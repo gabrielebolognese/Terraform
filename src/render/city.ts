@@ -1040,6 +1040,26 @@ function offlineBadge(x: number, y: number, z: number): Shape[] {
   ];
 }
 
+/**
+ * A building kept off by the network: the same diamond, with a broken link
+ * in it - two bars that do not meet - so "not connected" reads by shape.
+ */
+function unlinkedBadge(x: number, y: number, z: number): Shape[] {
+  const c = isoProject(x, y, z);
+  const r = 11;
+  const outline: number[] = [c.sx, c.sy - r - 2, c.sx + r + 2, c.sy, c.sx, c.sy + r + 2, c.sx - r - 2, c.sy];
+  const body: number[] = [c.sx, c.sy - r, c.sx + r, c.sy, c.sx, c.sy + r, c.sx - r, c.sy];
+  const left: number[] = [c.sx - 7, c.sy - 1.4, c.sx - 1.8, c.sy - 1.4, c.sx - 1.8, c.sy + 1.4, c.sx - 7, c.sy + 1.4];
+  const right: number[] = [c.sx + 1.8, c.sy - 1.4, c.sx + 7, c.sy - 1.4, c.sx + 7, c.sy + 1.4, c.sx + 1.8, c.sy + 1.4];
+  const amber = { r: 1, g: 0.8, b: 0.3, a: 1 };
+  return [
+    { rings: [outline], fill: { r: 0.95, g: 0.95, b: 0.95, a: 1 } },
+    { rings: [body], fill: { r: 0.12, g: 0.12, b: 0.14, a: 1 } },
+    { rings: [left], fill: amber },
+    { rings: [right], fill: amber },
+  ];
+}
+
 /** A ring around a footprint, on the ground at height `z`. */
 function footprintRing(tx: number, ty: number, size: number, width: number, fill: Rgba, z = 0): Shape {
   return {
@@ -1257,6 +1277,19 @@ interface SceneCache {
   ground: Map<number, Shape[]>;
   /** Each building's static shapes, as the runs between its live parts. */
   buildings: Map<string, Shape[][]>;
+  /** The straight stretches of road the rovers drive, found once per layout. */
+  runs: RoadRun[] | null;
+  /** Connection points, as `tile * 4 + side` (side: the building is east, west, south, north of the road). */
+  connectors: Set<number>;
+}
+
+/** A straight stretch of road: from (tx, ty), `length` tiles along (dx, dy). */
+interface RoadRun {
+  readonly tx: number;
+  readonly ty: number;
+  readonly dx: number;
+  readonly dy: number;
+  readonly length: number;
 }
 
 /** One cache per level of detail, so zooming in and out never throws one away. */
@@ -1311,7 +1344,15 @@ function groundKey(view: CityView): string {
     sum += z;
     weighted += z * ((i % 97) + 1);
   });
-  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}`;
+  // Roads are ground too: laying one must redraw it.
+  let roads = 0;
+  let roadWeight = 0;
+  view.roads.forEach((r, i) => {
+    if (!r) return;
+    roads += 1;
+    roadWeight += (i % 101) + 1;
+  });
+  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}|${roads}|${roadWeight}`;
 }
 
 /** At low detail, open ground is drawn in patches this many tiles across. */
@@ -1340,7 +1381,7 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
         const z0 = view.groundZ[py * n + px] ?? 0;
         for (let y = py; y < py + LOW_PATCH && open; y += 1) {
           for (let x = px; x < px + LOW_PATCH; x += 1) {
-            if (covered.has(y * n + x) || view.steep[y * n + x] === true || (view.groundZ[y * n + x] ?? 0) !== z0) open = false;
+            if (covered.has(y * n + x) || view.steep[y * n + x] === true || view.roads[y * n + x] === true || (view.groundZ[y * n + x] ?? 0) !== z0) open = false;
           }
         }
         if (!open) continue;
@@ -1354,9 +1395,216 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
       if (!covered.has(ty * n + tx) && !done[ty * n + tx]) occupants.push({ tx, ty, w: 1, h: 1, building: -1 });
     }
   }
-  const fresh: SceneCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map() };
+  // One connection point per side of a building: the road tile nearest the
+  // middle of that side (the first version put one on every road tile a
+  // building touched, and a street read as a row of bollards).
+  const connectors = new Set<number>();
+  for (const b of view.buildings) {
+    const mid = Math.floor(b.size / 2);
+    const offsets = Array.from({ length: b.size }, (_, k) => mid + (k % 2 === 0 ? k / 2 : -(k + 1) / 2)).filter((k) => k >= 0 && k < b.size);
+    // [road x, road y, side index] for each side, walked out from its middle.
+    const sides: ((k: number) => [number, number, number])[] = [
+      (k) => [b.tx - 1, b.ty + k, 0],
+      (k) => [b.tx + b.size, b.ty + k, 1],
+      (k) => [b.tx + k, b.ty - 1, 2],
+      (k) => [b.tx + k, b.ty + b.size, 3],
+    ];
+    for (const side of sides) {
+      for (const k of offsets) {
+        const [x, y, dir] = side(k);
+        if (x < 0 || y < 0 || x >= n || y >= n || view.roads[y * n + x] !== true) continue;
+        connectors.add((y * n + x) * 4 + dir);
+        break;
+      }
+    }
+  }
+  const fresh: SceneCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map(), runs: null, connectors };
   sceneCaches.set(quality, fresh);
   return fresh;
+}
+
+// ---------------------------------------------------------------------------
+// Roads (at the user's request): the surface, where it meets a building, and
+// the rovers that drive it.
+// ---------------------------------------------------------------------------
+
+const ROAD = rgb(0.34, 0.31, 0.29);
+/**
+ * A road as it reads from further away, where its kerbs, dashes and rovers
+ * are not drawn: the surface scaled by the mean colour of the full drawing
+ * over the bare one (measured on the example metropolis's streets: x1.113,
+ * x1.127, x1.103). With the bare surface, the far view lost a fifth of its
+ * likeness to the near one.
+ */
+const ROAD_FAR = rgb(0.378, 0.349, 0.32);
+const KERB = rgb(0.6, 0.57, 0.52);
+const ROAD_DASH = rgb(0.86, 0.74, 0.38);
+const CONNECTOR = rgb(0.68, 0.7, 0.72);
+const CONNECTOR_LIGHT = rgb(1, 0.72, 0.25);
+
+/**
+ * A road tile's markings: a kerb along every edge that is not more road, a
+ * dash down the middle of a straight stretch, and a connection point - a
+ * pedestal with a light, and a conduit to the wall - on every edge a
+ * building stands against. Static, so kept with the ground.
+ */
+function roadDetail(view: CityView, connectors: ReadonlySet<number>, tx: number, ty: number, z: number, quality: CityQuality): Part[] {
+  const n = view.tiles;
+  const out: Part[] = [];
+  const at = (x: number, y: number): number => (x >= 0 && y >= 0 && x < n && y < n ? y * n + x : -1);
+  const isRoad = (x: number, y: number): boolean => view.roads[at(x, y)] === true;
+  const e = isRoad(tx + 1, ty);
+  const w = isRoad(tx - 1, ty);
+  const s = isRoad(tx, ty + 1);
+  const nn = isRoad(tx, ty - 1);
+  const zz = z + 0.004;
+  const flat = (x0: number, y0: number, x1: number, y1: number, colour: Rgb, emissive = false): Part =>
+    part(sheet([[x0, y0, zz], [x1, y0, zz], [x1, y1, zz], [x0, y1, zz]]), colour, emissive ? { emissive: true } : {});
+  // Kerbs and dashes up close only: at medium they were most of the 23,000
+  // shapes roads added to a zoomed-out metropolis (measured).
+  if (quality === "high") {
+    const k = 0.06;
+    if (!nn) out.push(flat(tx, ty, tx + 1, ty + k, KERB));
+    if (!s) out.push(flat(tx, ty + 1 - k, tx + 1, ty + 1, KERB));
+    if (!w) out.push(flat(tx, ty, tx + k, ty + 1, KERB));
+    if (!e) out.push(flat(tx + 1 - k, ty, tx + 1, ty + 1, KERB));
+    const along = e || w;
+    const across = nn || s;
+    if (along && !across) out.push(flat(tx + 0.3, ty + 0.47, tx + 0.7, ty + 0.53, ROAD_DASH));
+    else if (across && !along) out.push(flat(tx + 0.47, ty + 0.3, tx + 0.53, ty + 0.7, ROAD_DASH));
+  }
+  // Connection points: toward the building on each side this tile serves.
+  const sides: [number, number, number, number][] = [
+    [1, 0, tx + 0.78, ty + 0.5],
+    [-1, 0, tx + 0.22, ty + 0.5],
+    [0, 1, tx + 0.5, ty + 0.78],
+    [0, -1, tx + 0.5, ty + 0.22],
+  ];
+  sides.forEach(([dx, dy, px, py], side) => {
+    if (!connectors.has(at(tx, ty) * 4 + side)) return;
+    const h = 0.07;
+    out.push(part(box(px - h, py - h, z, px + h, py + h, z + 0.16), CONNECTOR));
+    if (quality === "high") {
+      out.push(part(box(px - 0.04, py - 0.04, z + 0.16, px + 0.04, py + 0.04, z + 0.2), CONNECTOR_LIGHT, { emissive: true }));
+      // The conduit: from the pedestal to the wall.
+      const ex = dx === 0 ? px : tx + (dx > 0 ? 1 : 0);
+      const ey = dy === 0 ? py : ty + (dy > 0 ? 1 : 0);
+      out.push(part(box(Math.min(px, ex) - 0.025, Math.min(py, ey) - 0.025, z, Math.max(px, ex) + 0.025, Math.max(py, ey) + 0.025, z + 0.05), DARK_METAL));
+    }
+  });
+  return out;
+}
+
+/** The straight stretches of road, at least three tiles long: rover routes. Along x first, then y. */
+function roadRuns(view: CityView): RoadRun[] {
+  const n = view.tiles;
+  const runs: RoadRun[] = [];
+  const road = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < n && y < n && view.roads[y * n + x] === true;
+  for (const [dx, dy] of [
+    [1, 0],
+    [0, 1],
+  ] as const) {
+    for (let y = 0; y < n; y += 1) {
+      for (let x = 0; x < n; x += 1) {
+        if (!road(x, y) || road(x - dx, y - dy)) continue;
+        let length = 1;
+        while (road(x + dx * length, y + dy * length)) length += 1;
+        if (length >= 3) runs.push({ tx: x, ty: y, dx, dy, length });
+      }
+    }
+  }
+  return runs;
+}
+
+interface Rover {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** Heading: +1 or -1 along the run's axis. */
+  readonly dx: number;
+  readonly dy: number;
+  readonly hue: number;
+}
+
+/** Tiles per second. */
+const ROVER_SPEED = 0.55;
+
+/**
+ * Where every rover is at `time`: each shuttles up and down its stretch of
+ * road, turning at the ends. Render-time only (micro §8: aliveness is never
+ * simulated), and a pure function of the layout and the time.
+ */
+function roversOn(view: CityView, cache: SceneCache, time: number): Map<number, Rover[]> {
+  cache.runs ??= roadRuns(view);
+  const n = view.tiles;
+  const byTile = new Map<number, Rover[]>();
+  cache.runs.forEach((run, r) => {
+    // One rover per stretch, and one more for every ten tiles of it.
+    const count = 1 + Math.floor(run.length / 10);
+    const travel = run.length - 1;
+    for (let k = 0; k < count; k += 1) {
+      const offset = hash2(r * 7 + k, run.tx * 13 + run.ty) * 2 * travel;
+      const t = (time * ROVER_SPEED + offset) % (2 * travel);
+      const forward = t < travel;
+      const along = forward ? t : 2 * travel - t;
+      const x = run.tx + run.dx * along + 0.5;
+      const y = run.ty + run.dy * along + 0.5;
+      const tx = Math.floor(x);
+      const ty = Math.floor(y);
+      const tile = ty * n + tx;
+      const z = view.groundZ[tile] ?? 0;
+      const sign = forward ? 1 : -1;
+      // Keep to the right of the dash.
+      const side = 0.14 * sign;
+      const rover: Rover = { x: x - run.dy * side, y: y + run.dx * side, z, dx: run.dx * sign, dy: run.dy * sign, hue: hash2(r + 3, k + 5) };
+      const list = byTile.get(tile);
+      if (list === undefined) byTile.set(tile, [rover]);
+      else list.push(rover);
+    }
+  });
+  return byTile;
+}
+
+const ROVER_BODY = rgb(0.9, 0.88, 0.84);
+const ROVER_TRIM = [rgb(0.92, 0.48, 0.16), rgb(0.2, 0.5, 0.78), rgb(0.85, 0.72, 0.2)] as const;
+
+/** A six-wheeled rover: chassis, cab, a stripe, a mast, and a headlamp facing where it is going. */
+function drawRovers(list: readonly Rover[] | undefined, out: Shape[]): void {
+  if (list === undefined) return;
+  for (const r of list) {
+    const ax = Math.abs(r.dx);
+    // Half-extents along and across its heading.
+    const hl = 0.19;
+    const hw = 0.11;
+    const ex = ax ? hl : hw;
+    const ey = ax ? hw : hl;
+    const trim = ROVER_TRIM[Math.floor(r.hue * ROVER_TRIM.length)] ?? ROVER_TRIM[0];
+    const parts: Part[] = [];
+    // Wheels: three a side.
+    for (const u of [-0.13, 0, 0.13]) {
+      for (const v of [-1, 1]) {
+        const cx = r.x + (ax ? u : v * (hw + 0.005));
+        const cy = r.y + (ax ? v * (hw + 0.005) : u);
+        parts.push(part(box(cx - 0.035, cy - 0.035, r.z, cx + 0.035, cy + 0.035, r.z + 0.07), RUBBER));
+      }
+    }
+    parts.push(part(box(r.x - ex, r.y - ey, r.z + 0.05, r.x + ex, r.y + ey, r.z + 0.12), ROVER_BODY));
+    // The stripe along its flank.
+    parts.push(part(box(r.x - ex - 0.002, r.y - ey - 0.002, r.z + 0.08, r.x + ex + 0.002, r.y + ey + 0.002, r.z + 0.095), trim));
+    // The cab, at the front.
+    const fx = r.x + r.dx * 0.09;
+    const fy = r.y + r.dy * 0.09;
+    const cab = 0.08;
+    parts.push(part(box(fx - (ax ? cab : hw * 0.8), fy - (ax ? hw * 0.8 : cab), r.z + 0.12, fx + (ax ? cab : hw * 0.8), fy + (ax ? hw * 0.8 : cab), r.z + 0.2), GLASS));
+    // A mast at the back, and the lamp at the front.
+    const bx = r.x - r.dx * 0.13;
+    const by = r.y - r.dy * 0.13;
+    parts.push(part(box(bx - 0.01, by - 0.01, r.z + 0.12, bx + 0.01, by + 0.01, r.z + 0.3), DARK_METAL));
+    const lx = r.x + r.dx * (hl + 0.005);
+    const ly = r.y + r.dy * (hl + 0.005);
+    parts.push(part(box(lx - 0.02, ly - 0.02, r.z + 0.08, lx + 0.02, ly + 0.02, r.z + 0.11), rgb(1, 0.95, 0.75), { emissive: true }));
+    emitParts(parts, out);
+  }
 }
 
 /** Lift a solid by `dz` tiles: a building assembled at ground zero, stood on its own ground. */
@@ -1374,8 +1622,12 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   const span = Math.max(1e-9, range.hi - range.lo);
 
   const quality: CityQuality = options.quality ?? "high";
-  const { occupants, order, ground, buildings } = occupantsInOrder(view, quality);
+  const cache = occupantsInOrder(view, quality);
+  const { occupants, order, ground, buildings } = cache;
   const badges: Shape[] = [];
+  // Rovers move every frame, so they are never cached: each is drawn with
+  // the road tile it is on (up close only).
+  const rovers = quality === "high" ? roversOn(view, cache, options.time) : null;
   const vp = options.viewport;
   for (const i of order) {
     const o = occupants[i]!;
@@ -1395,6 +1647,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       const kept = ground.get(i);
       if (kept !== undefined) {
         for (const shape of kept) out.push(shape);
+        if (rovers !== null && o.w === 1) drawRovers(rovers.get(o.ty * n + o.tx), out);
         continue;
       }
       const start = out.length;
@@ -1417,10 +1670,11 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       }
       const z = view.groundZ[o.ty * n + o.tx] ?? 0;
       const steep = view.steep[o.ty * n + o.tx] === true;
+      const road = view.roads[o.ty * n + o.tx] === true;
       // Height as a colour ramp, and a faint checker so single tiles read.
       const ramp = mix(GROUND_LOW, GROUND_HIGH, (z - range.lo) / span);
       const checker = (o.tx + o.ty) % 2 === 0 ? 1 : 0.965;
-      const top = shade(steep ? GROUND_STEEP : ramp, checker);
+      const top = road ? shade(quality === "high" ? ROAD : ROAD_FAR, 0.985 + 0.015 * checker) : shade(steep ? GROUND_STEEP : ramp, checker);
       const faces = box(o.tx, o.ty, floor, o.tx + 1, o.ty + 1, z);
       // Only the sides that rise above the nearer neighbour can show.
       const sides: Face[] = [];
@@ -1430,7 +1684,9 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       if (south < z) sides.push(faces[2]!);
       emitParts([part(sides, CLIFF)], out);
       out.push({ rings: [ringOf(faces[0]!.pts)], fill: { ...top, a: 1 } });
-      if (steep && quality !== "low") {
+      if (road) {
+        if (quality !== "low") emitParts(roadDetail(view, cache.connectors, o.tx, o.ty, z, quality), out);
+      } else if (steep && quality !== "low") {
         const h = 0.18 + 0.3 * hash2(o.tx, o.ty);
         const r = 0.22 + 0.1 * hash2(o.ty + 91, o.tx);
         emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, r, r * 0.45, z, z + h, quality === "high" ? 7 : 5), ROCK)], out);
@@ -1439,6 +1695,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
         emitParts(scatter(o.tx, o.ty, z), out);
       }
       ground.set(i, out.slice(start));
+      if (rovers !== null) drawRovers(rovers.get(o.ty * n + o.tx), out);
       continue;
     }
     const b = view.buildings[o.building]!;
@@ -1450,7 +1707,8 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
     emitBuilding(built, b, buildings, out);
     // Steam and other particles only up close.
     if (quality === "high") out.push(...built.extras);
-    if (!b.operable) badges.push(...offlineBadge(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + buildingTop(b.type) + 0.35));
+    // Not connected to what it needs reads differently from any other reason it is off.
+    if (!b.operable) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + buildingTop(b.type) + 0.35));
   }
 
   // Overlays, on top of everything so they are never hidden - each on its own ground.

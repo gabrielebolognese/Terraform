@@ -30,6 +30,8 @@ import {
   liquidWaterRate,
   marsStart,
   nextSubstepFlows,
+  roadKey,
+  roadsToConnect,
   seedBiosphere,
   siteElevation,
   worldEnv,
@@ -90,9 +92,25 @@ function layOut(s: Settlement, wants: readonly BuildingType[], t: Tuning): Place
   for (let y = 0; y < n; y += 1) for (let x = 0; x < n; x += 1) order.push([x, y]);
   const c = n / 2;
   order.sort((p, q) => Math.max(Math.abs(p[0] + 0.5 - c), Math.abs(p[1] + 0.5 - c)) - Math.max(Math.abs(q[0] + 0.5 - c), Math.abs(q[1] + 0.5 - c)) || Math.atan2(p[1] - c, p[0] - c) - Math.atan2(q[1] - c, q[0] - c));
+  // Only ground a road can reach from the centre: a pocket walled off by
+  // steep ground is one no player could connect (the first version with roads
+  // built 23 buildings in such a pocket, and its domes had no oxygen).
+  const reach = new Uint8Array(n * n);
+  const centre = Math.floor(n / 2) * n + Math.floor(n / 2);
+  const stack = ground.steep[centre] ? [] : [centre];
+  while (stack.length > 0) {
+    const tile = stack.pop()!;
+    if (reach[tile]) continue;
+    reach[tile] = 1;
+    const x = tile % n;
+    const y = (tile - x) / n;
+    for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]] as const) {
+      if (nx >= 0 && ny >= 0 && nx < n && ny < n && !reach[ny * n + nx] && !ground.steep[ny * n + nx]) stack.push(ny * n + nx);
+    }
+  }
   const fits = (tx: number, ty: number, size: number): boolean => {
     if (tx < 0 || ty < 0 || tx + size > n || ty + size > n) return false;
-    for (let y = ty; y < ty + size; y += 1) for (let x = tx; x < tx + size; x += 1) if (taken[y * n + x] || ground.steep[y * n + x]) return false;
+    for (let y = ty; y < ty + size; y += 1) for (let x = tx; x < tx + size; x += 1) if (taken[y * n + x] || !reach[y * n + x]) return false;
     return true;
   };
   let cursor = 0;
@@ -110,6 +128,32 @@ function layOut(s: Settlement, wants: readonly BuildingType[], t: Tuning): Place
     }
   }
   return placed;
+}
+
+/**
+ * Streets: a road on every open, buildable tile beside a building (the
+ * layout leaves a one-tile street round each), then whatever roads it takes
+ * to join what the streets leave apart - so every building is on one
+ * network, as the game with roads requires.
+ */
+function streets(s: Settlement, t: Tuning): number[] {
+  const ground = groundOf(s, t);
+  const n = ground.tiles;
+  const taken = new Uint8Array(n * n);
+  for (const b of s.buildings) {
+    const size = BUILDING_DEFS[b.type].footprint;
+    for (let y = b.ty; y < b.ty + size; y += 1) for (let x = b.tx; x < b.tx + size; x += 1) taken[y * n + x] = 1;
+  }
+  const roads: number[] = [];
+  for (let y = 0; y < n; y += 1) {
+    for (let x = 0; x < n; x += 1) {
+      if (taken[y * n + x] || ground.steep[y * n + x]) continue;
+      const beside = (x > 0 && taken[y * n + x - 1]) || (x + 1 < n && taken[y * n + x + 1]) || (y > 0 && taken[(y - 1) * n + x]) || (y + 1 < n && taken[(y + 1) * n + x]);
+      if (beside) roads.push(roadKey(x, y));
+    }
+  }
+  const joined = [...roads, ...roadsToConnect({ ...s, roads }, t)];
+  return joined.sort((a, b) => a - b);
 }
 
 /** Everything a settlement of `homes` domes needs, in the order to place it. */
@@ -180,7 +224,8 @@ export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
     state = foundSettlement(state, kind, site.lat, site.lon, game).state;
     const founded = state.settlements[state.settlements.length - 1]!;
     const buildings = layOut(founded, wishList(kind, size), game);
-    const built: Settlement = { ...founded, buildings };
+    const laid: Settlement = { ...founded, buildings };
+    const built: Settlement = { ...laid, roads: streets(laid, game) };
     // A thriving settlement: full stores, nine in ten homes taken.
     const cap = capacities(built, game);
     const settled: Settlement = { ...built, stores: { ...cap }, population: Math.floor(housing(built, game) * 0.9) };

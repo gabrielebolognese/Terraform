@@ -43,6 +43,7 @@ that state.
 | [`docs/balance/batch23-sea-level.md`](docs/balance/batch23-sea-level.md) | Sea level from the ocean, and how fast it rises: the input the flooding batches build on. |
 | [`docs/balance/detail-pass-buildings.md`](docs/balance/detail-pass-buildings.md) | The ten buildings rebuilt with far more detail; a close-up of all ten is `docs/frames/city-buildings.png`. |
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
+| [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
 | [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) | The whole visual arc, twelve frames at fixed progress values. |
 
 ## Status
@@ -74,7 +75,9 @@ whole reference playthrough in seconds, and **See example planet** - Mars fully 
 27 cities (three of them metropolises, 3 x 3 a city's ground) and 15 outposts; your own planet
 is kept aside, never saved over, and comes back with **Back to my planet**. A metropolis steps down to lighter
 detail as you zoom out (three levels, chosen by how much of the city is on screen), so it stays
-smooth to move around. See
+smooth to move around. Cities have roads: a building runs only when a road (or a shared wall) joins it to a
+producer of everything it draws, so a mine needs a road to a power plant and a dome one to a
+greenhouse. Lay them with **Road** (click or drag), or **Connect everything**; rovers drive them. See
 [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) for the visual arc at a glance.
 
 Dust storms, cometary impacts and solar variability run in the browser. They are **seeded on

@@ -17,7 +17,10 @@ import {
   gridTiles,
   habitat,
   makeTuning,
+  networkOf,
   placeBuilding,
+  placeRoad,
+  roadTile,
   serialize,
   settlementStep,
   siteElevation,
@@ -26,7 +29,7 @@ import {
 import { examplePlanet } from "./example.js";
 
 /** The browser's tuning: the example is built for the game as it is played. */
-const game = makeTuning({ EVENTS_ENABLED: 1, ECONOMY_ENABLED: 1, TECH_GATE_ENABLED: 1, SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
+const game = makeTuning({ EVENTS_ENABLED: 1, ECONOMY_ENABLED: 1, TECH_GATE_ENABLED: 1, SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, NETWORK_ENABLED: 1 });
 const { state } = examplePlanet(DEFAULT_TUNING, game);
 const env = habitat(state.reservoirs, derive(state.reservoirs, worldEnv(state, NEUTRAL_ENV, game), game), game, 0);
 
@@ -48,7 +51,7 @@ describe("the example planet", () => {
   });
 
   it("has every size, from a handful of buildings to hundreds", () => {
-    // Measured: 5 to 758 buildings; the metropolises 640, 734 and 758 (3,443 in all).
+    // Measured: 5 to 737 buildings; the metropolises 640, 732 and 737 (3,416 in all).
     const counts = state.settlements.map((s) => s.buildings.length);
     expect(Math.min(...counts)).toBeLessThanOrEqual(6);
     expect(Math.max(...counts)).toBeGreaterThan(500);
@@ -98,9 +101,25 @@ describe("the example planet", () => {
     }
   });
 
+  it("lays only roads a player could lay, and joins every settlement into one network", () => {
+    // Independent of the street and join code: each road replayed through
+    // `placeRoad` - the call a player's click makes - on the settlement
+    // as built, with materials to spare. 42 hilly grids, ~13,800 roads.
+    for (const s of state.settlements) {
+      let replay: SimState = { ...state, settlements: state.settlements.map((c) => (c.id === s.id ? { ...c, roads: [], stores: { ...c.stores, materials: 1e9 } } : c)) };
+      for (const key of s.roads) {
+        const { tx, ty } = roadTile(key);
+        const out = placeRoad(replay, s.id, tx, ty, game);
+        expect(out.ok, `${s.id}: road at ${tx},${ty} - ${out.reason}`).toBe(true);
+        replay = out.state;
+      }
+      expect(networkOf(s.buildings, s.roads, gridTiles(s.kind, game)).count, s.id).toBe(1);
+    }
+  });
+
   it("is the same planet every time, and survives the save exactly", () => {
     expect(examplePlanet(DEFAULT_TUNING, game).state).toEqual(state);
-    // Measured: a 178 kB save.
+    // Measured: a 256 kB save (178 kB before roads).
     expect(deserialize(serialize(state, game, "2026-09-24T12:00:00.000Z"), game)).toEqual(state);
   });
 });

@@ -38,8 +38,11 @@ import {
   stormIntensity,
   validateTuning,
   foundSettlement,
+  connectAll,
   placeBuilding,
+  placeRoad,
   removeBuilding,
+  removeRoad,
   siteElevation,
   liquidWaterRate,
   nextSubstepFlows,
@@ -73,6 +76,10 @@ import "./style.css";
  * hills (Batch 22): 12 m either side of the base elevation. Measured over 100
  * sites, 16.1% of the ground is too steep to build on, and at least 439 of
  * the 900 places a 3 x 3 building could start are open.
+ *
+ * And roads (at the user's request): a building runs only when its network -
+ * the buildings it touches and the roads it is on - holds a producer of what
+ * it draws. Older saves are given the roads that connect what they had.
  */
 const tuning = makeTuning({
   EVENTS_ENABLED: 1,
@@ -80,6 +87,7 @@ const tuning = makeTuning({
   TECH_GATE_ENABLED: 1,
   SETTLEMENTS_ENABLED: 1,
   TERRAIN_RELIEF_M: 12,
+  NETWORK_ENABLED: 1,
 });
 validateTuning(tuning);
 
@@ -286,6 +294,22 @@ const city = new CityScreen(
     canPlace: (id: string, type: BuildingType, tx: number, ty: number) => placeBuilding(state, id, type, tx, ty, tuning),
     onRemove: (id: string, tx: number, ty: number) => {
       const outcome = removeBuilding(state, id, tx, ty);
+      state = outcome.state;
+      return outcome;
+    },
+    onRoad: (id: string, tx: number, ty: number) => {
+      const outcome = placeRoad(state, id, tx, ty, tuning);
+      state = outcome.state;
+      return outcome;
+    },
+    canRoad: (id: string, tx: number, ty: number) => placeRoad(state, id, tx, ty, tuning),
+    onUnroad: (id: string, tx: number, ty: number) => {
+      const outcome = removeRoad(state, id, tx, ty);
+      state = outcome.state;
+      return outcome;
+    },
+    onConnect: (id: string) => {
+      const outcome = connectAll(state, id, tuning);
       state = outcome.state;
       return outcome;
     },

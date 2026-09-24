@@ -10,17 +10,21 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { isoProject } from "../render/iso.js";
-import type { BuildingType, SimState } from "../sim/index.js";
+import type { BuildingType, SimState, Tuning } from "../sim/index.js";
 import {
   NEUTRAL_ENV,
+  connectAll,
   derive,
   foundSettlement,
   habitat,
   makeTuning,
   marsStart,
   placeBuilding,
+  placeRoad,
   groundOf,
   removeBuilding,
+  removeRoad,
+  roadKey,
   worldEnv,
 } from "../sim/index.js";
 import { centreCamera, isoToScreen } from "./city-camera.js";
@@ -30,7 +34,8 @@ const t = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
 const W = 800;
 const H = 600;
 
-function mount(kind: "city" | "outpost" = "city", stores: Record<string, number> = {}) {
+function mount(kind: "city" | "outpost" = "city", stores: Record<string, number> = {}, tuning: Tuning = t) {
+  const t = tuning;
   let state: SimState = foundSettlement(marsStart(), kind, 0.31, -1.2, t).state;
   state = { ...state, settlements: state.settlements.map((s) => ({ ...s, stores: { ...s.stores, materials: 1000, ...stores } })) };
   const calls: string[] = [];
@@ -52,6 +57,25 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
         state = o.state;
         return o;
       },
+      onRoad: (id, tx, ty) => {
+        calls.push(`road@${tx},${ty}`);
+        const o = placeRoad(state, id, tx, ty, t);
+        state = o.state;
+        return o;
+      },
+      canRoad: (id, tx, ty) => placeRoad(state, id, tx, ty, t),
+      onUnroad: (id, tx, ty) => {
+        calls.push(`unroad@${tx},${ty}`);
+        const o = removeRoad(state, id, tx, ty);
+        state = o.state;
+        return o;
+      },
+      onConnect: (id) => {
+        calls.push("connect");
+        const o = connectAll(state, id, t);
+        state = o.state;
+        return o;
+      },
       onBack: () => calls.push("back"),
     },
     t,
@@ -60,8 +84,9 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
   canvas.width = W;
   canvas.height = H;
   let now = 0;
-  const frame = (): void => {
-    now += 1000;
+  /** One frame, `dt` ms after the last (a second by default: past every refresh interval). */
+  const frame = (dt = 1000): void => {
+    now += dt;
     const env = habitat(state.reservoirs, derive(state.reservoirs, worldEnv(state, NEUTRAL_ENV, t), t), t, 0);
     screen.frame(state.settlements[0]!, env, now);
   };
@@ -84,13 +109,29 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
   };
   /** Click the middle of a tile on the ground. */
   const clickTile = (tx: number, ty: number): void => clickAt(tx + 0.5, ty + 0.5, 0);
+  /** Press on the first tile, move across the rest, release on the last - as a drag with the main button. */
+  const dragTiles = (tiles: readonly (readonly [number, number])[]): void => {
+    const at = ([x, y]: readonly [number, number]) => {
+      const iso = isoProject(x + 0.5, y + 0.5, 0);
+      return isoToScreen(centreCamera(32, W), W, H, iso.sx, iso.sy);
+    };
+    const first = at(tiles[0]!);
+    canvas.dispatchEvent(new PointerEvent("pointerdown", { clientX: first.px, clientY: first.py, pointerId: 1, button: 0 }));
+    for (const tile of tiles.slice(1)) {
+      const p = at(tile);
+      canvas.dispatchEvent(new PointerEvent("pointermove", { clientX: p.px, clientY: p.py, pointerId: 1, button: 0 }));
+    }
+    const last = at(tiles[tiles.length - 1]!);
+    canvas.dispatchEvent(new PointerEvent("pointerup", { clientX: last.px, clientY: last.py, pointerId: 1, button: 0 }));
+    frame();
+  };
   const q = (sel: string): HTMLElement => {
     const e = host.querySelector<HTMLElement>(sel);
     if (e === null) throw new Error(`missing ${sel}`);
     return e;
   };
   const option = (type: BuildingType): HTMLButtonElement => q(`.city-build-option[data-type="${type}"]`) as HTMLButtonElement;
-  return { host, screen, calls, frame, clickTile, clickAt, hoverAt, q, option, state: () => state };
+  return { host, screen, calls, frame, clickTile, clickAt, hoverAt, dragTiles, q, option, state: () => state };
 }
 
 beforeEach(() => {
@@ -100,10 +141,10 @@ beforeEach(() => {
 describe("the city view", () => {
   it("offers only what this kind of settlement may build", () => {
     const city = mount("city");
-    expect(city.host.querySelectorAll(".city-build-option").length).toBe(10);
+    expect(city.host.querySelectorAll(".city-build-option[data-type]").length).toBe(10);
     document.body.replaceChildren();
     const outpost = mount("outpost");
-    const offered = [...outpost.host.querySelectorAll<HTMLElement>(".city-build-option")].map((b) => b.dataset["type"]);
+    const offered = [...outpost.host.querySelectorAll<HTMLElement>(".city-build-option[data-type]")].map((b) => b.dataset["type"]);
     expect(offered).not.toContain("habitat_dome");
     expect(offered).not.toContain("greenhouse");
     expect(offered.length).toBe(8);
@@ -225,5 +266,79 @@ describe("the city view", () => {
     const page = mount();
     (page.q(".city-back") as HTMLButtonElement).click();
     expect(page.calls).toEqual(["back"]);
+  });
+});
+
+describe("roads (at the user's request: connect the power plant to the mines)", () => {
+  const net = makeTuning({ SETTLEMENTS_ENABLED: 1, NETWORK_ENABLED: 1 });
+  const roadAt = (page: ReturnType<typeof mount>, tx: number, ty: number): boolean => page.state().settlements[0]!.roads.includes(roadKey(tx, ty));
+
+  it("lays road along a drag, one call a tile, through the sim", () => {
+    const page = mount("city", {}, net);
+    (page.q(".city-road") as HTMLButtonElement).click();
+    page.frame();
+    expect(page.q(".city-road").getAttribute("aria-pressed")).toBe("true");
+    expect(page.q(".city-hint").textContent).toMatch(/Click or drag to lay road/);
+    // The pointer lingers on a tile (two moves on 11,14): still one road there.
+    page.dragTiles([[10, 14], [11, 14], [11, 14], [12, 14], [13, 14]]);
+    expect(page.calls).toEqual(["road@10,14", "road@11,14", "road@12,14", "road@13,14"]);
+    for (const x of [10, 11, 12, 13]) expect(roadAt(page, x, 14), `${x},14`).toBe(true);
+  });
+
+  it("takes road up when the drag starts on a road", () => {
+    const page = mount("city", {}, net);
+    (page.q(".city-road") as HTMLButtonElement).click();
+    page.dragTiles([[10, 14], [11, 14], [12, 14]]);
+    page.dragTiles([[11, 14], [12, 14]]);
+    expect(roadAt(page, 10, 14)).toBe(true);
+    expect(roadAt(page, 11, 14)).toBe(false);
+    expect(roadAt(page, 12, 14)).toBe(false);
+  });
+
+  it("says in words why a road was refused", () => {
+    const page = mount("city", {}, net);
+    page.option("storage_depot").click();
+    page.clickTile(14, 14);
+    (page.q(".city-road") as HTMLButtonElement).click();
+    page.dragTiles([[14, 14]]);
+    expect(page.q(".city-hint").textContent).toBe("Cannot lay road: a building stands there.");
+  });
+
+  it("tells the player a building is not connected, and what to connect it to", () => {
+    const page = mount("city", {}, net);
+    page.option("reactor").click();
+    page.clickTile(4, 4);
+    page.option("regolith_mine").click();
+    page.clickTile(10, 4);
+    page.option("regolith_mine").click();
+    page.clickAt(11, 5, 0);
+    expect(page.q(".city-inspector-status").textContent).toBe("Not connected: nothing on its network makes power. Lay a road to a power plant.");
+  });
+
+  it("connects everything at a click, and the mine runs on the very next frame", () => {
+    const page = mount("city", {}, net);
+    page.option("reactor").click();
+    page.clickTile(4, 4);
+    page.option("regolith_mine").click();
+    page.clickTile(10, 4);
+    page.option("regolith_mine").click();
+    page.clickAt(11, 5, 0);
+    expect(page.q(".city-inspector-status").textContent).toMatch(/^Not connected/);
+    (page.q(".city-connect") as HTMLButtonElement).click();
+    // 16 ms later - well inside the view's 200 ms refresh: new roads must redraw at once.
+    page.frame(16);
+    expect(page.calls.at(-1)).toBe("connect");
+    expect(page.q(".city-hint").textContent).toMatch(/^Laid \d+ roads?\.$/);
+    expect(page.q(".city-inspector-status").textContent).toBe("Running.");
+  });
+
+  it("puts the Road tool down with Escape", () => {
+    const page = mount("city", {}, net);
+    (page.q(".city-road") as HTMLButtonElement).click();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    page.frame();
+    expect(page.q(".city-road").getAttribute("aria-pressed")).toBe("false");
+    page.clickTile(10, 14);
+    expect(page.calls).toEqual([]);
   });
 });
