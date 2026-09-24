@@ -62,6 +62,14 @@ export interface CitySceneOptions {
   readonly viewport?: { readonly minX: number; readonly maxX: number; readonly minY: number; readonly maxY: number };
   /** Level of detail; absent means "high" (the golden frames are drawn at high). */
   readonly quality?: CityQuality;
+  /** A selected tile of ground (a rock to send a rover to), ringed; absent or null for none. */
+  readonly selectedTile?: { readonly tx: number; readonly ty: number } | null;
+  /**
+   * Sim-years since the last substep, 0 up to one substep: how far rovers and
+   * rockets have got between the simulation's steps, so they move smoothly.
+   * Presentation only; absent means 0.
+   */
+  readonly sinceYears?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -419,6 +427,7 @@ const TOPS: Readonly<Record<string, number>> = {
   regolith_mine: 1.0,
   storage_depot: 0.8,
   spaceport: 1.6,
+  headquarters: 1.7,
 };
 
 export function buildingTop(type: string): number {
@@ -506,7 +515,10 @@ function vent(x: number, y: number, z: number, w = 0.12, h = 0.08): Part[] {
   return [part(box(x, y, z, x + w, y + w, z + h), METAL), part(box(x + w, y + 0.02, z + 0.015, x + w + 0.004, y + w - 0.02, z + h - 0.015), RUBBER)];
 }
 
-function assemble(b: CityBuildingView, time: number): Kit {
+/** Where a spaceport's rocket is: on the pad (null), away, or flying this many tiles above it. */
+type RocketState = null | "away" | number;
+
+function assemble(b: CityBuildingView, time: number, rocket: RocketState = null): Kit {
   const s = b.size;
   const x0 = b.tx;
   const y0 = b.ty;
@@ -935,6 +947,53 @@ function assemble(b: CityBuildingView, time: number): Kit {
       ]);
       return k;
     }
+    case "headquarters": {
+      // A 5 x 5 compound: the slab, the command block with its glass bridge,
+      // the rover garage with three bays, a comms mast and dish.
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 4.9, y0 + 4.9, 0.08), CONCRETE));
+      add(() => [
+        part(box(x0 + 0.3, y0 + 0.3, 0.08, x0 + 4.7, y0 + 0.36, 0.1), HAZARD),
+        part(box(x0 + 0.3, y0 + 4.64, 0.08, x0 + 4.7, y0 + 4.7, 0.1), HAZARD),
+      ]);
+      // The command block, two storeys, with a band of lit windows.
+      add(() => part(box(x0 + 0.6, y0 + 0.6, 0.08, x0 + 3.2, y0 + 2.9, 0.95), PAINT_WHITE));
+      add(() => part(box(x0 + 0.58, y0 + 0.58, 0.5, x0 + 3.22, y0 + 2.92, 0.56), ACCENT));
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 6; i += 1) {
+          const wx = x0 + 0.8 + i * 0.4;
+          out.push(part(box(wx, y0 + 2.9, 0.66, wx + 0.24, y0 + 2.92, 0.84), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+        }
+        for (let i = 0; i < 5; i += 1) {
+          const wy = y0 + 0.8 + i * 0.4;
+          out.push(part(box(x0 + 3.2, wy, 0.66, x0 + 3.22, wy + 0.24, 0.84), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+        }
+        return out;
+      });
+      // The bridge: a glass drum on the roof.
+      add(() => part(frustum(x0 + 1.9, y0 + 1.75, 0.75, 0.7, 0.95, 1.3, 20), GLASS));
+      add(() => part(frustum(x0 + 1.9, y0 + 1.75, 0.78, 0.6, 1.3, 1.38, 20), DARK_METAL));
+      add(() => vent(x0 + 0.8, y0 + 0.8, 0.95, 0.2, 0.12));
+      add(() => vent(x0 + 2.8, y0 + 0.8, 0.95, 0.2, 0.12));
+      // The garage along the front, three bays with doors.
+      add(() => part(box(x0 + 0.6, y0 + 3.3, 0.08, x0 + 4.4, y0 + 4.4, 0.62), CONCRETE));
+      add(() => part(box(x0 + 0.58, y0 + 3.28, 0.62, x0 + 4.42, y0 + 4.42, 0.66), DARK_METAL));
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 3; i += 1) {
+          const dx = x0 + 0.8 + i * 1.2;
+          out.push(part(box(dx, y0 + 4.4, 0.1, dx + 0.9, y0 + 4.42, 0.52), RUBBER));
+          out.push(part(box(dx, y0 + 4.42, 0.46, dx + 0.9, y0 + 4.43, 0.5), HAZARD));
+        }
+        return out;
+      });
+      // The comms mast and dish, back right.
+      add(() => lattice(x0 + 4.1, y0 + 1.0, 0.16, 0.06, 0.08, 1.7, 7, METAL));
+      add(() => part(sheet([[x0 + 3.55, y0 + 1.9, 0.9], [x0 + 3.9, y0 + 1.75, 1.1], [x0 + 4.05, y0 + 2.15, 0.95], [x0 + 3.7, y0 + 2.3, 0.75]]), PAINT_WHITE, { twoSided: true }));
+      add(() => part(box(x0 + 3.6, y0 + 1.75, 0.08, x0 + 3.8, y0 + 2.2, 0.8), DARK_METAL));
+      live(() => part(box(x0 + 4.07, y0 + 0.97, 1.7, x0 + 4.13, y0 + 1.03, 1.76), on && Math.floor(time * 1.2) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
+      return k;
+    }
     case "spaceport": {
       const px = cx - 0.1;
       const py = cy - 0.1;
@@ -972,7 +1031,25 @@ function assemble(b: CityBuildingView, time: number): Kit {
         ]);
       }
       // The lander: legs, engine bell, banded body with windows, nose, fins.
-      add(() => {
+      // On the pad it is kept with the building; away, the pad is empty; in
+      // flight it is raised by its height every frame, over its exhaust.
+      const lander = (make: () => Part[]): void => {
+        if (rocket === "away") return;
+        if (rocket === null) add(make);
+        else live(() => raise(make(), rocket));
+      };
+      if (typeof rocket === "number") {
+        live(() => {
+          const flicker = 0.85 + 0.15 * Math.sin(time * 40);
+          return [
+            part(frustum(px, py, 0.14, 0.3 * flicker, rocket + 0.24, rocket + 0.24 - 0.9 * flicker, 12), rgb(1, 0.62, 0.2), { emissive: true, alpha: 0.85 }),
+            part(frustum(px, py, 0.08, 0.14, rocket + 0.24, rocket + 0.24 - 0.5 * flicker, 10), rgb(1, 0.95, 0.7), { emissive: true }),
+          ];
+        });
+        // Dust off the pad while it is low.
+        if (rocket < 3) for (let i = 0; i < 4; i += 1) k.extras.push(puff(px + 0.6 * Math.cos(i * 1.7 + time), py + 0.6 * Math.sin(i * 1.7 + time), 0.2, 10 + 6 * i, STEAM, 0.35 * (1 - rocket / 3)));
+      }
+      lander(() => {
         const out: Part[] = [];
         for (let i = 0; i < 4; i += 1) {
           const a = Math.PI / 4 + (i * Math.PI) / 2;
@@ -990,7 +1067,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
         }
         return out;
       });
-      add(() => {
+      lander(() => {
         const out: Part[] = [];
         for (let i = 0; i < 3; i += 1) {
           const a = Math.PI / 4 + (i - 1) * 0.45;
@@ -1114,6 +1191,7 @@ const FAR_COLOUR: Readonly<Record<string, Rgb>> = {
   regolith_mine: rgb(0.427, 0.378, 0.332),
   storage_depot: rgb(0.78, 0.73, 0.68),
   spaceport: rgb(0.574, 0.573, 0.538),
+  headquarters: rgb(0.624, 0.549, 0.473),
 };
 
 /** Medium detail: each building's signature masses, coarse curves, no greebles, nothing animated. */
@@ -1187,6 +1265,14 @@ function assembleMedium(b: CityBuildingView): Kit {
       add(() => part(frustum(x0 + 0.7, y0 + 0.32, 0.17, 0.17, 0, 0.5, 8), PAINT_WHITE));
       add(() => part(frustum(x0 + 0.3, y0 + 0.72, 0.17, 0.17, 0, 0.5, 8), PAINT_WHITE));
       break;
+    case "headquarters":
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 4.9, y0 + 4.9, 0.08), CONCRETE));
+      add(() => part(box(x0 + 0.6, y0 + 0.6, 0.08, x0 + 3.2, y0 + 2.9, 0.95), PAINT_WHITE));
+      add(() => part(box(x0 + 0.58, y0 + 0.58, 0.5, x0 + 3.22, y0 + 2.92, 0.56), ACCENT));
+      add(() => part(frustum(x0 + 1.9, y0 + 1.75, 0.75, 0.7, 0.95, 1.3, 10), GLASS));
+      add(() => part(box(x0 + 0.6, y0 + 3.3, 0.08, x0 + 4.4, y0 + 4.4, 0.62), CONCRETE));
+      add(() => part(box(x0 + 4.0, y0 + 0.9, 0.08, x0 + 4.2, y0 + 1.1, 1.7), METAL));
+      break;
     case "spaceport":
       add(() => part(frustum(cx - 0.1, cy - 0.1, 1.32, 1.3, 0, 0.1, 16), CONCRETE));
       add(() => part(frustum(cx - 0.1, cy - 0.1, 0.2, 0.2, 0.1, 1.12, 8), PAINT_WHITE));
@@ -1214,17 +1300,20 @@ function assembleLow(b: CityBuildingView): Kit {
   return k;
 }
 
-/** Loose rocks on open ground: derived from where the tile is, drawn only up close. */
+/**
+ * Loose rocks on a tile the simulation says has them: two or three boulders,
+ * big enough to see and click (a rover breaks exactly these). Where they lie
+ * on the tile is derived from the tile, so they never move.
+ */
 function scatter(tx: number, ty: number, z: number): Part[] {
   const out: Part[] = [];
-  if (hash2(tx * 7 + 3, ty * 13 - 5) > 0.08) return out;
-  const count = 1 + Math.floor(hash2(tx + 11, ty + 29) * 3);
+  const count = 2 + Math.floor(hash2(tx + 11, ty + 29) * 2);
   for (let i = 0; i < count; i += 1) {
-    const rx = tx + 0.2 + 0.6 * hash2(tx * 31 + i, ty * 17 - i);
-    const ry = ty + 0.2 + 0.6 * hash2(tx * 19 - i, ty * 23 + i);
-    const r = 0.05 + 0.11 * hash2(tx + i * 5, ty - i * 3);
-    const h = 0.04 + 0.1 * hash2(tx - i * 7, ty + i * 11);
-    out.push(part(frustum(rx, ry, r, r * 0.5, z, z + h, 6), ROCK));
+    const rx = tx + 0.25 + 0.5 * hash2(tx * 31 + i, ty * 17 - i);
+    const ry = ty + 0.25 + 0.5 * hash2(tx * 19 - i, ty * 23 + i);
+    const r = 0.1 + 0.1 * hash2(tx + i * 5, ty - i * 3);
+    const h = 0.08 + 0.12 * hash2(tx - i * 7, ty + i * 11);
+    out.push(part(frustum(rx, ry, r, r * 0.55, z, z + h, 6), ROCK));
   }
   return out;
 }
@@ -1277,19 +1366,12 @@ interface SceneCache {
   ground: Map<number, Shape[]>;
   /** Each building's static shapes, as the runs between its live parts. */
   buildings: Map<string, Shape[][]>;
-  /** The straight stretches of road the rovers drive, found once per layout. */
-  runs: RoadRun[] | null;
-  /** Connection points, as `tile * 4 + side` (side: the building is east, west, south, north of the road). */
-  connectors: Set<number>;
-}
-
-/** A straight stretch of road: from (tx, ty), `length` tiles along (dx, dy). */
-interface RoadRun {
-  readonly tx: number;
-  readonly ty: number;
-  readonly dx: number;
-  readonly dy: number;
-  readonly length: number;
+  /**
+   * Where each network meets a building, as `tile * 4 + side` (side: the
+   * building is east, west, south, north of the tile): one per side of a
+   * building, per network.
+   */
+  connectors: { readonly corridors: Set<number>; readonly cables: Set<number> };
 }
 
 /** One cache per level of detail, so zooming in and out never throws one away. */
@@ -1303,9 +1385,10 @@ const asList = (made: Part | readonly Part[]): readonly Part[] => (Array.isArray
  * between its live parts; every frame after that builds only the live parts
  * and slots them back in, so painter's order is exactly the assembly's.
  */
-function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][]>, out: Shape[]): void {
+function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][]>, out: Shape[], variant = ""): void {
   // `cache` belongs to one level of detail's scene cache, so the level needs no place in the key.
-  const key = `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}|${Math.round(b.activity * 20)}`;
+  // `variant`: whatever else changes the static parts (a spaceport whose rocket is away).
+  const key = `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}|${Math.round(b.activity * 20)}|${variant}`;
   const kept = cache.get(key);
   if (kept === undefined) {
     const runs: Shape[][] = [[]];
@@ -1344,15 +1427,20 @@ function groundKey(view: CityView): string {
     sum += z;
     weighted += z * ((i % 97) + 1);
   });
-  // Roads are ground too: laying one must redraw it.
-  let roads = 0;
-  let roadWeight = 0;
-  view.roads.forEach((r, i) => {
-    if (!r) return;
-    roads += 1;
-    roadWeight += (i % 101) + 1;
-  });
-  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}|${roads}|${roadWeight}`;
+  // Corridors, cables and rocks are drawn with the ground: laying one, or
+  // breaking one, must redraw it.
+  const layer = (tiles: readonly boolean[]): string => {
+    let count = 0;
+    let weight = 0;
+    tiles.forEach((on, i) => {
+      if (!on) return;
+      count += 1;
+      weight += (i % 101) + 1;
+    });
+    return `${count}:${weight}`;
+  };
+  const rocks = layer(view.rocks.map((r) => r !== "none"));
+  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}|${layer(view.corridors)}|${layer(view.cables)}|${rocks}`;
 }
 
 /** At low detail, open ground is drawn in patches this many tiles across. */
@@ -1381,7 +1469,7 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
         const z0 = view.groundZ[py * n + px] ?? 0;
         for (let y = py; y < py + LOW_PATCH && open; y += 1) {
           for (let x = px; x < px + LOW_PATCH; x += 1) {
-            if (covered.has(y * n + x) || view.steep[y * n + x] === true || view.roads[y * n + x] === true || (view.groundZ[y * n + x] ?? 0) !== z0) open = false;
+            if (covered.has(y * n + x) || view.steep[y * n + x] === true || view.corridors[y * n + x] === true || (view.groundZ[y * n + x] ?? 0) !== z0) open = false;
           }
         }
         if (!open) continue;
@@ -1395,10 +1483,10 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
       if (!covered.has(ty * n + tx) && !done[ty * n + tx]) occupants.push({ tx, ty, w: 1, h: 1, building: -1 });
     }
   }
-  // One connection point per side of a building: the road tile nearest the
-  // middle of that side (the first version put one on every road tile a
-  // building touched, and a street read as a row of bollards).
-  const connectors = new Set<number>();
+  // One connection point per side of a building, per network: the tile of it
+  // nearest the middle of that side (the first version put one on every tile
+  // a building touched, and a street read as a row of bollards).
+  const connectors = { corridors: new Set<number>(), cables: new Set<number>() };
   for (const b of view.buildings) {
     const mid = Math.floor(b.size / 2);
     const offsets = Array.from({ length: b.size }, (_, k) => mid + (k % 2 === 0 ? k / 2 : -(k + 1) / 2)).filter((k) => k >= 0 && k < b.size);
@@ -1409,167 +1497,251 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
       (k) => [b.tx + k, b.ty - 1, 2],
       (k) => [b.tx + k, b.ty + b.size, 3],
     ];
-    for (const side of sides) {
-      for (const k of offsets) {
-        const [x, y, dir] = side(k);
-        if (x < 0 || y < 0 || x >= n || y >= n || view.roads[y * n + x] !== true) continue;
-        connectors.add((y * n + x) * 4 + dir);
-        break;
+    for (const layer of ["corridors", "cables"] as const) {
+      for (const side of sides) {
+        for (const k of offsets) {
+          const [x, y, dir] = side(k);
+          if (x < 0 || y < 0 || x >= n || y >= n || view[layer][y * n + x] !== true) continue;
+          connectors[layer].add((y * n + x) * 4 + dir);
+          break;
+        }
       }
     }
   }
-  const fresh: SceneCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map(), runs: null, connectors };
+  const fresh: SceneCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map(), connectors };
   sceneCaches.set(quality, fresh);
   return fresh;
 }
 
 // ---------------------------------------------------------------------------
-// Roads (at the user's request): the surface, where it meets a building, and
-// the rovers that drive it.
+// Corridors and cables (at the user's request: "roads are not like earth city
+// roads, here they are thin corridors"; power by "thinner cables, yellow").
 // ---------------------------------------------------------------------------
 
-const ROAD = rgb(0.34, 0.31, 0.29);
-/**
- * A road as it reads from further away, where its kerbs, dashes and rovers
- * are not drawn: the surface scaled by the mean colour of the full drawing
- * over the bare one (measured on the example metropolis's streets: x1.113,
- * x1.127, x1.103). With the bare surface, the far view lost a fifth of its
- * likeness to the near one.
- */
-const ROAD_FAR = rgb(0.378, 0.349, 0.32);
-const KERB = rgb(0.6, 0.57, 0.52);
-const ROAD_DASH = rgb(0.86, 0.74, 0.38);
-const CONNECTOR = rgb(0.68, 0.7, 0.72);
-const CONNECTOR_LIGHT = rgb(1, 0.72, 0.25);
+const CORRIDOR = rgb(0.88, 0.88, 0.86);
+const CORRIDOR_FAR = rgb(0.665, 0.695, 0.701);
+const CABLE = rgb(0.98, 0.78, 0.12);
+const TERMINAL_LIGHT = rgb(1, 0.72, 0.25);
+/** Sides in the order connectors use: toward +x, -x, +y, -y. */
+const SIDES: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+/** Which sides of a tile a network runs out of: to more of it, or into a building at its connection point. */
+function linkSides(view: CityView, layer: "corridors" | "cables", connectors: ReadonlySet<number>, tx: number, ty: number): boolean[] {
+  const n = view.tiles;
+  return SIDES.map(([dx, dy], side) => {
+    const x = tx + dx;
+    const y = ty + dy;
+    if (x < 0 || y < 0 || x >= n || y >= n) return false;
+    return view[layer][y * n + x] === true || connectors.has((ty * n + tx) * 4 + side);
+  });
+}
+
+/** An arm from a tile's hub to its edge on `side`, `half` wide, as a box from z0 to z1. */
+function arm(tx: number, ty: number, side: number, half: number, z0: number, z1: number): Face[] {
+  const [dx, dy] = SIDES[side]!;
+  const cx = tx + 0.5;
+  const cy = ty + 0.5;
+  const x0 = dx === 0 ? cx - half : dx > 0 ? cx : tx;
+  const x1 = dx === 0 ? cx + half : dx > 0 ? tx + 1 : cx;
+  const y0 = dy === 0 ? cy - half : dy > 0 ? cy : ty;
+  const y1 = dy === 0 ? cy + half : dy > 0 ? ty + 1 : cy;
+  return box(x0, y0, z0, x1, y1, z1);
+}
 
 /**
- * A road tile's markings: a kerb along every edge that is not more road, a
- * dash down the middle of a straight stretch, and a connection point - a
- * pedestal with a light, and a conduit to the wall - on every edge a
- * building stands against. Static, so kept with the ground.
+ * A corridor's footprint on its tile as at most two bars - east-west and
+ * north-south - each running from the middle to every side it continues
+ * on. The same outline as a hub with four arms in half the boxes, and one
+ * box on a straight run (the first version drew a hub and an arm each: on
+ * the example metropolis's 2,815 corridor tiles that was 27,600 shapes at
+ * medium detail, measured).
  */
-function roadDetail(view: CityView, connectors: ReadonlySet<number>, tx: number, ty: number, z: number, quality: CityQuality): Part[] {
-  const n = view.tiles;
+function corridorBars(sides: readonly boolean[], tx: number, ty: number, half: number): [number, number, number, number][] {
+  const [east, west, south, north] = sides as [boolean, boolean, boolean, boolean];
+  const cx = tx + 0.5;
+  const cy = ty + 0.5;
+  const bars: [number, number, number, number][] = [];
+  if (east || west) bars.push([west ? tx : cx - half, cy - half, east ? tx + 1 : cx + half, cy + half]);
+  if (north || south) bars.push([cx - half, north ? ty : cy - half, cx + half, south ? ty + 1 : cy + half]);
+  if (bars.length === 0) bars.push([cx - half, cy - half, cx + half, cy + half]);
+  return bars;
+}
+
+/**
+ * A corridor tile: a pressurised walkway with a glass roof strip, and an
+ * airlock collar where it meets a building. Further away the same bars,
+ * plainer; furthest, a flat trace in the colour it reads as.
+ */
+function corridorDetail(view: CityView, connectors: ReadonlySet<number>, tx: number, ty: number, z: number, quality: CityQuality): Part[] {
+  const sides = linkSides(view, "corridors", connectors, tx, ty);
   const out: Part[] = [];
-  const at = (x: number, y: number): number => (x >= 0 && y >= 0 && x < n && y < n ? y * n + x : -1);
-  const isRoad = (x: number, y: number): boolean => view.roads[at(x, y)] === true;
-  const e = isRoad(tx + 1, ty);
-  const w = isRoad(tx - 1, ty);
-  const s = isRoad(tx, ty + 1);
-  const nn = isRoad(tx, ty - 1);
-  const zz = z + 0.004;
-  const flat = (x0: number, y0: number, x1: number, y1: number, colour: Rgb, emissive = false): Part =>
-    part(sheet([[x0, y0, zz], [x1, y0, zz], [x1, y1, zz], [x0, y1, zz]]), colour, emissive ? { emissive: true } : {});
-  // Kerbs and dashes up close only: at medium they were most of the 23,000
-  // shapes roads added to a zoomed-out metropolis (measured).
-  if (quality === "high") {
-    const k = 0.06;
-    if (!nn) out.push(flat(tx, ty, tx + 1, ty + k, KERB));
-    if (!s) out.push(flat(tx, ty + 1 - k, tx + 1, ty + 1, KERB));
-    if (!w) out.push(flat(tx, ty, tx + k, ty + 1, KERB));
-    if (!e) out.push(flat(tx + 1 - k, ty, tx + 1, ty + 1, KERB));
-    const along = e || w;
-    const across = nn || s;
-    if (along && !across) out.push(flat(tx + 0.3, ty + 0.47, tx + 0.7, ty + 0.53, ROAD_DASH));
-    else if (across && !along) out.push(flat(tx + 0.47, ty + 0.3, tx + 0.53, ty + 0.7, ROAD_DASH));
+  const half = 0.17;
+  const top = z + 0.2;
+  const bars = corridorBars(sides, tx, ty, half);
+  if (quality === "low") {
+    // A roof at the tube's own height, a little wider for the walls it
+    // stands in for: a flat trace on the ground covered 60% of the pixels
+    // the tube does, and the far view lost a fifth of its likeness (measured).
+    for (const [x0, y0, x1, y1] of corridorBars(sides, tx, ty, 0.22)) out.push(part(sheet([[x0, y0, top], [x1, y0, top], [x1, y1, top], [x0, y1, top]]), CORRIDOR_FAR));
+    return out;
   }
-  // Connection points: toward the building on each side this tile serves.
-  const sides: [number, number, number, number][] = [
-    [1, 0, tx + 0.78, ty + 0.5],
-    [-1, 0, tx + 0.22, ty + 0.5],
-    [0, 1, tx + 0.5, ty + 0.78],
-    [0, -1, tx + 0.5, ty + 0.22],
-  ];
-  sides.forEach(([dx, dy, px, py], side) => {
-    if (!connectors.has(at(tx, ty) * 4 + side)) return;
-    const h = 0.07;
-    out.push(part(box(px - h, py - h, z, px + h, py + h, z + 0.16), CONNECTOR));
-    if (quality === "high") {
-      out.push(part(box(px - 0.04, py - 0.04, z + 0.16, px + 0.04, py + 0.04, z + 0.2), CONNECTOR_LIGHT, { emissive: true }));
-      // The conduit: from the pedestal to the wall.
-      const ex = dx === 0 ? px : tx + (dx > 0 ? 1 : 0);
-      const ey = dy === 0 ? py : ty + (dy > 0 ? 1 : 0);
-      out.push(part(box(Math.min(px, ex) - 0.025, Math.min(py, ey) - 0.025, z, Math.max(px, ex) + 0.025, Math.max(py, ey) + 0.025, z + 0.05), DARK_METAL));
-    }
+  if (quality === "medium") {
+    // The roof alone: at this distance a corridor's walls are a pixel or two,
+    // and they were half of what corridors cost here.
+    for (const [x0, y0, x1, y1] of bars) out.push(part(sheet([[x0, y0, top], [x1, y0, top], [x1, y1, top], [x0, y1, top]]), CORRIDOR));
+    return out;
+  }
+  for (const [x0, y0, x1, y1] of bars) out.push(part(box(x0, y0, z, x1, y1, top), CORRIDOR));
+  if (quality === "high") {
+    // The glass strip along the roof.
+    for (const [x0, y0, x1, y1] of corridorBars(sides, tx, ty, 0.06)) out.push(part(box(x0, y0, top, x1, y1, top + 0.015), GLASS));
+    SIDES.forEach(([dx, dy], side) => {
+      if (!connectors.has((ty * view.tiles + tx) * 4 + side)) return;
+      // The airlock collar, at the building's wall.
+      const ex = tx + 0.5 + dx * 0.44;
+      const ey = ty + 0.5 + dy * 0.44;
+      const w = dx === 0 ? 0.24 : 0.06;
+      const d = dy === 0 ? 0.24 : 0.06;
+      out.push(part(box(ex - w, ey - d, z, ex + w, ey + d, top + 0.06), METAL));
+      out.push(part(box(ex - w * 0.6, ey - d * 0.6, top + 0.06, ex + w * 0.6, ey + d * 0.6, top + 0.08), TERMINAL_LIGHT, { emissive: true }));
+    });
+  }
+  return out;
+}
+
+/**
+ * A cable tile: a thin yellow line from a post, to each side it runs on; a
+ * terminal box where it meets a building. Over a corridor it rides on the
+ * roof. Not drawn furthest away: too thin to see.
+ */
+function cableDetail(view: CityView, connectors: ReadonlySet<number>, tx: number, ty: number, z: number, quality: CityQuality): Part[] {
+  if (quality === "low") return [];
+  const sides = linkSides(view, "cables", connectors, tx, ty);
+  const out: Part[] = [];
+  const onCorridor = view.corridors[ty * view.tiles + tx] === true;
+  if (quality === "medium") {
+    const lift = (onCorridor ? z + 0.225 : z) + 0.006;
+    out.push(part(sheet([[tx + 0.46, ty + 0.46, lift], [tx + 0.54, ty + 0.46, lift], [tx + 0.54, ty + 0.54, lift], [tx + 0.46, ty + 0.54, lift]]), CABLE));
+    sides.forEach((on, side) => {
+      if (on) out.push(part([arm(tx, ty, side, 0.03, lift, lift)[0]!], CABLE));
+    });
+    return out;
+  }
+  const h = onCorridor ? z + 0.26 : z + 0.24;
+  if (!onCorridor) out.push(part(box(tx + 0.48, ty + 0.48, z, tx + 0.52, ty + 0.52, h), DARK_METAL));
+  out.push(part(box(tx + 0.47, ty + 0.47, h, tx + 0.53, ty + 0.53, h + 0.03), CABLE));
+  sides.forEach((on, side) => {
+    if (on) out.push(part(arm(tx, ty, side, 0.018, h + 0.004, h + 0.026), CABLE));
+  });
+  SIDES.forEach(([dx, dy], side) => {
+    if (!connectors.has((ty * view.tiles + tx) * 4 + side)) return;
+    // The terminal on the wall: a box, a yellow cap and a lamp.
+    const ex = tx + 0.5 + dx * 0.42;
+    const ey = ty + 0.5 + dy * 0.42;
+    out.push(part(box(ex - 0.07, ey - 0.07, z, ex + 0.07, ey + 0.07, h + 0.02), DARK_METAL));
+    out.push(part(box(ex - 0.07, ey - 0.07, h + 0.02, ex + 0.07, ey + 0.07, h + 0.05), CABLE));
+    out.push(part(box(ex - 0.025, ey - 0.025, h + 0.05, ex + 0.025, ey + 0.025, h + 0.08), TERMINAL_LIGHT, { emissive: true }));
   });
   return out;
 }
 
-/** The straight stretches of road, at least three tiles long: rover routes. Along x first, then y. */
-function roadRuns(view: CityView): RoadRun[] {
-  const n = view.tiles;
-  const runs: RoadRun[] = [];
-  const road = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < n && y < n && view.roads[y * n + x] === true;
-  for (const [dx, dy] of [
-    [1, 0],
-    [0, 1],
-  ] as const) {
-    for (let y = 0; y < n; y += 1) {
-      for (let x = 0; x < n; x += 1) {
-        if (!road(x, y) || road(x - dx, y - dy)) continue;
-        let length = 1;
-        while (road(x + dx * length, y + dy * length)) length += 1;
-        if (length >= 3) runs.push({ tx: x, ty: y, dx, dy, length });
-      }
-    }
-  }
-  return runs;
-}
+// ---------------------------------------------------------------------------
+// Rovers at work and rockets in flight (at the user's request). Both are
+// drawn, not simulated: where each is comes from its job's time left, plus
+// the moments since the last substep so they move smoothly.
+// ---------------------------------------------------------------------------
 
 interface Rover {
   readonly x: number;
   readonly y: number;
   readonly z: number;
-  /** Heading: +1 or -1 along the run's axis. */
+  /** Heading: the axis it mostly drives along, +1 or -1. */
   readonly dx: number;
   readonly dy: number;
   readonly hue: number;
+  /** At the rock, breaking it: how far through, 0..1; null while driving. */
+  readonly working: number | null;
 }
 
-/** Tiles per second. */
-const ROVER_SPEED = 0.55;
+/** How far through each job is, 0..1, at this moment. */
+function jobProgress(total: number, remaining: number, since: number): number {
+  return Math.min(1, Math.max(0, (total - remaining + since) / total));
+}
 
-/**
- * Where every rover is at `time`: each shuttles up and down its stretch of
- * road, turning at the ends. Render-time only (micro §8: aliveness is never
- * simulated), and a pure function of the layout and the time.
- */
-function roversOn(view: CityView, cache: SceneCache, time: number): Map<number, Rover[]> {
-  cache.runs ??= roadRuns(view);
-  const n = view.tiles;
+/** Every rover out on a job, by the tile it is on: out from the headquarters, at the rock, and back. */
+function roversAt(view: CityView, since: number): Map<number, Rover[]> {
   const byTile = new Map<number, Rover[]>();
-  cache.runs.forEach((run, r) => {
-    // One rover per stretch, and one more for every ten tiles of it.
-    const count = 1 + Math.floor(run.length / 10);
-    const travel = run.length - 1;
-    for (let k = 0; k < count; k += 1) {
-      const offset = hash2(r * 7 + k, run.tx * 13 + run.ty) * 2 * travel;
-      const t = (time * ROVER_SPEED + offset) % (2 * travel);
-      const forward = t < travel;
-      const along = forward ? t : 2 * travel - t;
-      const x = run.tx + run.dx * along + 0.5;
-      const y = run.ty + run.dy * along + 0.5;
-      const tx = Math.floor(x);
-      const ty = Math.floor(y);
-      const tile = ty * n + tx;
-      const z = view.groundZ[tile] ?? 0;
-      const sign = forward ? 1 : -1;
-      // Keep to the right of the dash.
-      const side = 0.14 * sign;
-      const rover: Rover = { x: x - run.dy * side, y: y + run.dx * side, z, dx: run.dx * sign, dy: run.dy * sign, hue: hash2(r + 3, k + 5) };
-      const list = byTile.get(tile);
-      if (list === undefined) byTile.set(tile, [rover]);
-      else list.push(rover);
+  const g = view.garage;
+  if (g === null) return byTile;
+  const n = view.tiles;
+  view.jobs.forEach((job, k) => {
+    if (job.kind !== "rover") return;
+    const tx = job.tx + 0.5;
+    const ty = job.ty + 0.5;
+    const len = Math.hypot(tx - g.x, ty - g.y) || 1;
+    const ux = (tx - g.x) / len;
+    const uy = (ty - g.y) / len;
+    // It leaves by the garage door on the side facing the rock, and stops beside the rock.
+    const start = Math.max(0, Math.min(len, 2.6));
+    const stop = Math.max(start, len - 0.45);
+    const elapsed = jobProgress(job.total, job.remaining, since) * job.total;
+    const drive = Math.max(1e-9, (job.total - job.work) / 2);
+    let along: number;
+    let sign = 1;
+    let working: number | null = null;
+    if (elapsed < drive) along = start + (stop - start) * (elapsed / drive);
+    else if (elapsed < drive + job.work) {
+      along = stop;
+      working = (elapsed - drive) / Math.max(1e-9, job.work);
+    } else {
+      along = stop - (stop - start) * Math.min(1, (elapsed - drive - job.work) / drive);
+      sign = -1;
     }
+    const x = g.x + ux * along;
+    const y = g.y + uy * along;
+    const tile = Math.min(n - 1, Math.max(0, Math.floor(y))) * n + Math.min(n - 1, Math.max(0, Math.floor(x)));
+    const major = Math.abs(ux) >= Math.abs(uy);
+    const rover: Rover = {
+      x,
+      y,
+      z: view.groundZ[tile] ?? 0,
+      dx: major ? Math.sign(ux * sign) || 1 : 0,
+      dy: major ? 0 : Math.sign(uy * sign) || 1,
+      hue: ((k * 0.37) % 1 + 1) % 1,
+      working,
+    };
+    const list = byTile.get(tile);
+    if (list === undefined) byTile.set(tile, [rover]);
+    else list.push(rover);
   });
   return byTile;
+}
+
+/** Each spaceport's rocket, by the spaceport's corner tile: in flight at a height, or away. */
+function rocketsAt(view: CityView, since: number): Map<number, RocketState> {
+  const out = new Map<number, RocketState>();
+  for (const job of view.jobs) {
+    if (job.kind !== "rocket") continue;
+    const q = jobProgress(job.total, job.remaining, since);
+    // A tenth of the trip to climb out of sight, a tenth to come down.
+    const edge = 0.1;
+    const high = 14;
+    const state: RocketState = q < edge ? high * (q / edge) ** 2 : q > 1 - edge ? high * ((1 - q) / edge) ** 2 : "away";
+    out.set(job.ty * view.tiles + job.tx, state);
+  }
+  return out;
 }
 
 const ROVER_BODY = rgb(0.9, 0.88, 0.84);
 const ROVER_TRIM = [rgb(0.92, 0.48, 0.16), rgb(0.2, 0.5, 0.78), rgb(0.85, 0.72, 0.2)] as const;
 
-/** A six-wheeled rover: chassis, cab, a stripe, a mast, and a headlamp facing where it is going. */
-function drawRovers(list: readonly Rover[] | undefined, out: Shape[]): void {
+/** A six-wheeled rover: chassis, cab, a stripe, a mast, a headlamp - and, at a rock, a drill and its dust. */
+function drawRovers(list: readonly Rover[] | undefined, time: number, out: Shape[]): void {
   if (list === undefined) return;
   for (const r of list) {
     const ax = Math.abs(r.dx);
@@ -1580,7 +1752,6 @@ function drawRovers(list: readonly Rover[] | undefined, out: Shape[]): void {
     const ey = ax ? hw : hl;
     const trim = ROVER_TRIM[Math.floor(r.hue * ROVER_TRIM.length)] ?? ROVER_TRIM[0];
     const parts: Part[] = [];
-    // Wheels: three a side.
     for (const u of [-0.13, 0, 0.13]) {
       for (const v of [-1, 1]) {
         const cx = r.x + (ax ? u : v * (hw + 0.005));
@@ -1589,21 +1760,33 @@ function drawRovers(list: readonly Rover[] | undefined, out: Shape[]): void {
       }
     }
     parts.push(part(box(r.x - ex, r.y - ey, r.z + 0.05, r.x + ex, r.y + ey, r.z + 0.12), ROVER_BODY));
-    // The stripe along its flank.
     parts.push(part(box(r.x - ex - 0.002, r.y - ey - 0.002, r.z + 0.08, r.x + ex + 0.002, r.y + ey + 0.002, r.z + 0.095), trim));
-    // The cab, at the front.
     const fx = r.x + r.dx * 0.09;
     const fy = r.y + r.dy * 0.09;
     const cab = 0.08;
     parts.push(part(box(fx - (ax ? cab : hw * 0.8), fy - (ax ? hw * 0.8 : cab), r.z + 0.12, fx + (ax ? cab : hw * 0.8), fy + (ax ? hw * 0.8 : cab), r.z + 0.2), GLASS));
-    // A mast at the back, and the lamp at the front.
     const bx = r.x - r.dx * 0.13;
     const by = r.y - r.dy * 0.13;
     parts.push(part(box(bx - 0.01, by - 0.01, r.z + 0.12, bx + 0.01, by + 0.01, r.z + 0.3), DARK_METAL));
     const lx = r.x + r.dx * (hl + 0.005);
     const ly = r.y + r.dy * (hl + 0.005);
     parts.push(part(box(lx - 0.02, ly - 0.02, r.z + 0.08, lx + 0.02, ly + 0.02, r.z + 0.11), rgb(1, 0.95, 0.75), { emissive: true }));
+    if (r.working !== null) {
+      // The drill arm, hammering, reaching past the nose into the rock.
+      const beat = 0.03 * Math.abs(Math.sin(time * 18));
+      const dx0 = r.x + r.dx * (hl + 0.02);
+      const dy0 = r.y + r.dy * (hl + 0.02);
+      const dx1 = r.x + r.dx * (hl + 0.24);
+      const dy1 = r.y + r.dy * (hl + 0.24);
+      parts.push(part(box(Math.min(dx0, dx1) - 0.02, Math.min(dy0, dy1) - 0.02, r.z + 0.06 + beat, Math.max(dx0, dx1) + 0.02, Math.max(dy0, dy1) + 0.02, r.z + 0.1 + beat), HAZARD));
+    }
     emitParts(parts, out);
+    if (r.working !== null) {
+      for (let i = 0; i < 3; i += 1) {
+        const c = (((time * 0.8 + i / 3) % 1) + 1) % 1;
+        out.push(puff(r.x + r.dx * 0.4 + 0.1 * Math.sin(i * 2.1), r.y + r.dy * 0.4 + 0.1 * Math.cos(i * 2.1), r.z + 0.05 + c * 0.35, 5 + c * 7, rgb(0.7, 0.5, 0.38), 0.5 * (1 - c)));
+      }
+    }
   }
 }
 
@@ -1625,9 +1808,11 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   const cache = occupantsInOrder(view, quality);
   const { occupants, order, ground, buildings } = cache;
   const badges: Shape[] = [];
-  // Rovers move every frame, so they are never cached: each is drawn with
-  // the road tile it is on (up close only).
-  const rovers = quality === "high" ? roversOn(view, cache, options.time) : null;
+  // Rovers and rockets move every frame, so they are never cached: a rover is
+  // drawn with the tile it is on, a rocket with its spaceport.
+  const since = options.sinceYears ?? 0;
+  const rovers = quality !== "low" ? roversAt(view, since) : null;
+  const rockets = rocketsAt(view, since);
   const vp = options.viewport;
   for (const i of order) {
     const o = occupants[i]!;
@@ -1647,7 +1832,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       const kept = ground.get(i);
       if (kept !== undefined) {
         for (const shape of kept) out.push(shape);
-        if (rovers !== null && o.w === 1) drawRovers(rovers.get(o.ty * n + o.tx), out);
+        if (rovers !== null && o.w === 1) drawRovers(rovers.get(o.ty * n + o.tx), options.time, out);
         continue;
       }
       const start = out.length;
@@ -1670,11 +1855,11 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       }
       const z = view.groundZ[o.ty * n + o.tx] ?? 0;
       const steep = view.steep[o.ty * n + o.tx] === true;
-      const road = view.roads[o.ty * n + o.tx] === true;
+      const rock = view.rocks[o.ty * n + o.tx] ?? "none";
       // Height as a colour ramp, and a faint checker so single tiles read.
       const ramp = mix(GROUND_LOW, GROUND_HIGH, (z - range.lo) / span);
       const checker = (o.tx + o.ty) % 2 === 0 ? 1 : 0.965;
-      const top = road ? shade(quality === "high" ? ROAD : ROAD_FAR, 0.985 + 0.015 * checker) : shade(steep ? GROUND_STEEP : ramp, checker);
+      const top = shade(steep ? GROUND_STEEP : ramp, checker);
       const faces = box(o.tx, o.ty, floor, o.tx + 1, o.ty + 1, z);
       // Only the sides that rise above the nearer neighbour can show.
       const sides: Face[] = [];
@@ -1684,18 +1869,20 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       if (south < z) sides.push(faces[2]!);
       emitParts([part(sides, CLIFF)], out);
       out.push({ rings: [ringOf(faces[0]!.pts)], fill: { ...top, a: 1 } });
-      if (road) {
-        if (quality !== "low") emitParts(roadDetail(view, cache.connectors, o.tx, o.ty, z, quality), out);
-      } else if (steep && quality !== "low") {
+      // The rocks the simulation knows (a rover can break exactly what is drawn).
+      if (rock === "crag" && quality !== "low") {
         const h = 0.18 + 0.3 * hash2(o.tx, o.ty);
         const r = 0.22 + 0.1 * hash2(o.ty + 91, o.tx);
         emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, r, r * 0.45, z, z + h, quality === "high" ? 7 : 5), ROCK)], out);
-      } else if (quality === "high") {
-        // Loose rocks on open ground (requested by the user: not only hills).
+      } else if (rock === "loose" && quality === "high") {
         emitParts(scatter(o.tx, o.ty, z), out);
+      } else if (rock === "loose" && quality === "medium") {
+        emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, 0.14, 0.07, z, z + 0.1, 5), ROCK)], out);
       }
+      if (view.corridors[o.ty * n + o.tx] === true) emitParts(corridorDetail(view, cache.connectors.corridors, o.tx, o.ty, z, quality), out);
+      if (view.cables[o.ty * n + o.tx] === true) emitParts(cableDetail(view, cache.connectors.cables, o.tx, o.ty, z, quality), out);
       ground.set(i, out.slice(start));
-      if (rovers !== null) drawRovers(rovers.get(o.ty * n + o.tx), out);
+      if (rovers !== null) drawRovers(rovers.get(o.ty * n + o.tx), options.time, out);
       continue;
     }
     const b = view.buildings[o.building]!;
@@ -1703,8 +1890,11 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
     const plinth = box(b.tx, b.ty, floor, b.tx + b.size, b.ty + b.size, b.baseZ);
     emitParts([part(plinth.slice(1, 3), CLIFF)], out);
     out.push({ rings: [ringOf(plinth[0]!.pts)], fill: { ...mix(GROUND_LOW, GROUND_HIGH, (b.baseZ - range.lo) / span), a: 1 } });
-    const built = quality === "high" ? assemble(b, options.time) : quality === "medium" ? assembleMedium(b) : assembleLow(b);
-    emitBuilding(built, b, buildings, out);
+    const rocket: RocketState = b.type === "spaceport" ? rockets.get(b.ty * n + b.tx) ?? null : null;
+    const built = quality === "high" ? assemble(b, options.time, rocket) : quality === "medium" ? assembleMedium(b) : assembleLow(b);
+    emitBuilding(built, b, buildings, out, quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") : "");
+    // A rover crossing the building's ground is drawn after it.
+    if (rovers !== null) for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
     // Steam and other particles only up close.
     if (quality === "high") out.push(...built.extras);
     // Not connected to what it needs reads differently from any other reason it is off.
@@ -1712,6 +1902,10 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   }
 
   // Overlays, on top of everything so they are never hidden - each on its own ground.
+  const tile = options.selectedTile ?? null;
+  if (tile !== null && tile.tx >= 0 && tile.ty >= 0 && tile.tx < n && tile.ty < n) {
+    out.push(footprintRing(tile.tx, tile.ty, 1, 0.08, { r: 1, g: 0.85, b: 0.4, a: 0.95 }, view.groundZ[tile.ty * n + tile.tx] ?? 0));
+  }
   if (options.selected !== null) {
     const b = view.buildings[options.selected];
     if (b !== undefined) out.push(footprintRing(b.tx, b.ty, b.size, 0.12, { r: 1, g: 1, b: 1, a: 0.9 }, b.baseZ));

@@ -16,11 +16,12 @@ import {
   deserialize,
   gridTiles,
   habitat,
+  foundingBuildings,
   makeTuning,
   networkOf,
   placeBuilding,
-  placeRoad,
-  roadTile,
+  keyTile,
+  placeLink,
   serialize,
   settlementStep,
   siteElevation,
@@ -29,7 +30,7 @@ import {
 import { examplePlanet } from "./example.js";
 
 /** The browser's tuning: the example is built for the game as it is played. */
-const game = makeTuning({ EVENTS_ENABLED: 1, ECONOMY_ENABLED: 1, TECH_GATE_ENABLED: 1, SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, NETWORK_ENABLED: 1 });
+const game = makeTuning({ EVENTS_ENABLED: 1, ECONOMY_ENABLED: 1, TECH_GATE_ENABLED: 1, SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, NETWORK_ENABLED: 1, HEADQUARTERS_ENABLED: 1 });
 const { state } = examplePlanet(DEFAULT_TUNING, game);
 const env = habitat(state.reservoirs, derive(state.reservoirs, worldEnv(state, NEUTRAL_ENV, game), game), game, 0);
 
@@ -88,11 +89,15 @@ describe("the example planet", () => {
   });
 
   it("follows the placement rules, checked by placing every building again through the game's own API", () => {
-    // Independent of the layout code: an empty copy of each settlement, and
-    // `placeBuilding` - the call a player's click makes - for each building.
-    let replay: SimState = { ...state, settlements: state.settlements.map((s) => ({ ...s, buildings: [], stores: { ...s.stores, materials: 1e9 } })) };
+    // Independent of the layout code: a copy of each settlement as it was
+    // founded (the headquarters and a city's spaceport are landed, never
+    // built), and `placeBuilding` - the call a player's click makes - for
+    // every building after those.
+    let replay: SimState = { ...state, settlements: state.settlements.map((s) => ({ ...s, buildings: foundingBuildings(s.kind, game), stores: { ...s.stores, materials: 1e9 } })) };
     for (const s of state.settlements) {
-      for (const b of s.buildings) {
+      const founded = foundingBuildings(s.kind, game);
+      expect(s.buildings.slice(0, founded.length), `${s.id} keeps what it was founded with`).toEqual(founded);
+      for (const b of s.buildings.slice(founded.length)) {
         const out = placeBuilding(replay, s.id, b.type, b.tx, b.ty, game);
         expect(out.ok, `${s.id}: ${b.type} at ${b.tx},${b.ty} - ${out.reason}`).toBe(true);
         replay = out.state;
@@ -101,19 +106,21 @@ describe("the example planet", () => {
     }
   });
 
-  it("lays only roads a player could lay, and joins every settlement into one network", () => {
+  it("lays only corridors and cables a player could lay, and joins every settlement into one network of each", () => {
     // Independent of the street and join code: each road replayed through
-    // `placeRoad` - the call a player's click makes - on the settlement
-    // as built, with materials to spare. 42 hilly grids, ~13,800 roads.
+    // `placeLink` - the call a player's click makes - on the settlement
+    // as built, with materials to spare. 42 hilly grids.
     for (const s of state.settlements) {
-      let replay: SimState = { ...state, settlements: state.settlements.map((c) => (c.id === s.id ? { ...c, roads: [], stores: { ...c.stores, materials: 1e9 } } : c)) };
-      for (const key of s.roads) {
-        const { tx, ty } = roadTile(key);
-        const out = placeRoad(replay, s.id, tx, ty, game);
-        expect(out.ok, `${s.id}: road at ${tx},${ty} - ${out.reason}`).toBe(true);
-        replay = out.state;
+      for (const layer of ["corridors", "cables"] as const) {
+        let replay: SimState = { ...state, settlements: state.settlements.map((c) => (c.id === s.id ? { ...c, [layer]: [], stores: { ...c.stores, materials: 1e9 } } : c)) };
+        for (const key of s[layer]) {
+          const { tx, ty } = keyTile(key);
+          const out = placeLink(replay, s.id, layer, tx, ty, game);
+          expect(out.ok, `${s.id}: ${layer} at ${tx},${ty} - ${out.reason}`).toBe(true);
+          replay = out.state;
+        }
+        expect(networkOf(s.buildings, s[layer], gridTiles(s.kind, game)).count, `${s.id} ${layer}`).toBe(1);
       }
-      expect(networkOf(s.buildings, s.roads, gridTiles(s.kind, game)).count, s.id).toBe(1);
     }
   });
 

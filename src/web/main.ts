@@ -39,10 +39,12 @@ import {
   validateTuning,
   foundSettlement,
   connectAll,
+  launchRocket,
   placeBuilding,
-  placeRoad,
+  placeLink,
   removeBuilding,
-  removeRoad,
+  removeLink,
+  sendRover,
   siteElevation,
   liquidWaterRate,
   nextSubstepFlows,
@@ -88,6 +90,7 @@ const tuning = makeTuning({
   SETTLEMENTS_ENABLED: 1,
   TERRAIN_RELIEF_M: 12,
   NETWORK_ENABLED: 1,
+  HEADQUARTERS_ENABLED: 1,
 });
 validateTuning(tuning);
 
@@ -297,14 +300,24 @@ const city = new CityScreen(
       state = outcome.state;
       return outcome;
     },
-    onRoad: (id: string, tx: number, ty: number) => {
-      const outcome = placeRoad(state, id, tx, ty, tuning);
+    onLink: (id, layer, tx, ty) => {
+      const outcome = placeLink(state, id, layer, tx, ty, tuning);
       state = outcome.state;
       return outcome;
     },
-    canRoad: (id: string, tx: number, ty: number) => placeRoad(state, id, tx, ty, tuning),
-    onUnroad: (id: string, tx: number, ty: number) => {
-      const outcome = removeRoad(state, id, tx, ty);
+    canLink: (id, layer, tx, ty) => placeLink(state, id, layer, tx, ty, tuning),
+    onUnlink: (id, layer, tx, ty) => {
+      const outcome = removeLink(state, id, layer, tx, ty);
+      state = outcome.state;
+      return outcome;
+    },
+    onSendRover: (id, tx, ty) => {
+      const outcome = sendRover(state, id, tx, ty, tuning);
+      state = outcome.state;
+      return outcome;
+    },
+    onLaunch: (id, tx, ty) => {
+      const outcome = launchRocket(state, id, tx, ty, tuning);
       state = outcome.state;
       return outcome;
     },
@@ -516,7 +529,7 @@ function render(timestamp: number): void {
   if (resident !== null) {
     const here = state.settlements.find((s) => s.id === resident);
     if (here === undefined) journey.abort();
-    else city.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp);
+    else city.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp, clock.pendingYears);
   }
 
   if (timestamp - lastSample >= 1000 / SPARK_HZ) {

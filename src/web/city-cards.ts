@@ -20,13 +20,16 @@ import { fillShapes } from "./city.js";
 export const PREVIEW_W = 112;
 export const PREVIEW_H = 80;
 
-/** What a card can show: a building, the road, or "connect everything". */
-export type CardKind = BuildingType | "road" | "connect";
+/** What a card can show: a building, a corridor, a power cable, or "connect everything". */
+export type CardKind = BuildingType | "corridor" | "cable" | "connect";
 
 /** A tiny flat scene: `tiles` square, with these buildings and road tiles. */
-export function previewView(id: string, tiles: number, buildings: readonly CityBuildingView[], roads: readonly (readonly [number, number])[]): CityView {
-  const road = new Array<boolean>(tiles * tiles).fill(false);
-  for (const [x, y] of roads) road[y * tiles + x] = true;
+export function previewView(id: string, tiles: number, buildings: readonly CityBuildingView[], corridorTiles: readonly (readonly [number, number])[], cableTiles: readonly (readonly [number, number])[] = []): CityView {
+  const grid = (list: readonly (readonly [number, number])[]): boolean[] => {
+    const g = new Array<boolean>(tiles * tiles).fill(false);
+    for (const [x, y] of list) g[y * tiles + x] = true;
+    return g;
+  };
   const zero = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
   return {
     id: `preview:${id}`,
@@ -48,7 +51,11 @@ export function previewView(id: string, tiles: number, buildings: readonly CityB
     floodState: "dry",
     floodDepthM: null,
     lostAtSeaLevelM: null,
-    roads: road,
+    corridors: grid(corridorTiles),
+    cables: grid(cableTiles),
+    rocks: new Array<"none">(tiles * tiles).fill("none"),
+    garage: null,
+    jobs: [],
   };
 }
 
@@ -65,17 +72,29 @@ const building = (type: BuildingType, tx: number, ty: number, index = 0): CityBu
   network: null,
 });
 
+/** The two buildings the Power cable card joins: a solar array and a mine. */
+export function cableBuildings(): CityBuildingView[] {
+  return [building("solar_array", 0, 0, 0), building("regolith_mine", 4, 4, 1)];
+}
+
 /** The tiny scene a card shows. */
 export function previewScene(kind: CardKind): Shape[] {
   // Mid-animation, so lights are on and blades have turned; rovers mid-road.
   const at = { time: 2.4, selected: null, ghost: null, quality: "high" as const };
-  if (kind === "road") {
-    // A bend of road with a rover on it.
-    return cityScene(previewView("road", 4, [], [[0, 1], [1, 1], [2, 1], [3, 1], [2, 2], [2, 3]]), at);
+  if (kind === "corridor") {
+    // A bend of corridor with a junction.
+    return cityScene(previewView("corridor", 4, [], [[0, 1], [1, 1], [2, 1], [3, 1], [2, 2], [2, 3]]), at);
+  }
+  if (kind === "cable") {
+    // A power cable from a solar array to a mine.
+    return cityScene(previewView("cable", 6, cableBuildings(), [], [[2, 1], [3, 1], [4, 1], [4, 2], [4, 3]]), at);
   }
   if (kind === "connect") {
-    // Two buildings joined by a road, a connection point at each end.
-    return cityScene(previewView("connect", 5, [building("solar_array", 0, 0, 0), building("regolith_mine", 3, 3, 1)], [[2, 0], [2, 1], [2, 2], [3, 2], [4, 2]]), at);
+    // A dome and a greenhouse joined by a corridor, and the greenhouse's power cable.
+    return cityScene(
+      previewView("connect", 6, [building("habitat_dome", 0, 0, 0), building("greenhouse", 4, 4, 1)], [[3, 1], [4, 1], [4, 2], [4, 3]], [[5, 0], [5, 1], [5, 2], [5, 3]]),
+      at,
+    );
   }
   const size = BUILDING_DEFS[kind].footprint;
   return cityScene(previewView(kind, size, [building(kind, 0, 0)], []), at);
@@ -117,7 +136,7 @@ export function drawPreview(canvas: HTMLCanvasElement, shapes: readonly Shape[])
 /** Every card's picture, drawn once. In a page with no 2D canvas (tests) they stay blank. */
 export function makePreviews(): Map<CardKind, HTMLCanvasElement> {
   const out = new Map<CardKind, HTMLCanvasElement>();
-  for (const kind of [...BUILDING_TYPES, "road", "connect"] as CardKind[]) {
+  for (const kind of [...BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].buildable), "corridor", "cable", "connect"] as CardKind[]) {
     const canvas = document.createElement("canvas");
     canvas.width = PREVIEW_W * 2;
     canvas.height = PREVIEW_H * 2;

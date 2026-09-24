@@ -19,12 +19,15 @@ import {
   habitat,
   makeTuning,
   marsStart,
+  launchRocket,
   placeBuilding,
-  placeRoad,
+  placeLink,
   groundOf,
   removeBuilding,
-  removeRoad,
-  roadKey,
+  removeLink,
+  rocksOf,
+  sendRover,
+  tileKey,
   worldEnv,
 } from "../sim/index.js";
 import { centreCamera, isoToScreen } from "./city-camera.js";
@@ -57,16 +60,28 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
         state = o.state;
         return o;
       },
-      onRoad: (id, tx, ty) => {
-        calls.push(`road@${tx},${ty}`);
-        const o = placeRoad(state, id, tx, ty, t);
+      onLink: (id, layer, tx, ty) => {
+        calls.push(`${layer}@${tx},${ty}`);
+        const o = placeLink(state, id, layer, tx, ty, t);
         state = o.state;
         return o;
       },
-      canRoad: (id, tx, ty) => placeRoad(state, id, tx, ty, t),
-      onUnroad: (id, tx, ty) => {
-        calls.push(`unroad@${tx},${ty}`);
-        const o = removeRoad(state, id, tx, ty);
+      canLink: (id, layer, tx, ty) => placeLink(state, id, layer, tx, ty, t),
+      onUnlink: (id, layer, tx, ty) => {
+        calls.push(`un-${layer}@${tx},${ty}`);
+        const o = removeLink(state, id, layer, tx, ty);
+        state = o.state;
+        return o;
+      },
+      onSendRover: (id, tx, ty) => {
+        calls.push(`rover@${tx},${ty}`);
+        const o = sendRover(state, id, tx, ty, t);
+        state = o.state;
+        return o;
+      },
+      onLaunch: (id, tx, ty) => {
+        calls.push(`launch@${tx},${ty}`);
+        const o = launchRocket(state, id, tx, ty, t);
         state = o.state;
         return o;
       },
@@ -269,42 +284,46 @@ describe("the city view", () => {
   });
 });
 
-describe("roads (at the user's request: connect the power plant to the mines)", () => {
+describe("corridors and cables (at the user's request: connect the power plant to the mines)", () => {
   const net = makeTuning({ SETTLEMENTS_ENABLED: 1, NETWORK_ENABLED: 1 });
-  const roadAt = (page: ReturnType<typeof mount>, tx: number, ty: number): boolean => page.state().settlements[0]!.roads.includes(roadKey(tx, ty));
+  const at = (page: ReturnType<typeof mount>, layer: "corridors" | "cables", tx: number, ty: number): boolean => page.state().settlements[0]![layer].includes(tileKey(tx, ty));
 
-  it("lays road along a drag, one call a tile, through the sim", () => {
+  it("lays power cable along a drag, one call a tile, through the sim", () => {
     const page = mount("city", {}, net);
-    (page.q(".city-road") as HTMLButtonElement).click();
+    (page.q(".city-cable") as HTMLButtonElement).click();
     page.frame();
-    expect(page.q(".city-road").getAttribute("aria-pressed")).toBe("true");
-    expect(page.q(".city-hint").textContent).toMatch(/Click or drag to lay road/);
-    // The pointer lingers on a tile (two moves on 11,14): still one road there.
+    expect(page.q(".city-cable").getAttribute("aria-pressed")).toBe("true");
+    expect(page.q(".city-hint").textContent).toMatch(/Click or drag to lay power cable/);
+    // The pointer lingers on a tile (two moves on 11,14): still one cable there.
     page.dragTiles([[10, 14], [11, 14], [11, 14], [12, 14], [13, 14]]);
-    expect(page.calls).toEqual(["road@10,14", "road@11,14", "road@12,14", "road@13,14"]);
-    for (const x of [10, 11, 12, 13]) expect(roadAt(page, x, 14), `${x},14`).toBe(true);
+    expect(page.calls).toEqual(["cables@10,14", "cables@11,14", "cables@12,14", "cables@13,14"]);
+    for (const x of [10, 11, 12, 13]) expect(at(page, "cables", x, 14), `${x},14`).toBe(true);
+    expect(page.state().settlements[0]!.corridors).toEqual([]);
   });
 
-  it("takes road up when the drag starts on a road", () => {
+  it("lays corridor with the corridor tool, and takes it up when the drag starts on it", () => {
     const page = mount("city", {}, net);
-    (page.q(".city-road") as HTMLButtonElement).click();
+    (page.q(".city-corridor") as HTMLButtonElement).click();
+    page.frame();
+    expect(page.q(".city-hint").textContent).toMatch(/Click or drag to lay corridor/);
     page.dragTiles([[10, 14], [11, 14], [12, 14]]);
     page.dragTiles([[11, 14], [12, 14]]);
-    expect(roadAt(page, 10, 14)).toBe(true);
-    expect(roadAt(page, 11, 14)).toBe(false);
-    expect(roadAt(page, 12, 14)).toBe(false);
+    expect(at(page, "corridors", 10, 14)).toBe(true);
+    expect(at(page, "corridors", 11, 14)).toBe(false);
+    expect(at(page, "corridors", 12, 14)).toBe(false);
+    expect(page.state().settlements[0]!.cables).toEqual([]);
   });
 
-  it("says in words why a road was refused", () => {
+  it("says in words why a cable was refused", () => {
     const page = mount("city", {}, net);
     page.option("storage_depot").click();
     page.clickTile(14, 14);
-    (page.q(".city-road") as HTMLButtonElement).click();
+    (page.q(".city-cable") as HTMLButtonElement).click();
     page.dragTiles([[14, 14]]);
-    expect(page.q(".city-hint").textContent).toBe("Cannot lay road: a building stands there.");
+    expect(page.q(".city-hint").textContent).toBe("Cannot lay cable: a building stands there.");
   });
 
-  it("tells the player a building is not connected, and what to connect it to", () => {
+  it("tells the player a building is not connected, and what to lay to what", () => {
     const page = mount("city", {}, net);
     page.option("reactor").click();
     page.clickTile(4, 4);
@@ -312,7 +331,7 @@ describe("roads (at the user's request: connect the power plant to the mines)", 
     page.clickTile(10, 4);
     page.option("regolith_mine").click();
     page.clickAt(11, 5, 0);
-    expect(page.q(".city-inspector-status").textContent).toBe("Not connected: nothing on its network makes power. Lay a road to a power plant.");
+    expect(page.q(".city-inspector-status").textContent).toBe("Not connected: nothing on its network makes power. Lay a power cable to a power plant.");
   });
 
   it("connects everything at a click, and the mine runs on the very next frame", () => {
@@ -325,21 +344,72 @@ describe("roads (at the user's request: connect the power plant to the mines)", 
     page.clickAt(11, 5, 0);
     expect(page.q(".city-inspector-status").textContent).toMatch(/^Not connected/);
     (page.q(".city-connect") as HTMLButtonElement).click();
-    // 16 ms later - well inside the view's 200 ms refresh: new roads must redraw at once.
+    // 16 ms later - well inside the view's 200 ms refresh: what was laid must redraw at once.
     page.frame(16);
     expect(page.calls.at(-1)).toBe("connect");
-    expect(page.q(".city-hint").textContent).toMatch(/^Laid \d+ roads?\.$/);
+    expect(page.q(".city-hint").textContent).toMatch(/^Laid \d+ tiles? of corridor and cable\.$/);
     expect(page.q(".city-inspector-status").textContent).toBe("Running.");
   });
 
-  it("puts the Road tool down with Escape", () => {
+  it("puts the tool down with Escape", () => {
     const page = mount("city", {}, net);
-    (page.q(".city-road") as HTMLButtonElement).click();
+    (page.q(".city-corridor") as HTMLButtonElement).click();
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     page.frame();
-    expect(page.q(".city-road").getAttribute("aria-pressed")).toBe("false");
+    expect(page.q(".city-corridor").getAttribute("aria-pressed")).toBe("false");
     page.clickTile(10, 14);
     expect(page.calls).toEqual([]);
+  });
+});
+
+describe("the headquarters, rovers and rockets (at the user's request)", () => {
+  const hq = makeTuning({ SETTLEMENTS_ENABLED: 1, NETWORK_ENABLED: 1, HEADQUARTERS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
+  /** A loose rock on this site, and where its ground is drawn. */
+  const looseRock = (page: ReturnType<typeof mount>): { tx: number; ty: number; z: number } => {
+    const s = page.state().settlements[0]!;
+    const ground = groundOf(s, hq);
+    const k = rocksOf(s, hq).findIndex((r, i) => r === "loose" && Math.abs((i % 32) - 16) < 9 && Math.abs(Math.floor(i / 32) - 16) < 9);
+    expect(k, "a loose rock near the middle of this site").toBeGreaterThanOrEqual(0);
+    return { tx: k % 32, ty: Math.floor(k / 32), z: ground.heightM[k]! / hq.TILE_METRES };
+  };
+
+  it("selects a rock with a click, says what breaking it brings and how long a rover takes, and sends one", () => {
+    const page = mount("city", {}, hq);
+    const rock = looseRock(page);
+    page.clickAt(rock.tx + 0.5, rock.ty + 0.5, rock.z);
+    expect(page.q(".city-inspector").hidden).toBe(false);
+    expect(page.q(".city-inspector-name").textContent).toBe("Loose rocks");
+    expect(page.q(".city-inspector-summary").textContent).toMatch(/brings back 1 material/);
+    expect(page.q(".city-inspector-status").textContent).toMatch(/A rover would take about \d+ s at 1x there and back\. 3 of 3 rovers/);
+    expect(page.q(".city-send-rover").hidden).toBe(false);
+    (page.q(".city-send-rover") as HTMLButtonElement).click();
+    page.frame(16);
+    expect(page.calls.at(-1)).toBe(`rover@${rock.tx},${rock.ty}`);
+    expect(page.q(".city-hint").textContent).toBe("A rover is on its way.");
+    expect(page.q(".city-inspector-status").textContent).toMatch(/A rover is on its way: back in about \d+ s at 1x\./);
+  });
+
+  it("launches the spaceport's rocket, and says when it will be back", () => {
+    // Room in the stores: a rocket is refused when they are full.
+    const page = mount("city", { materials: 100 }, hq);
+    // The spaceport the city landed with, east of the headquarters.
+    page.clickAt(20.5, 16.5, 0);
+    expect(page.q(".city-inspector-name").textContent).toBe("Spaceport");
+    expect(page.q(".city-launch").hidden).toBe(false);
+    expect(page.q(".city-inspector-summary").textContent).toMatch(/back in about 60 s at 1x with 20 materials/);
+    (page.q(".city-launch") as HTMLButtonElement).click();
+    page.frame(16);
+    expect(page.calls.at(-1)).toMatch(/^launch@/);
+    expect(page.q(".city-inspector-summary").textContent).toMatch(/Its rocket is away: back in about 60 s at 1x\./);
+  });
+
+  it("offers no card for the headquarters, and no way to remove it", () => {
+    const page = mount("city", {}, hq);
+    expect(page.host.querySelector('.city-card[data-type="headquarters"]')).toBeNull();
+    page.clickAt(16.5, 16.5, 0);
+    expect(page.q(".city-inspector-name").textContent).toBe("Headquarters");
+    expect(page.q(".city-remove").hidden).toBe(true);
+    expect(page.q(".city-launch").hidden).toBe(true);
   });
 });
 
@@ -348,8 +418,8 @@ describe("the build bar (at the user's request: cards along the bottom, as in Cl
     const page = mount();
     const dock = page.q(".city-dock");
     const cards = [...dock.querySelectorAll<HTMLElement>(".city-card")];
-    // Ten buildings, the road and "connect everything".
-    expect(cards.length).toBe(12);
+    // Ten buildings, the corridor, the power cable and "connect everything".
+    expect(cards.length).toBe(13);
     expect(page.q(".city-panel").querySelector(".city-card")).toBeNull();
     for (const c of cards) {
       expect(c.querySelector("canvas.city-card-preview"), c.dataset["card"]).not.toBeNull();
@@ -372,9 +442,11 @@ describe("the build bar (at the user's request: cards along the bottom, as in Cl
     expect(tip.textContent).toMatch(/Makes food [\d.]+\/yr\./);
     page.option("greenhouse").dispatchEvent(new PointerEvent("pointerleave"));
     expect(tip.hidden).toBe(true);
-    // The road's card explains the network.
-    page.q(".city-road").dispatchEvent(new PointerEvent("pointerenter"));
-    expect(tip.textContent).toMatch(/a mine needs a road to a power plant/);
+    // The corridor's and the cable's cards say what each carries.
+    page.q(".city-cable").dispatchEvent(new PointerEvent("pointerenter"));
+    expect(tip.textContent).toMatch(/Carries power, and only power: a mine needs a cable to a power plant/);
+    page.q(".city-corridor").dispatchEvent(new PointerEvent("pointerenter"));
+    expect(tip.textContent).toMatch(/water, oxygen, food and materials\. A dome needs a corridor to a greenhouse/);
   });
 
   it("tells it from the keyboard too: focus shows the same words", () => {

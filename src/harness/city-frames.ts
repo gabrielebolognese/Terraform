@@ -158,7 +158,11 @@ export function buildingSheet(): { view: CityView; options: CitySceneOptions } {
     floodState: "dry",
     floodDepthM: null,
     lostAtSeaLevelM: null,
-    roads: new Array<boolean>(tiles * tiles).fill(false),
+    corridors: new Array<boolean>(tiles * tiles).fill(false),
+    cables: new Array<boolean>(tiles * tiles).fill(false),
+    rocks: new Array<"none">(tiles * tiles).fill("none"),
+    garage: null,
+    jobs: [],
   };
   return { view, options: { time: 1.3, selected: null, ghost: null } };
 }

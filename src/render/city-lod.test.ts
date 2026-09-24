@@ -1,8 +1,8 @@
 /**
  * Three levels of detail (requested by the user: "in a metropolis if I zoom
  * out a lot it lags"). Measured on the example's largest metropolis, the
- * whole grid (9,216 tiles, 758 buildings, and its streets since roads came):
- * 266,310 shapes at high, 46,506 at medium, 16,717 at low.
+ * whole grid (9,216 tiles, ~740 buildings, 2,815 tiles of corridor and 500
+ * of cable): 278,453 shapes at high, 45,734 at medium, 21,491 at low.
  *
  * A far view is only worth drawing if it still looks like the city. The first
  * version did not: it merged sloping ground into flat patches and coloured
@@ -60,8 +60,10 @@ function fromAfar(f: Frame, k = 8): Frame {
 
 describe("levels of detail", () => {
   it("cut a whole metropolis's shapes to a fifth, then to a tenth", () => {
-    // Measured: medium 17.5% of high, low 6.3%. (Roads first took medium to
-    // 23%: kerbs and connection points on every street. Now high only.)
+    // Measured: medium 16.4% of high, low 7.7%. (Roads first took medium to
+    // 23%: kerbs and connection points on every street, now high only. Then
+    // corridors drawn as a hub and four arms took it to 22%: now two bars,
+    // and at medium only their roofs.)
     const high = cityScene(metropolis, at("high")).length;
     expect(cityScene(metropolis, at("medium")).length).toBeLessThan(0.2 * high);
     expect(cityScene(metropolis, at("low")).length).toBeLessThan(0.1 * high);
@@ -69,10 +71,10 @@ describe("levels of detail", () => {
 
   it("still look like the city from as far as they are drawn", () => {
     // 960 x 600 is the whole metropolis about as large as it is on screen at
-    // the widest zoom. Measured, over 8 x 8 blocks: bare ground 0.0238 from
-    // the full city, medium 0.0060 (25% of that), low 0.0095 (40%). Streets
-    // drawn in their bare surface colour took low to 45%; they now take the
-    // colour a street reads as up close, kerbs, dashes and rovers included.
+    // the widest zoom. Measured, over 8 x 8 blocks: bare ground 0.0250 from
+    // the full city, medium 0.0082 (33% of that), low 0.0098 (39%).
+    // Corridors drawn far away as a flat trace on the ground took low to 47%;
+    // they are now a roof at the tube's height, in the colour it reads as.
     const W = 960;
     const H = 600;
     const high = fromAfar(renderCity(metropolis, at("high"), W, H, false));
@@ -127,8 +129,8 @@ describe("levels of detail", () => {
     // Merging sloping ground into flat patches erased the terraces: bare
     // ground at low differed from high by 0.0206. Merging only flat patches:
     // 0.0012 (measured, 480 x 300).
-    // The terrain alone: no buildings, and no roads (they have tests of their own).
-    const bare: CityView = { ...metropolis, buildings: [], roads: metropolis.roads.map(() => false) };
+    // The terrain alone: no buildings, and no corridors or cables (they have tests of their own).
+    const bare: CityView = { ...metropolis, buildings: [], corridors: metropolis.corridors.map(() => false), cables: metropolis.cables.map(() => false) };
     const high = renderCity(bare, at("high"), 480, 300, false);
     expect(frameDifference(renderCity(bare, at("low"), 480, 300, false), high)).toBeLessThan(0.004);
     // And the patches are really used, where they can be: on flat open
@@ -160,23 +162,36 @@ describe("levels of detail", () => {
 });
 
 describe("loose rocks", () => {
-  // Flat, open ground: no hills, so any rock is a loose one.
+  // Flat, open ground with the site's loose rocks and nothing else: no
+  // hills, no crags.
   const { view } = referenceCity();
-  const open: CityView = { ...view, id: "open", buildings: [], groundZ: view.groundZ.map(() => 0), steep: view.steep.map(() => false) };
+  const open: CityView = {
+    ...view,
+    id: "open",
+    buildings: [],
+    groundZ: view.groundZ.map(() => 0),
+    steep: view.steep.map(() => false),
+    rocks: view.rocks.map((r) => (r === "loose" ? "loose" : "none")),
+  };
 
   it("lie on open ground up close, on a scattering of tiles, not everywhere", () => {
     const W = 640;
     const H = 400;
     resetSceneCache();
-    const near = renderCity(open, at("high"), W, H, false);
-    const plain = renderCity(open, at("medium"), W, H, false);
+    const withRocks = renderCity(open, at("high"), W, H, false);
+    resetSceneCache();
+    const without = renderCity({ ...open, rocks: open.rocks.map(() => "none") }, at("high"), W, H, false);
     let changed = 0;
-    for (let i = 0; i < near.pixels.length; i += 4) if (near.pixels[i] !== plain.pixels[i] || near.pixels[i + 1] !== plain.pixels[i + 1]) changed += 1;
-    // Measured: 0.27% of the frame (the grid fills about half of it) - rocks
-    // are there, and they are pebbles on a few tiles, not a rubble field.
+    for (let i = 0; i < withRocks.pixels.length; i += 4) if (withRocks.pixels[i] !== without.pixels[i] || withRocks.pixels[i + 1] !== without.pixels[i + 1]) changed += 1;
     const share = changed / (W * H);
-    expect(share).toBeGreaterThan(0.0015);
-    expect(share).toBeLessThan(0.006);
+    const tiles = open.rocks.filter((r) => r === "loose").length / open.rocks.length;
+    // Measured: loose rocks on 4.5% of this grid's tiles (8% of its open,
+    // buildable ground, ROCK_LOOSE_SHARE), covering 0.35% of the frame -
+    // boulders big enough to click, on a scattering of tiles.
+    expect(tiles).toBeGreaterThan(0.02);
+    expect(tiles).toBeLessThan(0.1);
+    expect(share).toBeGreaterThan(0.002);
+    expect(share).toBeLessThan(0.007);
   });
 
   it("are the same rocks on every visit, and at every moment", () => {

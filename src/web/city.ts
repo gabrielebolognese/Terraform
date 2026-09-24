@@ -18,7 +18,8 @@ import { CITY_BACKGROUND, cityScene, rayHit } from "../render/city.js";
 import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
-import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, cityView, roadKey } from "../sim/index.js";
+import type { Layer } from "../sim/index.js";
+import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, cityView, layerOf, roverYears, tileKey } from "../sim/index.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
 import type { CardKind } from "./city-cards.js";
@@ -37,17 +38,21 @@ export interface CityHooks {
   /** The same call as a dry run, for the preview. Must not change the world. */
   readonly canPlace: (settlementId: string, type: BuildingType, tx: number, ty: number) => ActionOutcome;
   readonly onRemove: (settlementId: string, tx: number, ty: number) => ActionOutcome;
-  /** Lay a road on one tile; the sim decides. */
-  readonly onRoad: (settlementId: string, tx: number, ty: number) => ActionOutcome;
+  /** Lay a corridor or a cable on one tile; the sim decides. */
+  readonly onLink: (settlementId: string, layer: Layer, tx: number, ty: number) => ActionOutcome;
   /** The same call as a dry run, for the preview. Must not change the world. */
-  readonly canRoad: (settlementId: string, tx: number, ty: number) => ActionOutcome;
-  readonly onUnroad: (settlementId: string, tx: number, ty: number) => ActionOutcome;
-  /** Lay (and pay for) the roads that join every building into one network. */
+  readonly canLink: (settlementId: string, layer: Layer, tx: number, ty: number) => ActionOutcome;
+  readonly onUnlink: (settlementId: string, layer: Layer, tx: number, ty: number) => ActionOutcome;
+  /** Send a rover from the headquarters to break the rock on a tile. */
+  readonly onSendRover: (settlementId: string, tx: number, ty: number) => ActionOutcome;
+  /** Launch the rocket of the spaceport covering a tile. */
+  readonly onLaunch: (settlementId: string, tx: number, ty: number) => ActionOutcome;
+  /** Lay (and pay for) the corridors and cables that join every building into one network of each. */
   readonly onConnect: (settlementId: string) => ActionOutcome & { readonly laid: number };
   readonly onBack: () => void;
 }
 
-/** What makes each resource, for the words: where a road should lead. */
+/** What makes each resource, for the words: where a corridor or cable should lead. */
 const MADE_BY: Readonly<Record<MicroResource, string>> = {
   power: "a power plant",
   water: "a Water Extractor",
@@ -84,6 +89,12 @@ function button(className: string, text: string, onClick: () => void): HTMLButto
   return b;
 }
 
+/** Sim-years as the real seconds they take at 1x, in words. */
+function seconds(years: number, t: Tuning): string {
+  const s = Math.max(1, Math.round(years / t.TIME_SCALE));
+  return s >= 90 ? `about ${Math.round(s / 60)} min at 1x` : `about ${s} s at 1x`;
+}
+
 function fmt(n: number): string {
   return Math.abs(n) >= 100 ? n.toFixed(0) : n.toFixed(1);
 }
@@ -103,7 +114,11 @@ export function offlineReason(view: CityView, index: number, env: HabitatChannel
   if (b.submerged) return "Offline: under water.";
   if (b.network !== null) {
     const lacks = b.network.resources;
-    return `Not connected: nothing on its network makes ${lacks.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(" or ")}. Lay a road to ${lacks.map((r) => MADE_BY[r]).join(" and ")}.`;
+    // Power comes by cable; everything else by corridor - say which to lay, to what.
+    const how = (layer: Layer): string[] =>
+      lacks.filter((r) => layerOf(r) === layer).map((r) => `${layer === "cables" ? "a power cable" : "a corridor"} to ${MADE_BY[r]}`);
+    const lay = [...how("cables"), ...how("corridors")];
+    return `Not connected: nothing on its network makes ${lacks.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(" or ")}. Lay ${lay.join(", and ")}.`;
   }
   const def = BUILDING_DEFS[b.type];
   if (!def.canOperate(env, t)) return "Offline: the planet does not allow it here yet - the air needs more CO2.";
@@ -156,13 +171,20 @@ export class CityScreen {
   private readonly inspectorStatus: HTMLElement;
   private readonly inspectorSummary: HTMLElement;
   private readonly inspectorFlows: HTMLElement;
+  private readonly removeButton: HTMLButtonElement;
+  private readonly roverButton: HTMLButtonElement;
+  private readonly launchButton: HTMLButtonElement;
 
   private settlementId: string | null = null;
   private camera: CityCamera | null = null;
   private placing: BuildingType | null = null;
-  /** The Road tool is armed. */
-  private paving = false;
-  /** While a drag lays road ("lay") or takes it up ("clear"), and the last tile it touched. */
+  /** The corridor or cable tool, when one is armed. */
+  private paving: Layer | null = null;
+  /** A selected tile of ground: a rock a rover could break. */
+  private selectedTile: { tx: number; ty: number } | null = null;
+  /** Sim-years into the current substep, for smooth rovers and rockets. */
+  private sinceYears = 0;
+  /** While a drag lays ("lay") or takes up ("clear"), and the last tile it touched. */
   private painting: { mode: "lay" | "clear"; last: number } | null = null;
   private selected: number | null = null;
   private hover: { tx: number; ty: number } | null = null;
@@ -175,7 +197,7 @@ export class CityScreen {
   private paletteKind: string | null = null;
   private viewAt = -Infinity;
   private viewBuildings: Settlement["buildings"] | null = null;
-  private viewRoads: Settlement["roads"] | null = null;
+  private viewLinks: readonly unknown[] = [];
 
   constructor(
     host: HTMLElement,
@@ -234,9 +256,17 @@ export class CityScreen {
     this.inspectorSummary = el("p", "city-inspector-summary", "");
     this.inspectorFlows = el("p", "city-inspector-flows", "");
     const actions = el("div", "city-inspector-actions");
+    this.removeButton = button("city-remove", "Remove", () => this.removeSelected());
+    this.roverButton = button("city-send-rover", "Send rover", () => this.sendRover());
+    this.launchButton = button("city-launch", "Launch rocket", () => this.launch());
     actions.append(
-      button("city-remove", "Remove", () => this.removeSelected()),
-      button("city-deselect", "Close", () => this.select(null)),
+      this.roverButton,
+      this.launchButton,
+      this.removeButton,
+      button("city-deselect", "Close", () => {
+        this.select(null);
+        this.selectedTile = null;
+      }),
     );
     this.inspector.append(this.inspectorName, this.inspectorStatus, this.inspectorSummary, this.inspectorFlows, actions);
 
@@ -254,7 +284,8 @@ export class CityScreen {
     this.settlementId = settlementId;
     this.camera = null;
     this.placing = null;
-    this.paving = false;
+    this.paving = null;
+    this.selectedTile = null;
     this.painting = null;
     this.selected = null;
     this.notice = null;
@@ -273,17 +304,17 @@ export class CityScreen {
   /** Arm a building type for placement (or disarm with null). */
   arm(type: BuildingType | null): void {
     this.placing = type;
-    if (type !== null) this.paving = false;
+    if (type !== null) this.paving = null;
     this.notice = null;
     if (type !== null) this.select(null);
     this.renderPalette(true);
     this.lastPanel = -Infinity;
   }
 
-  /** Arm (or put down) the Road tool. */
-  armRoad(on: boolean): void {
-    this.paving = on;
-    if (on) {
+  /** Arm the corridor or cable tool, or put it down with null. */
+  armLink(layer: Layer | null): void {
+    this.paving = layer;
+    if (layer !== null) {
       this.placing = null;
       this.select(null);
     }
@@ -292,37 +323,40 @@ export class CityScreen {
     this.lastPanel = -Infinity;
   }
 
-  /** "Connect everything": the sim finds and prices the roads; this says what happened. */
+  /** "Connect everything": the sim finds and prices the corridors and cables; this says what happened. */
   connect(): void {
     const id = this.settlementId;
     if (id === null) return;
     const outcome = this.hooks.onConnect(id);
-    this.notice = outcome.ok ? `Laid ${outcome.laid} road${outcome.laid === 1 ? "" : "s"}.` : `Cannot connect: ${outcome.reason ?? "refused"}.`;
+    this.notice = outcome.ok ? `Laid ${outcome.laid} tile${outcome.laid === 1 ? "" : "s"} of corridor and cable.` : `Cannot connect: ${outcome.reason ?? "refused"}.`;
     this.lastPanel = -Infinity;
   }
 
   select(index: number | null): void {
     this.selected = index;
+    if (index !== null) this.selectedTile = null;
     this.lastPanel = -Infinity;
   }
 
   /** One frame: derive the view, draw it, and (at PANEL_HZ) rewrite the panel. */
-  frame(settlement: Settlement, env: HabitatChannels, now: number): void {
+  frame(settlement: Settlement, env: HabitatChannels, now: number, sinceYears = 0): void {
     if (this.settlementId !== settlement.id) return;
+    this.sinceYears = sinceYears;
     this.settlement = settlement;
     this.env = env;
     // The view is re-derived a few times a second, not every frame: for a
-    // metropolis it costs ~15 ms. A change of buildings or roads - a
-    // placement, a removal - refreshes it at once, so the player never waits
-    // for their click.
+    // metropolis it costs ~15 ms. A change of buildings, corridors, cables,
+    // rocks or jobs - anything a click does - refreshes it at once, so the
+    // player never waits for their click.
     let view = this.view;
-    const changed = settlement.buildings !== this.viewBuildings || settlement.roads !== this.viewRoads;
+    const links = [settlement.corridors, settlement.cables, settlement.cleared, settlement.jobs.length];
+    const changed = settlement.buildings !== this.viewBuildings || links.some((l, i) => l !== this.viewLinks[i]);
     if (view === null || view.id !== settlement.id || changed || now - this.viewAt >= VIEW_MS) {
       view = cityView(settlement, env, this.tuning);
       this.view = view;
       this.viewAt = now;
       this.viewBuildings = settlement.buildings;
-      this.viewRoads = settlement.roads;
+      this.viewLinks = links;
     }
     if (this.selected !== null && this.selected >= view.buildings.length) this.selected = null;
     const size = this.viewSize();
@@ -343,14 +377,14 @@ export class CityScreen {
   }
 
   sceneOptions(now: number): CitySceneOptions {
-    return { time: now / 1000, selected: this.selected, ghost: this.ghost() };
+    return { time: now / 1000, selected: this.selected, ghost: this.ghost(), selectedTile: this.selectedTile, sinceYears: this.sinceYears };
   }
 
   private ghost(): CitySceneOptions["ghost"] {
-    if (this.paving && this.hover !== null && this.settlementId !== null && this.view !== null) {
-      // On a road the tool takes it up, which is always allowed; elsewhere, ask the sim.
-      const onRoad = this.view.roads[this.hover.ty * this.view.tiles + this.hover.tx] === true;
-      const ok = onRoad || this.hooks.canRoad(this.settlementId, this.hover.tx, this.hover.ty).ok;
+    if (this.paving !== null && this.hover !== null && this.settlementId !== null && this.view !== null) {
+      // On a tile of it the tool takes it up, which is always allowed; elsewhere, ask the sim.
+      const onLink = this.view[this.paving][this.hover.ty * this.view.tiles + this.hover.tx] === true;
+      const ok = onLink || this.hooks.canLink(this.settlementId, this.paving, this.hover.tx, this.hover.ty).ok;
       return { tx: this.hover.tx, ty: this.hover.ty, size: 1, valid: ok };
     }
     if (this.placing === null || this.hover === null || this.settlementId === null) return null;
@@ -414,15 +448,22 @@ export class CityScreen {
 
     this.renderPalette(false);
     const here = this.placing !== null && this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) : "";
-    this.hint.textContent = this.paving
-      ? this.notice ?? `Click or drag to lay road (${this.tuning.COST_ROAD} material a tile); start on a road to take it up. Buildings run only when a road or a shared wall joins them to what they need. Esc finishes.`
-      : this.placing === null
-        ? this.notice ?? "Choose a building, then click the ground to place it."
+    this.hint.textContent =
+      this.paving === "corridors"
+        ? this.notice ?? `Click or drag to lay corridor (${this.tuning.COST_CORRIDOR} material a tile): it carries water, oxygen, food and materials. Start on a corridor to take it up. Esc finishes.`
+        : this.paving === "cables"
+          ? this.notice ?? `Click or drag to lay power cable (${this.tuning.COST_CABLE} material a tile): it carries power. Start on a cable to take it up. Esc finishes.`
+          : this.placing === null
+        ? this.notice ?? "Choose a structure, then click the ground to place it - or click a rock to send a rover to break it."
         : this.notice ?? `Click the ground to place a ${BUILDING_DEFS[this.placing].name}. Esc cancels.${here}`;
 
     const index = this.selected;
     const b = index === null ? undefined : view.buildings[index];
-    this.inspector.hidden = b === undefined;
+    this.inspector.hidden = b === undefined && this.selectedTile === null;
+    this.removeButton.hidden = b === undefined || !BUILDING_DEFS[b.type].buildable;
+    this.roverButton.hidden = !(b === undefined && this.selectedTile !== null);
+    this.launchButton.hidden = b?.type !== "spaceport";
+    if (b === undefined && this.selectedTile !== null) this.renderRock(view, s, this.selectedTile);
     if (b !== undefined && index !== null) {
       const def = BUILDING_DEFS[b.type];
       this.inspectorName.textContent = def.name;
@@ -433,7 +474,39 @@ export class CityScreen {
       if (def.housing(this.tuning) > 0) extra.push(`Houses ${def.housing(this.tuning)}.`);
       if (def.planetaryCo2(this.tuning) > 0) extra.push(`Draws ${def.planetaryCo2(this.tuning)} mbar/yr of CO2 from the planet.`);
       this.inspectorFlows.textContent = `Uses ${rateList(def.consumes(this.tuning, env))}. Makes ${rateList(def.produces(this.tuning))}. ${extra.join(" ")}`.trim();
+      if (b.type === "spaceport") {
+        const job = s.jobs.find((j) => j.kind === "rocket" && j.tile === tileKey(b.tx, b.ty));
+        this.inspectorSummary.textContent =
+          job === undefined
+            ? `${def.summary} Launch a supply rocket: back in ${seconds(this.tuning.ROCKET_TRIP_YEARS, this.tuning)} with ${this.tuning.ROCKET_MATERIALS} materials, or as many as the stores have room for.`
+            : `Its rocket is away: back in ${seconds(job.remaining, this.tuning)}.`;
+      }
     }
+  }
+
+  /** The inspector for a rock: what it is, what breaking it brings, and how long a rover takes. */
+  private renderRock(view: CityView, s: Settlement, tile: { tx: number; ty: number }): void {
+    const rock = view.rocks[tile.ty * view.tiles + tile.tx] ?? "none";
+    const job = s.jobs.find((j) => j.kind === "rover" && j.tile === tileKey(tile.tx, tile.ty));
+    this.inspectorName.textContent = rock === "crag" ? "Crag" : rock === "loose" ? "Loose rocks" : "Open ground";
+    this.inspectorStatus.dataset["state"] = "ok";
+    if (job !== undefined) {
+      this.inspectorStatus.textContent = `A rover is on its way: back in ${seconds(job.remaining, this.tuning)}.`;
+    } else if (rock === "none") {
+      this.inspectorStatus.textContent = "Nothing here to break.";
+    } else if (view.garage === null) {
+      this.inspectorStatus.textContent = "There is no headquarters to send a rover from.";
+    } else {
+      const out = s.jobs.filter((j) => j.kind === "rover").length;
+      this.inspectorStatus.textContent = `A rover would take ${seconds(roverYears(s, tile.tx, tile.ty, rock, this.tuning), this.tuning)} there and back. ${this.tuning.ROVERS_PER_HQ - out} of ${this.tuning.ROVERS_PER_HQ} rovers at the headquarters.`;
+    }
+    this.inspectorSummary.textContent =
+      rock === "crag"
+        ? `Rock too steep to build on. Breaking it brings back ${this.tuning.ROCK_CRAG_MATERIALS} materials and leaves ground that can be built on.`
+        : rock === "loose"
+          ? `Scattered rock. Breaking it brings back ${this.tuning.ROCK_LOOSE_MATERIALS} material.`
+          : "";
+    this.inspectorFlows.textContent = "";
   }
 
   /** The ground under the pointer, in words: its height here, on the planet, and whether it is too steep. */
@@ -451,17 +524,20 @@ export class CityScreen {
     const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}`;
     if (!force && key === this.paletteKind) return;
     this.paletteKind = key;
-    const cards = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].kinds.includes(s.kind)).map((type) => {
+    const cards = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].buildable && BUILDING_DEFS[type].kinds.includes(s.kind)).map((type) => {
       const cost = BUILDING_DEFS[type].cost(this.tuning);
       const c = this.card(type, BUILDING_DEFS[type].name, `${cost}`, s.stores.materials < cost, this.placing === type, () => this.arm(this.placing === type ? null : type));
       c.dataset["type"] = type;
       return c;
     });
-    const road = this.card("road", "Road", `${this.tuning.COST_ROAD} / tile`, s.stores.materials < this.tuning.COST_ROAD, this.paving, () => this.armRoad(!this.paving));
-    road.classList.add("city-road");
-    const connect = this.card("connect", "Connect all", `${this.tuning.COST_ROAD} / road`, false, null, () => this.connect());
+    const t = this.tuning;
+    const corridor = this.card("corridor", "Corridor", `${t.COST_CORRIDOR} / tile`, s.stores.materials < t.COST_CORRIDOR, this.paving === "corridors", () => this.armLink(this.paving === "corridors" ? null : "corridors"));
+    corridor.classList.add("city-corridor");
+    const cable = this.card("cable", "Power cable", `${t.COST_CABLE} / tile`, s.stores.materials < t.COST_CABLE, this.paving === "cables", () => this.armLink(this.paving === "cables" ? null : "cables"));
+    cable.classList.add("city-cable");
+    const connect = this.card("connect", "Connect all", `${Math.min(t.COST_CORRIDOR, t.COST_CABLE)}+ / tile`, false, null, () => this.connect());
     connect.classList.add("city-connect");
-    this.palette.replaceChildren(...cards, road, connect);
+    this.palette.replaceChildren(...cards, corridor, cable, connect);
     // A card rebuilt under the pointer keeps its tooltip.
     if (this.tipFor !== null) {
       const again = [...this.palette.children].find((c) => (c as HTMLElement).dataset["card"] === this.tipFor) as HTMLElement | undefined;
@@ -504,20 +580,30 @@ export class CityScreen {
   /** What a card's structure does, in words: shown above the card while it is hovered or focused. */
   tipText(kind: CardKind): { title: string; lines: string[] } {
     const t = this.tuning;
-    if (kind === "road") {
+    if (kind === "corridor") {
       return {
-        title: "Road",
+        title: "Corridor",
         lines: [
-          "Joins buildings into one network. A building runs only when its network holds a producer of everything it uses: a mine needs a road to a power plant, a dome one to a greenhouse.",
+          "A pressurised walkway for people and goods: it carries water, oxygen, food and materials. A dome needs a corridor to a greenhouse.",
           "Buildings that share a wall are joined without one.",
-          `Costs ${t.COST_ROAD} material a tile. Click or drag to lay it; start a drag on a road to take it up.`,
+          `Costs ${t.COST_CORRIDOR} material a tile. Click or drag to lay it; start a drag on a corridor to take it up.`,
+        ],
+      };
+    }
+    if (kind === "cable") {
+      return {
+        title: "Power cable",
+        lines: [
+          "Carries power, and only power: a mine needs a cable to a power plant.",
+          "Buildings that share a wall are joined without one.",
+          `Costs ${t.COST_CABLE} material a tile. Click or drag to lay it; start a drag on a cable to take it up.`,
         ],
       };
     }
     if (kind === "connect") {
       return {
         title: "Connect everything",
-        lines: ["Lays the shortest roads that join every building into one network, round the hills.", `Costs ${t.COST_ROAD} material a road laid.`],
+        lines: ["Lays the shortest corridors and cables that join every building into one network of each, round the hills.", `Costs ${t.COST_CORRIDOR} material a tile of corridor, ${t.COST_CABLE} a tile of cable.`],
       };
     }
     const def = BUILDING_DEFS[kind];
@@ -556,8 +642,8 @@ export class CityScreen {
     const c = this.canvas;
     c.addEventListener("pointerdown", (e) => {
       c.setPointerCapture?.(e.pointerId);
-      // With the Road tool, the main button paints road; any other still pans.
-      if (this.paving && e.button === 0) {
+      // With a corridor or cable armed, the main button paints; any other still pans.
+      if (this.paving !== null && e.button === 0) {
         this.startPainting(this.local(e));
         return;
       }
@@ -608,7 +694,7 @@ export class CityScreen {
     );
     globalThis.addEventListener?.("keydown", (e: KeyboardEvent) => {
       if (this.settlementId === null || e.key !== "Escape") return;
-      if (this.paving) this.armRoad(false);
+      if (this.paving !== null) this.armLink(null);
       else if (this.placing !== null) this.arm(null);
       else this.select(null);
     });
@@ -619,7 +705,7 @@ export class CityScreen {
     return { x: e.clientX - rect.left, y: e.clientY - rect.top };
   }
 
-  /** A click that was not a drag: place what is armed, or select what is there. */
+  /** A click that was not a drag: place what is armed, or select what is there - a building, or a rock. */
   click(at: { x: number; y: number }): void {
     const view = this.view;
     const cam = this.camera;
@@ -636,42 +722,69 @@ export class CityScreen {
       this.lastPanel = -Infinity;
       return;
     }
-    this.select(pickBuilding(view, cam, size.w, size.h, at.x, at.y));
+    const picked = pickBuilding(view, cam, size.w, size.h, at.x, at.y);
+    this.select(picked);
+    if (picked === null) {
+      const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
+      const rock = tile === null ? "none" : view.rocks[tile.ty * view.tiles + tile.tx] ?? "none";
+      this.selectedTile = tile !== null && rock !== "none" ? tile : null;
+      this.lastPanel = -Infinity;
+    }
   }
 
-  /** A drag with the Road tool begins: it lays road, or - begun on a road - takes it up. */
+  /** Send a rover to the selected rock. */
+  private sendRover(): void {
+    const id = this.settlementId;
+    const tile = this.selectedTile;
+    if (id === null || tile === null) return;
+    const outcome = this.hooks.onSendRover(id, tile.tx, tile.ty);
+    this.notice = outcome.ok ? "A rover is on its way." : `Cannot send a rover: ${outcome.reason ?? "refused"}.`;
+    this.lastPanel = -Infinity;
+  }
+
+  /** Launch the selected spaceport's rocket. */
+  private launch(): void {
+    const id = this.settlementId;
+    const b = this.selected === null ? undefined : this.view?.buildings[this.selected];
+    if (id === null || b === undefined) return;
+    const outcome = this.hooks.onLaunch(id, b.tx, b.ty);
+    this.notice = outcome.ok ? "The rocket is away." : `Cannot launch: ${outcome.reason ?? "refused"}.`;
+    this.lastPanel = -Infinity;
+  }
+
+  /** A drag with the corridor or cable tool begins: it lays, or - begun on a tile of it - takes up. */
   private startPainting(at: { x: number; y: number }): void {
     const view = this.view;
     const cam = this.camera;
     if (view === null || cam === null) return;
     const size = this.viewSize();
     const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
-    if (tile === null) return;
-    const mode = view.roads[tile.ty * view.tiles + tile.tx] === true ? "clear" : "lay";
+    if (tile === null || this.paving === null) return;
+    const mode = view[this.paving][tile.ty * view.tiles + tile.tx] === true ? "clear" : "lay";
     this.painting = { mode, last: -1 };
     this.paint(at);
   }
 
-  /** Lay or take up road on the tile under the pointer, once per tile the drag crosses. */
+  /** Lay or take up on the tile under the pointer, once per tile the drag crosses. */
   paint(at: { x: number; y: number }): void {
     const view = this.view;
     const cam = this.camera;
     const id = this.settlementId;
     const p = this.painting;
-    if (view === null || cam === null || id === null || p === null) return;
+    const layer = this.paving;
+    if (view === null || cam === null || id === null || p === null || layer === null) return;
     const size = this.viewSize();
     const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
     if (tile === null) return;
     const key = tile.ty * view.tiles + tile.tx;
     if (key === p.last) return;
     p.last = key;
-    const hasRoad = this.settlement?.roads.includes(roadKey(tile.tx, tile.ty)) === true;
-    if (p.mode === "lay" && !hasRoad) {
-      const outcome = this.hooks.onRoad(id, tile.tx, tile.ty);
-      // Crossing a building or a steep slope mid-drag is not worth a message; a first tile is.
-      this.notice = outcome.ok ? null : `Cannot lay road: ${outcome.reason ?? "refused"}.`;
-    } else if (p.mode === "clear" && hasRoad) {
-      this.hooks.onUnroad(id, tile.tx, tile.ty);
+    const has = this.settlement?.[layer].includes(tileKey(tile.tx, tile.ty)) === true;
+    if (p.mode === "lay" && !has) {
+      const outcome = this.hooks.onLink(id, layer, tile.tx, tile.ty);
+      this.notice = outcome.ok ? null : `Cannot lay ${layer === "cables" ? "cable" : "corridor"}: ${outcome.reason ?? "refused"}.`;
+    } else if (p.mode === "clear" && has) {
+      this.hooks.onUnlink(id, layer, tile.tx, tile.ty);
       this.notice = null;
     }
     this.lastPanel = -Infinity;

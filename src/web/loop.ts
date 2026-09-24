@@ -38,6 +38,15 @@ export class SimClock {
     public speed: Speed = 1,
   ) {}
 
+  /**
+   * Sim-years banked toward the next substep: how far the world has got
+   * between steps. Read by the picture only, so rovers and rockets move
+   * smoothly; the simulation never sees it.
+   */
+  get pendingYears(): number {
+    return this.accumulator;
+  }
+
   /** Call when the tab becomes visible again, or after any deliberate pause. */
   resync(): void {
     this.lastTimestamp = null;

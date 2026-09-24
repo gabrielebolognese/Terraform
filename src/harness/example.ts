@@ -30,8 +30,8 @@ import {
   liquidWaterRate,
   marsStart,
   nextSubstepFlows,
-  roadKey,
-  roadsToConnect,
+  linksToConnect,
+  tileKey,
   seedBiosphere,
   siteElevation,
   worldEnv,
@@ -86,7 +86,12 @@ function layOut(s: Settlement, wants: readonly BuildingType[], t: Tuning): Place
   const ground = groundOf(s, t);
   const n = ground.tiles;
   const taken = new Uint8Array(n * n);
-  const placed: PlacedBuilding[] = [];
+  // What the settlement was founded with (the headquarters, a spaceport) stays where it landed.
+  const placed: PlacedBuilding[] = [...s.buildings];
+  for (const b of s.buildings) {
+    const size = BUILDING_DEFS[b.type].footprint;
+    for (let y = b.ty; y < b.ty + size; y += 1) for (let x = b.tx; x < b.tx + size; x += 1) taken[y * n + x] = 1;
+  }
   // Every tile, nearest the centre first (ties by angle, so the city grows round).
   const order: [number, number][] = [];
   for (let y = 0; y < n; y += 1) for (let x = 0; x < n; x += 1) order.push([x, y]);
@@ -131,12 +136,13 @@ function layOut(s: Settlement, wants: readonly BuildingType[], t: Tuning): Place
 }
 
 /**
- * Streets: a road on every open, buildable tile beside a building (the
- * layout leaves a one-tile street round each), then whatever roads it takes
- * to join what the streets leave apart - so every building is on one
- * network, as the game with roads requires.
+ * Streets: a corridor on every open, buildable tile beside a building (the
+ * layout leaves a one-tile street round each), then whatever corridor it
+ * takes to join what the streets leave apart; and the power cables that
+ * join every building - so each is on one network of each, as the game with
+ * networks requires.
  */
-function streets(s: Settlement, t: Tuning): number[] {
+function streets(s: Settlement, t: Tuning): { corridors: number[]; cables: number[] } {
   const ground = groundOf(s, t);
   const n = ground.tiles;
   const taken = new Uint8Array(n * n);
@@ -149,22 +155,24 @@ function streets(s: Settlement, t: Tuning): number[] {
     for (let x = 0; x < n; x += 1) {
       if (taken[y * n + x] || ground.steep[y * n + x]) continue;
       const beside = (x > 0 && taken[y * n + x - 1]) || (x + 1 < n && taken[y * n + x + 1]) || (y > 0 && taken[(y - 1) * n + x]) || (y + 1 < n && taken[(y + 1) * n + x]);
-      if (beside) roads.push(roadKey(x, y));
+      if (beside) roads.push(tileKey(x, y));
     }
   }
-  const joined = [...roads, ...roadsToConnect({ ...s, roads }, t)];
-  return joined.sort((a, b) => a - b);
+  const corridors = [...roads, ...linksToConnect({ ...s, corridors: roads }, "corridors", t)].sort((a, b) => a - b);
+  const cables = linksToConnect({ ...s, corridors }, "cables", t);
+  return { corridors, cables };
 }
 
 /** Everything a settlement of `homes` domes needs, in the order to place it. */
-function wishList(kind: SettlementKind, homes: number): BuildingType[] {
+function wishList(kind: SettlementKind, homes: number, founded: boolean): BuildingType[] {
   if (kind === "outpost") {
     const out: BuildingType[] = [];
     // Outposts work the land: power, a mine, extractors, depots - no people.
     for (let i = 0; i < homes; i += 1) out.push(i % 3 === 0 ? "reactor" : "geothermal_plant", "regolith_mine", "water_extractor", "storage_depot", "solar_array");
     return out;
   }
-  const out: BuildingType[] = ["spaceport"];
+  // A city is founded with its spaceport when the headquarters are on; otherwise it builds one first.
+  const out: BuildingType[] = founded ? [] : ["spaceport"];
   for (let i = 0; i < homes; i += 1) {
     out.push("habitat_dome", "greenhouse", "geothermal_plant", "water_extractor", "solar_array");
     if (i % 2 === 1) out.push("reactor", "storage_depot");
@@ -223,9 +231,9 @@ export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
     if (site === undefined) return;
     state = foundSettlement(state, kind, site.lat, site.lon, game).state;
     const founded = state.settlements[state.settlements.length - 1]!;
-    const buildings = layOut(founded, wishList(kind, size), game);
+    const buildings = layOut(founded, wishList(kind, size, founded.buildings.some((b) => b.type === "spaceport")), game);
     const laid: Settlement = { ...founded, buildings };
-    const built: Settlement = { ...laid, roads: streets(laid, game) };
+    const built: Settlement = { ...laid, ...streets(laid, game) };
     // A thriving settlement: full stores, nine in ten homes taken.
     const cap = capacities(built, game);
     const settled: Settlement = { ...built, stores: { ...cap }, population: Math.floor(housing(built, game) * 0.9) };
