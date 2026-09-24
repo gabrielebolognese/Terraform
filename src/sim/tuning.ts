@@ -678,15 +678,45 @@ export const BASE_TUNING = Object.freeze({
   CITY_GRID_TILES: 32,
   OUTPOST_GRID_TILES: 16,
   /**
-   * Micro §3.3's "blocked terrain" (Batch 20): the share of tiles outside the
-   * landing zone that are rough ground and cannot be built on. OFF (0) by
-   * default - fixtures place buildings on fixed tiles - and the browser opts in.
+   * Detail §1 (Batch 22): the local heightmap's relief, metres either side of
+   * the settlement's base elevation. OFF (0, flat ground) by default - every
+   * fixture places buildings on fixed tiles, and hills appearing under them
+   * would refuse placements that were legal. The browser opts in. Replaces
+   * Batch 20's rough outcrops: steep ground is now the blocked terrain.
    */
-  TERRAIN_ROUGH_FRACTION: 0,
-  /** Size of a rough outcrop, in tiles per noise cell. */
-  TERRAIN_FEATURE_TILES: 5,
-  /** Half-width of the square kept clear at the grid's centre, where the settlement was founded. */
+  TERRAIN_RELIEF_M: 0,
+  /**
+   * Size of a hill, in tiles per noise cell. Measured over 100 sites (Batch
+   * 22), at the browser's 12 m of relief: 16.1% of the ground is too steep at
+   * 10 tiles, and 57.3% at 5.
+   */
+  TERRAIN_FEATURE_TILES: 10,
+  /** Half-width of the square levelled at the grid's centre, where the settlement was founded. */
   TERRAIN_CLEAR_TILES: 4,
+  /** Detail §1.3: the steepest ground a building may stand on, rise over run to a neighbouring tile. */
+  TERRAIN_MAX_SLOPE: 0.15,
+
+  // -------------------------------------------------------------------------
+  // The planet's hypsometry (detail §1.1 and §4.1, Batch 22)
+  //
+  // Elevation in metres against the areoid, at evenly spaced RANKS of the
+  // shared elevation field: HYPSO_ELEV_k is the height below which k/8 of the
+  // planet's surface lies. Piecewise linear between them, so the curve is
+  // monotonic by construction when these are (validateTuning checks). A
+  // designer curve for Mars: the Hellas floor at -8.2 km, the northern plains
+  // near -4 km covering the lower third, the southern highlands above the
+  // datum. The noise field has no Olympus, so the top is 8 km, not 21.
+  // Sea level (Batch 23) is this curve at the ocean fraction.
+  // -------------------------------------------------------------------------
+  HYPSO_ELEV_0: -8200,
+  HYPSO_ELEV_1: -4600,
+  HYPSO_ELEV_2: -4100,
+  HYPSO_ELEV_3: -3000,
+  HYPSO_ELEV_4: -1000,
+  HYPSO_ELEV_5: 500,
+  HYPSO_ELEV_6: 1600,
+  HYPSO_ELEV_7: 3000,
+  HYPSO_ELEV_8: 8000,
 
   // -------------------------------------------------------------------------
   // The settlement simulation (micro-world.md sections 5 to 7, Batch 18)
@@ -864,6 +894,13 @@ export function validateTuning(t: Tuning): void {
   }
 
   if (!(t.T_LIFE_HI > t.T_LIFE_LO)) fail("T_LIFE_HI must exceed T_LIFE_LO");
+  // A hypsometric curve that ever falls would put higher ground lower.
+  const hypso = [t.HYPSO_ELEV_0, t.HYPSO_ELEV_1, t.HYPSO_ELEV_2, t.HYPSO_ELEV_3, t.HYPSO_ELEV_4, t.HYPSO_ELEV_5, t.HYPSO_ELEV_6, t.HYPSO_ELEV_7, t.HYPSO_ELEV_8];
+  for (let k = 1; k < hypso.length; k += 1) {
+    if (!((hypso[k] ?? 0) > (hypso[k - 1] ?? 0))) fail(`HYPSO_ELEV_${k} must exceed HYPSO_ELEV_${k - 1}`);
+  }
+  if (!(t.TERRAIN_RELIEF_M >= 0)) fail("TERRAIN_RELIEF_M must be >= 0");
+  if (!(t.TERRAIN_MAX_SLOPE > 0)) fail("TERRAIN_MAX_SLOPE must be > 0");
   if (!(t.P_LIFE_OK > t.P_LIFE_MIN)) fail("P_LIFE_OK must exceed P_LIFE_MIN");
   if (!(t.T_CEIL_K > t.T_FLOOR_K)) fail("T_CEIL_K must exceed T_FLOOR_K");
   if (!(t.ALBEDO_MAX > t.ALBEDO_MIN)) fail("ALBEDO_MAX must exceed ALBEDO_MIN");

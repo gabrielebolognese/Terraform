@@ -175,7 +175,8 @@ export { capacities, housing, newSettlement, placeBuilding, removeBuilding, sett
 export type { PlaceOutcome, SettlementStep } from "./micro/settlement.js";
 export { microStep } from "./micro/coupling.js";
 export type { MicroContribution } from "./micro/coupling.js";
-export { groundOf, isRough } from "./micro/terrain.js";
+export { groundOf, isSteep, slopeAt } from "./micro/terrain.js";
+export { elevationAtRank, siteElevation } from "./hypsometry.js";
 export type { Ground } from "./micro/terrain.js";
 export { cityView } from "./micro/view.js";
 export type { CityBuildingView, CityView } from "./micro/view.js";

@@ -13,9 +13,10 @@
 
 import type { VisualChannels } from "../sim/index.js";
 import { CDF_BINS, GLOBE_FRAGMENT, GLOBE_VERTEX } from "../render/globe-shader.js";
-import { cloudFieldHighAt, createScene, elevationField, renderScene } from "../render/planet.js";
+import { cloudFieldHighAt, createScene, renderScene } from "../render/planet.js";
 import type { PlanetScene } from "../render/planet.js";
-import { sphereCdf } from "../render/sphere-cdf.js";
+import { sphereCdf } from "../shared/sphere-cdf.js";
+import { elevationCdf } from "../shared/planet-terrain.js";
 import type { Orbit } from "./orbit.js";
 import { coast, drag, hold, initialOrbit, zoomBy } from "./orbit.js";
 import { MAX_DPR } from "./config.js";
@@ -93,6 +94,9 @@ export class Globe implements PlanetSink {
     this.bindInput();
     if (typeof requestAnimationFrame === "function") requestAnimationFrame((t) => this.frame(t));
   }
+
+  /** While choosing a founding site: the site under the pointer, or null off the planet (detail §1.3). */
+  onPickHover: ((site: { lat: number; lon: number } | null) => void) | null = null;
 
   /** Called when the player clicks a settlement's marker (micro §1.4: "selects a marker"). */
   onMarker: ((id: string) => void) | null = null;
@@ -212,6 +216,11 @@ export class Globe implements PlanetSink {
       this.orbit = hold(this.orbit);
     });
     c.addEventListener("pointermove", (e) => {
+      if (this.picking !== null && this.dragging === null) {
+        const rect = c.getBoundingClientRect();
+        const hit = pickPlanet(e.clientX - rect.left, e.clientY - rect.top, this.camera());
+        this.onPickHover?.(hit === null ? null : vecToLatLon(hit));
+      }
       const d = this.dragging;
       if (d === null || d.id !== e.pointerId) return;
       const dt = Math.max((e.timeStamp - d.t) / 1000, 1 / 240);
@@ -432,7 +441,8 @@ export class Globe implements PlanetSink {
     for (const name of UNIFORMS) uniforms[name] = gl.getUniformLocation(program, name);
 
     gl.useProgram(program);
-    this.uploadCdf(gl, 0, sphereCdf(elevationField, 60000, CDF_BINS));
+    // The shared table: the very one settlements' elevations are ranked by (Batch 22).
+    this.uploadCdf(gl, 0, elevationCdf());
     this.uploadCdf(gl, 1, sphereCdf(cloudFieldHighAt, 40000, CDF_BINS));
     gl.uniform1i(uniforms["uElevCdf"] ?? null, 0);
     gl.uniform1i(uniforms["uCloudCdf"] ?? null, 1);

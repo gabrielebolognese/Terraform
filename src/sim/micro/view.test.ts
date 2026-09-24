@@ -15,6 +15,7 @@ import type { BuildingType, SimState } from "../types.js";
 import { NEUTRAL_ENV } from "../types.js";
 import { foundSettlement } from "./registry.js";
 import { placeBuilding } from "./settlement.js";
+import { groundOf } from "./terrain.js";
 import { cityView } from "./view.js";
 
 const t = makeTuning({ SETTLEMENTS_ENABLED: 1 });
@@ -84,6 +85,29 @@ describe("the city view", () => {
     const view = cityView(s.settlements[0]!, envOf(s), t);
     expect(view.buildings[0]!.activity).toBeCloseTo(t.SPACEPORT_POWER / t.GEOTHERMAL_POWER, 12);
     expect(view.buildings[1]!.activity).toBe(1);
+  });
+
+  it("stands each building on the highest ground under its footprint, in the renderer's unit", () => {
+    // On hills, beside the flat landing zone: find a buildable 2x2 whose tiles differ in height.
+    const hills = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
+    const g = groundOf({ kind: "city", lat: 0.3, lon: 1.0 }, hills);
+    let spot: [number, number] | null = null;
+    for (let ty = 0; ty < 31 && spot === null; ty += 1) {
+      for (let tx = 0; tx < 31 && spot === null; tx += 1) {
+        const four = [ty * 32 + tx, ty * 32 + tx + 1, (ty + 1) * 32 + tx, (ty + 1) * 32 + tx + 1];
+        const hs = four.map((i) => g.heightM[i]!);
+        if (four.every((i) => !g.steep[i]) && Math.max(...hs) - Math.min(...hs) > 0.5) spot = [tx, ty];
+      }
+    }
+    expect(spot, "no sloping buildable 2x2 found").not.toBeNull();
+    const [tx, ty] = spot!;
+    let s0 = foundSettlement(marsStart(), "city", 0.3, 1.0, hills).state;
+    s0 = { ...s0, settlements: s0.settlements.map((c) => ({ ...c, stores: { ...c.stores, materials: 2000 } })) };
+    s0 = placeBuilding(s0, "settlement-1", "geothermal_plant", tx, ty, hills).state;
+    const view = cityView(s0.settlements[0]!, envOf(s0), hills);
+    const under = [0, 1].flatMap((dy) => [0, 1].map((dx) => g.heightM[(ty + dy) * 32 + tx + dx]!));
+    expect(view.buildings[0]!.baseZ * hills.TILE_METRES).toBeCloseTo(Math.max(...under), 9);
+    expect(view.groundZ[ty * 32 + tx]! * hills.TILE_METRES).toBeCloseTo(g.heightM[ty * 32 + tx]!, 9);
   });
 
   it("is derived: the settlement it was read from is left exactly as it was", () => {

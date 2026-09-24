@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import type { SettlementKind, SimState } from "../sim/index.js";
-import { DEFAULT_TUNING, NEUTRAL_ENV, computeProgress, derive, foundSettlement, marsStart } from "../sim/index.js";
+import { DEFAULT_TUNING, NEUTRAL_ENV, computeProgress, derive, foundSettlement, marsStart, siteElevation } from "../sim/index.js";
 import type { HudView } from "./hud.js";
 import { Hud } from "./hud.js";
 
@@ -33,7 +33,7 @@ function mount() {
     },
     t,
   );
-  const show = (state: SimState, founding: SettlementKind | null): void => {
+  const show = (state: SimState, founding: SettlementKind | null, foundingSite: string | null = null): void => {
     const d = derive(state.reservoirs, NEUTRAL_ENV, t);
     const p = computeProgress(state.reservoirs, d, t);
     const view: HudView = {
@@ -56,6 +56,7 @@ function mount() {
       seeded: false,
       settlements: state.settlements,
       founding,
+      foundingSite,
     };
     hud.update(view);
   };
@@ -93,6 +94,15 @@ describe("founding a settlement from the HUD", () => {
     expect(page.calls).toEqual(["cancel"]);
   });
 
+  it("names the site under the cursor and its elevation while choosing (detail §1.3)", () => {
+    const page = mount();
+    page.show(marsStart(), "city", "17.2°N 57.3°E, −3,120 m on the planet");
+    expect(page.q<HTMLElement>(".hud-found-prompt").textContent).toContain("Under the cursor: 17.2°N 57.3°E, −3,120 m on the planet.");
+    // Off the planet: no site named.
+    page.show(marsStart(), "city", null);
+    expect(page.q<HTMLElement>(".hud-found-prompt").textContent).not.toContain("Under the cursor");
+  });
+
   it("hides the prompt when not founding", () => {
     const page = mount();
     page.show(marsStart(), null);
@@ -107,7 +117,9 @@ describe("founding a settlement from the HUD", () => {
     s = foundSettlement(s, "outpost", 1.34, -0.1).state;
     page.show(s, null);
     const rows = [...page.root.querySelectorAll(".hud-settlement-text")].map((r) => r.textContent);
-    expect(rows).toEqual(["City 141.3°S 75.1°E", "Outpost 276.8°N 5.7°W"]);
+    // With each site's elevation on the planet (Batch 22: "Elevation is shown at founding").
+    expect(rows).toEqual(["City 141.3°S 75.1°E - 1,604 m", "Outpost 276.8°N 5.7°W - −2,899 m"]);
+    expect(Math.round(siteElevation(1.34, -0.1, t))).toBe(-2899);
   });
 
   it("opens each settlement's own city view from its row (Batch 20)", () => {

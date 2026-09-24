@@ -19,13 +19,14 @@ import {
   makeTuning,
   marsStart,
   placeBuilding,
+  groundOf,
   removeBuilding,
   worldEnv,
 } from "../sim/index.js";
 import { centreCamera, isoToScreen } from "./city-camera.js";
 import { CityScreen } from "./city.js";
 
-const t = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_ROUGH_FRACTION: 0.12 });
+const t = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
 const W = 800;
 const H = 600;
 
@@ -74,6 +75,13 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
     canvas.dispatchEvent(new PointerEvent("pointerup", { clientX: p.px, clientY: p.py, pointerId: 1 }));
     frame();
   };
+  /** Move the pointer over the screen point where (x, y, z) is drawn. */
+  const hoverAt = (x: number, y: number, z: number): void => {
+    const iso = isoProject(x, y, z);
+    const p = isoToScreen(centreCamera(32, W), W, H, iso.sx, iso.sy);
+    canvas.dispatchEvent(new PointerEvent("pointermove", { clientX: p.px, clientY: p.py, pointerId: 1 }));
+    frame();
+  };
   /** Click the middle of a tile on the ground. */
   const clickTile = (tx: number, ty: number): void => clickAt(tx + 0.5, ty + 0.5, 0);
   const q = (sel: string): HTMLElement => {
@@ -82,7 +90,7 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
     return e;
   };
   const option = (type: BuildingType): HTMLButtonElement => q(`.city-build-option[data-type="${type}"]`) as HTMLButtonElement;
-  return { host, screen, calls, frame, clickTile, clickAt, q, option, state: () => state };
+  return { host, screen, calls, frame, clickTile, clickAt, hoverAt, q, option, state: () => state };
 }
 
 beforeEach(() => {
@@ -152,6 +160,36 @@ describe("the city view", () => {
     page.clickAt(15.8, 15.8, 0.93);
     expect(page.q(".city-inspector").hidden, "clicking the dome's upper part selected nothing").toBe(false);
     expect(page.q(".city-inspector-name").textContent).toBe("Habitat Dome");
+  });
+
+  it("builds on a hill where the pointer shows it, and says how high the ground is", () => {
+    // A buildable tile well up a hill, found rather than assumed.
+    const g = groundOf({ kind: "city", lat: 0.31, lon: -1.2 }, t);
+    let k = -1;
+    g.heightM.forEach((h, i) => {
+      if (!g.steep[i] && h > 5 && (i % 32) < 31 && (k < 0 || h > g.heightM[k]!)) k = i;
+    });
+    expect(k, "no buildable hilltop at the test site").toBeGreaterThanOrEqual(0);
+    const tx = k % 32;
+    const ty = Math.floor(k / 32);
+    const z = g.heightM[k]! / t.TILE_METRES;
+    const page = mount();
+    page.option("storage_depot").click();
+    page.hoverAt(tx + 0.5, ty + 0.5, z);
+    const hint = page.q(".city-hint").textContent ?? "";
+    expect(hint).toContain(`Ground here: +${g.heightM[k]!.toFixed(1)} m`);
+    expect(hint).toContain(`on the planet`);
+    page.clickAt(tx + 0.5, ty + 0.5, z);
+    expect(page.state().settlements[0]!.buildings).toEqual([{ type: "storage_depot", tx, ty, level: 1 }]);
+  });
+
+  it("warns, in words, that steep ground cannot be built on", () => {
+    const g = groundOf({ kind: "city", lat: 0.31, lon: -1.2 }, t);
+    const k = g.steep.findIndex(Boolean);
+    const page = mount();
+    page.option("storage_depot").click();
+    page.hoverAt((k % 32) + 0.5, Math.floor(k / 32) + 0.5, g.heightM[k]! / t.TILE_METRES);
+    expect(page.q(".city-hint").textContent).toContain("Too steep to build on.");
   });
 
   it("removes the selected building", () => {

@@ -13,7 +13,7 @@ import { CityScreen } from "./city.js";
 import { WorldDriver } from "./driver.js";
 import { Journey } from "./journey.js";
 import { TravelPrompt } from "./travel-prompt.js";
-import { formatLatLon, settlementLabel } from "./settlement-label.js";
+import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.js";
 import type { FacilityType, SettlementKind, SimConfig, SimState } from "../sim/index.js";
 import {
   makeTuning,
@@ -37,6 +37,7 @@ import {
   foundSettlement,
   placeBuilding,
   removeBuilding,
+  siteElevation,
 } from "../sim/index.js";
 import type { BuildingType } from "../sim/index.js";
 import { AUTOSAVE_INTERVAL_MS, READOUT_HZ, SPARK_CAPACITY, SPARK_HZ } from "./config.js";
@@ -63,16 +64,16 @@ import "./style.css";
  *
  * Settlements tick and push the planet here (Batch 18's promise, kept in
  * Batch 20 now that there is a view to build them in), and their ground has
- * rough outcrops - 12% of it outside the 8 x 8 landing zone, which stays
- * clear. Measured over 200 sites: at least 599 of the 900 places a 3 x 3
- * building could start are open (Batch 20 note).
+ * hills (Batch 22): 12 m either side of the base elevation. Measured over 100
+ * sites, 16.1% of the ground is too steep to build on, and at least 439 of
+ * the 900 places a 3 x 3 building could start are open.
  */
 const tuning = makeTuning({
   EVENTS_ENABLED: 1,
   ECONOMY_ENABLED: 1,
   TECH_GATE_ENABLED: 1,
   SETTLEMENTS_ENABLED: 1,
-  TERRAIN_ROUGH_FRACTION: 0.12,
+  TERRAIN_RELIEF_M: 12,
 });
 validateTuning(tuning);
 
@@ -214,6 +215,11 @@ const events = new EventLog();
  * rules - `foundSettlement` refuses what is not a place, and says why.
  */
 let founding: SettlementKind | null = null;
+/** Detail §1.3: "Elevation is shown at founding" - the site under the cursor, in words. */
+let foundingSite: string | null = null;
+globe.onPickHover = (site) => {
+  foundingSite = site === null ? null : `${formatLatLon(site.lat, site.lon)}, ${formatMetres(siteElevation(site.lat, site.lon, tuning))} on the planet`;
+};
 function startFounding(kind: SettlementKind): void {
   founding = kind;
   globe.beginPick(({ lat, lon }) => {
@@ -512,6 +518,7 @@ function render(timestamp: number): void {
       seeded: state.seeded,
       settlements: state.settlements,
       founding,
+      foundingSite: founding === null ? null : foundingSite,
     });
 
     globe.setSettlements(state.settlements);

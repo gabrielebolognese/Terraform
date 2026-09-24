@@ -21,7 +21,7 @@
 
 import type { CityBuildingView, CityView } from "../sim/index.js";
 import type { FootprintBox } from "./iso.js";
-import { TOWARD_VIEWER, TILE_H, TILE_W, Z_PX, depthOrder, isoProject } from "./iso.js";
+import { TOWARD_VIEWER, TILE_H, TILE_W, Z_PX, depthOrder, isoProject, isoToGround } from "./iso.js";
 import type { Rgba, Shape } from "./raster.js";
 
 type V3 = readonly [number, number, number];
@@ -64,8 +64,10 @@ const rgb = (r: number, g: number, b: number): Rgb => ({ r, g, b });
 
 export const CITY_BACKGROUND: Rgba = { r: 0.086, g: 0.09, b: 0.102, a: 1 };
 
-const GROUND = rgb(0.56, 0.36, 0.25);
-const GROUND_ROUGH = rgb(0.4, 0.26, 0.19);
+/** The ground's colour ramp by height (detail §1.3: elevation shown as a colour ramp). */
+const GROUND_LOW = rgb(0.44, 0.27, 0.19);
+const GROUND_HIGH = rgb(0.66, 0.45, 0.32);
+const GROUND_STEEP = rgb(0.4, 0.26, 0.19);
 const CLIFF = rgb(0.38, 0.24, 0.17);
 const ROCK = rgb(0.47, 0.31, 0.23);
 const CONCRETE = rgb(0.62, 0.6, 0.57);
@@ -390,7 +392,7 @@ function assemble(b: CityBuildingView, time: number): Built {
       parts.push(part(box(x0 + 0.3, y0 + 0.45, 0.06, x0 + 0.95, y0 + 0.62, 0.3), DARK_METAL));
       parts.push(part(frustum(x0 + 1.35, y0 + 0.6, 0.42, 0.3, 0.06, 1.15, 20), METAL));
       parts.push(part(box(x0 + 0.2, y0 + 1.0, 0.06, x0 + 1.5, y0 + 1.8, 0.62), CONCRETE));
-      extras.push(...plume(x0 + 1.35, y0 + 0.6, 1.15, time, on));
+      extras.push(...plume(x0 + 1.35, y0 + 0.6, 1.15 + b.baseZ, time, on));
       return { parts, top: buildingTop(b.type), extras };
     }
     case "reactor": {
@@ -425,7 +427,7 @@ function assemble(b: CityBuildingView, time: number): Built {
       const light = on ? COLD_LIGHT : UNLIT;
       parts.push(part(box(x0 + 0.5, y0 + 1.6, 0.35, x0 + 1.2, y0 + 1.62, 0.45), light, { emissive: true }));
       parts.push(part(frustum(x0 + 1.45, y0 + 1.1, 0.16, 0.12, 0.7, 1.45, 14), CONCRETE));
-      extras.push(...plume(x0 + 1.45, y0 + 1.1, 1.45, time, on));
+      extras.push(...plume(x0 + 1.45, y0 + 1.1, 1.45 + b.baseZ, time, on));
       return { parts, top: buildingTop(b.type), extras };
     }
     case "greenhouse": {
@@ -493,26 +495,26 @@ function offlineBadge(x: number, y: number, z: number): Shape[] {
   ];
 }
 
-/** A ring around a footprint, on the ground. */
-function footprintRing(tx: number, ty: number, size: number, width: number, fill: Rgba): Shape {
+/** A ring around a footprint, on the ground at height `z`. */
+function footprintRing(tx: number, ty: number, size: number, width: number, fill: Rgba, z = 0): Shape {
   return {
-    rings: [diamond(tx - width, ty - width, tx + size + width, ty + size + width), diamond(tx, ty, tx + size, ty + size)],
+    rings: [diamond(tx - width, ty - width, tx + size + width, ty + size + width, z), diamond(tx, ty, tx + size, ty + size, z)],
     fill,
   };
 }
 
 /** A thin strip on the ground from a to b: the arms of the "cannot" cross. */
-function groundStrip(ax: number, ay: number, bx: number, by: number, half: number): number[] {
+function groundStrip(ax: number, ay: number, bx: number, by: number, half: number, z = 0): number[] {
   const dx = bx - ax;
   const dy = by - ay;
   const l = Math.hypot(dx, dy);
   const nx = (-dy / l) * half;
   const ny = (dx / l) * half;
   return ringOf([
-    [ax + nx, ay + ny, 0],
-    [bx + nx, by + ny, 0],
-    [bx - nx, by - ny, 0],
-    [ax - nx, ay - ny, 0],
+    [ax + nx, ay + ny, z],
+    [bx + nx, by + ny, z],
+    [bx - nx, by - ny, z],
+    [ax - nx, ay - ny, z],
   ]);
 }
 
@@ -520,81 +522,223 @@ function groundStrip(ax: number, ay: number, bx: number, by: number, half: numbe
 // The scene
 // ---------------------------------------------------------------------------
 
-/** The iso-pixel box a grid of `tiles` occupies, with room for the tallest building. */
-export function sceneBounds(tiles: number): { minX: number; maxX: number; minY: number; maxY: number } {
+/** The iso-pixel box a grid of `tiles` occupies, with room for the tallest building and the highest hill. */
+export function sceneBounds(tiles: number, maxGroundZ = 0): { minX: number; maxX: number; minY: number; maxY: number } {
   const half = (tiles * TILE_W) / 2;
-  return { minX: -half, maxX: half, minY: -2 * Z_PX, maxY: tiles * TILE_H + 0.6 * Z_PX };
+  return { minX: -half, maxX: half, minY: -(2 + Math.max(0, maxGroundZ)) * Z_PX, maxY: tiles * TILE_H + 0.6 * Z_PX };
+}
+
+/** Lowest and highest ground in the view, in tiles. */
+function groundRange(view: CityView): { lo: number; hi: number } {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const z of view.groundZ) {
+    lo = Math.min(lo, z);
+    hi = Math.max(hi, z);
+  }
+  return Number.isFinite(lo) ? { lo, hi } : { lo: 0, hi: 0 };
+}
+
+/** The highest ground under a footprint, in tiles - where a building (or a preview of one) stands. */
+function footprintTop(view: CityView, tx: number, ty: number, size: number): number {
+  const n = view.tiles;
+  let top = -Infinity;
+  for (let y = ty; y < ty + size; y += 1) {
+    for (let x = tx; x < tx + size; x += 1) {
+      if (x >= 0 && y >= 0 && x < n && y < n) top = Math.max(top, view.groundZ[y * n + x] ?? 0);
+    }
+  }
+  return Number.isFinite(top) ? top : 0;
+}
+
+interface Occupant extends FootprintBox {
+  /** A building's index, or -1 for a column of ground. */
+  readonly building: number;
+}
+
+/**
+ * Everything that stands in the scene, far to near: every tile of ground not
+ * under a building (a column up to its height), and every building (standing
+ * on a plinth that replaces the tiles beneath it). Ordering about a thousand
+ * of them is quadratic, so the order is kept until the layout changes - it
+ * depends on nothing else.
+ */
+let orderCache: { key: string; occupants: Occupant[]; order: number[]; ground: Map<number, Shape[]> } | null = null;
+
+/** Forget the cached order and ground shapes: the next frame is built from scratch. */
+export function resetSceneCache(): void {
+  orderCache = null;
+}
+
+/**
+ * A cheap fingerprint of the ground, so a cache kept for one terrain is never
+ * used for another (a retune, or a different settlement with the same id).
+ */
+function groundKey(view: CityView): string {
+  let sum = 0;
+  let weighted = 0;
+  view.groundZ.forEach((z, i) => {
+    sum += z;
+    weighted += z * ((i % 97) + 1);
+  });
+  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}`;
+}
+
+function occupantsInOrder(view: CityView): { occupants: Occupant[]; order: number[]; ground: Map<number, Shape[]> } {
+  const n = view.tiles;
+  const key = `${view.id}|${n}|${groundKey(view)}|${view.buildings.map((b) => `${b.tx},${b.ty},${b.size}`).join(";")}`;
+  if (orderCache !== null && orderCache.key === key) return orderCache;
+  const covered = new Set<number>();
+  const occupants: Occupant[] = view.buildings.map((b) => {
+    for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
+    return { tx: b.tx, ty: b.ty, w: b.size, h: b.size, building: b.index };
+  });
+  for (let ty = 0; ty < n; ty += 1) {
+    for (let tx = 0; tx < n; tx += 1) {
+      if (!covered.has(ty * n + tx)) occupants.push({ tx, ty, w: 1, h: 1, building: -1 });
+    }
+  }
+  orderCache = { key, occupants, order: depthOrder(occupants), ground: new Map() };
+  return orderCache;
+}
+
+/** Lift a solid by `dz` tiles: a building assembled at ground zero, stood on its own ground. */
+function raise(parts: readonly Part[], dz: number): Part[] {
+  if (dz === 0) return [...parts];
+  return parts.map((p) => ({ ...p, faces: p.faces.map((f) => ({ ...f, pts: f.pts.map(([x, y, z]) => [x, y, z + dz] as V3) })) }));
 }
 
 export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   const n = view.tiles;
   const out: Shape[] = [];
+  const range = groundRange(view);
+  // Every column reaches down to the same floor, half a tile below the lowest ground.
+  const floor = range.lo - 0.5;
+  const span = Math.max(1e-9, range.hi - range.lo);
 
-  // Ground: the grid's slab, its top, the rough patches and the tile lines.
-  emitParts([part(box(0, 0, -0.5, n, n, 0).slice(1, 3), CLIFF)], out);
-  out.push({ rings: [diamond(0, 0, n, n)], fill: { ...GROUND, a: 1 } });
-  for (let ty = 0; ty < n; ty += 1) {
-    for (let tx = 0; tx < n; tx += 1) {
-      if (view.rough[ty * n + tx] === true) out.push({ rings: [diamond(tx, ty, tx + 1, ty + 1)], fill: { ...GROUND_ROUGH, a: 1 } });
-    }
-  }
-  const line: Rgba = { r: 0.2, g: 0.12, b: 0.08, a: 0.16 };
-  for (let k = 0; k <= n; k += 1) {
-    out.push({ rings: [diamond(k - 0.015, 0, k + 0.015, n)], fill: line });
-    out.push({ rings: [diamond(0, k - 0.015, n, k + 0.015)], fill: line });
-  }
-
-  // Everything that stands on the ground, far to near: buildings and rocks.
-  interface Occupant extends FootprintBox {
-    readonly building: CityBuildingView | null;
-  }
-  const occupants: Occupant[] = view.buildings.map((b) => ({ tx: b.tx, ty: b.ty, w: b.size, h: b.size, building: b }));
-  for (let ty = 0; ty < n; ty += 1) {
-    for (let tx = 0; tx < n; tx += 1) {
-      if (view.rough[ty * n + tx] === true) occupants.push({ tx, ty, w: 1, h: 1, building: null });
-    }
-  }
+  const { occupants, order, ground } = occupantsInOrder(view);
   const badges: Shape[] = [];
-  for (const i of depthOrder(occupants)) {
+  for (const i of order) {
     const o = occupants[i]!;
-    if (o.building === null) {
-      const h = 0.18 + 0.4 * hash2(o.tx, o.ty);
-      const r = 0.3 + 0.12 * hash2(o.ty + 91, o.tx);
-      emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, r, r * 0.45, 0, h, 7), ROCK)], out);
+    if (o.building < 0) {
+      // Ground never animates: its shapes are built once per layout and kept
+      // (Batch 22 - rebuilding ~1,000 columns cost most of a 9 ms frame).
+      const kept = ground.get(i);
+      if (kept !== undefined) {
+        for (const shape of kept) out.push(shape);
+        continue;
+      }
+      const start = out.length;
+      const z = view.groundZ[o.ty * n + o.tx] ?? 0;
+      const steep = view.steep[o.ty * n + o.tx] === true;
+      // Height as a colour ramp, and a faint checker so single tiles read.
+      const ramp = mix(GROUND_LOW, GROUND_HIGH, (z - range.lo) / span);
+      const checker = (o.tx + o.ty) % 2 === 0 ? 1 : 0.965;
+      const top = shade(steep ? GROUND_STEEP : ramp, checker);
+      const faces = box(o.tx, o.ty, floor, o.tx + 1, o.ty + 1, z);
+      // Only the sides that rise above the nearer neighbour can show.
+      const sides: Face[] = [];
+      const east = o.tx + 1 < n ? view.groundZ[o.ty * n + o.tx + 1] ?? floor : floor;
+      const south = o.ty + 1 < n ? view.groundZ[(o.ty + 1) * n + o.tx] ?? floor : floor;
+      if (east < z) sides.push(faces[1]!);
+      if (south < z) sides.push(faces[2]!);
+      emitParts([part(sides, CLIFF)], out);
+      out.push({ rings: [ringOf(faces[0]!.pts)], fill: { ...top, a: 1 } });
+      if (steep) {
+        const h = 0.18 + 0.3 * hash2(o.tx, o.ty);
+        const r = 0.22 + 0.1 * hash2(o.ty + 91, o.tx);
+        emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, r, r * 0.45, z, z + h, 7), ROCK)], out);
+      }
+      ground.set(i, out.slice(start));
       continue;
     }
-    const built = assemble(o.building, options.time);
-    emitParts(built.parts, out);
+    const b = view.buildings[o.building]!;
+    // The plinth: the ground under the building, levelled at its highest point.
+    const plinth = box(b.tx, b.ty, floor, b.tx + b.size, b.ty + b.size, b.baseZ);
+    emitParts([part(plinth.slice(1, 3), CLIFF)], out);
+    out.push({ rings: [ringOf(plinth[0]!.pts)], fill: { ...mix(GROUND_LOW, GROUND_HIGH, (b.baseZ - range.lo) / span), a: 1 } });
+    const built = assemble(b, options.time);
+    emitParts(raise(built.parts, b.baseZ), out);
     out.push(...built.extras);
-    if (!o.building.operable) {
-      badges.push(...offlineBadge(o.tx + o.w / 2, o.ty + o.h / 2, built.top + 0.35));
-    }
+    if (!b.operable) badges.push(...offlineBadge(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + built.top + 0.35));
   }
 
-  // Overlays, on top of everything so they are never hidden.
+  // Overlays, on top of everything so they are never hidden - each on its own ground.
   if (options.selected !== null) {
     const b = view.buildings[options.selected];
-    if (b !== undefined) out.push(footprintRing(b.tx, b.ty, b.size, 0.12, { r: 1, g: 1, b: 1, a: 0.9 }));
+    if (b !== undefined) out.push(footprintRing(b.tx, b.ty, b.size, 0.12, { r: 1, g: 1, b: 1, a: 0.9 }, b.baseZ));
   }
   const g = options.ghost;
   if (g !== null) {
+    const z = footprintTop(view, g.tx, g.ty, g.size);
     out.push({
-      rings: [diamond(g.tx, g.ty, g.tx + g.size, g.ty + g.size)],
+      rings: [diamond(g.tx, g.ty, g.tx + g.size, g.ty + g.size, z)],
       fill: g.valid ? { r: 1, g: 1, b: 1, a: 0.28 } : { r: 0.95, g: 0.35, b: 0.3, a: 0.35 },
     });
-    out.push(footprintRing(g.tx, g.ty, g.size, 0.06, { r: 1, g: 1, b: 1, a: 0.85 }));
+    out.push(footprintRing(g.tx, g.ty, g.size, 0.06, { r: 1, g: 1, b: 1, a: 0.85 }, z));
     if (!g.valid) {
       // A cross, so "cannot build here" reads without colour.
       const cross: Rgba = { r: 1, g: 1, b: 1, a: 0.9 };
       // Through the edge midpoints, which project to the screen's diagonals.
       const mx = g.tx + g.size / 2;
       const my = g.ty + g.size / 2;
-      out.push({ rings: [groundStrip(g.tx + 0.2, my, g.tx + g.size - 0.2, my, 0.05)], fill: cross });
-      out.push({ rings: [groundStrip(mx, g.ty + 0.2, mx, g.ty + g.size - 0.2, 0.05)], fill: cross });
+      out.push({ rings: [groundStrip(g.tx + 0.2, my, g.tx + g.size - 0.2, my, 0.05, z)], fill: cross });
+      out.push({ rings: [groundStrip(mx, g.ty + 0.2, mx, g.ty + g.size - 0.2, 0.05, z)], fill: cross });
     }
   }
   out.push(...badges);
   return out;
+}
+
+/** What a screen point lands on first: a building, a tile of ground, or nothing. */
+export type RayHit =
+  | { readonly kind: "building"; readonly index: number; readonly tx: number; readonly ty: number }
+  | { readonly kind: "ground"; readonly tx: number; readonly ty: number };
+
+/**
+ * The first solid along the line of sight through an iso-pixel point: every
+ * tile of ground not under a building (a column from the floor to its top),
+ * and every building (its plinth and body, from the floor to its top).
+ *
+ * The line through a screen point is the ground point beneath it plus
+ * s * (1, 1, 1) (`iso.ts`), with larger s nearer the viewer. For a box it
+ * spans s from max(x0 - gx, y0 - gy, z0) to min(x1 - gx, y1 - gy, z1); the
+ * surface the viewer sees is the box whose span reaches furthest toward them.
+ * Exact, not marched: a first version stepped along the line 0.02 tiles at a
+ * time and agreed with this on only 99.15% of screen points - it clipped the
+ * corners of columns between steps and picked the tile behind (Batch 22).
+ * Heights come from the same view the picture was drawn from, and building
+ * heights from the table the assemblies use, so what is clickable is what is
+ * drawn.
+ */
+export function rayHit(view: CityView, sx: number, sy: number): RayHit | null {
+  const n = view.tiles;
+  const g = isoToGround(sx, sy);
+  const floor = groundRange(view).lo - 0.5;
+  let best = -Infinity;
+  let hit: RayHit | null = null;
+  const covered = new Set<number>();
+  for (const b of view.buildings) {
+    for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
+    const near = Math.min(b.tx + b.size - g.x, b.ty + b.size - g.y, b.baseZ + buildingTop(b.type));
+    const far = Math.max(b.tx - g.x, b.ty - g.y, floor);
+    if (far < near && near > best) {
+      best = near;
+      hit = { kind: "building", index: b.index, tx: Math.min(b.tx + b.size - 1, Math.max(b.tx, Math.floor(g.x + near))), ty: Math.min(b.ty + b.size - 1, Math.max(b.ty, Math.floor(g.y + near))) };
+    }
+  }
+  for (let ty = 0; ty < n; ty += 1) {
+    for (let tx = 0; tx < n; tx += 1) {
+      if (covered.has(ty * n + tx)) continue;
+      const near = Math.min(tx + 1 - g.x, ty + 1 - g.y, view.groundZ[ty * n + tx] ?? 0);
+      const far = Math.max(tx - g.x, ty - g.y, floor);
+      if (far < near && near > best) {
+        best = near;
+        hit = { kind: "ground", tx, ty };
+      }
+    }
+  }
+  return hit;
 }
 
 /** Tile height of the scene in pixels at scale 1: exported so hosts can fit it. */

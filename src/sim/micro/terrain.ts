@@ -1,19 +1,26 @@
 /**
- * Micro doc §3.3 - "Each tile has a type (buildable ground, blocked terrain,
- * reserved)." The doc never says where blocked terrain comes from, so it is
- * DERIVED here: rough outcrops grown from value noise seeded by the
- * settlement's place on the planet. The same coordinate always gives the same
- * ground, so the terrain needs no room in the save (section 10's "never store
- * derived values") and a settlement founded twice at one spot is the same
- * ground twice.
+ * Detail doc §1 - a settlement's local terrain: a heightmap, and the slope
+ * that decides where a building may stand (Batch 22). It replaces Batch 20's
+ * rough outcrops: steep ground is now micro §3.3's "blocked terrain".
  *
- * Exactly `TERRAIN_ROUGH_FRACTION` of the tiles outside the landing zone are
- * rough - the roughest by the noise - so the dial means what it says. Off (0)
- * by default: tests and the calibrated fixtures place buildings on fixed tiles,
- * and ground appearing under them would refuse placements that were legal.
- * The browser opts in.
+ * DERIVED, never stored (detail §1.2's "store only the true state"). The
+ * heights come from value noise seeded by the settlement's place, so the same
+ * coordinate always gives the same ground and the save needs none of it. The
+ * doc seeds with `hash(planet_seed, lat, lon)`; the planet's own terrain is the
+ * same in every game, so this seeds by the place alone and a site always looks
+ * the same.
  *
- * "Reserved" tiles are not modelled: nothing in the doc reserves one yet.
+ * Heights are LOCAL, metres relative to the settlement's base elevation
+ * (`siteElevation` in hypsometry.ts): detail §1.1's two layers. The relief is
+ * `TERRAIN_RELIEF_M` either side of it - 0 by default, which makes every tile
+ * flat and buildable, as the fixtures were written for. The browser opts in.
+ *
+ * The square at the centre, where the settlement was founded, is flat at the
+ * base elevation itself (height 0), and the hills rise out of it over
+ * `EASE_TILES`. Scaling the hills toward the centre, rather than levelling the
+ * square to their average height, is what keeps its edge buildable: a
+ * levelled square met the hills with a step of up to a third of the relief -
+ * a cliff round the landing site (Batch 22, found by the reference city).
  */
 
 import type { Tuning } from "../tuning.js";
@@ -60,43 +67,85 @@ function placeSeed(lat: number, lon: number): number {
 export interface Ground {
   /** Edge of the grid, in tiles. */
   readonly tiles: number;
-  /** Row-major (`ty * tiles + tx`): true where the ground is too rough to build on. */
-  readonly rough: readonly boolean[];
+  /** Row-major (`ty * tiles + tx`): height in metres relative to the settlement's base elevation. */
+  readonly heightM: readonly number[];
+  /** Row-major: the steepest rise over run from this tile to a neighbouring one. */
+  readonly slope: readonly number[];
+  /** Row-major: too steep to build on (`slope > TERRAIN_MAX_SLOPE`). */
+  readonly steep: readonly boolean[];
 }
 
-/** Is (tx, ty) inside the landing zone kept clear at the grid's centre? */
-function inLandingZone(tx: number, ty: number, tiles: number, t: Tuning): boolean {
-  const half = tiles / 2;
-  const r = t.TERRAIN_CLEAR_TILES;
-  return tx >= half - r && tx < half + r && ty >= half - r && ty < half + r;
+/** Chebyshev distance, in tiles, from (tx, ty) to the levelled square at the centre (0 inside it). */
+function outsideLandingZone(tx: number, ty: number, tiles: number, t: Tuning): number {
+  const lo = tiles / 2 - t.TERRAIN_CLEAR_TILES;
+  const hi = tiles / 2 + t.TERRAIN_CLEAR_TILES - 1;
+  const dx = tx < lo ? lo - tx : tx > hi ? tx - hi : 0;
+  const dy = ty < lo ? lo - ty : ty > hi ? ty - hi : 0;
+  return Math.max(dx, dy);
 }
+
+/**
+ * Tiles over which the hills rise out of the landing zone. The ramp adds at
+ * most relief * 1.5 / EASE_TILES of height per tile (a smoothstep's steepest
+ * gradient is 1.5): 2.25 m at the browser's 12 m of relief, against the
+ * 1.5 m a 10 m tile may rise. So the ramp alone never makes ground steep
+ * unless the hill it rises into is already large there.
+ */
+const EASE_TILES = 8;
 
 /** The ground of a settlement at (lat, lon). */
 export function groundOf(place: { readonly kind: SettlementKind; readonly lat: number; readonly lon: number }, t: Tuning): Ground {
   const tiles = gridTiles(place.kind, t);
-  const rough: boolean[] = new Array<boolean>(tiles * tiles).fill(false);
-  const fraction = Math.min(1, Math.max(0, t.TERRAIN_ROUGH_FRACTION));
-  if (fraction === 0) return { tiles, rough };
-
-  const seed = placeSeed(place.lat, place.lon);
-  const scale = Math.max(1, t.TERRAIN_FEATURE_TILES);
-  const candidates: { index: number; height: number }[] = [];
-  for (let ty = 0; ty < tiles; ty += 1) {
-    for (let tx = 0; tx < tiles; tx += 1) {
-      if (inLandingZone(tx, ty, tiles, t)) continue;
-      // Two octaves: outcrops with ragged edges rather than smooth blobs.
-      const height = valueNoise(seed, tx, ty, scale) + 0.5 * valueNoise(seed ^ 0x9e37, tx, ty, scale / 2);
-      candidates.push({ index: ty * tiles + tx, height });
+  const n = tiles * tiles;
+  const heightM = new Array<number>(n).fill(0);
+  const relief = Math.max(0, t.TERRAIN_RELIEF_M);
+  if (relief > 0) {
+    const seed = placeSeed(place.lat, place.lon);
+    const scale = Math.max(1, t.TERRAIN_FEATURE_TILES);
+    const raw = (tx: number, ty: number): number => {
+      // Two octaves, weights summing to 1, mapped to -1..1: hills with rougher shoulders.
+      const v = (2 / 3) * valueNoise(seed, tx, ty, scale) + (1 / 3) * valueNoise(seed ^ 0x9e37, tx, ty, scale / 2);
+      return (2 * v - 1) * relief;
+    };
+    for (let ty = 0; ty < tiles; ty += 1) {
+      for (let tx = 0; tx < tiles; tx += 1) {
+        const u = Math.min(1, outsideLandingZone(tx, ty, tiles, t) / EASE_TILES);
+        // Exactly 0 inside the zone - not -0, which a negative hill times a zero weight gives.
+        heightM[ty * tiles + tx] = u === 0 ? 0 : raw(tx, ty) * u * u * (3 - 2 * u);
+      }
     }
   }
-  // The roughest tiles, exactly as many as the dial asks for. Ties break by
-  // index so the order never depends on the sort's stability.
-  candidates.sort((p, q) => q.height - p.height || p.index - q.index);
-  const count = Math.round(fraction * candidates.length);
-  for (let i = 0; i < count; i += 1) rough[candidates[i]!.index] = true;
-  return { tiles, rough };
+  const slope = new Array<number>(n).fill(0);
+  const steep = new Array<boolean>(n).fill(false);
+  for (let ty = 0; ty < tiles; ty += 1) {
+    for (let tx = 0; tx < tiles; tx += 1) {
+      const h = heightM[ty * tiles + tx]!;
+      let worst = 0;
+      for (const [dx, dy] of NEIGHBOURS) {
+        const x = tx + dx;
+        const y = ty + dy;
+        if (x < 0 || y < 0 || x >= tiles || y >= tiles) continue;
+        worst = Math.max(worst, Math.abs(heightM[y * tiles + x]! - h));
+      }
+      const s = worst / t.TILE_METRES;
+      slope[ty * tiles + tx] = s;
+      steep[ty * tiles + tx] = s > t.TERRAIN_MAX_SLOPE;
+    }
+  }
+  return { tiles, heightM, slope, steep };
 }
 
-export function isRough(ground: Ground, tx: number, ty: number): boolean {
-  return ground.rough[ty * ground.tiles + tx] === true;
+const NEIGHBOURS: readonly (readonly [number, number])[] = [
+  [1, 0],
+  [-1, 0],
+  [0, 1],
+  [0, -1],
+];
+
+export function isSteep(ground: Ground, tx: number, ty: number): boolean {
+  return ground.steep[ty * ground.tiles + tx] === true;
+}
+
+export function slopeAt(ground: Ground, tx: number, ty: number): number {
+  return ground.slope[ty * ground.tiles + tx] ?? 0;
 }

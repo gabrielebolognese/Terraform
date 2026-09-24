@@ -39,6 +39,7 @@ that state.
 | [`docs/balance/batch19-settlement-save.md`](docs/balance/batch19-settlement-save.md) | Settlements in the save (schema v5): exact round trip, retune-safe loading, and offline progression proven exact. |
 | [`docs/balance/batch20-city-view.md`](docs/balance/batch20-city-view.md) | The 2.5D city view: procedural buildings, rough ground, placement, the inspector, and a golden city render. |
 | [`docs/balance/batch21-travel.md`](docs/balance/batch21-travel.md) | Travel between orbit and a city: markers, the camera move, and proof the world advances the same in either view. |
+| [`docs/balance/batch22-terrain.md`](docs/balance/batch22-terrain.md) | Terrain with depth: one elevation field for the globe and the settlements, metres on the planet, hills and slope, exact picking. |
 | [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) | The whole visual arc, twelve frames at fixed progress values. |
 
 ## Status
@@ -60,7 +61,8 @@ lever with its price, what is ordered and what is online, and lets you order, di
 each one off. Under **Settlements** you can found a city or an outpost by clicking the planet;
 each gets a marker that stays on its spot as the globe turns. Click a marker (or **Open** in the
 list) and the camera flies down to it, into its
-2.5D view: build from the palette on the ground (rough outcrops refuse), click a building to see
+2.5D view: build from the palette on its hills (ground too steep refuses, and every elevation is
+given in metres), click a building to see
 what it is doing and why it might be offline (the settlement layer, Batches 17-21,
 is being built from `docs/design/micro-world.md`). The planet fills the whole
 window behind it, shaded on the GPU at full resolution: drag to turn it, scroll to zoom. The

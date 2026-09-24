@@ -18,7 +18,7 @@ import type { BuildingType, MicroResource, PlacedBuilding, Settlement, Settlemen
 import { MICRO_RESOURCES } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { footprintFits, footprintTiles, gridTiles } from "./space.js";
-import { groundOf, isRough } from "./terrain.js";
+import { groundOf, isSteep, slopeAt } from "./terrain.js";
 
 /** Section 7.2: the resources whose shortage is a life-support emergency. */
 const LIFE_SUPPORT: readonly MicroResource[] = ["power", "water", "oxygen", "food"];
@@ -102,7 +102,12 @@ export function placeBuilding(
   const f = { tx, ty, w: def.footprint, h: def.footprint };
   if (!footprintFits(f, gridTiles(s.kind, t))) return refuse(`${def.name} does not fit there - it runs off the grid`);
   const ground = groundOf(s, t);
-  if (footprintTiles(f).some(([x, y]) => isRough(ground, x, y))) return refuse(`${def.name} would stand on rough ground`);
+  // Detail §1.3: "A building footprint must fit on tiles whose slope is below a buildable maximum."
+  const tooSteep = footprintTiles(f).filter(([x, y]) => isSteep(ground, x, y));
+  if (tooSteep.length > 0) {
+    const worst = Math.max(...tooSteep.map(([x, y]) => slopeAt(ground, x, y)));
+    return refuse(`${def.name} would stand on ground too steep to build on (slope ${worst.toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE})`);
+  }
   const taken = occupied(s);
   if (footprintTiles(f).some(([x, y]) => taken.has(`${x},${y}`))) return refuse(`${def.name} would overlap another building`);
   const cost = def.cost(t);

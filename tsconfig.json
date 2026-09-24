@@ -15,6 +15,7 @@
     "src/index.test.ts",
     "src/sim/**/*",
     "src/render/**/*",
+    "src/shared/**/*",
     "src/harness/**/*",
     "src/testkit/**/*"
   ],

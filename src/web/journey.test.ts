@@ -24,13 +24,13 @@ import { WorldDriver } from "./driver.js";
 import { Journey } from "./journey.js";
 import { SimClock } from "./loop.js";
 
-/** The browser's own tuning (`main.ts`): events, economy, tech gates, settlements, rough ground. */
+/** The browser's own tuning (`main.ts`): events, economy, tech gates, settlements, hills. */
 const tuning = makeTuning({
   EVENTS_ENABLED: 1,
   ECONOMY_ENABLED: 1,
   TECH_GATE_ENABLED: 1,
   SETTLEMENTS_ENABLED: 1,
-  TERRAIN_ROUGH_FRACTION: 0.12,
+  TERRAIN_RELIEF_M: 12,
 });
 const cfg = () => ({ tuning, env: NEUTRAL_ENV, forcing: null });
 

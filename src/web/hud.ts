@@ -16,10 +16,10 @@
  */
 
 import type { Derived, FacilityType, Phase, ProgressAxes, Reservoirs, Settlement, SettlementKind, Tuning } from "../sim/index.js";
-import { FACILITY_LIST, livingWorldShortfall, PHASE_INFO, TARGETS } from "../sim/index.js";
+import { FACILITY_LIST, livingWorldShortfall, PHASE_INFO, TARGETS, siteElevation } from "../sim/index.js";
 import type { Advice } from "./guidance.js";
 import type { BuildRow } from "./build.js";
-import { formatLatLon, settlementLabel } from "./settlement-label.js";
+import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.js";
 import type { GameEvent } from "./events.js";
 import type { Speed } from "./config.js";
 import { READOUT_HZ, SPEEDS } from "./config.js";
@@ -57,6 +57,8 @@ export interface HudView {
   /** Batch 17: the settlement registry, and whether the player is choosing a founding site. */
   readonly settlements: readonly Settlement[];
   readonly founding: SettlementKind | null;
+  /** Batch 22: while founding, the site under the cursor and its elevation, in words - or null. */
+  readonly foundingSite?: string | null;
 }
 
 export interface HudHooks {
@@ -294,7 +296,7 @@ export class Hud {
 
   private readonly openSettlement: (id: string) => void;
 
-  constructor(parent: HTMLElement, hooks: HudHooks, _tuning: Tuning) {
+  constructor(parent: HTMLElement, hooks: HudHooks, private readonly tuning: Tuning) {
     this.openSettlement = hooks.onOpenSettlement;
     const shell = el("section", "hud");
 
@@ -685,7 +687,9 @@ export class Hud {
     for (const b of this.foundButtons) b.disabled = choosing;
     this.foundPrompt.hidden = !choosing;
     if (choosing) {
-      this.foundPromptText.textContent = `Click the planet where the new ${view.founding} should stand. Esc cancels.`;
+      const site = view.foundingSite ?? null;
+      this.foundPromptText.textContent =
+        `Click the planet where the new ${view.founding} should stand. Esc cancels.` + (site === null ? "" : ` Under the cursor: ${site}.`);
     }
     // The list only changes when the registry does; rebuild it only then.
     const key = view.settlements.map((s) => `${s.id}:${s.lat}:${s.lon}`).join("|");
@@ -704,7 +708,10 @@ export class Hud {
         open.setAttribute("aria-label", `Open ${settlementLabel(s)}`);
         open.addEventListener("click", () => this.openSettlement(s.id));
         const text = el("span", "hud-settlement-text");
-        text.append(el("span", "hud-settlement-name", settlementLabel(s)), el("span", "hud-settlement-where", formatLatLon(s.lat, s.lon)));
+        text.append(
+          el("span", "hud-settlement-name", settlementLabel(s)),
+          el("span", "hud-settlement-where", `${formatLatLon(s.lat, s.lon)} - ${formatMetres(siteElevation(s.lat, s.lon, this.tuning))}`),
+        );
         item.append(text, open);
         return item;
       }),

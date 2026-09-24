@@ -28,7 +28,7 @@ This file is the source of truth for *in what order* we build it, and for what "
 | 19 | Micro: settlement save schema + offline progression | **COMPLETE** - [note](docs/balance/batch19-settlement-save.md) - schema v5; round trip and offline catch-up exact; capacities and grid deliberately not stored |
 | 20 | Micro: the 2.5D city view | **COMPLETE** - [note](docs/balance/batch20-city-view.md) - shape list + software golden render (tolerance 0.003%, measured); topological draw order replaces §3.1's key; rough ground derived from place; browser runs settlements |
 | 21 | Micro: travel between orbit and a city | **COMPLETE** - [note](docs/balance/batch21-travel.md) - world equal to the last bit with or without travel; one scene at most, none in transit; marker + confirm; no per-city deserialize |
-| 22 | Detail: terrain with depth | NOT STARTED - detail §1, §6 step 1 |
+| 22 | Detail: terrain with depth | **COMPLETE** - [note](docs/balance/batch22-terrain.md) - one shared elevation field; hypsometry to metres; slope-limited hills (browser 12 m); exact picking; a terrain golden frame |
 | 23 | Detail: sea level from the macro sim | NOT STARTED - detail §4.1, §6 step 2 |
 | 24 | Detail: the flood model, headless | NOT STARTED - detail §4.2, §4.3, §4.7, §6 step 3 |
 | 25 | Detail: flood forecast and warnings | NOT STARTED - detail §4.4, §6 step 4 |
@@ -853,18 +853,26 @@ the user to decide**:
 10. **The detail doc names the foundational doc `terraforming-micro-design.md`**, which is
     `docs/design/micro-world.md` here.
 
-## Batch 22 - Detail: terrain with depth - NOT STARTED
+## Batch 22 - Detail: terrain with depth - COMPLETE
+
+**Done** - see [the note](docs/balance/batch22-terrain.md). Changed from the plan and the doc:
+- **The hypsometric curve arrived here, not in Batch 23:** `base_elev_m` needs metres. Batch 23
+  reuses it for sea level.
+- **Nothing about terrain is stored** (conflict 4), and the local terrain is seeded by place, not
+  by `planet_seed`.
+- **Rough ground is retired** (conflict 3): steep ground is the blocked terrain.
+- **A second golden city frame** (the whole grid), because the close-up could not see the hills.
 
 **Goal.** Detail §6 step 1: "Add the two-layer elevation to the settlement model (section 1):
 `base_elev_m` sampled from the planet, `local_height` from a stored seed. Render the grid with
 height. No new buildings yet."
 
-- [ ] One planetary elevation field owned by the simulation (conflict 1), and `base_elev_m` read
+- [x] One planetary elevation field owned by the simulation (conflict 1), and `base_elev_m` read
   from it at each settlement's coordinate.
-- [ ] A deterministic local heightmap and slope per tile (§1.2, §1.3), with modest relief.
-- [ ] Slope-limited placement (§1.3). The terracing action itself waits for Batch 28.
-- [ ] The city view drawn with height; elevation shown when founding and when placing.
-- [ ] The rough-ground decision (conflict 3) and the storage decision (conflict 4) applied.
+- [x] A deterministic local heightmap and slope per tile (§1.2, §1.3), with modest relief.
+- [x] Slope-limited placement (§1.3). The terracing action itself waits for Batch 28.
+- [x] The city view drawn with height; elevation shown when founding and when placing.
+- [x] The rough-ground decision (conflict 3) and the storage decision (conflict 4) applied.
 
 **Exit gate.**
 - The same coordinate always gives the same terrain, and the save needs no terrain beyond what

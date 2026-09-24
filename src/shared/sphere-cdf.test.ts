@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { cloudFieldAt, cloudFieldHighAt, elevationField } from "./planet.js";
+import { cloudFieldAt, cloudFieldHighAt, elevationField } from "../render/planet.js";
 import { lookupCdf, sphereCdf } from "./sphere-cdf.js";
 
 /** Uniform random points on the sphere, from a seeded LCG. */

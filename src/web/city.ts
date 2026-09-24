@@ -14,13 +14,14 @@
  * placement is crossed out and the reason is written under the palette.
  */
 
-import { CITY_BACKGROUND, buildingTop, cityScene } from "../render/city.js";
+import { CITY_BACKGROUND, cityScene, rayHit } from "../render/city.js";
 import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, cityView } from "../sim/index.js";
 import type { CityCamera } from "./city-camera.js";
-import { centreCamera, footprintOrigin, pan, tileAt, zoomAt } from "./city-camera.js";
+import { centreCamera, footprintOrigin, pan, screenToIso, zoomAt } from "./city-camera.js";
+import { formatMetres } from "./settlement-label.js";
 import { formatLatLon, settlementLabel } from "./settlement-label.js";
 
 export interface ActionOutcome {
@@ -88,21 +89,26 @@ export function offlineReason(view: CityView, index: number, env: HabitatChannel
 }
 
 /**
- * The building under a screen point: march down the view ray from the top of
- * the tallest building to the ground and take the first footprint whose
- * building is tall enough to be there. Heights come from the renderer, so
- * what is clickable is what is drawn.
+ * What a screen point lands on: the first building or tile of ground along the
+ * line of sight, over the heightmap (Batch 22). Before the ground had height,
+ * the tile under the pointer was the flat ground beneath it; on a hill that is
+ * the wrong tile.
  */
+export function pickAt(view: CityView, cam: CityCamera, viewW: number, viewH: number, px: number, py: number) {
+  const iso = screenToIso(cam, viewW, viewH, px, py);
+  return rayHit(view, iso.sx, iso.sy);
+}
+
+/** The building under a screen point, or null. */
 export function pickBuilding(view: CityView, cam: CityCamera, viewW: number, viewH: number, px: number, py: number): number | null {
-  for (let z = 1.6; z >= -1e-9; z -= 0.1) {
-    const tile = tileAt(cam, viewW, viewH, px, py, view.tiles, Math.max(0, z));
-    if (tile === null) continue;
-    const hit = view.buildings.find(
-      (b) => tile.tx >= b.tx && tile.ty >= b.ty && tile.tx < b.tx + b.size && tile.ty < b.ty + b.size && buildingTop(b.type) >= z,
-    );
-    if (hit !== undefined) return hit.index;
-  }
-  return null;
+  const hit = pickAt(view, cam, viewW, viewH, px, py);
+  return hit !== null && hit.kind === "building" ? hit.index : null;
+}
+
+/** The tile under a screen point, whatever stands on it - where a placement would go. */
+export function tileUnder(view: CityView, cam: CityCamera, viewW: number, viewH: number, px: number, py: number): { tx: number; ty: number } | null {
+  const hit = pickAt(view, cam, viewW, viewH, px, py);
+  return hit === null ? null : { tx: hit.tx, ty: hit.ty };
 }
 
 export class CityScreen {
@@ -291,7 +297,8 @@ export class CityScreen {
 
   private renderPanel(view: CityView, s: Settlement, env: HabitatChannels): void {
     this.title.textContent = settlementLabel(s);
-    this.where.textContent = `${s.kind === "city" ? "City" : "Outpost"} - ${formatLatLon(s.lat, s.lon)}`;
+    // Detail §1.3: "Elevation is shown at founding and at placement."
+    this.where.textContent = `${s.kind === "city" ? "City" : "Outpost"} - ${formatLatLon(s.lat, s.lon)} - ${formatMetres(view.baseElevationM)} on the planet`;
     const people =
       view.kind === "city"
         ? `${Math.floor(view.population)} of ${view.housing} people housed. `
@@ -315,10 +322,11 @@ export class CityScreen {
     }
 
     this.renderPalette(false);
+    const here = this.placing !== null && this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) : "";
     this.hint.textContent =
       this.placing === null
         ? this.notice ?? "Choose a building, then click the ground to place it."
-        : this.notice ?? `Click the ground to place a ${BUILDING_DEFS[this.placing].name}. Esc cancels.`;
+        : this.notice ?? `Click the ground to place a ${BUILDING_DEFS[this.placing].name}. Esc cancels.${here}`;
 
     const index = this.selected;
     const b = index === null ? undefined : view.buildings[index];
@@ -334,6 +342,15 @@ export class CityScreen {
       if (def.planetaryCo2(this.tuning) > 0) extra.push(`Draws ${def.planetaryCo2(this.tuning)} mbar/yr of CO2 from the planet.`);
       this.inspectorFlows.textContent = `Uses ${rateList(def.consumes(this.tuning, env))}. Makes ${rateList(def.produces(this.tuning))}. ${extra.join(" ")}`.trim();
     }
+  }
+
+  /** The ground under the pointer, in words: its height here, on the planet, and whether it is too steep. */
+  private groundWords(view: CityView, tx: number, ty: number): string {
+    const i = ty * view.tiles + tx;
+    const local = view.heightM[i];
+    if (local === undefined) return "";
+    const steep = view.steep[i] === true ? " Too steep to build on." : "";
+    return ` Ground here: ${formatMetres(local, true)} (${formatMetres(view.baseElevationM + local)} on the planet).${steep}`;
   }
 
   private renderPalette(force: boolean): void {
@@ -368,7 +385,10 @@ export class CityScreen {
       const local = this.local(e);
       if (this.view !== null && this.camera !== null) {
         const size = this.viewSize();
-        this.hover = tileAt(this.camera, size.w, size.h, local.x, local.y, this.view.tiles);
+        const before = this.hover;
+        this.hover = tileUnder(this.view, this.camera, size.w, size.h, local.x, local.y);
+        // The hint names the ground under the pointer, so rewrite it when that changes.
+        if (this.placing !== null && (before?.tx !== this.hover?.tx || before?.ty !== this.hover?.ty)) this.lastPanel = -Infinity;
       }
       const d = this.drag;
       if (d === null || this.camera === null || this.view === null) return;
@@ -419,7 +439,7 @@ export class CityScreen {
     if (view === null || cam === null || id === null) return;
     const size = this.viewSize();
     if (this.placing !== null) {
-      const tile = tileAt(cam, size.w, size.h, at.x, at.y, view.tiles);
+      const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
       if (tile === null) return;
       const origin = footprintOrigin(tile.tx, tile.ty, BUILDING_DEFS[this.placing].footprint);
       const outcome = this.hooks.onPlace(id, this.placing, origin.tx, origin.ty);

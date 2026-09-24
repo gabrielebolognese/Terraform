@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { frameDifference } from "../render/planet.js";
-import { CITY_GOLDEN, referenceCity, renderCity } from "./city-frames.js";
+import { CITY_GOLDEN, CITY_GOLDEN_WHOLE, referenceCity, renderCity } from "./city-frames.js";
 import { FRAMES_DIR } from "./frames.js";
 import { decodePng } from "./png.js";
 
@@ -21,9 +21,10 @@ import { decodePng } from "./png.js";
  * Mean absolute per-channel difference, as a fraction of full scale.
  *
  * NOT the planet frames' 0.2%. Measured against this city (Batch 20), the
- * changes a player would notice are far smaller than that:
+ * changes a player would notice are far smaller than that (the first line
+ * re-measured in Batch 22, after the ground gained height: it was 0.0052%):
  *
- *   reactor load halved (core glow dimmer)        0.0052%
+ *   reactor load halved (core glow dimmer)        0.0044%
  *   one rock removed                              0.0439%
  *   render time +0.5 s (animation phase)          0.0668%
  *   solar array switched off (badge, panels)      0.1064%
@@ -36,6 +37,26 @@ import { decodePng } from "./png.js";
  * pixels and still catches the smallest change measured.
  */
 const TOLERANCE = 0.00003;
+
+/**
+ * The whole-grid terrain frame (Batch 22). The close-up above frames the flat
+ * landing zone, where lowering a hill tile by a metre, marking a steep tile
+ * buildable, or leaving the hilltop solar array unlifted all changed it by
+ * 0.0000%. Measured on this frame instead:
+ *
+ *   reactor load halved (small at this scale)     0.0005%
+ *   tile 26,25 (z -0.04) one metre lower          0.0015%
+ *   tile 6,4 (z 0.44) one metre lower             0.0029%
+ *   steep tile 2,0 drawn as buildable             0.0036%
+ *   solar array at 19,12 switched off             0.0054%
+ *   hilltop solar array not lifted onto its hill  0.0394%
+ *   tile 10,28 (z -0.91) one metre lower          0.0994%
+ *   unmodified render                             0.0000%
+ *
+ * 0.001% is about one full-contrast pixel at 384 x 240: every single-tile
+ * change measured exceeds it. The buildings are the close-up's job.
+ */
+const TOLERANCE_TERRAIN = 0.00001;
 
 describe("the reference city render", () => {
   const path = join(FRAMES_DIR, CITY_GOLDEN.name);
@@ -58,13 +79,30 @@ describe("the reference city render", () => {
     expect(frameDifference(golden, renderCity(dimmer, options, CITY_GOLDEN.width, CITY_GOLDEN.height))).toBeGreaterThan(TOLERANCE);
   });
 
-  it("shows what it is meant to: nine of the ten building types, rough ground, a browned-out building", () => {
+  it("the terrain frame matches too, within its own measured tolerance", () => {
+    const golden = decodePng(readFileSync(join(FRAMES_DIR, CITY_GOLDEN_WHOLE.name)));
+    const { view, options } = referenceCity();
+    const rendered = renderCity(view, options, CITY_GOLDEN_WHOLE.width, CITY_GOLDEN_WHOLE.height, false);
+    expect(frameDifference(golden, rendered)).toBeLessThanOrEqual(TOLERANCE_TERRAIN);
+  });
+
+  it("would notice one tile of ground a metre lower - the terrain tolerance is not vacuous", () => {
+    const golden = decodePng(readFileSync(join(FRAMES_DIR, CITY_GOLDEN_WHOLE.name)));
+    const { view, options } = referenceCity();
+    // The smallest single-tile change measured: tile 26,25, a metre (0.1 tile) lower.
+    const k = 25 * 32 + 26;
+    const lower = { ...view, groundZ: view.groundZ.map((z, i) => (i === k ? z - 0.1 : z)) };
+    expect(frameDifference(golden, renderCity(lower, options, CITY_GOLDEN_WHOLE.width, CITY_GOLDEN_WHOLE.height, false))).toBeGreaterThan(TOLERANCE_TERRAIN);
+  });
+
+  it("shows what it is meant to: nine of the ten building types, hills and steep ground, a browned-out building", () => {
     const { view } = referenceCity();
     const types = new Set(view.buildings.map((b) => b.type));
     // The extractor is left out on purpose - a dry city is what browns the domes out.
     expect(types.size).toBe(9);
     expect(types.has("water_extractor")).toBe(false);
-    expect(view.rough.some(Boolean)).toBe(true);
+    expect(view.steep.some(Boolean)).toBe(true);
+    expect(Math.max(...view.groundZ) - Math.min(...view.groundZ)).toBeGreaterThan(1);
     expect(view.buildings.some((b) => !b.operable)).toBe(true);
     expect(view.buildings.some((b) => b.operable)).toBe(true);
   });

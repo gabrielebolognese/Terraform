@@ -18,9 +18,9 @@ import { makeTuning } from "../tuning.js";
 import type { BuildingType, SimState } from "../types.js";
 import { foundSettlement } from "./registry.js";
 import { placeBuilding } from "./settlement.js";
-import { groundOf, isRough } from "./terrain.js";
+import { groundOf, isSteep } from "./terrain.js";
 
-const t = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_ROUGH_FRACTION: 0.12 });
+const t = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
 const SITE = { lat: 0.31, lon: -1.2 };
 
 function world(materials = 1000): SimState {
@@ -29,17 +29,17 @@ function world(materials = 1000): SimState {
   return { ...s, settlements: s.settlements.map((c) => ({ ...c, stores: { ...c.stores, materials } })) };
 }
 
-/** A rough tile at this site, found rather than assumed. */
-function aRoughTile(): { tx: number; ty: number } {
+/** A tile too steep to build on at this site, found rather than assumed. */
+function aSteepTile(): { tx: number; ty: number } {
   const g = groundOf({ kind: "city", ...SITE }, t);
-  for (let ty = 0; ty < g.tiles; ty += 1) for (let tx = 0; tx < g.tiles; tx += 1) if (isRough(g, tx, ty)) return { tx, ty };
-  throw new Error("no rough ground at the test site - the rough-ground case would be vacuous");
+  for (let ty = 0; ty < g.tiles; ty += 1) for (let tx = 0; tx < g.tiles; tx += 1) if (isSteep(g, tx, ty)) return { tx, ty };
+  throw new Error("no steep ground at the test site - the steep-ground case would be vacuous");
 }
 
 describe("placement refuses every case §3.3 and the settlement rules name", () => {
   const base = world();
   const occupied = placeBuilding(base, "settlement-1", "spaceport", 14, 14, t).state;
-  const rough = aRoughTile();
+  const steep = aSteepTile();
 
   const cases: readonly { what: string; state: SimState; id: string; type: BuildingType; tx: number; ty: number; reason: RegExp }[] = [
     { what: "no such settlement", state: base, id: "settlement-9", type: "reactor", tx: 14, ty: 14, reason: /no settlement settlement-9/ },
@@ -49,7 +49,7 @@ describe("placement refuses every case §3.3 and the settlement rules name", () 
     { what: "off the grid, north", state: base, id: "settlement-1", type: "reactor", tx: 14, ty: -1, reason: /runs off the grid/ },
     { what: "off the grid, east", state: base, id: "settlement-1", type: "habitat_dome", tx: 30, ty: 14, reason: /runs off the grid/ },
     { what: "off the grid, south", state: base, id: "settlement-1", type: "habitat_dome", tx: 14, ty: 30, reason: /runs off the grid/ },
-    { what: "on rough ground", state: base, id: "settlement-1", type: "storage_depot", tx: rough.tx, ty: rough.ty, reason: /rough ground/ },
+    { what: "on ground too steep", state: base, id: "settlement-1", type: "storage_depot", tx: steep.tx, ty: steep.ty, reason: /too steep to build on \(slope 0\.\d\d, limit 0\.15\)/ },
     { what: "overlapping, one tile shared", state: occupied, id: "settlement-1", type: "reactor", tx: 16, ty: 16, reason: /overlap another building/ },
     { what: "not paid for", state: world(59), id: "settlement-1", type: "habitat_dome", tx: 14, ty: 14, reason: /needs 60 materials, 59 available/ },
   ];
@@ -82,11 +82,37 @@ describe("placement refuses every case §3.3 and the settlement rules name", () 
       [0, 29],
       [29, 29],
     ] as const) {
-      // The corners of this site may be rough; only a clear corner proves the edge rule.
+      // The corners of this site may be steep; only a buildable corner proves the edge rule.
       const g = groundOf({ kind: "city", ...SITE }, t);
-      const clear = [0, 1, 2].every((dx) => [0, 1, 2].every((dy) => !isRough(g, tx + dx, ty + dy)));
+      const clear = [0, 1, 2].every((dx) => [0, 1, 2].every((dy) => !isSteep(g, tx + dx, ty + dy)));
       const out = placeBuilding(tight, "settlement-1", "habitat_dome", tx, ty, t);
       expect(out.ok, `${tx},${ty}: ${out.reason}`).toBe(clear);
+    }
+  });
+
+  it("refuses a step up or down to ANY side, not just one", () => {
+    // Judged from the heights alone, not from `isSteep`: a tile whose only
+    // big step (over 0.15 x 10 m) is to one particular side. Every direction
+    // must refuse. An east-only slope check passed every other test here.
+    const g = groundOf({ kind: "city", ...SITE }, t);
+    const limit = t.TERRAIN_MAX_SLOPE * t.TILE_METRES;
+    const h = (x: number, y: number): number | undefined => (x < 0 || y < 0 || x >= 32 || y >= 32 ? undefined : g.heightM[y * 32 + x]);
+    const sides = { east: [1, 0], west: [-1, 0], south: [0, 1], north: [0, -1] } as const;
+    for (const [side, [dx, dy]] of Object.entries(sides)) {
+      let found: [number, number] | null = null;
+      for (let ty = 0; ty < 32 && found === null; ty += 1) {
+        for (let tx = 0; tx < 32 && found === null; tx += 1) {
+          const here = h(tx, ty)!;
+          const steps = Object.values(sides).map(([ex, ey]) => Math.abs((h(tx + ex, ty + ey) ?? here) - here));
+          const theOne = Math.abs((h(tx + dx, ty + dy) ?? here) - here);
+          if (theOne > limit && steps.filter((d) => d > limit).length === 1) found = [tx, ty];
+        }
+      }
+      expect(found, `no tile at this site steps only to the ${side} - the case would be vacuous`).not.toBeNull();
+      const [tx, ty] = found!;
+      const out = placeBuilding(base, "settlement-1", "storage_depot", tx, ty, t);
+      expect(out.ok, `built on a step only to the ${side}, at ${tx},${ty}`).toBe(false);
+      expect(out.reason).toMatch(/too steep/);
     }
   });
 
@@ -97,7 +123,7 @@ describe("placement refuses every case §3.3 and the settlement rules name", () 
       [29, 0],
       [0, 29],
       [29, 29],
-    ] as const).filter(([tx, ty]) => [0, 1, 2].every((dx) => [0, 1, 2].every((dy) => !isRough(g, tx + dx, ty + dy))));
+    ] as const).filter(([tx, ty]) => [0, 1, 2].every((dx) => [0, 1, 2].every((dy) => !isSteep(g, tx + dx, ty + dy))));
     expect(clearCorners.length).toBeGreaterThan(0);
   });
 });

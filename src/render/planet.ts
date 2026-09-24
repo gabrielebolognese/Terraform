@@ -31,7 +31,8 @@
  */
 
 import type { VisualChannels } from "../sim/index.js";
-import { fbm, valueNoise } from "./noise.js";
+import { fbm, valueNoise } from "../shared/noise.js";
+import { PLANET_ELEVATION_FREQ, elevationField } from "../shared/planet-terrain.js";
 
 export interface RenderOptions {
   readonly width: number;
@@ -95,7 +96,8 @@ export const SCENE = {
   ambient: 0.14,
   /** How far the atmosphere extends past the disc, as a fraction of the radius. */
   haloWidth: 0.16,
-  elevationFreq: 2.6,
+  /** The continents' frequency: the shared field's own, so the globe and the settlements agree. */
+  elevationFreq: PLANET_ELEVATION_FREQ,
   cloudFreq: 3.4,
   capEdgeFreq: 5.0,
   /** Softness of the shoreline, ice edge and cloud edge, in field units. */
@@ -174,9 +176,7 @@ const LZ = SCENE.lightZ / LIGHT_LEN;
  * `globe-shader.ts`) and this renderer are built from one definition: the
  * shader is a port of exactly these, and `sphereCdf` ranks them.
  */
-export function elevationField(x: number, y: number, z: number): number {
-  return fbm(x * SCENE.elevationFreq, y * SCENE.elevationFreq, z * SCENE.elevationFreq, 4);
-}
+export { elevationField };
 
 export function cloudFieldAt(x: number, y: number, z: number): number {
   return fbm(x * SCENE.cloudFreq + 11.3, y * SCENE.cloudFreq, z * SCENE.cloudFreq - 5.7, 3);

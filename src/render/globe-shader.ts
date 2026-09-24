@@ -28,10 +28,36 @@
  * rest of `src/render/`. `src/web/globe.ts` does the GL plumbing.
  */
 
-import { CLOUD_WARP, GROUND, SCENE } from "./planet.js";
+import { fbm } from "../shared/noise.js";
+import { lookupCdf } from "../shared/sphere-cdf.js";
+import { CLOUD_WARP, GROUND, SCENE, elevationField } from "./planet.js";
 
 /** Number of entries in each CDF texture. */
 export const CDF_BINS = 1024;
+
+/** Coastline roughness, in rank units: how far the globe's shore wanders from the pure elevation rank. */
+export const COAST_DETAIL = 0.022;
+/** The coastline detail field's frequency and offset (it is not the elevation field's own noise). */
+export const DETAIL_FREQ = SCENE.elevationFreq * 7;
+export const DETAIL_OFFSET: readonly [number, number, number] = [31.7, -4.1, 12.9];
+
+/**
+ * The globe's coastline, in TypeScript: the jittered elevation rank the shader
+ * compares with the ocean fraction at a planet-space point. The shader draws
+ * sea where this is below `uOcean` (its shore smoothstep is centred there).
+ *
+ * A mirror, like `toPlanetJs`: Batch 22 holds the settlements' elevations to
+ * what the globe draws with it, and a GPU cannot be asked directly.
+ */
+export function globeCoastRankJs(p: readonly [number, number, number], cdf: Float32Array): number {
+  const detail = fbm(
+    p[0] * DETAIL_FREQ + DETAIL_OFFSET[0],
+    p[1] * DETAIL_FREQ + DETAIL_OFFSET[1],
+    p[2] * DETAIL_FREQ + DETAIL_OFFSET[2],
+    5,
+  );
+  return lookupCdf(cdf, elevationField(p[0], p[1], p[2])) + (detail - 0.5) * COAST_DETAIL;
+}
 
 function f(x: number): string {
   const s = x.toString();
@@ -145,8 +171,8 @@ const vec3 DUST = ${v3(GROUND.dust)};
 const vec3 SPACE = ${v3(GROUND.space)};
 
 // ---- presentation only: not in the software renderer ---------------------
-const float DETAIL_FREQ = ${f(SCENE.elevationFreq * 7)};
-const float COAST_DETAIL = 0.022;     // coastline roughness, in rank units
+const float DETAIL_FREQ = ${f(DETAIL_FREQ)};
+const float COAST_DETAIL = ${f(COAST_DETAIL)};     // coastline roughness, in rank units
 const float BUMP = 0.9;               // relief strength on land
 const float CLOUD_DRIFT = 0.012;      // radians per second relative to the ground
 const float CLOUD_WARP_FREQ = ${f(CLOUD_WARP.freq)};
@@ -215,7 +241,7 @@ float fbm(vec3 p, int octaves) {
 float elevationField(vec3 p) { return fbm(p * ELEV_FREQ, 4); }
 float capWobble(vec3 p) { return (valueNoise(p * CAP_FREQ) - 0.5) * 0.11; }
 float dustHaze(vec3 p) { return valueNoise(vec3(p.x * 1.9 + 3.1, p.y * 1.9, p.z * 1.9)) * 0.4 + 0.6; }
-float detailField(vec3 p) { return fbm(p * DETAIL_FREQ + vec3(31.7, -4.1, 12.9), 5); }
+float detailField(vec3 p) { return fbm(p * DETAIL_FREQ + ${v3({ r: DETAIL_OFFSET[0], g: DETAIL_OFFSET[1], b: DETAIL_OFFSET[2] })}, 5); }
 
 // planet.ts cloudFieldHighAt, ported: a warped six-octave field.
 float cloudFieldHigh(vec3 p) {
