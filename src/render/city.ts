@@ -83,6 +83,16 @@ const LEAF = rgb(0.36, 0.64, 0.38);
 const LEAF_OFF = rgb(0.34, 0.38, 0.33);
 const WATER = rgb(0.3, 0.5, 0.66);
 const STEAM = rgb(0.92, 0.93, 0.95);
+const PAINT_WHITE = rgb(0.86, 0.86, 0.84);
+const FRAME = rgb(0.78, 0.8, 0.82);
+const RUBBER = rgb(0.13, 0.13, 0.14);
+const ACCENT = rgb(0.92, 0.5, 0.16);
+const HAZARD = rgb(0.93, 0.77, 0.2);
+const CELL_DARK = rgb(0.07, 0.12, 0.26);
+const CELL_LIGHT = rgb(0.15, 0.25, 0.5);
+const RED_LIGHT = rgb(1, 0.28, 0.22);
+const GREEN_LIGHT = rgb(0.4, 1, 0.55);
+const GROW_LIGHT = rgb(0.95, 0.55, 0.85);
 
 /** Light from the far left and above: tops brightest, +y faces next, +x faces darkest. */
 const LIGHT: V3 = normalise([0.15, 0.45, 0.88]);
@@ -224,6 +234,102 @@ function sheet(pts: readonly V3[]): Face[] {
   return [{ pts, n: normalise([u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]) }];
 }
 
+function cross(a: V3, b: V3): V3 {
+  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+/** A round tube from a to b, at any angle: pipes, struts, legs, rails. */
+function tube(a: V3, b: V3, r: number, segments = 8): Face[] {
+  const d = normalise([b[0] - a[0], b[1] - a[1], b[2] - a[2]]);
+  const helper: V3 = Math.abs(d[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  const u = normalise(cross(d, helper));
+  const v = cross(d, u);
+  const at = (o: V3, ang: number): V3 => [
+    o[0] + r * (Math.cos(ang) * u[0] + Math.sin(ang) * v[0]),
+    o[1] + r * (Math.cos(ang) * u[1] + Math.sin(ang) * v[1]),
+    o[2] + r * (Math.cos(ang) * u[2] + Math.sin(ang) * v[2]),
+  ];
+  const faces: Face[] = [];
+  const capA: V3[] = [];
+  const capB: V3[] = [];
+  for (let i = 0; i < segments; i += 1) {
+    const a0 = (i / segments) * 2 * Math.PI;
+    const a1 = ((i + 1) / segments) * 2 * Math.PI;
+    const am = (a0 + a1) / 2;
+    faces.push({
+      pts: [at(a, a0), at(a, a1), at(b, a1), at(b, a0)],
+      n: normalise([Math.cos(am) * u[0] + Math.sin(am) * v[0], Math.cos(am) * u[1] + Math.sin(am) * v[1], Math.cos(am) * u[2] + Math.sin(am) * v[2]]),
+    });
+    capA.push(at(a, a0));
+    capB.push(at(b, a0));
+  }
+  faces.push({ pts: capB, n: d }, { pts: capA.reverse(), n: [-d[0], -d[1], -d[2]] });
+  return faces;
+}
+
+/**
+ * A thin band round a vertical cylinder: rings, bolt collars, rims. Its sides
+ * only - a band with `frustum`'s top cap painted a flat disc right across the
+ * tower it wraps (Batch 22's detail pass, seen in the first render).
+ */
+function band(cx: number, cy: number, r: number, z: number, h = 0.03, segments = 24): Face[] {
+  return frustum(cx, cy, r, r, z, z + h, segments).slice(0, segments);
+}
+
+/**
+ * A panel of cells: a frame across the quad (p, p + u, p + u + v, p + v),
+ * and `cols` x `rows` cells inset from it by `gap`. Solar modules, glazing,
+ * control boards. Cells are lifted a hair off the frame along its normal.
+ */
+function cells(p: V3, u: V3, v: V3, cols: number, rows: number, gap: number): Face[][] {
+  const n = normalise(cross(u, v));
+  const lift = 0.004;
+  const out: Face[][] = [];
+  for (let j = 0; j < rows; j += 1) {
+    for (let i = 0; i < cols; i += 1) {
+      const at = (fu: number, fv: number): V3 => [
+        p[0] + u[0] * fu + v[0] * fv + n[0] * lift,
+        p[1] + u[1] * fu + v[1] * fv + n[1] * lift,
+        p[2] + u[2] * fu + v[2] * fv + n[2] * lift,
+      ];
+      const u0 = (i + gap) / cols;
+      const u1 = (i + 1 - gap) / cols;
+      const v0 = (j + gap) / rows;
+      const v1 = (j + 1 - gap) / rows;
+      out.push(sheet([at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)]));
+    }
+  }
+  return out;
+}
+
+/** Meridian and latitude ribs over a dome's glass: the structure that makes it read as built. */
+function domeRibs(cx: number, cy: number, z0: number, r: number, meridians: number, latitudes: readonly number[]): Face[] {
+  const faces: Face[] = [];
+  const R = r * 1.012;
+  const at = (a: number, p: number): V3 => [cx + R * Math.cos(p) * Math.cos(a), cy + R * Math.cos(p) * Math.sin(a), z0 + R * Math.sin(p)];
+  const w = 0.022 / r;
+  const steps = 8;
+  for (let m = 0; m < meridians; m += 1) {
+    const a = (m / meridians) * 2 * Math.PI;
+    for (let k = 0; k < steps; k += 1) {
+      const p0 = (k / steps) * (Math.PI / 2) * 0.97;
+      const p1 = ((k + 1) / steps) * (Math.PI / 2) * 0.97;
+      const pm = (p0 + p1) / 2;
+      faces.push({ pts: [at(a - w, p0), at(a + w, p0), at(a + w, p1), at(a - w, p1)], n: [Math.cos(pm) * Math.cos(a), Math.cos(pm) * Math.sin(a), Math.sin(pm)] });
+    }
+  }
+  for (const p of latitudes) {
+    const segs = 32;
+    for (let i = 0; i < segs; i += 1) {
+      const a0 = (i / segs) * 2 * Math.PI;
+      const a1 = ((i + 1) / segs) * 2 * Math.PI;
+      const am = (a0 + a1) / 2;
+      faces.push({ pts: [at(a0, p - w), at(a1, p - w), at(a1, p + w), at(a0, p + w)], n: [Math.cos(p) * Math.cos(am), Math.cos(p) * Math.sin(am), Math.sin(p)] });
+    }
+  }
+  return faces;
+}
+
 function part(faces: readonly Face[], colour: Rgb, extra: Partial<Pick<Part, "emissive" | "alpha" | "twoSided">> = {}): Part {
   return { faces, colour, ...extra };
 }
@@ -295,7 +401,7 @@ function diamond(x0: number, y0: number, x1: number, y1: number, z = 0): number[
  * so what is drawn and what is clickable cannot drift apart).
  */
 const TOPS: Readonly<Record<string, number>> = {
-  habitat_dome: 1.45,
+  habitat_dome: 1.9,
   solar_array: 0.6,
   geothermal_plant: 1.3,
   reactor: 1.5,
@@ -311,13 +417,6 @@ export function buildingTop(type: string): number {
   return TOPS[type] ?? 1;
 }
 
-interface Built {
-  readonly parts: Part[];
-  /** Height of the tallest part, tiles: where the status badge floats. */
-  readonly top: number;
-  readonly extras: Shape[];
-}
-
 function plume(x: number, y: number, z: number, time: number, on: boolean): Shape[] {
   if (!on) return [];
   const out: Shape[] = [];
@@ -328,7 +427,78 @@ function plume(x: number, y: number, z: number, time: number, on: boolean): Shap
   return out;
 }
 
-function assemble(b: CityBuildingView, time: number): Built {
+/**
+ * A building's parts in painter's order, each either STATIC - its geometry
+ * depends only on the building, where it stands and whether it runs, so its
+ * shapes are built once and kept - or LIVE: animated, or driven by load, and
+ * rebuilt every frame. Parts are thunks, so a frame served from the cache
+ * never builds the static geometry at all.
+ */
+interface Kit {
+  readonly items: { readonly live: boolean; readonly make: () => Part | readonly Part[] }[];
+  readonly extras: Shape[];
+}
+
+function kit(): Kit & { s: (make: () => Part | readonly Part[]) => void; l: (make: () => Part | readonly Part[]) => void } {
+  const items: Kit["items"] = [];
+  return {
+    items,
+    extras: [],
+    s: (make) => items.push({ live: false, make }),
+    l: (make) => items.push({ live: true, make }),
+  };
+}
+
+/** A lattice mast or tower: four legs from a square base to a square top, with rings and braces on the two faces the viewer sees. */
+function lattice(cx: number, cy: number, halfBase: number, halfTop: number, z0: number, z1: number, levels: number, colour: Rgb): Part[] {
+  const corner = (half: number, z: number, sx: number, sy: number): V3 => [cx + sx * half, cy + sy * half, z];
+  const at = (sx: number, sy: number, f: number): V3 => {
+    const half = halfBase + (halfTop - halfBase) * f;
+    return corner(half, z0 + (z1 - z0) * f, sx, sy);
+  };
+  const out: Part[] = [];
+  // Far leg first, near leg last.
+  for (const [sx, sy] of [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ] as const) {
+    out.push(part(tube(at(sx, sy, 0), at(sx, sy, 1), 0.018, 6), colour));
+  }
+  for (let k = 1; k <= levels; k += 1) {
+    const f0 = (k - 1) / levels;
+    const f1 = k / levels;
+    // Rings and X-braces on the +x and +y faces (the far faces are hidden by them).
+    out.push(part(tube(at(1, -1, f1), at(1, 1, f1), 0.011, 5), colour));
+    out.push(part(tube(at(-1, 1, f1), at(1, 1, f1), 0.011, 5), colour));
+    out.push(part(tube(at(1, -1, f0), at(1, 1, f1), 0.009, 5), colour));
+    out.push(part(tube(at(1, 1, f0), at(1, -1, f1), 0.009, 5), colour));
+    out.push(part(tube(at(-1, 1, f0), at(1, 1, f1), 0.009, 5), colour));
+    out.push(part(tube(at(1, 1, f0), at(-1, 1, f1), 0.009, 5), colour));
+  }
+  return out;
+}
+
+/** A railing along a roof edge: posts and a top rail. */
+function railing(a: V3, b: V3, height: number, posts: number, colour: Rgb): Part[] {
+  const out: Part[] = [];
+  const up = (p: V3): V3 => [p[0], p[1], p[2] + height];
+  for (let i = 0; i <= posts; i += 1) {
+    const f = i / posts;
+    const p: V3 = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+    out.push(part(tube(p, up(p), 0.007, 4), colour));
+  }
+  out.push(part(tube(up(a), up(b), 0.008, 4), colour));
+  return out;
+}
+
+/** Roof vents: small boxes with a dark louvre face. */
+function vent(x: number, y: number, z: number, w = 0.12, h = 0.08): Part[] {
+  return [part(box(x, y, z, x + w, y + w, z + h), METAL), part(box(x + w, y + 0.02, z + 0.015, x + w + 0.004, y + w - 0.02, z + h - 0.015), RUBBER)];
+}
+
+function assemble(b: CityBuildingView, time: number): Kit {
   const s = b.size;
   const x0 = b.tx;
   const y0 = b.ty;
@@ -336,138 +506,503 @@ function assemble(b: CityBuildingView, time: number): Built {
   const cy = y0 + s / 2;
   const on = b.operable;
   const act = b.activity;
-  const parts: Part[] = [];
-  const extras: Shape[] = [];
-  const pad = (h = 0.06, inset = 0.08): void => {
-    parts.push(part(box(x0 + inset, y0 + inset, 0, x0 + s - inset, y0 + s - inset, h), CONCRETE));
-  };
+  const k = kit();
+  const { s: add, l: live } = k;
+  const pad = (h = 0.06, inset = 0.08): void => add(() => part(box(x0 + inset, y0 + inset, 0, x0 + s - inset, y0 + s - inset, h), CONCRETE));
 
   switch (b.type) {
     case "habitat_dome": {
-      // "A dome is a hemisphere plus a base ring."
-      parts.push(part(frustum(cx, cy, 1.38, 1.34, 0, 0.18, 28), CONCRETE));
-      parts.push(part(dome(cx, cy, 0.18, 1.24), GLASS));
-      // Window lights around the base ring: how full the dome is.
-      const lit = Math.round(act * 8);
-      for (let i = 0; i < 8; i += 1) {
-        const a = -Math.PI / 4 + (i / 7) * Math.PI;
-        const wx = cx + 1.36 * Math.cos(a);
-        const wy = cy + 1.36 * Math.sin(a);
-        parts.push(part(box(wx - 0.05, wy - 0.05, 0.06, wx + 0.05, wy + 0.05, 0.13), i < lit ? WARM_LIGHT : UNLIT, { emissive: true }));
-      }
-      // Airlock toward the viewer.
-      parts.push(part(box(cx + 0.95, cy + 0.95, 0, cx + 1.3, cy + 1.3, 0.34), METAL));
-      return { parts, top: buildingTop(b.type), extras };
+      const r = 1.24;
+      const zb = 0.2;
+      // "A dome is a hemisphere plus a base ring." A two-tier ring, then the glass.
+      add(() => part(frustum(cx, cy, 1.42, 1.38, 0, 0.1, 36), CONCRETE));
+      add(() => part(frustum(cx, cy, 1.37, 1.33, 0.1, zb, 36), PAINT_WHITE));
+      // Corridor stubs out of the back, before the glass that hides their roots.
+      add(() => part(tube([cx - 1.25, cy - 0.3, 0.14], [x0 + 0.02, cy - 0.3, 0.14], 0.09, 10), METAL));
+      add(() => part(tube([cx + 0.3, cy - 1.25, 0.14], [cx + 0.3, y0 + 0.02, 0.14], 0.09, 10), METAL));
+      add(() => part(dome(cx, cy, zb, r, 36, 9), GLASS));
+      add(() => part(domeRibs(cx, cy, zb, r, 16, [0.32, 0.72, 1.12]), FRAME));
+      // Crown hub and a mast with a beacon.
+      add(() => part(frustum(cx, cy, 0.2, 0.15, zb + r - 0.03, zb + r + 0.07, 16), METAL));
+      add(() => part(frustum(cx, cy, 0.06, 0.05, zb + r + 0.07, zb + r + 0.1, 10), DARK_METAL));
+      add(() => part(tube([cx, cy, zb + r + 0.1], [cx, cy, zb + r + 0.42], 0.012, 5), METAL));
+      live(() => part(box(cx - 0.025, cy - 0.025, zb + r + 0.42, cx + 0.025, cy + 0.025, zb + r + 0.46), on && Math.floor(time * 1.5) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
+      // Window lights around the near half of the ring: how full the dome is.
+      live(() => {
+        const lit = Math.round(act * 14);
+        const out: Part[] = [];
+        for (let i = 0; i < 14; i += 1) {
+          const a = -Math.PI / 4 + ((i + 0.5) / 14) * Math.PI;
+          const wx = cx + 1.36 * Math.cos(a);
+          const wy = cy + 1.36 * Math.sin(a);
+          out.push(part(box(wx - 0.04, wy - 0.04, 0.115, wx + 0.04, wy + 0.04, 0.17), i < lit ? WARM_LIGHT : UNLIT, { emissive: true }));
+        }
+        return out;
+      });
+      // Corridor stubs toward the viewer, and the airlock.
+      add(() => part(tube([cx + 1.3, cy + 0.45, 0.14], [x0 + s - 0.02, cy + 0.45, 0.14], 0.09, 10), METAL));
+      add(() => part(band(x0 + s - 0.08, cy + 0.45, 0.1, 0.04, 0.2, 10), DARK_METAL));
+      add(() => part(box(cx + 0.92, cy + 0.92, 0, cx + 1.32, cy + 1.32, 0.34), METAL));
+      add(() => part(box(cx + 0.92, cy + 0.92, 0.34, cx + 1.32, cy + 1.32, 0.36), DARK_METAL));
+      add(() => part(box(cx + 1.32, cy + 1.02, 0.02, cx + 1.325, cy + 1.22, 0.27), RUBBER));
+      add(() => part(box(cx + 0.92, cy + 1.32, 0.3, cx + 1.32, cy + 1.325, 0.33), HAZARD));
+      return k;
     }
     case "solar_array": {
-      pad(0.04);
-      // Four panels on posts, tilted toward the low sun.
-      const colour = on ? mix(PANEL, PANEL_ON, Math.max(0.4, act)) : PANEL;
-      for (const [u, v] of [
-        [0, 0],
-        [1, 0],
-        [0, 1],
-        [1, 1],
-      ] as const) {
-        const px = x0 + u + 0.12;
-        const py = y0 + v + 0.18;
-        parts.push(part(box(px + 0.33, py + 0.3, 0.04, px + 0.43, py + 0.4, 0.34), DARK_METAL));
-        parts.push(
-          part(
-            sheet([
-              [px, py, 0.5],
-              [px + 0.76, py, 0.5],
-              [px + 0.76, py + 0.62, 0.22],
-              [px, py + 0.62, 0.22],
-            ]),
-            colour,
-            { twoSided: true },
-          ),
+      add(() => part(box(x0 + 0.04, y0 + 0.04, 0, x0 + s - 0.04, y0 + s - 0.04, 0.035), CONCRETE));
+      // Cable tray between the rows, and the inverter that collects them.
+      const table = (u: number, v: number): void => {
+        const px = x0 + u + 0.08;
+        const py = y0 + v + 0.1;
+        const w = 0.84;
+        const d = 0.66;
+        const hiZ = 0.54;
+        const loZ = 0.2;
+        // Legs: two tall at the back, two short at the front; a brace and the torque tube.
+        add(() => [
+          part(tube([px + 0.12, py + 0.06, 0.035], [px + 0.12, py + 0.06, hiZ - 0.02], 0.016, 6), DARK_METAL),
+          part(tube([px + w - 0.12, py + 0.06, 0.035], [px + w - 0.12, py + 0.06, hiZ - 0.02], 0.016, 6), DARK_METAL),
+          part(tube([px + 0.12, py + 0.06, 0.28], [px + w - 0.12, py + 0.06, 0.28], 0.01, 5), DARK_METAL),
+          part(tube([px + 0.12, py + d - 0.06, 0.035], [px + 0.12, py + d - 0.06, loZ + 0.02], 0.016, 6), DARK_METAL),
+          part(tube([px + w - 0.12, py + d - 0.06, 0.035], [px + w - 0.12, py + d - 0.06, loZ + 0.02], 0.016, 6), DARK_METAL),
+          part(tube([px, py + d / 2, (hiZ + loZ) / 2 - 0.03], [px + w, py + d / 2, (hiZ + loZ) / 2 - 0.03], 0.018, 6), METAL),
+        ]);
+        const p: V3 = [px, py, hiZ];
+        const uu: V3 = [w, 0, 0];
+        const vv: V3 = [0, d, loZ - hiZ];
+        // The module frame, then its cells: 6 x 4, each a slightly different blue.
+        add(() => part(sheet([p, [px + w, py, hiZ], [px + w, py + d, loZ], [px, py + d, loZ]]), FRAME, { twoSided: true }));
+        add(() =>
+          cells(p, uu, vv, 6, 4, 0.06).map((faces, i) => {
+            const shadeOf = 0.2 + 0.55 * hash2(x0 * 17 + u * 5 + i, y0 * 13 + v * 7 - i);
+            const base = mix(CELL_DARK, CELL_LIGHT, shadeOf);
+            return part(faces, on ? mix(base, PANEL_ON, 0.25) : base, { twoSided: true });
+          }),
         );
-      }
-      return { parts, top: buildingTop(b.type), extras };
+        // Sunlight sliding across the glass while the array works: the load it carries.
+        live(() => {
+          if (!on) return [];
+          const sweep = ((time * 0.15 + u * 0.3 + v * 0.2) % 1 + 1) % 1;
+          const band0 = sweep;
+          const band1 = Math.min(1, sweep + 0.16);
+          const at = (fu: number, fv: number): V3 => [p[0] + uu[0] * fu + vv[0] * fv, p[1] + uu[1] * fu + vv[1] * fv + 0.002, p[2] + uu[2] * fu + vv[2] * fv + 0.006];
+          return [part(sheet([at(band0, 0.02), at(band1, 0.02), at(band1 - 0.12, 0.98), at(band0 - 0.12, 0.98)]), rgb(0.75, 0.88, 1), { emissive: true, alpha: 0.12 + 0.18 * act, twoSided: true })];
+        });
+      };
+      table(0, 0);
+      table(1, 0);
+      add(() => part(box(x0 + 0.1, y0 + 0.86, 0.035, x0 + 1.7, y0 + 0.94, 0.07), DARK_METAL));
+      add(() => [
+        part(box(x0 + 1.72, y0 + 0.8, 0.035, x0 + 1.94, y0 + 1.02, 0.28), PAINT_WHITE),
+        part(box(x0 + 1.72, y0 + 0.8, 0.28, x0 + 1.94, y0 + 1.02, 0.3), DARK_METAL),
+        part(box(x0 + 1.76, y0 + 1.02, 0.08, x0 + 1.9, y0 + 1.024, 0.22), RUBBER),
+      ]);
+      live(() => part(box(x0 + 1.94, y0 + 0.87, 0.22, x0 + 1.944, y0 + 0.9, 0.25), on ? GREEN_LIGHT : UNLIT, { emissive: true }));
+      table(0, 1);
+      table(1, 1);
+      return k;
     }
     case "geothermal_plant": {
       pad();
-      parts.push(part(box(x0 + 0.3, y0 + 0.45, 0.06, x0 + 0.95, y0 + 0.62, 0.3), DARK_METAL));
-      parts.push(part(frustum(x0 + 1.35, y0 + 0.6, 0.42, 0.3, 0.06, 1.15, 20), METAL));
-      parts.push(part(box(x0 + 0.2, y0 + 1.0, 0.06, x0 + 1.5, y0 + 1.8, 0.62), CONCRETE));
-      extras.push(...plume(x0 + 1.35, y0 + 0.6, 1.15 + b.baseZ, time, on));
-      return { parts, top: buildingTop(b.type), extras };
+      // Wellheads at the back, their valve trees, and the pipe that carries the brine.
+      for (const [wx, wy] of [
+        [x0 + 0.3, y0 + 0.3],
+        [x0 + 0.75, y0 + 0.25],
+      ] as const) {
+        add(() => [
+          part(frustum(wx, wy, 0.1, 0.1, 0.06, 0.12, 12), DARK_METAL),
+          part(frustum(wx, wy, 0.05, 0.05, 0.12, 0.34, 10), METAL),
+          part(band(wx, wy, 0.07, 0.24, 0.025, 10), ACCENT),
+          part(tube([wx, wy, 0.3], [wx, y0 + 0.62, 0.3], 0.03, 8), METAL),
+        ]);
+      }
+      add(() => part(tube([x0 + 0.25, y0 + 0.62, 0.3], [x0 + 1.05, y0 + 0.62, 0.3], 0.04, 8), METAL));
+      // The cooling tower: a waisted shell, banded, with a dark rim.
+      const tx = x0 + 1.4;
+      const ty = y0 + 0.55;
+      add(() => [
+        part(frustum(tx, ty, 0.44, 0.31, 0.06, 0.78, 24), PAINT_WHITE),
+        part(frustum(tx, ty, 0.31, 0.34, 0.78, 1.16, 24), PAINT_WHITE),
+        part(band(tx, ty, 0.405, 0.28, 0.06), ACCENT),
+        part(band(tx, ty, 0.355, 1.13, 0.05), DARK_METAL),
+      ]);
+      k.extras.push(...plume(tx, ty, 1.16 + b.baseZ, time, on));
+      // The turbine hall, its roof plant, a railing, and a window band.
+      add(() => part(box(x0 + 0.18, y0 + 1.0, 0.06, x0 + 1.52, y0 + 1.82, 0.62), CONCRETE));
+      add(() => [...vent(x0 + 0.3, y0 + 1.1, 0.62), ...vent(x0 + 0.55, y0 + 1.1, 0.62), ...vent(x0 + 0.8, y0 + 1.1, 0.62)]);
+      add(() => part(box(x0 + 1.05, y0 + 1.25, 0.62, x0 + 1.4, y0 + 1.6, 0.74), METAL));
+      add(() => [
+        ...railing([x0 + 0.2, y0 + 1.8, 0.62], [x0 + 1.5, y0 + 1.8, 0.62], 0.07, 8, HAZARD),
+        ...railing([x0 + 1.5, y0 + 1.02, 0.62], [x0 + 1.5, y0 + 1.8, 0.62], 0.07, 5, HAZARD),
+      ]);
+      live(() => {
+        const glow = on ? WARM_LIGHT : UNLIT;
+        const out: Part[] = [];
+        for (let i = 0; i < 6; i += 1) {
+          const wx = x0 + 0.26 + i * 0.2;
+          out.push(part(box(wx, y0 + 1.82, 0.38, wx + 0.12, y0 + 1.825, 0.48), glow, { emissive: true }));
+        }
+        for (let i = 0; i < 3; i += 1) {
+          const wy = y0 + 1.1 + i * 0.22;
+          out.push(part(box(x0 + 1.52, wy, 0.38, x0 + 1.525, wy + 0.14, 0.48), glow, { emissive: true }));
+        }
+        return out;
+      });
+      // The condensate drum on its saddles, piped into the hall.
+      add(() => [
+        part(box(x0 + 1.62, y0 + 1.2, 0.06, x0 + 1.72, y0 + 1.7, 0.16), DARK_METAL),
+        part(box(x0 + 1.84, y0 + 1.2, 0.06, x0 + 1.94, y0 + 1.7, 0.16), DARK_METAL),
+        part(tube([x0 + 1.78, y0 + 1.12, 0.26], [x0 + 1.78, y0 + 1.78, 0.26], 0.12, 12), METAL),
+      ]);
+      return k;
     }
     case "reactor": {
-      // "A reactor is a core plus towers plus pipes." Core brightness = load.
       pad();
-      parts.push(part(frustum(x0 + 0.45, y0 + 0.4, 0.14, 0.14, 0.06, 1.35, 12), METAL));
-      parts.push(part(frustum(x0 + 0.4, y0 + 1.2, 0.14, 0.14, 0.06, 1.35, 12), METAL));
-      parts.push(part(box(x0 + 0.5, y0 + 0.75, 0.2, cx + 0.1, y0 + 0.85, 0.3), DARK_METAL));
-      // The containment, in three stacked rings so the glowing core band sits
-      // in the wall rather than inside it.
-      const glow = on ? mix(UNLIT, COLD_LIGHT, 0.25 + 0.75 * act) : UNLIT;
-      parts.push(part(frustum(cx + 0.25, cy + 0.1, 0.55, 0.55, 0.06, 0.4, 24), CONCRETE));
-      parts.push(part(frustum(cx + 0.25, cy + 0.1, 0.56, 0.56, 0.4, 0.52, 24), glow, { emissive: true }));
-      parts.push(part(frustum(cx + 0.25, cy + 0.1, 0.55, 0.55, 0.52, 0.8, 24), CONCRETE));
-      parts.push(part(dome(cx + 0.25, cy + 0.1, 0.8, 0.55, 20, 5), CONCRETE));
-      return { parts, top: buildingTop(b.type), extras };
+      const rx = x0 + 1.25;
+      const ry = y0 + 1.1;
+      // Two cooling towers at the back, banded, with dark rims.
+      for (const [tx, ty] of [
+        [x0 + 0.42, y0 + 0.38],
+        [x0 + 0.38, y0 + 1.12],
+      ] as const) {
+        add(() => [
+          part(frustum(tx, ty, 0.2, 0.13, 0.06, 1.3, 16), PAINT_WHITE),
+          part(band(tx, ty, 0.175, 0.45, 0.06, 16), ACCENT),
+          part(band(tx, ty, 0.15, 0.95, 0.06, 16), ACCENT),
+          part(band(tx, ty, 0.14, 1.28, 0.06, 16), DARK_METAL),
+          part(tube([tx + 0.12, ty, 0.3], [rx - 0.5, ty < ry ? ry - 0.3 : ty, 0.3], 0.045, 8), METAL),
+        ]);
+      }
+      // The switchyard: transformers with their insulators.
+      for (const [sx, sy] of [
+        [x0 + 1.55, y0 + 0.18],
+        [x0 + 1.55, y0 + 0.46],
+      ] as const) {
+        add(() => [
+          part(box(sx, sy, 0.06, sx + 0.3, sy + 0.2, 0.26), DARK_METAL),
+          part(tube([sx + 0.07, sy + 0.1, 0.26], [sx + 0.07, sy + 0.1, 0.38], 0.018, 6), PAINT_WHITE),
+          part(tube([sx + 0.15, sy + 0.1, 0.26], [sx + 0.15, sy + 0.1, 0.38], 0.018, 6), PAINT_WHITE),
+          part(tube([sx + 0.23, sy + 0.1, 0.26], [sx + 0.23, sy + 0.1, 0.38], 0.018, 6), PAINT_WHITE),
+        ]);
+      }
+      // "A reactor is a core plus towers plus pipes." The containment, in
+      // stacked rings so the glowing core band sits in its wall, with bolt collars.
+      add(() => part(frustum(rx, ry, 0.56, 0.55, 0.06, 0.4, 28), CONCRETE));
+      add(() => part(band(rx, ry, 0.565, 0.16, 0.025, 28), DARK_METAL));
+      live(() => part(frustum(rx, ry, 0.565, 0.565, 0.4, 0.52, 28), on ? mix(UNLIT, COLD_LIGHT, 0.25 + 0.75 * act) : UNLIT, { emissive: true }));
+      add(() => [
+        part(frustum(rx, ry, 0.55, 0.55, 0.52, 0.8, 28), CONCRETE),
+        part(band(rx, ry, 0.56, 0.66, 0.025, 28), DARK_METAL),
+        part(dome(rx, ry, 0.8, 0.55, 28, 6), CONCRETE),
+        part(domeRibs(rx, ry, 0.8, 0.55, 8, [0.5]), DARK_METAL),
+        part(box(rx - 0.08, ry - 0.08, 1.33, rx + 0.08, ry + 0.08, 1.4), METAL),
+      ]);
+      // The turbine hall at the front, with roof vents and a lit strip.
+      add(() => part(box(x0 + 0.12, y0 + 1.6, 0.06, x0 + 0.62, y0 + 1.92, 0.5), METAL));
+      add(() => [...vent(x0 + 0.18, y0 + 1.66, 0.5, 0.1, 0.06), ...vent(x0 + 0.36, y0 + 1.66, 0.5, 0.1, 0.06)]);
+      live(() => part(box(x0 + 0.16, y0 + 1.92, 0.3, x0 + 0.58, y0 + 1.925, 0.36), on ? COLD_LIGHT : UNLIT, { emissive: true }));
+      return k;
     }
     case "water_extractor": {
-      pad(0.18, 0.1);
-      parts.push(part(box(cx - 0.15, cy - 0.15, 0.18, cx + 0.15, cy + 0.15, 1.2), DARK_METAL));
-      parts.push(part(frustum(x0 + 0.55, y0 + 1.45, 0.33, 0.33, 0.18, 0.72, 18), WATER));
-      // "Extractor arms move when operable."
-      const angle = on ? time * 1.2 : 0.6;
-      parts.push(part(turnedBox(cx, cy, 0.72, 0.06, angle, 1.05, 1.15), METAL));
-      return { parts, top: buildingTop(b.type), extras };
+      pad(0.16, 0.08);
+      // The derrick: a lattice tower over the well, its crown block on top.
+      add(() => lattice(cx, cy, 0.24, 0.07, 0.16, 1.22, 4, DARK_METAL));
+      add(() => part(box(cx - 0.1, cy - 0.1, 1.2, cx + 0.1, cy + 0.1, 1.3), HAZARD));
+      // The walking beam: "extractor arms move when operable".
+      live(() => {
+        const angle = on ? time * 1.2 : 0.6;
+        const endX = cx + 0.7 * Math.cos(angle);
+        const endY = cy + 0.7 * Math.sin(angle);
+        return [
+          part(turnedBox(cx, cy, 0.72, 0.05, angle, 1.04, 1.12), METAL),
+          part(box(endX - 0.07, endY - 0.07, 0.98, endX + 0.07, endY + 0.07, 1.14), DARK_METAL),
+        ];
+      });
+      // The holding tank with bands and a ladder, piped to the pump house.
+      const tx = x0 + 0.52;
+      const ty = y0 + 1.45;
+      add(() => [
+        part(frustum(tx, ty, 0.33, 0.33, 0.16, 0.74, 24), WATER),
+        part(band(tx, ty, 0.335, 0.3, 0.025), METAL),
+        part(band(tx, ty, 0.335, 0.52, 0.025), METAL),
+        part(frustum(tx, ty, 0.33, 0.1, 0.74, 0.84, 24), METAL),
+        part(box(tx + 0.02, ty + 0.33, 0.16, tx + 0.08, ty + 0.34, 0.76), HAZARD),
+        part(tube([tx + 0.33, ty, 0.3], [x0 + 1.2, ty, 0.3], 0.035, 8), METAL),
+      ]);
+      // The pump house, with a vent and its own lit window.
+      add(() => [
+        part(box(x0 + 1.2, y0 + 1.18, 0.16, x0 + 1.8, y0 + 1.8, 0.6), PAINT_WHITE),
+        part(box(x0 + 1.18, y0 + 1.16, 0.6, x0 + 1.82, y0 + 1.82, 0.63), DARK_METAL),
+        ...vent(x0 + 1.3, y0 + 1.28, 0.63),
+        part(tube([cx + 0.1, cy + 0.1, 0.3], [x0 + 1.25, y0 + 1.25, 0.3], 0.03, 8), METAL),
+      ]);
+      live(() => part(box(x0 + 1.35, y0 + 1.8, 0.34, x0 + 1.65, y0 + 1.805, 0.46), on ? COLD_LIGHT : UNLIT, { emissive: true }));
+      return k;
     }
     case "atmosphere_processor": {
       pad();
-      parts.push(part(frustum(x0 + 0.55, y0 + 0.3, 0.2, 0.2, 0.06, 0.55, 14), DARK_METAL));
-      parts.push(part(frustum(x0 + 1.1, y0 + 0.3, 0.2, 0.2, 0.06, 0.55, 14), DARK_METAL));
-      parts.push(part(box(x0 + 0.25, y0 + 0.5, 0.06, x0 + 1.7, y0 + 1.6, 0.7), METAL));
-      const light = on ? COLD_LIGHT : UNLIT;
-      parts.push(part(box(x0 + 0.5, y0 + 1.6, 0.35, x0 + 1.2, y0 + 1.62, 0.45), light, { emissive: true }));
-      parts.push(part(frustum(x0 + 1.45, y0 + 1.1, 0.16, 0.12, 0.7, 1.45, 14), CONCRETE));
-      extras.push(...plume(x0 + 1.45, y0 + 1.1, 1.45 + b.baseZ, time, on));
-      return { parts, top: buildingTop(b.type), extras };
+      // Intakes at the back: grilled cylinders with caps.
+      for (const ix of [x0 + 0.55, x0 + 1.1]) {
+        add(() => [
+          part(frustum(ix, y0 + 0.3, 0.2, 0.2, 0.06, 0.55, 16), DARK_METAL),
+          part(band(ix, y0 + 0.3, 0.205, 0.15, 0.02, 16), METAL),
+          part(band(ix, y0 + 0.3, 0.205, 0.25, 0.02, 16), METAL),
+          part(band(ix, y0 + 0.3, 0.205, 0.35, 0.02, 16), METAL),
+          part(band(ix, y0 + 0.3, 0.205, 0.45, 0.02, 16), METAL),
+          part(frustum(ix, y0 + 0.3, 0.23, 0.08, 0.55, 0.64, 16), METAL),
+        ]);
+      }
+      // The body, with panel seams on the faces the viewer sees.
+      add(() => part(box(x0 + 0.25, y0 + 0.5, 0.06, x0 + 1.7, y0 + 1.6, 0.7), METAL));
+      add(() => {
+        const seams: Part[] = [];
+        for (let i = 1; i < 6; i += 1) {
+          const sx = x0 + 0.25 + (i * 1.45) / 6;
+          seams.push(part(box(sx - 0.006, y0 + 1.6, 0.08, sx + 0.006, y0 + 1.604, 0.68), DARK_METAL));
+        }
+        for (let i = 1; i < 4; i += 1) {
+          const sy = y0 + 0.5 + (i * 1.1) / 4;
+          seams.push(part(box(x0 + 1.7, sy - 0.006, 0.08, x0 + 1.704, sy + 0.006, 0.68), DARK_METAL));
+        }
+        seams.push(part(box(x0 + 0.25, y0 + 1.6, 0.66, x0 + 1.7, y0 + 1.605, 0.7), ACCENT));
+        return seams;
+      });
+      add(() => [...vent(x0 + 0.35, y0 + 0.6, 0.7), ...vent(x0 + 0.6, y0 + 0.6, 0.7), ...vent(x0 + 0.35, y0 + 0.85, 0.7)]);
+      add(() => [
+        ...railing([x0 + 0.27, y0 + 1.58, 0.7], [x0 + 1.68, y0 + 1.58, 0.7], 0.07, 10, HAZARD),
+        ...railing([x0 + 1.68, y0 + 0.52, 0.7], [x0 + 1.68, y0 + 1.58, 0.7], 0.07, 7, HAZARD),
+      ]);
+      live(() => part(box(x0 + 0.45, y0 + 1.605, 0.32, x0 + 1.2, y0 + 1.61, 0.44), on ? COLD_LIGHT : UNLIT, { emissive: true }));
+      // The exhaust stack, banded, with its beacon.
+      add(() => [
+        part(frustum(x0 + 1.45, y0 + 1.1, 0.17, 0.12, 0.7, 1.45, 16), CONCRETE),
+        part(band(x0 + 1.45, y0 + 1.1, 0.16, 0.95, 0.06, 16), ACCENT),
+        part(band(x0 + 1.45, y0 + 1.1, 0.135, 1.25, 0.06, 16), ACCENT),
+        part(band(x0 + 1.45, y0 + 1.1, 0.125, 1.42, 0.04, 16), DARK_METAL),
+      ]);
+      live(() => part(box(x0 + 1.43, y0 + 1.08, 1.46, x0 + 1.47, y0 + 1.12, 1.5), on && Math.floor(time * 1.2) % 2 === 1 ? RED_LIGHT : UNLIT, { emissive: true }));
+      k.extras.push(...plume(x0 + 1.45, y0 + 1.1, 1.46 + b.baseZ, time, on));
+      // The gas drums on the near side, piped into the body.
+      for (const dy of [0.7, 1.0, 1.3]) {
+        add(() => [
+          part(frustum(x0 + 1.84, y0 + dy, 0.1, 0.1, 0.06, 0.52, 14), PAINT_WHITE),
+          part(band(x0 + 1.84, y0 + dy, 0.103, 0.18, 0.02, 14), HAZARD),
+          part(dome(x0 + 1.84, y0 + dy, 0.52, 0.1, 14, 3), PAINT_WHITE),
+          part(tube([x0 + 1.74, y0 + dy, 0.4], [x0 + 1.7, y0 + dy, 0.4], 0.025, 6), METAL),
+        ]);
+      }
+      return k;
     }
     case "greenhouse": {
       pad(0.1);
-      parts.push(part(box(x0 + 0.15, y0 + 0.35, 0.1, x0 + 1.85, y0 + 1.65, 0.3), CONCRETE));
-      parts.push(part(vault(x0 + 0.15, x0 + 1.85, cy, 0.65, 0.3), on ? LEAF : LEAF_OFF, { alpha: 0.95 }));
-      return { parts, top: buildingTop(b.type), extras };
+      add(() => part(box(x0 + 0.15, y0 + 0.35, 0.1, x0 + 1.85, y0 + 1.65, 0.3), CONCRETE));
+      // Rows of crops, seen through the glass.
+      add(() => {
+        const rows: Part[] = [];
+        for (const ry of [-0.42, -0.14, 0.14, 0.42]) {
+          rows.push(part(box(x0 + 0.25, cy + ry - 0.08, 0.3, x0 + 1.75, cy + ry + 0.08, 0.34), RUBBER));
+          rows.push(part(box(x0 + 0.27, cy + ry - 0.06, 0.34, x0 + 1.73, cy + ry + 0.06, 0.42), on ? LEAF : LEAF_OFF));
+        }
+        return rows;
+      });
+      // Grow lights over the rows while it runs.
+      live(() => (on ? [part(box(x0 + 0.3, cy - 0.5, 0.62, x0 + 1.7, cy + 0.5, 0.63), GROW_LIGHT, { emissive: true, alpha: 0.18 + 0.12 * act })] : []));
+      // The glass vault, see-through, then its arches over it.
+      add(() => part(vault(x0 + 0.15, x0 + 1.85, cy, 0.65, 0.3, 16), GLASS, { alpha: 0.42 }));
+      add(() => {
+        const arches: Part[] = [];
+        for (let i = 0; i <= 8; i += 1) {
+          const ax = x0 + 0.15 + (i * 1.7) / 8;
+          const w = 0.012;
+          const faces: Face[] = [];
+          const R = 0.66;
+          for (let j = 0; j < 12; j += 1) {
+            const a0 = (j / 12) * Math.PI;
+            const a1 = ((j + 1) / 12) * Math.PI;
+            const am = (a0 + a1) / 2;
+            faces.push({
+              pts: [
+                [ax - w, cy + R * Math.cos(a0), 0.3 + R * Math.sin(a0)],
+                [ax + w, cy + R * Math.cos(a0), 0.3 + R * Math.sin(a0)],
+                [ax + w, cy + R * Math.cos(a1), 0.3 + R * Math.sin(a1)],
+                [ax - w, cy + R * Math.cos(a1), 0.3 + R * Math.sin(a1)],
+              ],
+              n: [0, Math.cos(am), Math.sin(am)],
+            });
+          }
+          arches.push(part(faces, FRAME));
+        }
+        arches.push(part(tube([x0 + 0.15, cy, 0.3 + 0.66], [x0 + 1.85, cy, 0.3 + 0.66], 0.015, 6), FRAME));
+        return arches;
+      });
+      // The plant room on the near end, with a fan.
+      add(() => part(box(x0 + 1.86, y0 + 0.7, 0.1, x0 + 1.98, y0 + 1.3, 0.56), METAL));
+      live(() => {
+        const a = on ? time * 6 : 0.3;
+        const blades: Part[] = [part(box(x0 + 1.98, cy - 0.16, 0.18, x0 + 1.984, cy + 0.16, 0.5), RUBBER)];
+        for (let i = 0; i < 3; i += 1) {
+          const t0 = a + (i * 2 * Math.PI) / 3;
+          blades.push(part(sheet([[x0 + 1.986, cy, 0.34], [x0 + 1.986, cy + 0.14 * Math.cos(t0), 0.34 + 0.14 * Math.sin(t0)], [x0 + 1.986, cy + 0.14 * Math.cos(t0 + 0.5), 0.34 + 0.14 * Math.sin(t0 + 0.5)]]), METAL, { twoSided: true }));
+        }
+        return blades;
+      });
+      return k;
     }
     case "regolith_mine": {
-      parts.push(part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 1.1, y0 + 1.1, 0.02), rgb(0.3, 0.19, 0.14)));
-      parts.push(part(box(x0 + 0.45, y0 + 0.45, 0, x0 + 0.75, y0 + 0.75, 0.3), rgb(0.85, 0.66, 0.2)));
-      // The digger's boom swings while the mine runs.
-      const angle = on ? 0.6 + 0.5 * Math.sin(time * 0.9) : 0.6;
-      parts.push(part(turnedBox(x0 + 0.6, y0 + 0.6, 0.45, 0.07, angle, 0.25, 0.35), rgb(0.85, 0.66, 0.2)));
-      parts.push(part(box(x0 + 1.2, y0 + 0.2, 0, x0 + 1.85, y0 + 0.95, 0.75), DARK_METAL));
-      parts.push(part(box(x0 + 1.25, y0 + 1.15, 0, x0 + 1.85, y0 + 1.85, 0.4), CONCRETE));
-      return { parts, top: buildingTop(b.type), extras };
+      // The pit: terraced steps down into the ground, darker as they go.
+      add(() => [
+        part(box(x0 + 0.08, y0 + 0.08, 0, x0 + 1.12, y0 + 1.12, 0.02), rgb(0.36, 0.23, 0.17)),
+        part(box(x0 + 0.2, y0 + 0.2, 0, x0 + 1.0, y0 + 1.0, 0.024), rgb(0.29, 0.18, 0.13)),
+        part(box(x0 + 0.34, y0 + 0.34, 0, x0 + 0.86, y0 + 0.86, 0.028), rgb(0.22, 0.14, 0.1)),
+      ]);
+      // The processing plant at the back right, with a stack.
+      add(() => [
+        part(box(x0 + 1.2, y0 + 0.2, 0, x0 + 1.86, y0 + 0.95, 0.72), DARK_METAL),
+        part(box(x0 + 1.2, y0 + 0.95, 0.5, x0 + 1.86, y0 + 0.954, 0.54), HAZARD),
+        part(frustum(x0 + 1.72, y0 + 0.35, 0.07, 0.05, 0.72, 1.0, 10), METAL),
+      ]);
+      // The conveyor from the pit up into the plant, on posts.
+      add(() => [
+        part(tube([x0 + 1.02, y0 + 0.58, 0.02], [x0 + 1.02, y0 + 0.58, 0.28], 0.015, 5), DARK_METAL),
+        part(tube([x0 + 1.12, y0 + 0.58, 0.02], [x0 + 1.12, y0 + 0.58, 0.38], 0.015, 5), DARK_METAL),
+        part(sheet([[x0 + 0.85, y0 + 0.52, 0.14], [x0 + 1.2, y0 + 0.52, 0.5], [x0 + 1.2, y0 + 0.64, 0.5], [x0 + 0.85, y0 + 0.64, 0.14]]), RUBBER, { twoSided: true }),
+        part(tube([x0 + 0.85, y0 + 0.64, 0.16], [x0 + 1.2, y0 + 0.64, 0.52], 0.01, 4), HAZARD),
+      ]);
+      // The digger: tracks, body, cab and a swinging boom.
+      add(() => [
+        part(box(x0 + 0.44, y0 + 0.44, 0.03, x0 + 0.78, y0 + 0.52, 0.1), RUBBER),
+        part(box(x0 + 0.44, y0 + 0.68, 0.03, x0 + 0.78, y0 + 0.76, 0.1), RUBBER),
+        part(box(x0 + 0.46, y0 + 0.47, 0.1, x0 + 0.76, y0 + 0.73, 0.26), HAZARD),
+        part(box(x0 + 0.62, y0 + 0.62, 0.26, x0 + 0.74, y0 + 0.72, 0.38), HAZARD),
+        part(box(x0 + 0.74, y0 + 0.63, 0.29, x0 + 0.745, y0 + 0.71, 0.36), GLASS),
+      ]);
+      live(() => {
+        const angle = on ? 0.6 + 0.5 * Math.sin(time * 0.9) : 0.6;
+        const bx = x0 + 0.6 + 0.38 * Math.cos(angle);
+        const by = y0 + 0.6 + 0.38 * Math.sin(angle);
+        return [
+          part(turnedBox(x0 + 0.6 + 0.19 * Math.cos(angle), y0 + 0.6 + 0.19 * Math.sin(angle), 0.2, 0.035, angle, 0.26, 0.32), HAZARD),
+          part(box(bx - 0.06, by - 0.06, 0.08, bx + 0.06, by + 0.06, 0.2), DARK_METAL),
+        ];
+      });
+      // Spoil heap and the ore store at the front.
+      add(() => part(frustum(x0 + 0.42, y0 + 1.55, 0.32, 0.06, 0, 0.32, 10), ROCK));
+      add(() => [
+        part(box(x0 + 1.25, y0 + 1.15, 0, x0 + 1.86, y0 + 1.86, 0.4), CONCRETE),
+        ...vent(x0 + 1.35, y0 + 1.25, 0.4),
+        ...vent(x0 + 1.6, y0 + 1.25, 0.4),
+        part(box(x0 + 1.4, y0 + 1.86, 0.02, x0 + 1.72, y0 + 1.864, 0.3), RUBBER),
+      ]);
+      return k;
     }
     case "storage_depot": {
-      pad(0.04, 0.04);
-      parts.push(part(box(x0 + 0.08, y0 + 0.08, 0.04, x0 + 0.5, y0 + 0.92, 0.42), CONCRETE));
-      parts.push(part(frustum(x0 + 0.72, y0 + 0.5, 0.22, 0.22, 0.04, 0.62, 16), METAL));
-      return { parts, top: buildingTop(b.type), extras };
+      // A bunded slab: a low wall round the edge to hold a spill.
+      add(() => [
+        part(box(x0 + 0.03, y0 + 0.03, 0, x0 + 0.97, y0 + 0.97, 0.03), CONCRETE),
+        part(box(x0 + 0.03, y0 + 0.03, 0.03, x0 + 0.97, y0 + 0.07, 0.08), CONCRETE),
+        part(box(x0 + 0.03, y0 + 0.03, 0.03, x0 + 0.07, y0 + 0.97, 0.08), CONCRETE),
+      ]);
+      for (const [tx, ty, h] of [
+        [x0 + 0.3, y0 + 0.32, 0.6],
+        [x0 + 0.7, y0 + 0.32, 0.5],
+        [x0 + 0.3, y0 + 0.72, 0.5],
+      ] as const) {
+        const r = 0.17;
+        add(() => [
+          part(frustum(tx, ty, r, r, 0.03, h, 18), PAINT_WHITE),
+          part(band(tx, ty, r + 0.004, 0.14, 0.06, 18), ACCENT),
+          part(band(tx, ty, r + 0.004, h - 0.12, 0.06, 18), ACCENT),
+          part(dome(tx, ty, h, r, 18, 4), PAINT_WHITE),
+          part(box(tx - 0.02, ty + r, 0.03, tx + 0.02, ty + r + 0.008, h), DARK_METAL),
+        ]);
+      }
+      add(() => [
+        part(tube([x0 + 0.47, y0 + 0.32, 0.2], [x0 + 0.53, y0 + 0.32, 0.2], 0.03, 6), METAL),
+        part(tube([x0 + 0.3, y0 + 0.49, 0.2], [x0 + 0.3, y0 + 0.55, 0.2], 0.03, 6), METAL),
+        part(box(x0 + 0.58, y0 + 0.6, 0.03, x0 + 0.92, y0 + 0.92, 0.18), METAL),
+        part(box(x0 + 0.62, y0 + 0.64, 0.18, x0 + 0.88, y0 + 0.88, 0.3), METAL),
+        part(box(x0 + 0.92, y0 + 0.7, 0.05, x0 + 0.925, y0 + 0.82, 0.14), HAZARD),
+      ]);
+      return k;
     }
     case "spaceport": {
-      parts.push(part(frustum(cx - 0.1, cy - 0.1, 1.3, 1.3, 0, 0.1, 28), CONCRETE));
+      const px = cx - 0.1;
+      const py = cy - 0.1;
+      // The pad, its markings: an outer ring, a dark touchdown circle, a cross.
+      add(() => [
+        part(frustum(px, py, 1.32, 1.3, 0, 0.1, 36), CONCRETE),
+        part(frustum(px, py, 1.2, 1.2, 0.1, 0.103, 36), RUBBER),
+        part(frustum(px, py, 1.12, 1.12, 0.103, 0.106, 36), CONCRETE),
+        part(frustum(px, py, 0.62, 0.62, 0.106, 0.109, 28), HAZARD),
+        part(frustum(px, py, 0.56, 0.56, 0.109, 0.112, 28), CONCRETE),
+        part(box(px - 0.9, py - 0.04, 0.106, px + 0.9, py + 0.04, 0.11), PAINT_WHITE),
+        part(box(px - 0.04, py - 0.9, 0.106, px + 0.04, py + 0.9, 0.11), PAINT_WHITE),
+      ]);
       // Pad lights, chasing round the ring while the port runs.
-      for (let i = 0; i < 10; i += 1) {
-        const a = (i / 10) * 2 * Math.PI;
-        const lx = cx - 0.1 + 1.12 * Math.cos(a);
-        const ly = cy - 0.1 + 1.12 * Math.sin(a);
-        const litNow = on && (Math.floor(time * 3) + i) % 3 !== 0;
-        parts.push(part(box(lx - 0.04, ly - 0.04, 0.1, lx + 0.04, ly + 0.04, 0.14), litNow ? WARM_LIGHT : UNLIT, { emissive: true }));
+      live(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 16; i += 1) {
+          const a = (i / 16) * 2 * Math.PI;
+          const lx = px + 1.25 * Math.cos(a);
+          const ly = py + 1.25 * Math.sin(a);
+          const litNow = on && (Math.floor(time * 4) + i) % 4 !== 0;
+          out.push(part(box(lx - 0.035, ly - 0.035, 0.1, lx + 0.035, ly + 0.035, 0.14), litNow ? WARM_LIGHT : UNLIT, { emissive: true }));
+        }
+        return out;
+      });
+      // The service gantry at the back, and its arm to the lander.
+      add(() => lattice(x0 + 0.55, y0 + 0.55, 0.14, 0.1, 0.1, 1.5, 6, HAZARD));
+      add(() => part(tube([x0 + 0.62, y0 + 0.62, 1.05], [px - 0.14, py - 0.14, 1.05], 0.025, 6), HAZARD));
+      // Fuel tanks on saddles, back right.
+      for (const fy of [y0 + 0.3, y0 + 0.62]) {
+        add(() => [
+          part(box(x0 + 2.35, fy - 0.1, 0, x0 + 2.43, fy + 0.1, 0.12), DARK_METAL),
+          part(box(x0 + 2.75, fy - 0.1, 0, x0 + 2.83, fy + 0.1, 0.12), DARK_METAL),
+          part(tube([x0 + 2.25, fy, 0.22], [x0 + 2.92, fy, 0.22], 0.12, 14), PAINT_WHITE),
+        ]);
       }
-      // A lander on the pad, and the control tower on the near corner.
-      parts.push(part(frustum(cx - 0.1, cy - 0.1, 0.2, 0.2, 0.1, 1.1, 16), METAL));
-      parts.push(part(frustum(cx - 0.1, cy - 0.1, 0.2, 0.0, 1.1, 1.45, 16), METAL));
-      parts.push(part(box(x0 + 2.35, y0 + 2.35, 0, x0 + 2.85, y0 + 2.85, 0.9), CONCRETE));
-      parts.push(part(box(x0 + 2.3, y0 + 2.3, 0.9, x0 + 2.9, y0 + 2.9, 1.1), on ? GLASS : DARK_METAL));
-      return { parts, top: buildingTop(b.type), extras };
+      // The lander: legs, engine bell, banded body with windows, nose, fins.
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 4; i += 1) {
+          const a = Math.PI / 4 + (i * Math.PI) / 2;
+          out.push(part(tube([px + 0.16 * Math.cos(a), py + 0.16 * Math.sin(a), 0.5], [px + 0.42 * Math.cos(a), py + 0.42 * Math.sin(a), 0.11], 0.018, 6), DARK_METAL));
+          out.push(part(frustum(px + 0.42 * Math.cos(a), py + 0.42 * Math.sin(a), 0.05, 0.05, 0.1, 0.12, 8), DARK_METAL));
+        }
+        out.push(part(frustum(px, py, 0.17, 0.1, 0.24, 0.42, 16), DARK_METAL));
+        out.push(part(frustum(px, py, 0.2, 0.2, 0.42, 1.12, 20), PAINT_WHITE));
+        out.push(part(band(px, py, 0.205, 0.55, 0.06, 20), ACCENT));
+        out.push(part(band(px, py, 0.205, 0.98, 0.03, 20), RUBBER));
+        out.push(part(frustum(px, py, 0.2, 0.0, 1.12, 1.48, 20), PAINT_WHITE));
+        for (let i = 0; i < 3; i += 1) {
+          const a = Math.PI / 4 + (i - 1) * 0.7;
+          out.push(part(turnedBox(px + 0.26 * Math.cos(a), py + 0.26 * Math.sin(a), 0.07, 0.008, a, 0.42, 0.7), ACCENT));
+        }
+        return out;
+      });
+      live(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 3; i += 1) {
+          const a = Math.PI / 4 + (i - 1) * 0.45;
+          const wx = px + 0.203 * Math.cos(a);
+          const wy = py + 0.203 * Math.sin(a);
+          out.push(part(box(wx - 0.02, wy - 0.02, 0.85, wx + 0.02, wy + 0.02, 0.9), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+        }
+        return out;
+      });
+      // The control tower on the near corner: shaft, lit cab, dish and mast.
+      add(() => [
+        part(box(x0 + 2.35, y0 + 2.35, 0, x0 + 2.85, y0 + 2.85, 0.9), CONCRETE),
+        part(box(x0 + 2.3, y0 + 2.3, 0.9, x0 + 2.9, y0 + 2.9, 0.93), DARK_METAL),
+      ]);
+      live(() => part(box(x0 + 2.3, y0 + 2.3, 0.93, x0 + 2.9, y0 + 2.9, 1.1), on ? mix(GLASS, WARM_LIGHT, 0.35) : DARK_METAL, { emissive: on }));
+      add(() => [
+        part(box(x0 + 2.28, y0 + 2.28, 1.1, x0 + 2.92, y0 + 2.92, 1.14), DARK_METAL),
+        part(tube([x0 + 2.8, y0 + 2.4, 1.14], [x0 + 2.8, y0 + 2.4, 1.45], 0.012, 5), METAL),
+        part(tube([x0 + 2.45, y0 + 2.75, 1.14], [x0 + 2.45, y0 + 2.75, 1.26], 0.02, 6), METAL),
+        part(sheet([[x0 + 2.33, y0 + 2.7, 1.3], [x0 + 2.52, y0 + 2.62, 1.36], [x0 + 2.6, y0 + 2.82, 1.28], [x0 + 2.41, y0 + 2.9, 1.22]]), PAINT_WHITE, { twoSided: true }),
+      ]);
+      return k;
     }
   }
 }
@@ -563,7 +1098,46 @@ interface Occupant extends FootprintBox {
  * of them is quadratic, so the order is kept until the layout changes - it
  * depends on nothing else.
  */
-let orderCache: { key: string; occupants: Occupant[]; order: number[]; ground: Map<number, Shape[]> } | null = null;
+let orderCache: {
+  key: string;
+  occupants: Occupant[];
+  order: number[];
+  ground: Map<number, Shape[]>;
+  /** Each building's static shapes, as the runs between its live parts. */
+  buildings: Map<string, Shape[][]>;
+} | null = null;
+
+const asList = (made: Part | readonly Part[]): readonly Part[] => (Array.isArray(made) ? (made as readonly Part[]) : [made as Part]);
+
+/**
+ * A building into the frame. Its static parts are built once per layout,
+ * where it stands and whether it runs, and kept as the runs of shapes
+ * between its live parts; every frame after that builds only the live parts
+ * and slots them back in, so painter's order is exactly the assembly's.
+ */
+function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][]>, out: Shape[]): void {
+  const key = `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}`;
+  const kept = cache.get(key);
+  if (kept === undefined) {
+    const runs: Shape[][] = [[]];
+    for (const item of kit.items) {
+      const start = out.length;
+      emitParts(raise(asList(item.make()), b.baseZ), out);
+      if (item.live) runs.push([]);
+      else runs[runs.length - 1]!.push(...out.slice(start));
+    }
+    cache.set(key, runs);
+    return;
+  }
+  let run = 0;
+  for (const shape of kept[0]!) out.push(shape);
+  for (const item of kit.items) {
+    if (!item.live) continue;
+    emitParts(raise(asList(item.make()), b.baseZ), out);
+    run += 1;
+    for (const shape of kept[run] ?? []) out.push(shape);
+  }
+}
 
 /** Forget the cached order and ground shapes: the next frame is built from scratch. */
 export function resetSceneCache(): void {
@@ -584,7 +1158,7 @@ function groundKey(view: CityView): string {
   return `${sum}|${weighted}|${view.steep.filter(Boolean).length}`;
 }
 
-function occupantsInOrder(view: CityView): { occupants: Occupant[]; order: number[]; ground: Map<number, Shape[]> } {
+function occupantsInOrder(view: CityView): { occupants: Occupant[]; order: number[]; ground: Map<number, Shape[]>; buildings: Map<string, Shape[][]> } {
   const n = view.tiles;
   const key = `${view.id}|${n}|${groundKey(view)}|${view.buildings.map((b) => `${b.tx},${b.ty},${b.size}`).join(";")}`;
   if (orderCache !== null && orderCache.key === key) return orderCache;
@@ -598,7 +1172,7 @@ function occupantsInOrder(view: CityView): { occupants: Occupant[]; order: numbe
       if (!covered.has(ty * n + tx)) occupants.push({ tx, ty, w: 1, h: 1, building: -1 });
     }
   }
-  orderCache = { key, occupants, order: depthOrder(occupants), ground: new Map() };
+  orderCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map() };
   return orderCache;
 }
 
@@ -616,7 +1190,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   const floor = range.lo - 0.5;
   const span = Math.max(1e-9, range.hi - range.lo);
 
-  const { occupants, order, ground } = occupantsInOrder(view);
+  const { occupants, order, ground, buildings } = occupantsInOrder(view);
   const badges: Shape[] = [];
   for (const i of order) {
     const o = occupants[i]!;
@@ -658,9 +1232,9 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
     emitParts([part(plinth.slice(1, 3), CLIFF)], out);
     out.push({ rings: [ringOf(plinth[0]!.pts)], fill: { ...mix(GROUND_LOW, GROUND_HIGH, (b.baseZ - range.lo) / span), a: 1 } });
     const built = assemble(b, options.time);
-    emitParts(raise(built.parts, b.baseZ), out);
+    emitBuilding(built, b, buildings, out);
     out.push(...built.extras);
-    if (!b.operable) badges.push(...offlineBadge(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + built.top + 0.35));
+    if (!b.operable) badges.push(...offlineBadge(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + buildingTop(b.type) + 0.35));
   }
 
   // Overlays, on top of everything so they are never hidden - each on its own ground.

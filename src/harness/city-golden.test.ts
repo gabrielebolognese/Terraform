@@ -22,9 +22,10 @@ import { decodePng } from "./png.js";
  *
  * NOT the planet frames' 0.2%. Measured against this city (Batch 20), the
  * changes a player would notice are far smaller than that (the first line
- * re-measured in Batch 22, after the ground gained height: it was 0.0052%):
+ * re-measured after the detailed buildings - it was 0.0052%, then 0.0044%
+ * once the ground gained height):
  *
- *   reactor load halved (core glow dimmer)        0.0044%
+ *   reactor load halved (core glow dimmer)        0.0046%
  *   one rock removed                              0.0439%
  *   render time +0.5 s (animation phase)          0.0668%
  *   solar array switched off (badge, panels)      0.1064%
@@ -44,13 +45,15 @@ const TOLERANCE = 0.00003;
  * buildable, or leaving the hilltop solar array unlifted all changed it by
  * 0.0000%. Measured on this frame instead:
  *
- *   reactor load halved (small at this scale)     0.0005%
+ *   reactor load halved (small at this scale)     0.0004%
  *   tile 26,25 (z -0.04) one metre lower          0.0015%
  *   tile 6,4 (z 0.44) one metre lower             0.0029%
  *   steep tile 2,0 drawn as buildable             0.0036%
- *   solar array at 19,12 switched off             0.0054%
- *   hilltop solar array not lifted onto its hill  0.0394%
- *   tile 10,28 (z -0.91) one metre lower          0.0994%
+ *   solar array at 19,12 switched off             0.0073%
+ *   hilltop solar array not lifted onto its hill  0.0539%
+ *   tile 10,28 (z -0.91) one metre lower          0.0990%
+ *
+ * (Re-measured after the detailed buildings; the terrain rows did not move.)
  *   unmodified render                             0.0000%
  *
  * 0.001% is about one full-contrast pixel at 384 x 240: every single-tile

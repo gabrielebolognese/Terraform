@@ -41,6 +41,7 @@ that state.
 | [`docs/balance/batch21-travel.md`](docs/balance/batch21-travel.md) | Travel between orbit and a city: markers, the camera move, and proof the world advances the same in either view. |
 | [`docs/balance/batch22-terrain.md`](docs/balance/batch22-terrain.md) | Terrain with depth: one elevation field for the globe and the settlements, metres on the planet, hills and slope, exact picking. |
 | [`docs/balance/batch23-sea-level.md`](docs/balance/batch23-sea-level.md) | Sea level from the ocean, and how fast it rises: the input the flooding batches build on. |
+| [`docs/balance/detail-pass-buildings.md`](docs/balance/detail-pass-buildings.md) | The ten buildings rebuilt with far more detail; a close-up of all ten is `docs/frames/city-buildings.png`. |
 | [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) | The whole visual arc, twelve frames at fixed progress values. |
 
 ## Status
@@ -103,7 +104,7 @@ npm install
 | `npm run sim:run` | Headless fast-forward, ASCII S-curve plot, optional CSV |
 | `npm run sim:sweep` | Score tuning variants against the section 0 pacing goals |
 | `npm run sim:frames` | Re-render the twelve golden frames and the contact sheet |
-| `npm run sim:city` | Re-render the golden city frame and its two larger previews |
+| `npm run sim:city` | Re-render the golden city frames, the larger previews and the building close-up sheet |
 | `npm run sim:run -- --events` | Same, with section 12.2's seeded weather turned on |
 | `npm run dev:node` | One-shot summary of the starting world |
 | `npm test` | Run the test suite once |

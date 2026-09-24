@@ -21,6 +21,7 @@ import { cityScene, CITY_BACKGROUND, sceneBounds } from "../render/city.js";
 import type { CitySceneOptions } from "../render/city.js";
 import type { Frame } from "../render/planet.js";
 import { rasterize } from "../render/raster.js";
+import { isoProject } from "../render/iso.js";
 import type { BuildingType, CityView, SimState } from "../sim/index.js";
 import {
   NEUTRAL_ENV,
@@ -99,16 +100,62 @@ export function referenceCity(): { state: SimState; view: CityView; options: Cit
  * Render a view to fit a frame - the part of the grid the reference city
  * occupies, not the whole 32x32, so the buildings are big enough to see.
  */
-export function renderCity(view: CityView, options: CitySceneOptions, width: number, height: number, focus = true): Frame {
+export function renderCity(
+  view: CityView,
+  options: CitySceneOptions,
+  width: number,
+  height: number,
+  focus = true,
+  frame: { minX: number; maxX: number; minY: number; maxY: number } | null = null,
+): Frame {
   const b = sceneBounds(view.tiles, Math.max(...view.groundZ));
   // The reference city sits around tiles 11..21; frame that, or the whole grid.
-  const box = focus ? { minX: -8 * 32, maxX: 8 * 32, minY: 17 * 16, maxY: 41 * 16 } : b;
+  const box = frame ?? (focus ? { minX: -8 * 32, maxX: 8 * 32, minY: 17 * 16, maxY: 41 * 16 } : b);
   const scale = Math.min(width / (box.maxX - box.minX), height / (box.maxY - box.minY));
   return rasterize(cityScene(view, options), width, height, {
     scale,
     offsetX: width / 2 - ((box.minX + box.maxX) / 2) * scale,
     offsetY: height / 2 - ((box.minY + box.maxY) / 2) * scale,
   }, CITY_BACKGROUND);
+}
+
+/**
+ * Every building type, running, side by side on flat ground: a close-up
+ * sheet for a human to look at (not compared). The city renders them small;
+ * this is where their detail can be judged.
+ */
+export function buildingSheet(): { view: CityView; options: CitySceneOptions } {
+  const layout: readonly [BuildingType, number, number, number][] = [
+    ["habitat_dome", 1, 1, 3],
+    ["spaceport", 5, 1, 3],
+    ["reactor", 9, 1, 2],
+    ["geothermal_plant", 12, 1, 2],
+    ["solar_array", 1, 5, 2],
+    ["water_extractor", 4, 5, 2],
+    ["atmosphere_processor", 7, 5, 2],
+    ["greenhouse", 10, 5, 2],
+    ["regolith_mine", 13, 5, 2],
+    ["storage_depot", 16, 5, 1],
+  ];
+  const tiles = 18;
+  const view: CityView = {
+    id: "sheet",
+    kind: "city",
+    tiles,
+    groundZ: new Array<number>(tiles * tiles).fill(0),
+    heightM: new Array<number>(tiles * tiles).fill(0),
+    steep: new Array<boolean>(tiles * tiles).fill(false),
+    baseElevationM: 0,
+    buildings: layout.map(([type, tx, ty, size], index) => ({ index, type, tx, ty, size, operable: true, activity: 0.8, baseZ: 0 })),
+    population: 0,
+    housing: 0,
+    supported: true,
+    stores: { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 },
+    capacities: { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 },
+    net: { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 },
+    shortages: [],
+  };
+  return { view, options: { time: 1.3, selected: null, ghost: null } };
 }
 
 function main(): void {
@@ -120,7 +167,16 @@ function main(): void {
   // Larger, for a human to look at; not compared.
   writeFileSync(join(FRAMES_DIR, "city-preview.png"), encodePng(renderCity(view, options, 1280, 800)));
   writeFileSync(join(FRAMES_DIR, "city-whole.png"), encodePng(renderCity(view, options, 1280, 800, false)));
-  console.log(`wrote ${CITY_GOLDEN.name}, ${CITY_GOLDEN_WHOLE.name}, city-preview.png and city-whole.png to ${FRAMES_DIR}`);
+  const sheet = buildingSheet();
+  // Framed on the buildings (tiles 0..18 by 0..8, up to 2 tiles tall), not the whole grid.
+  const sheetBox = {
+    minX: isoProject(0, 8.5).sx - 20,
+    maxX: isoProject(18, 0).sx + 20,
+    minY: isoProject(0, 0, 2.2).sy,
+    maxY: isoProject(18, 8.5).sy + 20,
+  };
+  writeFileSync(join(FRAMES_DIR, "city-buildings.png"), encodePng(renderCity(sheet.view, sheet.options, 1800, 900, false, sheetBox)));
+  console.log(`wrote ${CITY_GOLDEN.name}, ${CITY_GOLDEN_WHOLE.name}, city-preview.png, city-whole.png and city-buildings.png to ${FRAMES_DIR}`);
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -46,6 +46,19 @@ describe("the scene cache", () => {
     }
   });
 
+  it("rebuilds a building's kept shapes when it switches off or on", () => {
+    // A building's static parts are kept per building; switching it off
+    // changes their colours (a dark greenhouse, dull solar cells).
+    const off: CityView = { ...view, buildings: view.buildings.map((b) => ({ ...b, operable: false, activity: 0 })) };
+    const truthOff = scratch(off);
+    const truthOn = scratch(view);
+    resetSceneCache();
+    cityScene(view, options);
+    expect(cityScene(off, options)).toEqual(truthOff);
+    expect(cityScene(view, options)).toEqual(truthOn);
+    expect(truthOff).not.toEqual(truthOn);
+  });
+
   it("gives the same frame twice in a row", () => {
     cityScene(flat, options); // leave something else in the cache
     const fresh = cityScene(view, options);
