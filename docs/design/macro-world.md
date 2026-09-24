@@ -587,6 +587,10 @@ FLOOD_WARN_MARGIN_M = 20     # warning begins with the sea this far below the ba
 FLOOD_THRESHOLD_M = 10       # the sea this far above the base declares the settlement lost
 FLOOD_BUILDING_LOSS_M = 2    # a building is lost with this much water over its highest tile
 
+# Roads and the settlement network (micro §6, §7.1). OFF by default; the browser opts in.
+NETWORK_ENABLED = 0          # a building runs only if its network holds a producer of what it draws
+COST_ROAD = 1                # materials per road tile
+
 # The settlement simulation (micro-world.md sections 5-7; Batch 18). Per sim-year.
 SETTLEMENTS_ENABLED = 0    # OFF by default; the browser opts in when there is UI for it
 MICRO_GROWTH_RATE = 0.1    MICRO_DECLINE_RATE = 0.2   MICRO_SEED_POPULATION = 4

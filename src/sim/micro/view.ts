@@ -20,6 +20,8 @@ import { siteElevation } from "../hypsometry.js";
 import { groundOf } from "./terrain.js";
 import type { FloodState } from "./flood.js";
 import { submerged } from "./flood.js";
+import type { NetworkIssue } from "./network.js";
+import { roadGrid } from "./network.js";
 
 export interface CityBuildingView {
   /** Index into the settlement's `buildings`. */
@@ -35,6 +37,8 @@ export interface CityBuildingView {
   readonly baseZ: number;
   /** Batch 24: water over some tile of its footprint - offline for that reason. */
   readonly submerged: boolean;
+  /** Why the network keeps it from running (not connected to what it needs), or null. */
+  readonly network: NetworkIssue | null;
   /**
    * How hard it is working, 0..1, for the aliveness layer. A power plant's is
    * the share of the settlement's power being drawn ("reactor core brightness
@@ -79,6 +83,8 @@ export interface CityView {
   readonly floodDepthM: number | null;
   /** Null while it stands; the sea level it was lost at. */
   readonly lostAtSeaLevelM: number | null;
+  /** Row-major: the tiles that carry a road. */
+  readonly roads: readonly boolean[];
 }
 
 const POWER_PLANTS: ReadonlySet<BuildingType> = new Set<BuildingType>(["solar_array", "geothermal_plant", "reactor"]);
@@ -119,7 +125,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
         }
       }
       const drowned = step.flood !== null && submerged(b, step.flood);
-      return { index, type: b.type, tx: b.tx, ty: b.ty, size, operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned };
+      return { index, type: b.type, tx: b.tx, ty: b.ty, size, operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null };
     }),
     population: s.population,
     housing: home,
@@ -132,5 +138,6 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     floodState: s.lostAtSeaLevelM !== null ? "flooded" : step.flood?.state ?? "dry",
     floodDepthM: step.flood?.depthM ?? null,
     lostAtSeaLevelM: s.lostAtSeaLevelM,
+    roads: Array.from(roadGrid(s.roads, n), (r) => r === 1),
   };
 }

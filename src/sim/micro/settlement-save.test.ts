@@ -75,7 +75,8 @@ describe("a world with settlements round-trips through the save exactly", () => 
   it("stores only true state - no capacities, no grid size, nothing derived", () => {
     const saved = toSave(s, ON, AT).settlements?.[0] as unknown as Record<string, unknown>;
     // Batch 24 added `lost_at_sea_level_m`: true state, the record of a loss.
-    expect(Object.keys(saved).sort()).toEqual(["buildings", "id", "kind", "lat", "lon", "lost_at_sea_level_m", "population", "stores"]);
+    // v7 added `roads`: true state, laid by the player.
+    expect(Object.keys(saved).sort()).toEqual(["buildings", "id", "kind", "lat", "lon", "lost_at_sea_level_m", "population", "roads", "stores"]);
   });
 });
 

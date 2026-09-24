@@ -1,8 +1,8 @@
 /**
  * Three levels of detail (requested by the user: "in a metropolis if I zoom
  * out a lot it lags"). Measured on the example's largest metropolis, the
- * whole grid (9,216 tiles, 758 buildings): 229,813 shapes at high, 39,219 at
- * medium, 16,938 at low.
+ * whole grid (9,216 tiles, 758 buildings, and its streets since roads came):
+ * 266,310 shapes at high, 46,506 at medium, 16,717 at low.
  *
  * A far view is only worth drawing if it still looks like the city. The first
  * version did not: it merged sloping ground into flat patches and coloured
@@ -60,7 +60,8 @@ function fromAfar(f: Frame, k = 8): Frame {
 
 describe("levels of detail", () => {
   it("cut a whole metropolis's shapes to a fifth, then to a tenth", () => {
-    // Measured: medium 17.1% of high, low 7.4%.
+    // Measured: medium 17.5% of high, low 6.3%. (Roads first took medium to
+    // 23%: kerbs and connection points on every street. Now high only.)
     const high = cityScene(metropolis, at("high")).length;
     expect(cityScene(metropolis, at("medium")).length).toBeLessThan(0.2 * high);
     expect(cityScene(metropolis, at("low")).length).toBeLessThan(0.1 * high);
@@ -68,8 +69,10 @@ describe("levels of detail", () => {
 
   it("still look like the city from as far as they are drawn", () => {
     // 960 x 600 is the whole metropolis about as large as it is on screen at
-    // the widest zoom. Measured, over 8 x 8 blocks: bare ground 0.0251 from
-    // the full city, medium 0.0078 (31% of that), low 0.0093 (37%).
+    // the widest zoom. Measured, over 8 x 8 blocks: bare ground 0.0238 from
+    // the full city, medium 0.0060 (25% of that), low 0.0095 (40%). Streets
+    // drawn in their bare surface colour took low to 45%; they now take the
+    // colour a street reads as up close, kerbs, dashes and rovers included.
     const W = 960;
     const H = 600;
     const high = fromAfar(renderCity(metropolis, at("high"), W, H, false));
@@ -94,7 +97,7 @@ describe("levels of detail", () => {
     const H = 260;
     const seen = (quality: CityQuality, type: (typeof BUILDING_TYPES)[number]): { colour: number[]; pixels: number } => {
       const bare = renderCity({ ...flat, buildings: [] }, at(quality), W, H, false);
-      const b = { index: 0, type, tx: 10, ty: 10, size: BUILDING_DEFS[type].footprint, operable: true, activity: 1, baseZ: 0, submerged: false };
+      const b = { index: 0, type, tx: 10, ty: 10, size: BUILDING_DEFS[type].footprint, operable: true, activity: 1, baseZ: 0, submerged: false, network: null };
       const f = renderCity({ ...flat, buildings: [b] }, at(quality), W, H, false);
       const sum = [0, 0, 0];
       let pixels = 0;
@@ -124,7 +127,8 @@ describe("levels of detail", () => {
     // Merging sloping ground into flat patches erased the terraces: bare
     // ground at low differed from high by 0.0206. Merging only flat patches:
     // 0.0012 (measured, 480 x 300).
-    const bare: CityView = { ...metropolis, buildings: [] };
+    // The terrain alone: no buildings, and no roads (they have tests of their own).
+    const bare: CityView = { ...metropolis, buildings: [], roads: metropolis.roads.map(() => false) };
     const high = renderCity(bare, at("high"), 480, 300, false);
     expect(frameDifference(renderCity(bare, at("low"), 480, 300, false), high)).toBeLessThan(0.004);
     // And the patches are really used, where they can be: on flat open

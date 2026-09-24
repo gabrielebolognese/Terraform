@@ -739,6 +739,17 @@ export const BASE_TUNING = Object.freeze({
   FLOOD_BUILDING_LOSS_M: 2,
 
   // -------------------------------------------------------------------------
+  // Roads and the settlement network (micro §6, §7.1; at the user's request)
+  //
+  // OFF by default: with it on, a building runs only when a road (or a wall
+  // it shares) joins it to what it needs - which switches buildings off, and
+  // so moves the balance. The browser opts in.
+  // -------------------------------------------------------------------------
+  NETWORK_ENABLED: 0,
+  /** Materials per road tile. A Storage Depot is 10, a Solar Array 20. */
+  COST_ROAD: 1,
+
+  // -------------------------------------------------------------------------
   // The settlement simulation (micro-world.md sections 5 to 7, Batch 18)
   //
   // OFF by default, for the reason events and the economy are: a settlement's
@@ -924,6 +935,7 @@ export function validateTuning(t: Tuning): void {
   if (!(t.FLOOD_WARN_MARGIN_M >= 0)) fail("FLOOD_WARN_MARGIN_M must be >= 0");
   if (!(t.FLOOD_THRESHOLD_M > 0)) fail("FLOOD_THRESHOLD_M must be > 0");
   if (!(t.FLOOD_BUILDING_LOSS_M >= 0)) fail("FLOOD_BUILDING_LOSS_M must be >= 0");
+  if (!(t.COST_ROAD >= 0)) fail("COST_ROAD must be >= 0");
   if (!(t.P_LIFE_OK > t.P_LIFE_MIN)) fail("P_LIFE_OK must exceed P_LIFE_MIN");
   if (!(t.T_CEIL_K > t.T_FLOOR_K)) fail("T_CEIL_K must exceed T_FLOOR_K");
   if (!(t.ALBEDO_MAX > t.ALBEDO_MIN)) fail("ALBEDO_MAX must exceed ALBEDO_MIN");

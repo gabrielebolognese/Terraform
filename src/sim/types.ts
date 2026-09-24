@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 6;
+  readonly schemaVersion: 7;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -390,6 +390,12 @@ export interface Settlement {
    * state - the flood that caused it may recede, the loss does not.
    */
   readonly lostAtSeaLevelM: number | null;
+  /**
+   * Roads (at the user's request; micro §6's network made real): the tiles
+   * that carry a road, as sorted `roadKey`s (`ty * 1024 + tx`). True state -
+   * the player lays them. Which buildings they connect is derived.
+   */
+  readonly roads: readonly number[];
 }
 
 /** Micro §6. Networked: power, water, oxygen. Stored: food, materials. Population is separate. */

@@ -27,6 +27,7 @@
 import { clamp01 } from "./math.js";
 import { wrapLongitude } from "./micro/space.js";
 import { capacities, housing, newSettlement } from "./micro/settlement.js";
+import { roadKey, roadTile, roadsToConnect } from "./micro/network.js";
 import { BUILDING_DEFS } from "./micro/buildings.js";
 import { footprintTiles } from "./micro/space.js";
 import { unlockedFor } from "./tech.js";
@@ -58,7 +59,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 6;
+export const SAVE_SCHEMA_VERSION = 7;
 
 export interface SavedFacility {
   readonly type: string;
@@ -119,6 +120,12 @@ export interface SavedSettlement {
    * level it was lost at. True state - detail §4.7 keeps the record.
    */
   readonly lost_at_sea_level_m?: number | null;
+  /**
+   * Added in v7 (roads, at the user's request): the road tiles, as sorted
+   * keys `ty * 1024 + tx`. Null only in a save carried forward from v6 - its
+   * roads are laid on load, see `migrateV6toV7`.
+   */
+  readonly roads?: readonly number[] | null;
 }
 
 /**
@@ -195,6 +202,7 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       stores: { ...s.stores },
       buildings: s.buildings.map((b) => ({ type: b.type, tx: b.tx, ty: b.ty, level: b.level })),
       lost_at_sea_level_m: s.lostAtSeaLevelM,
+      roads: [...s.roads],
     })),
   };
 }
@@ -272,7 +280,23 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 4) current = migrateV3toV4(current);
   if (version < 5) current = migrateV4toV5(current, t);
   if (version < 6) current = migrateV5toV6(current);
+  if (version < 7) current = migrateV6toV7(current);
   return current;
+}
+
+/**
+ * v6 -> v7: roads. A v6 settlement had none, and needed none - every
+ * building was on the network. Marked null here and, once its buildings are
+ * read, given the roads that connect what it had (`roadsToConnect`), free: a
+ * player who built a working city must not load it to find a new rule has
+ * switched it off. Where the ground makes a join impossible, that part stays
+ * unconnected, as it would for a player.
+ */
+function migrateV6toV7(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  if (!Array.isArray(list)) return { ...save, schema_version: 7 };
+  const settlements = list.map((raw) => (typeof raw === "object" && raw !== null ? { ...(raw as Record<string, unknown>), roads: null } : raw));
+  return { ...save, schema_version: 7, settlements };
 }
 
 /** v3 -> v4 (Batch 17): no settlement existed before the micro layer, so the registry starts empty. */
@@ -566,8 +590,35 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
         throw new SaveError(`${where} was lost to the sea but still has ${buildings.length > 0 ? "buildings" : "people"}`);
       }
     }
-    return { ...draft, stores, population: Math.min(population, housing(draft, t)), lostAtSeaLevelM };
+    const standing: Settlement = { ...draft, stores, population: Math.min(population, housing(draft, t)), lostAtSeaLevelM };
+    // v7: roads; null only for a settlement carried forward from v6.
+    if (s["roads"] === null) return { ...standing, roads: [...roadsToConnect(standing, t)] };
+    return { ...standing, roads: readRoads(s, where, buildings) };
   });
+}
+
+/**
+ * A settlement's roads. Rejects what cannot be meant: a key that is not a
+ * whole tile, the same road twice, or a road under a building. A road off a
+ * grid a retune has shrunk is KEPT, like a building: it is drawn and joins
+ * nothing, and dropping it would destroy what the player built.
+ */
+function readRoads(s: Record<string, unknown>, where: string, buildings: readonly PlacedBuilding[]): readonly number[] {
+  const under = new Set<number>();
+  for (const b of buildings) {
+    const size = BUILDING_DEFS[b.type].footprint;
+    for (const [x, y] of footprintTiles({ tx: b.tx, ty: b.ty, w: size, h: size })) under.add(roadKey(x, y));
+  }
+  const seen = new Set<number>();
+  asArray(s["roads"], `${where}.roads`).forEach((raw, j) => {
+    const at = `${where}.roads[${j}]`;
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) throw new SaveError(`${at} must be a road key (a whole number from 0), got ${describe(raw)}`);
+    const { tx, ty } = roadTile(raw);
+    if (seen.has(raw)) throw new SaveError(`${at} repeats the road at tile ${tx},${ty}`);
+    if (under.has(raw)) throw new SaveError(`${at} lies under a building at tile ${tx},${ty}`);
+    seen.add(raw);
+  });
+  return [...seen].sort((a, b) => a - b);
 }
 
 /**

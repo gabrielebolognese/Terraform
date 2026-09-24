@@ -7,7 +7,7 @@
  * inside `advance` (via computeStep), never once per call, so a settlement is
  * as chunk-independent as the planet.
  *
- * Stored: population, the five stores, the buildings. Derived every substep
+ * Stored: population, the five stores, the buildings, the roads. Derived every substep
  * and never stored (micro §10): which buildings are operable, efficiencies,
  * production and consumption totals, capacities, housing.
  */
@@ -21,6 +21,8 @@ import { footprintFits, footprintTiles, gridTiles } from "./space.js";
 import { groundOf, isSteep, slopeAt } from "./terrain.js";
 import type { FloodReading } from "./flood.js";
 import { applyFlood, floodReading, submerged } from "./flood.js";
+import type { NetworkIssue } from "./network.js";
+import { applyNetwork, networkOf, roadKey, roadsToConnect } from "./network.js";
 
 /** Section 7.2: the resources whose shortage is a life-support emergency. */
 const LIFE_SUPPORT: readonly MicroResource[] = ["power", "water", "oxygen", "food"];
@@ -37,6 +39,7 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     stores: { power: 0, water: life, oxygen: life, food: life, materials: t.FOUND_MATERIALS },
     buildings: [],
     lostAtSeaLevelM: null,
+    roads: [],
   };
 }
 
@@ -114,6 +117,8 @@ export function placeBuilding(
   }
   const taken = occupied(s);
   if (footprintTiles(f).some(([x, y]) => taken.has(`${x},${y}`))) return refuse(`${def.name} would overlap another building`);
+  const roads = new Set(s.roads);
+  if (footprintTiles(f).some(([x, y]) => roads.has(roadKey(x, y)))) return refuse(`${def.name} would stand on a road - remove the road first`);
   const cost = def.cost(t);
   if (s.stores.materials < cost) {
     return refuse(`${def.name} needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
@@ -125,6 +130,53 @@ export function placeBuilding(
     buildings: [...s.buildings, building],
   };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
+}
+
+/**
+ * Lay a road on one tile, paying `COST_ROAD` materials. Refused, changing
+ * nothing, off the grid, on ground too steep to build on, under a building,
+ * where a road already is, or without the materials.
+ */
+export function placeRoad(state: SimState, settlementId: string, tx: number, ty: number, t: Tuning): PlaceOutcome {
+  const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
+  if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
+  if (!footprintFits({ tx, ty, w: 1, h: 1 }, gridTiles(s.kind, t))) return refuse("a road must be on the grid");
+  const ground = groundOf(s, t);
+  if (isSteep(ground, tx, ty)) return refuse(`the ground is too steep for a road (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE})`);
+  if (occupied(s).has(`${tx},${ty}`)) return refuse("a building stands there");
+  const key = roadKey(tx, ty);
+  if (s.roads.includes(key)) return refuse("there is a road there already");
+  if (s.stores.materials < t.COST_ROAD) return refuse(`a road needs ${t.COST_ROAD} materials, ${Math.floor(s.stores.materials)} available`);
+  const next: Settlement = { ...s, stores: { ...s.stores, materials: s.stores.materials - t.COST_ROAD }, roads: [...s.roads, key].sort((a, b) => a - b) };
+  return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
+}
+
+/** Take up the road on (tx, ty). No refund, as for buildings. */
+export function removeRoad(state: SimState, settlementId: string, tx: number, ty: number): PlaceOutcome {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
+  const key = roadKey(tx, ty);
+  if (!s.roads.includes(key)) return { state, ok: false, reason: "there is no road there" };
+  return { state: withSettlement(state, settlementId, { ...s, roads: s.roads.filter((k) => k !== key) }), ok: true, reason: null };
+}
+
+/**
+ * "Connect everything": lay, and pay for, the roads `roadsToConnect` finds -
+ * the shortest that join every building into one network, where the ground
+ * allows. All or nothing.
+ */
+export function connectAll(state: SimState, settlementId: string, t: Tuning): PlaceOutcome & { readonly laid: number } {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}`, laid: 0 };
+  if (s.lostAtSeaLevelM !== null) return { state, ok: false, reason: `${settlementId} was lost to the sea`, laid: 0 };
+  const add = roadsToConnect(s, t);
+  if (add.length === 0) return { state, ok: false, reason: "everything that can be connected already is", laid: 0 };
+  const cost = add.length * t.COST_ROAD;
+  if (s.stores.materials < cost) return { state, ok: false, reason: `${add.length} roads need ${cost} materials, ${Math.floor(s.stores.materials)} available`, laid: 0 };
+  const next: Settlement = { ...s, stores: { ...s.stores, materials: s.stores.materials - cost }, roads: [...s.roads, ...add].sort((a, b) => a - b) };
+  return { state: withSettlement(state, settlementId, next), ok: true, reason: null, laid: add.length };
 }
 
 /** Remove the building whose footprint covers (tx, ty). Frees its tiles; no refund (none is specified). */
@@ -159,6 +211,8 @@ export interface SettlementStep {
   readonly shortages: readonly MicroResource[];
   /** Batch 24: the flood as it stood this substep, or null with flooding off. Derived, never stored. */
   readonly flood: FloodReading | null;
+  /** Parallel to `buildings`: why the network kept each from running, or null. All null with the network off. */
+  readonly network: readonly (NetworkIssue | null)[];
 }
 
 /**
@@ -180,12 +234,19 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   if (s.lostAtSeaLevelM !== null) {
     // A ruin: nothing runs, nothing grows, nothing reaches the planet.
     const none = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
-    return { next: s, operable: [], supported: false, planetaryCo2: 0, production: none, consumption: none, shortages: [], flood };
+    return { next: s, operable: [], supported: false, planetaryCo2: 0, production: none, consumption: none, shortages: [], flood, network: [] };
   }
   const defs = s.buildings.map((b) => BUILDING_DEFS[b.type]);
-  // Section 6: in the basic version every building on the grid is on the network.
   // A building with water over any tile of its footprint is offline (detail §4.3).
   const operable = defs.map((def, i) => def.canOperate(env, t) && !(flood !== null && submerged(s.buildings[i]!, flood)));
+  // Section 6's network: with it off, every building on the grid is on it.
+  const network = t.NETWORK_ENABLED ? networkOf(s.buildings, s.roads, gridTiles(s.kind, t)) : null;
+  const draws = defs.map((def) => def.consumes(t, env));
+  const makes = defs.map((def) => def.produces(t));
+  const issues: (NetworkIssue | null)[] = defs.map(() => null);
+  const connect = (): void => {
+    if (network !== null) while (applyNetwork(network, draws, makes, operable, issues));
+  };
 
   const totals = (): { prod: Record<MicroResource, number>; cons: Record<MicroResource, number> } => {
     const prod = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
@@ -209,7 +270,9 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   // not read off the stores alone (see `supported` below).
   const shortLife = new Set<MicroResource>();
   const shortAny = new Set<MicroResource>();
-  for (let pass = 0; pass <= MICRO_RESOURCES.length; pass += 1) {
+  // Each pass switches at least one building off or ends the loop.
+  for (let pass = 0; pass <= MICRO_RESOURCES.length + defs.length; pass += 1) {
+    connect();
     const { prod, cons } = totals();
     const short = MICRO_RESOURCES.filter((r) => s.stores[r] + (prod[r] - cons[r]) * h < 0);
     if (short.length === 0) break;
@@ -262,5 +325,5 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env);
   });
 
-  return { next: { ...s, stores, population }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood };
+  return { next: { ...s, stores, population }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
 }
