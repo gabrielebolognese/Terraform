@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 7;
+  readonly schemaVersion: 8;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -391,18 +391,37 @@ export interface Settlement {
    */
   readonly lostAtSeaLevelM: number | null;
   /**
-   * Roads (at the user's request; micro §6's network made real): the tiles
-   * that carry a road, as sorted `roadKey`s (`ty * 1024 + tx`). True state -
-   * the player lays them. Which buildings they connect is derived.
+   * The settlement's networks (at the user's request; micro §6 made real),
+   * each as sorted tile keys (`ty * 1024 + tx`). True state - the player lays
+   * them; which buildings they join is derived.
+   *   corridors: pressurised walkways - water, oxygen, food and materials;
+   *   cables:    power lines - power.
    */
-  readonly roads: readonly number[];
+  readonly corridors: readonly number[];
+  readonly cables: readonly number[];
+  /** Rock tiles a rover has broken (tile keys, sorted). A broken crag leaves buildable ground. */
+  readonly cleared: readonly number[];
+  /** Rovers and rockets under way. Each counts down in sim-years, one substep at a time. */
+  readonly jobs: readonly SettlementJob[];
 }
+
+/**
+ * Work under way (at the user's request). Counted down by `settlementStep`,
+ * substep by substep, so it is as chunk-independent as everything else, and
+ * it finishes offline exactly as it would have live.
+ */
+export type SettlementJob =
+  /** A rover out from the headquarters to break the rock on `tile`, bringing back `materials`. */
+  /** `work` is the part of `total` spent breaking the rock; the rest is the drive out and back. */
+  | { readonly kind: "rover"; readonly tile: number; readonly materials: number; readonly work: number; readonly total: number; readonly remaining: number }
+  /** A rocket off the spaceport whose corner is `tile`, to come back with materials. */
+  | { readonly kind: "rocket"; readonly tile: number; readonly total: number; readonly remaining: number };
 
 /** Micro §6. Networked: power, water, oxygen. Stored: food, materials. Population is separate. */
 export const MICRO_RESOURCES = ["power", "water", "oxygen", "food", "materials"] as const;
 export type MicroResource = (typeof MICRO_RESOURCES)[number];
 
-/** Micro §5's ten buildings. */
+/** Micro §5's ten buildings, and the headquarters every settlement is founded around. */
 export const BUILDING_TYPES = [
   "habitat_dome",
   "solar_array",
@@ -414,6 +433,7 @@ export const BUILDING_TYPES = [
   "regolith_mine",
   "storage_depot",
   "spaceport",
+  "headquarters",
 ] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];
 

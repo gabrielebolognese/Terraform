@@ -154,10 +154,13 @@ export {
   footprintFits,
   footprintTiles,
   gridTiles,
+  keyTile,
   latLonToVec,
+  TILE_STRIDE,
   onGrid,
   planetToWorld,
   tangentFrame,
+  tileKey,
   tileToWorld,
   vecToLatLon,
   worldToPlanet,
@@ -171,9 +174,25 @@ export { MARS_RADIUS_M } from "./planets/mars.js";
 export type { Settlement, SettlementKind } from "./types.js";
 export { BUILDING_DEFS } from "./micro/buildings.js";
 export type { BuildingDef } from "./micro/buildings.js";
-export { capacities, connectAll, housing, newSettlement, placeBuilding, placeRoad, removeBuilding, removeRoad, settlementStep } from "./micro/settlement.js";
-export { ROAD_STRIDE, networkOf, roadKey, roadTile, roadsToConnect } from "./micro/network.js";
-export type { Network, NetworkIssue } from "./micro/network.js";
+export {
+  capacities,
+  connectAll,
+  foundingBuildings,
+  headquartersOrigin,
+  housing,
+  launchRocket,
+  newSettlement,
+  placeBuilding,
+  placeLink,
+  removeBuilding,
+  removeLink,
+  sendRover,
+  settlementStep,
+} from "./micro/settlement.js";
+export { LAYERS, layerOf, linksToConnect, networkOf } from "./micro/network.js";
+export type { Layer, Network, NetworkIssue } from "./micro/network.js";
+export { garage, rocksOf, roverYears, siteGround } from "./micro/rocks.js";
+export type { Rock } from "./micro/rocks.js";
 export type { PlaceOutcome, SettlementStep } from "./micro/settlement.js";
 export { microStep } from "./micro/coupling.js";
 export type { MicroContribution } from "./micro/coupling.js";
@@ -184,6 +203,6 @@ export { nextSubstepFlows } from "./integrate.js";
 export type { SeaLevel } from "./sea-level.js";
 export type { Ground } from "./micro/terrain.js";
 export { cityView } from "./micro/view.js";
-export type { CityBuildingView, CityView } from "./micro/view.js";
+export type { CityBuildingView, CityJobView, CityView } from "./micro/view.js";
 export { BUILDING_TYPES, MICRO_RESOURCES } from "./types.js";
 export type { BuildingType, MicroResource, PlacedBuilding } from "./types.js";

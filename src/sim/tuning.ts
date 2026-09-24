@@ -746,8 +746,38 @@ export const BASE_TUNING = Object.freeze({
   // so moves the balance. The browser opts in.
   // -------------------------------------------------------------------------
   NETWORK_ENABLED: 0,
-  /** Materials per road tile. A Storage Depot is 10, a Solar Array 20. */
-  COST_ROAD: 1,
+  /** Materials per tile of corridor, and of power cable. A Storage Depot is 10, a Solar Array 20. */
+  COST_CORRIDOR: 1,
+  COST_CABLE: 1,
+
+  // -------------------------------------------------------------------------
+  // The headquarters, rovers and rockets (at the user's request)
+  //
+  // OFF by default: founding with a headquarters and a spaceport hands every
+  // settlement free oxygen, water and a supply rocket, which moves the
+  // balance. The browser opts in. Times are sim-years; the clock runs
+  // TIME_SCALE (0.03) sim-years a real second at 1x.
+  // -------------------------------------------------------------------------
+  HEADQUARTERS_ENABLED: 0,
+  /** Made by the headquarters, per year; it draws no power. */
+  HQ_OXYGEN: 5,
+  HQ_WATER: 3,
+  /** Rovers the headquarters keeps; one job each. */
+  ROVERS_PER_HQ: 3,
+  /** A rover's drive, per tile each way: 0.5 real seconds at 1x. */
+  ROVER_YEARS_PER_TILE: 0.015,
+  /** Breaking loose rocks, and a crag: 3 and 10 real seconds at 1x. */
+  ROVER_WORK_YEARS_LOOSE: 0.09,
+  ROVER_WORK_YEARS_CRAG: 0.3,
+  /** Materials a rover brings back from loose rocks, and from a crag. */
+  ROCK_LOOSE_MATERIALS: 1,
+  ROCK_CRAG_MATERIALS: 5,
+  /** Share of open, buildable tiles with loose rocks on. */
+  ROCK_LOOSE_SHARE: 0.08,
+  /** A supply rocket's round trip: one real minute at 1x (60 x 0.03). */
+  ROCKET_TRIP_YEARS: 1.8,
+  /** Materials a rocket brings back, or as many as the stores have room for. */
+  ROCKET_MATERIALS: 20,
 
   // -------------------------------------------------------------------------
   // The settlement simulation (micro-world.md sections 5 to 7, Batch 18)
@@ -935,7 +965,11 @@ export function validateTuning(t: Tuning): void {
   if (!(t.FLOOD_WARN_MARGIN_M >= 0)) fail("FLOOD_WARN_MARGIN_M must be >= 0");
   if (!(t.FLOOD_THRESHOLD_M > 0)) fail("FLOOD_THRESHOLD_M must be > 0");
   if (!(t.FLOOD_BUILDING_LOSS_M >= 0)) fail("FLOOD_BUILDING_LOSS_M must be >= 0");
-  if (!(t.COST_ROAD >= 0)) fail("COST_ROAD must be >= 0");
+  if (!(t.COST_CORRIDOR >= 0)) fail("COST_CORRIDOR must be >= 0");
+  if (!(t.COST_CABLE >= 0)) fail("COST_CABLE must be >= 0");
+  if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");
+  if (!(t.ROCKET_TRIP_YEARS > 0)) fail("ROCKET_TRIP_YEARS must be > 0");
+  if (!(t.ROCK_LOOSE_SHARE >= 0 && t.ROCK_LOOSE_SHARE <= 1)) fail("ROCK_LOOSE_SHARE must be in [0, 1]");
   if (!(t.P_LIFE_OK > t.P_LIFE_MIN)) fail("P_LIFE_OK must exceed P_LIFE_MIN");
   if (!(t.T_CEIL_K > t.T_FLOOR_K)) fail("T_CEIL_K must exceed T_FLOOR_K");
   if (!(t.ALBEDO_MAX > t.ALBEDO_MIN)) fail("ALBEDO_MAX must exceed ALBEDO_MIN");

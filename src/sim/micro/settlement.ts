@@ -7,22 +7,25 @@
  * inside `advance` (via computeStep), never once per call, so a settlement is
  * as chunk-independent as the planet.
  *
- * Stored: population, the five stores, the buildings, the roads. Derived every substep
+ * Stored: population, the five stores, the buildings, the corridors and
+ * cables, the broken rocks, the rovers and rockets under way. Derived every substep
  * and never stored (micro §10): which buildings are operable, efficiencies,
  * production and consumption totals, capacities, housing.
  */
 
 import type { HabitatChannels } from "../habitat.js";
 import type { Tuning } from "../tuning.js";
-import type { BuildingType, MicroResource, PlacedBuilding, Settlement, SettlementKind, SimState } from "../types.js";
+import type { BuildingType, MicroResource, PlacedBuilding, Settlement, SettlementJob, SettlementKind, SimState } from "../types.js";
 import { MICRO_RESOURCES, isCityKind } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
-import { footprintFits, footprintTiles, gridTiles } from "./space.js";
-import { groundOf, isSteep, slopeAt } from "./terrain.js";
+import { footprintFits, footprintTiles, gridTiles, tileKey } from "./space.js";
+import { isSteep, slopeAt } from "./terrain.js";
+import type { Rock } from "./rocks.js";
+import { garage, rocksOf, roverYears, siteGround } from "./rocks.js";
 import type { FloodReading } from "./flood.js";
 import { applyFlood, floodReading, submerged } from "./flood.js";
-import type { NetworkIssue } from "./network.js";
-import { applyNetwork, networkOf, roadKey, roadsToConnect } from "./network.js";
+import type { Layer, NetworkIssue } from "./network.js";
+import { LAYERS, applyNetwork, linksToConnect, networkOf } from "./network.js";
 
 /** Section 7.2: the resources whose shortage is a life-support emergency. */
 const LIFE_SUPPORT: readonly MicroResource[] = ["power", "water", "oxygen", "food"];
@@ -39,8 +42,35 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     stores: { power: 0, water: life, oxygen: life, food: life, materials: t.FOUND_MATERIALS },
     buildings: [],
     lostAtSeaLevelM: null,
-    roads: [],
+    corridors: [],
+    cables: [],
+    cleared: [],
+    jobs: [],
   };
+}
+
+/**
+ * Where the headquarters stands on an `n`-tile grid: its 5 x 5 footprint
+ * centred on the grid (at the user's request: "always at the center of the
+ * city, 5x5").
+ */
+export function headquartersOrigin(n: number): { tx: number; ty: number } {
+  const c = Math.floor(n / 2) - 2;
+  return { tx: c, ty: c };
+}
+
+/**
+ * What a settlement is founded with (behind `HEADQUARTERS_ENABLED`): the
+ * headquarters at the centre, and - for a city or a metropolis - one
+ * spaceport sharing its east wall. Landed, not built: no cost, and on the
+ * levelled landing zone.
+ */
+export function foundingBuildings(kind: SettlementKind, t: Tuning): PlacedBuilding[] {
+  if (!t.HEADQUARTERS_ENABLED) return [];
+  const hq = headquartersOrigin(gridTiles(kind, t));
+  const out: PlacedBuilding[] = [{ type: "headquarters", tx: hq.tx, ty: hq.ty, level: 1 }];
+  if (kind !== "outpost") out.push({ type: "spaceport", tx: hq.tx + 5, ty: hq.ty + 1, level: 1 });
+  return out;
 }
 
 export function capacities(s: Settlement, t: Tuning): Readonly<Record<MicroResource, number>> {
@@ -105,10 +135,11 @@ export function placeBuilding(
   if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
   const def = BUILDING_DEFS[type];
   if (def === undefined) return refuse(`"${String(type)}" is not a building`);
+  if (!def.buildable) return refuse(`the ${def.name} is founded with the settlement, never built`);
   if (!def.kinds.includes(s.kind)) return refuse(`${def.name} cannot be built in an ${s.kind}`);
   const f = { tx, ty, w: def.footprint, h: def.footprint };
   if (!footprintFits(f, gridTiles(s.kind, t))) return refuse(`${def.name} does not fit there - it runs off the grid`);
-  const ground = groundOf(s, t);
+  const ground = siteGround(s, t);
   // Detail §1.3: "A building footprint must fit on tiles whose slope is below a buildable maximum."
   const tooSteep = footprintTiles(f).filter(([x, y]) => isSteep(ground, x, y));
   if (tooSteep.length > 0) {
@@ -117,8 +148,10 @@ export function placeBuilding(
   }
   const taken = occupied(s);
   if (footprintTiles(f).some(([x, y]) => taken.has(`${x},${y}`))) return refuse(`${def.name} would overlap another building`);
-  const roads = new Set(s.roads);
-  if (footprintTiles(f).some(([x, y]) => roads.has(roadKey(x, y)))) return refuse(`${def.name} would stand on a road - remove the road first`);
+  const corridors = new Set(s.corridors);
+  if (footprintTiles(f).some(([x, y]) => corridors.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a corridor - remove it first`);
+  const cables = new Set(s.cables);
+  if (footprintTiles(f).some(([x, y]) => cables.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a cable - remove it first`);
   const cost = def.cost(t);
   if (s.stores.materials < cost) {
     return refuse(`${def.name} needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
@@ -132,51 +165,113 @@ export function placeBuilding(
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
 
+const LAYER_WORDS: Readonly<Record<Layer, { one: string; cost: (t: Tuning) => number }>> = {
+  corridors: { one: "corridor", cost: (t) => t.COST_CORRIDOR },
+  cables: { one: "cable", cost: (t) => t.COST_CABLE },
+};
+
 /**
- * Lay a road on one tile, paying `COST_ROAD` materials. Refused, changing
+ * Lay a corridor or a cable on one tile, paying for it. Refused, changing
  * nothing, off the grid, on ground too steep to build on, under a building,
- * where a road already is, or without the materials.
+ * where one already is, or without the materials. A tile may carry both.
  */
-export function placeRoad(state: SimState, settlementId: string, tx: number, ty: number, t: Tuning): PlaceOutcome {
+export function placeLink(state: SimState, settlementId: string, layer: Layer, tx: number, ty: number, t: Tuning): PlaceOutcome {
   const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
+  const words = LAYER_WORDS[layer];
   const s = state.settlements.find((x) => x.id === settlementId);
   if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
   if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
-  if (!footprintFits({ tx, ty, w: 1, h: 1 }, gridTiles(s.kind, t))) return refuse("a road must be on the grid");
-  const ground = groundOf(s, t);
-  if (isSteep(ground, tx, ty)) return refuse(`the ground is too steep for a road (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE})`);
+  if (!footprintFits({ tx, ty, w: 1, h: 1 }, gridTiles(s.kind, t))) return refuse(`a ${words.one} must be on the grid`);
+  const ground = siteGround(s, t);
+  if (isSteep(ground, tx, ty)) return refuse(`the ground is too steep for a ${words.one} (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE}) - send a rover to break the crag`);
   if (occupied(s).has(`${tx},${ty}`)) return refuse("a building stands there");
-  const key = roadKey(tx, ty);
-  if (s.roads.includes(key)) return refuse("there is a road there already");
-  if (s.stores.materials < t.COST_ROAD) return refuse(`a road needs ${t.COST_ROAD} materials, ${Math.floor(s.stores.materials)} available`);
-  const next: Settlement = { ...s, stores: { ...s.stores, materials: s.stores.materials - t.COST_ROAD }, roads: [...s.roads, key].sort((a, b) => a - b) };
+  const key = tileKey(tx, ty);
+  if (s[layer].includes(key)) return refuse(`there is a ${words.one} there already`);
+  const cost = words.cost(t);
+  if (s.stores.materials < cost) return refuse(`a ${words.one} needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
+  const next: Settlement = { ...s, stores: { ...s.stores, materials: s.stores.materials - cost }, [layer]: [...s[layer], key].sort((a, b) => a - b) };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
 
-/** Take up the road on (tx, ty). No refund, as for buildings. */
-export function removeRoad(state: SimState, settlementId: string, tx: number, ty: number): PlaceOutcome {
+/** Take up the corridor or cable on (tx, ty). No refund, as for buildings. */
+export function removeLink(state: SimState, settlementId: string, layer: Layer, tx: number, ty: number): PlaceOutcome {
   const s = state.settlements.find((x) => x.id === settlementId);
   if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
-  const key = roadKey(tx, ty);
-  if (!s.roads.includes(key)) return { state, ok: false, reason: "there is no road there" };
-  return { state: withSettlement(state, settlementId, { ...s, roads: s.roads.filter((k) => k !== key) }), ok: true, reason: null };
+  const key = tileKey(tx, ty);
+  if (!s[layer].includes(key)) return { state, ok: false, reason: `there is no ${LAYER_WORDS[layer].one} there` };
+  return { state: withSettlement(state, settlementId, { ...s, [layer]: s[layer].filter((k) => k !== key) }), ok: true, reason: null };
 }
 
 /**
- * "Connect everything": lay, and pay for, the roads `roadsToConnect` finds -
- * the shortest that join every building into one network, where the ground
- * allows. All or nothing.
+ * "Connect everything": lay, and pay for, the corridors and cables
+ * `linksToConnect` finds - the shortest that join every building into one
+ * network of each, where the ground allows. All or nothing.
  */
 export function connectAll(state: SimState, settlementId: string, t: Tuning): PlaceOutcome & { readonly laid: number } {
   const s = state.settlements.find((x) => x.id === settlementId);
   if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}`, laid: 0 };
   if (s.lostAtSeaLevelM !== null) return { state, ok: false, reason: `${settlementId} was lost to the sea`, laid: 0 };
-  const add = roadsToConnect(s, t);
-  if (add.length === 0) return { state, ok: false, reason: "everything that can be connected already is", laid: 0 };
-  const cost = add.length * t.COST_ROAD;
-  if (s.stores.materials < cost) return { state, ok: false, reason: `${add.length} roads need ${cost} materials, ${Math.floor(s.stores.materials)} available`, laid: 0 };
-  const next: Settlement = { ...s, stores: { ...s.stores, materials: s.stores.materials - cost }, roads: [...s.roads, ...add].sort((a, b) => a - b) };
-  return { state: withSettlement(state, settlementId, next), ok: true, reason: null, laid: add.length };
+  const corridors = linksToConnect(s, "corridors", t);
+  const cables = linksToConnect(s, "cables", t);
+  const laid = corridors.length + cables.length;
+  if (laid === 0) return { state, ok: false, reason: "everything that can be connected already is", laid: 0 };
+  const cost = corridors.length * t.COST_CORRIDOR + cables.length * t.COST_CABLE;
+  if (s.stores.materials < cost) return { state, ok: false, reason: `${laid} tiles of corridor and cable need ${cost} materials, ${Math.floor(s.stores.materials)} available`, laid: 0 };
+  const next: Settlement = {
+    ...s,
+    stores: { ...s.stores, materials: s.stores.materials - cost },
+    corridors: [...s.corridors, ...corridors].sort((a, b) => a - b),
+    cables: [...s.cables, ...cables].sort((a, b) => a - b),
+  };
+  return { state: withSettlement(state, settlementId, next), ok: true, reason: null, laid };
+}
+
+/**
+ * Send a rover from the headquarters to break the rock on (tx, ty) (at the
+ * user's request). It takes longer the further the rock is; it brings back
+ * `ROCK_LOOSE_MATERIALS` for loose rocks, `ROCK_CRAG_MATERIALS` for a crag,
+ * and a broken crag leaves ground that can be built on. The headquarters
+ * keeps `ROVERS_PER_HQ` rovers.
+ */
+export function sendRover(state: SimState, settlementId: string, tx: number, ty: number, t: Tuning): PlaceOutcome {
+  const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
+  if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
+  if (garage(s) === null) return refuse("there is no headquarters to send a rover from");
+  const n = gridTiles(s.kind, t);
+  if (!footprintFits({ tx, ty, w: 1, h: 1 }, n)) return refuse("that is off the grid");
+  const rock: Rock = rocksOf(s, t)[ty * n + tx] ?? "none";
+  if (rock === "none") return refuse("there is no rock there to break");
+  const key = tileKey(tx, ty);
+  if (s.jobs.some((j) => j.kind === "rover" && j.tile === key)) return refuse("a rover is already on its way there");
+  const out = s.jobs.filter((j) => j.kind === "rover").length;
+  if (out >= t.ROVERS_PER_HQ) return refuse(`all ${t.ROVERS_PER_HQ} rovers are out`);
+  const years = roverYears(s, tx, ty, rock, t);
+  const work = rock === "crag" ? t.ROVER_WORK_YEARS_CRAG : t.ROVER_WORK_YEARS_LOOSE;
+  const job: SettlementJob = { kind: "rover", tile: key, materials: rock === "crag" ? t.ROCK_CRAG_MATERIALS : t.ROCK_LOOSE_MATERIALS, work, total: years, remaining: years };
+  return { state: withSettlement(state, settlementId, { ...s, jobs: [...s.jobs, job] }), ok: true, reason: null };
+}
+
+/**
+ * Launch a rocket from the spaceport covering (tx, ty) (at the user's
+ * request): it flies off and comes back `ROCKET_TRIP_YEARS` later - one real
+ * minute at 1x - with `ROCKET_MATERIALS`, or what the stores have room for.
+ * One rocket per spaceport at a time. It carries its own fuel: an unpowered
+ * spaceport can still launch.
+ */
+export function launchRocket(state: SimState, settlementId: string, tx: number, ty: number, t: Tuning): PlaceOutcome {
+  const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
+  if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
+  const port = s.buildings.find((b) => b.type === "spaceport" && tx >= b.tx && ty >= b.ty && tx < b.tx + 3 && ty < b.ty + 3);
+  if (port === undefined) return refuse("there is no spaceport there");
+  const key = tileKey(port.tx, port.ty);
+  if (s.jobs.some((j) => j.kind === "rocket" && j.tile === key)) return refuse("its rocket is already away");
+  if (s.stores.materials >= capacities(s, t).materials) return refuse("the stores are full of materials");
+  const job: SettlementJob = { kind: "rocket", tile: key, total: t.ROCKET_TRIP_YEARS, remaining: t.ROCKET_TRIP_YEARS };
+  return { state: withSettlement(state, settlementId, { ...s, jobs: [...s.jobs, job] }), ok: true, reason: null };
 }
 
 /** Remove the building whose footprint covers (tx, ty). Frees its tiles; no refund (none is specified). */
@@ -188,6 +283,7 @@ export function removeBuilding(state: SimState, settlementId: string, tx: number
     return tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + size;
   });
   if (index < 0) return { state, ok: false, reason: "there is no building there" };
+  if (!BUILDING_DEFS[s.buildings[index]!.type].buildable) return { state, ok: false, reason: `the ${BUILDING_DEFS[s.buildings[index]!.type].name} cannot be removed` };
   const next: Settlement = { ...s, buildings: s.buildings.filter((_, i) => i !== index) };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
@@ -239,8 +335,9 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   const defs = s.buildings.map((b) => BUILDING_DEFS[b.type]);
   // A building with water over any tile of its footprint is offline (detail §4.3).
   const operable = defs.map((def, i) => def.canOperate(env, t) && !(flood !== null && submerged(s.buildings[i]!, flood)));
-  // Section 6's network: with it off, every building on the grid is on it.
-  const network = t.NETWORK_ENABLED ? networkOf(s.buildings, s.roads, gridTiles(s.kind, t)) : null;
+  // Section 6's networks: with them off, every building on the grid is on them.
+  const n = gridTiles(s.kind, t);
+  const network = t.NETWORK_ENABLED ? { corridors: networkOf(s.buildings, s.corridors, n), cables: networkOf(s.buildings, s.cables, n) } : null;
   const draws = defs.map((def) => def.consumes(t, env));
   const makes = defs.map((def) => def.produces(t));
   const issues: (NetworkIssue | null)[] = defs.map(() => null);
@@ -297,6 +394,22 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   const stores = { ...s.stores };
   for (const r of MICRO_RESOURCES) stores[r] = Math.min(cap[r], Math.max(0, s.stores[r] + (prod[r] - cons[r]) * h));
 
+  // Rovers and rockets: each counts down by this substep; what comes home
+  // lands in the stores, up to their room (the user: "if there is 140/150,
+  // there are just 10 to get").
+  const jobs: SettlementJob[] = [];
+  let cleared = s.cleared;
+  for (const job of s.jobs) {
+    const remaining = job.remaining - h;
+    if (remaining > 1e-9) {
+      jobs.push({ ...job, remaining });
+      continue;
+    }
+    const brought = job.kind === "rover" ? job.materials : t.ROCKET_MATERIALS;
+    stores.materials = Math.min(cap.materials, stores.materials + brought);
+    if (job.kind === "rover") cleared = [...cleared, job.tile].sort((a, b) => a - b);
+  }
+
   /**
    * Section 7.3's support, with section 7.2's stress folded in.
    *
@@ -325,5 +438,5 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env);
   });
 
-  return { next: { ...s, stores, population }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
+  return { next: { ...s, stores, population, jobs, cleared }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
 }

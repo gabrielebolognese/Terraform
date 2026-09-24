@@ -22,7 +22,9 @@ export interface BuildingDef {
   readonly name: string;
   /** What it is, in the player's words. */
   readonly summary: string;
-  readonly footprint: 1 | 2 | 3;
+  readonly footprint: 1 | 2 | 3 | 5;
+  /** Whether a player may place it. The headquarters is founded, never built. */
+  readonly buildable: boolean;
   /** Which kinds of settlement may build it. Outposts carry no population (section 4.2). */
   readonly kinds: readonly SettlementKind[];
   readonly cost: (t: Tuning) => number;
@@ -55,6 +57,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Habitat Dome",
     summary: "Pressurised, regolith-shielded housing. Its life support falls away once the air outside is breathable.",
     footprint: 3,
+    buildable: true,
     kinds: CITY,
     cost: (t) => t.COST_HABITAT_DOME,
     consumes: (t, env) => {
@@ -74,6 +77,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Solar Array",
     summary: "Cheap power that scales with sunlight - orbital mirrors raise it, shades cut it.",
     footprint: 2,
+    buildable: true,
     kinds: BOTH,
     cost: (t) => t.COST_SOLAR_ARRAY,
     consumes: NONE,
@@ -89,6 +93,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Geothermal Plant",
     summary: "Steady baseload power from borehole heat, day or night.",
     footprint: 2,
+    buildable: true,
     kinds: BOTH,
     cost: (t) => t.COST_GEOTHERMAL_PLANT,
     consumes: NONE,
@@ -104,6 +109,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Reactor",
     summary: "Fission surface power: large and steady. The heavy backbone.",
     footprint: 2,
+    buildable: true,
     kinds: BOTH,
     cost: (t) => t.COST_REACTOR,
     consumes: NONE,
@@ -119,6 +125,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Water Extractor",
     summary: "Mines subsurface ice. Twice as productive once liquid water is in reach.",
     footprint: 2,
+    buildable: true,
     kinds: BOTH,
     cost: (t) => t.COST_WATER_EXTRACTOR,
     consumes: (t) => ({ power: t.EXTRACTOR_POWER }),
@@ -134,6 +141,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Atmosphere Processor",
     summary: "Splits the air's CO2 into oxygen (MOXIE-style): breathable air for the city, and less CO2 on the planet.",
     footprint: 2,
+    buildable: true,
     kinds: BOTH,
     cost: (t) => t.COST_ATMOSPHERE_PROCESSOR,
     consumes: (t) => ({ power: t.PROCESSOR_POWER }),
@@ -149,6 +157,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Greenhouse",
     summary: "Enclosed hydroponics: power and water into food.",
     footprint: 2,
+    buildable: true,
     kinds: CITY,
     cost: (t) => t.COST_GREENHOUSE,
     consumes: (t) => ({ power: t.GREENHOUSE_POWER, water: t.GREENHOUSE_WATER }),
@@ -164,6 +173,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Regolith Mine",
     summary: "Digs and processes regolith into construction materials.",
     footprint: 2,
+    buildable: true,
     kinds: BOTH,
     cost: (t) => t.COST_REGOLITH_MINE,
     consumes: (t) => ({ power: t.MINE_POWER }),
@@ -179,6 +189,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Storage Depot",
     summary: "Tanks and bunkers: more room for every stored resource.",
     footprint: 1,
+    buildable: true,
     kinds: BOTH,
     cost: (t) => t.COST_STORAGE_DEPOT,
     consumes: NONE,
@@ -200,6 +211,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     name: "Spaceport",
     summary: "The Earth link: imports materials and life-support stock while the settlement cannot yet feed itself.",
     footprint: 3,
+    buildable: true,
     kinds: BOTH,
     cost: (t) => t.COST_SPACEPORT,
     consumes: (t) => ({ power: t.SPACEPORT_POWER }),
@@ -209,6 +221,22 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
       oxygen: t.SPACEPORT_LIFE_SUPPORT,
       food: t.SPACEPORT_LIFE_SUPPORT,
     }),
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  headquarters: {
+    type: "headquarters",
+    name: "Headquarters",
+    summary: "The heart of the settlement, landed with it: command, the rover garage, and life support of its own. It cannot be built or moved.",
+    footprint: 5,
+    buildable: false,
+    kinds: ["city", "outpost", "metropolis"],
+    cost: ZERO,
+    consumes: NONE,
+    produces: (t) => ({ oxygen: t.HQ_OXYGEN, water: t.HQ_WATER }),
     housing: ZERO,
     capacity: NONE,
     planetaryCo2: ZERO,

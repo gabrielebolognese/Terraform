@@ -589,7 +589,15 @@ FLOOD_BUILDING_LOSS_M = 2    # a building is lost with this much water over its 
 
 # Roads and the settlement network (micro §6, §7.1). OFF by default; the browser opts in.
 NETWORK_ENABLED = 0          # a building runs only if its network holds a producer of what it draws
-COST_ROAD = 1                # materials per road tile
+COST_CORRIDOR = 1            # materials per corridor tile (carries water, oxygen, food, materials)
+COST_CABLE = 1               # materials per power cable tile (carries power)
+
+# Headquarters, rovers and rockets. OFF by default; the browser opts in. Sim-years (0.03 = 1 real second at 1x).
+HEADQUARTERS_ENABLED = 0     # found each settlement with a 5x5 headquarters, and a city with one spaceport
+HQ_OXYGEN = 5                HQ_WATER = 3                ROVERS_PER_HQ = 3
+ROVER_YEARS_PER_TILE = 0.015 ROVER_WORK_YEARS_LOOSE = 0.09  ROVER_WORK_YEARS_CRAG = 0.3
+ROCK_LOOSE_MATERIALS = 1     ROCK_CRAG_MATERIALS = 5     ROCK_LOOSE_SHARE = 0.08
+ROCKET_TRIP_YEARS = 1.8      ROCKET_MATERIALS = 20
 
 # The settlement simulation (micro-world.md sections 5-7; Batch 18). Per sim-year.
 SETTLEMENTS_ENABLED = 0    # OFF by default; the browser opts in when there is UI for it

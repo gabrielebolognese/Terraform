@@ -130,8 +130,8 @@ export function onGrid(tx: number, ty: number, tiles: number): boolean {
 export interface Footprint {
   readonly tx: number;
   readonly ty: number;
-  readonly w: 1 | 2 | 3;
-  readonly h: 1 | 2 | 3;
+  readonly w: 1 | 2 | 3 | 5;
+  readonly h: 1 | 2 | 3 | 5;
 }
 
 /** Every tile a footprint covers, row by row. */
@@ -144,4 +144,19 @@ export function footprintTiles(f: Footprint): readonly (readonly [number, number
 /** Does the whole footprint lie on the grid? (Occupancy and buildability are Batch 18/20.) */
 export function footprintFits(f: Footprint, tiles: number): boolean {
   return footprintTiles(f).every(([x, y]) => onGrid(x, y, tiles));
+}
+
+/**
+ * A tile's key: `ty * TILE_STRIDE + tx`. Fixed, not the grid's edge, so a key
+ * means the same tile whatever the grid's size is tuned to. Corridors,
+ * cables and broken rocks are stored as keys.
+ */
+export const TILE_STRIDE = 1024;
+
+export function tileKey(tx: number, ty: number): number {
+  return ty * TILE_STRIDE + tx;
+}
+
+export function keyTile(key: number): { tx: number; ty: number } {
+  return { tx: key % TILE_STRIDE, ty: Math.floor(key / TILE_STRIDE) };
 }

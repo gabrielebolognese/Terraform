@@ -27,7 +27,10 @@
 import { clamp01 } from "./math.js";
 import { wrapLongitude } from "./micro/space.js";
 import { capacities, housing, newSettlement } from "./micro/settlement.js";
-import { roadKey, roadTile, roadsToConnect } from "./micro/network.js";
+import { LAYERS, linksToConnect } from "./micro/network.js";
+import type { Layer } from "./micro/network.js";
+import { headquartersOrigin } from "./micro/settlement.js";
+import { gridTiles, keyTile, tileKey } from "./micro/space.js";
 import { BUILDING_DEFS } from "./micro/buildings.js";
 import { footprintTiles } from "./micro/space.js";
 import { unlockedFor } from "./tech.js";
@@ -45,6 +48,7 @@ import type {
   Reservoirs,
   SimState,
   Settlement,
+  SettlementJob,
   BuildingType,
   PlacedBuilding,
 } from "./types.js";
@@ -59,7 +63,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 7;
+export const SAVE_SCHEMA_VERSION = 8;
 
 export interface SavedFacility {
   readonly type: string;
@@ -126,6 +130,17 @@ export interface SavedSettlement {
    * roads are laid on load, see `migrateV6toV7`.
    */
   readonly roads?: readonly number[] | null;
+  /**
+   * Added in v8 (corridors and cables, at the user's request, in place of
+   * v7's roads): each network's tiles, as sorted keys. Null only in a save
+   * carried forward from v6 - laid on load, see `migrateV7toV8`.
+   */
+  readonly corridors?: readonly number[] | null;
+  readonly cables?: readonly number[] | null;
+  /** Added in v8: the rock tiles rovers have broken, as sorted keys. */
+  readonly cleared?: readonly number[];
+  /** Added in v8: rovers and rockets under way, counting down in sim-years. */
+  readonly jobs?: readonly Record<string, unknown>[];
 }
 
 /**
@@ -202,7 +217,10 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       stores: { ...s.stores },
       buildings: s.buildings.map((b) => ({ type: b.type, tx: b.tx, ty: b.ty, level: b.level })),
       lost_at_sea_level_m: s.lostAtSeaLevelM,
-      roads: [...s.roads],
+      corridors: [...s.corridors],
+      cables: [...s.cables],
+      cleared: [...s.cleared],
+      jobs: s.jobs.map((j) => ({ ...j })),
     })),
   };
 }
@@ -281,7 +299,24 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 5) current = migrateV4toV5(current, t);
   if (version < 6) current = migrateV5toV6(current);
   if (version < 7) current = migrateV6toV7(current);
+  if (version < 8) current = migrateV7toV8(current);
   return current;
+}
+
+/**
+ * v7 -> v8: v7's roads carried everything; v8 has corridors (water, oxygen,
+ * food, materials) and cables (power). Each road becomes both, so nothing a
+ * player connected comes apart. No rock had been broken, nothing was under way.
+ */
+function migrateV7toV8(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  if (!Array.isArray(list)) return { ...save, schema_version: 8 };
+  const settlements = list.map((raw) => {
+    if (typeof raw !== "object" || raw === null) return raw;
+    const { roads, ...rest } = raw as Record<string, unknown>;
+    return { ...rest, corridors: roads ?? null, cables: roads ?? null, cleared: [], jobs: [] };
+  });
+  return { ...save, schema_version: 8, settlements };
 }
 
 /**
@@ -591,34 +626,110 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
       }
     }
     const standing: Settlement = { ...draft, stores, population: Math.min(population, housing(draft, t)), lostAtSeaLevelM };
-    // v7: roads; null only for a settlement carried forward from v6.
-    if (s["roads"] === null) return { ...standing, roads: [...roadsToConnect(standing, t)] };
-    return { ...standing, roads: readRoads(s, where, buildings) };
+    const cleared = readKeys(s, "cleared", where, "rock", new Set());
+    const jobs = readJobs(s, where);
+    const under = underBuildings(buildings);
+    let settled: Settlement = { ...standing, cleared, jobs };
+    // v8: corridors and cables; null only for a settlement carried forward from v6.
+    for (const layer of LAYERS) {
+      settled = { ...settled, [layer]: s[layer] === null ? [] : readKeys(s, layer, where, LINK_WORDS[layer], under) };
+    }
+    for (const layer of LAYERS) {
+      if (s[layer] === null) settled = { ...settled, [layer]: [...linksToConnect(settled, layer, t)] };
+    }
+    return withHeadquarters(settled, t);
   });
 }
 
-/**
- * A settlement's roads. Rejects what cannot be meant: a key that is not a
- * whole tile, the same road twice, or a road under a building. A road off a
- * grid a retune has shrunk is KEPT, like a building: it is drawn and joins
- * nothing, and dropping it would destroy what the player built.
- */
-function readRoads(s: Record<string, unknown>, where: string, buildings: readonly PlacedBuilding[]): readonly number[] {
+const LINK_WORDS: Readonly<Record<Layer, string>> = { corridors: "corridor", cables: "cable" };
+
+function underBuildings(buildings: readonly PlacedBuilding[]): Set<number> {
   const under = new Set<number>();
   for (const b of buildings) {
     const size = BUILDING_DEFS[b.type].footprint;
-    for (const [x, y] of footprintTiles({ tx: b.tx, ty: b.ty, w: size, h: size })) under.add(roadKey(x, y));
+    for (const [x, y] of footprintTiles({ tx: b.tx, ty: b.ty, w: size, h: size })) under.add(tileKey(x, y));
   }
+  return under;
+}
+
+/**
+ * A list of tile keys - a network's tiles, or the broken rocks. Rejects what
+ * cannot be meant: a key that is not a whole tile, the same tile twice, or a
+ * link under a building. A tile off a grid a retune has shrunk is KEPT, like
+ * a building: dropping it would destroy what the player built.
+ */
+function readKeys(s: Record<string, unknown>, field: string, where: string, noun: string, under: ReadonlySet<number>): readonly number[] {
   const seen = new Set<number>();
-  asArray(s["roads"], `${where}.roads`).forEach((raw, j) => {
-    const at = `${where}.roads[${j}]`;
-    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) throw new SaveError(`${at} must be a road key (a whole number from 0), got ${describe(raw)}`);
-    const { tx, ty } = roadTile(raw);
-    if (seen.has(raw)) throw new SaveError(`${at} repeats the road at tile ${tx},${ty}`);
+  asArray(s[field], `${where}.${field}`).forEach((raw, j) => {
+    const at = `${where}.${field}[${j}]`;
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) throw new SaveError(`${at} must be a tile key (a whole number from 0), got ${describe(raw)}`);
+    const { tx, ty } = keyTile(raw);
+    if (seen.has(raw)) throw new SaveError(`${at} repeats the ${noun} at tile ${tx},${ty}`);
     if (under.has(raw)) throw new SaveError(`${at} lies under a building at tile ${tx},${ty}`);
     seen.add(raw);
   });
   return [...seen].sort((a, b) => a - b);
+}
+
+/** Rovers and rockets under way. A job with no time left, or more left than it takes, is not one the game makes. */
+function readJobs(s: Record<string, unknown>, where: string): readonly SettlementJob[] {
+  return asArray(s["jobs"], `${where}.jobs`).map((raw, j) => {
+    const at = `${where}.jobs[${j}]`;
+    const job = asRecord(raw, at);
+    const kind = job["kind"];
+    const tile = numberAt(job, "tile", `${at}.tile`);
+    const total = numberAt(job, "total", `${at}.total`);
+    const remaining = numberAt(job, "remaining", `${at}.remaining`);
+    if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
+    if (!(total > 0) || !(remaining > 0) || remaining > total) throw new SaveError(`${at} has ${remaining} of ${total} years left, which no job can`);
+    if (kind === "rocket") return { kind, tile, total, remaining };
+    if (kind === "rover") {
+      const materials = numberAt(job, "materials", `${at}.materials`);
+      const work = numberAt(job, "work", `${at}.work`);
+      if (materials < 0) throw new SaveError(`${at}.materials is negative (${materials})`);
+      if (work < 0 || work > total) throw new SaveError(`${at}.work ${work} is outside its ${total}-year trip`);
+      return { kind, tile, total, remaining, materials, work };
+    }
+    throw new SaveError(`${at}.kind must be "rover" or "rocket", got ${describe(kind)}`);
+  });
+}
+
+/**
+ * With the headquarters on, every standing settlement has one: a settlement
+ * from before them is given one at the centre, or - where the player built
+ * there - on the nearest free 5 x 5 ground, clear of buildings, taking up
+ * any corridor or cable under it. Where there is no room at all, none: its
+ * rovers wait for one. Deterministic, like everything a load does.
+ */
+function withHeadquarters(s: Settlement, t: Tuning): Settlement {
+  if (!t.HEADQUARTERS_ENABLED || s.lostAtSeaLevelM !== null || s.buildings.some((b) => b.type === "headquarters")) return s;
+  const n = gridTiles(s.kind, t);
+  const under = underBuildings(s.buildings);
+  const centre = headquartersOrigin(n);
+  const free = (ox: number, oy: number): boolean => {
+    if (ox < 0 || oy < 0 || ox + 5 > n || oy + 5 > n) return false;
+    for (let y = oy; y < oy + 5; y += 1) for (let x = ox; x < ox + 5; x += 1) if (under.has(tileKey(x, y))) return false;
+    return true;
+  };
+  // Rings out from the centre; within a ring, in reading order.
+  for (let r = 0; r <= n; r += 1) {
+    for (let oy = centre.ty - r; oy <= centre.ty + r; oy += 1) {
+      for (let ox = centre.tx - r; ox <= centre.tx + r; ox += 1) {
+        if (Math.max(Math.abs(ox - centre.tx), Math.abs(oy - centre.ty)) !== r || !free(ox, oy)) continue;
+        const inside = (key: number): boolean => {
+          const { tx, ty } = keyTile(key);
+          return tx >= ox && ty >= oy && tx < ox + 5 && ty < oy + 5;
+        };
+        return {
+          ...s,
+          buildings: [{ type: "headquarters", tx: ox, ty: oy, level: 1 }, ...s.buildings],
+          corridors: s.corridors.filter((k) => !inside(k)),
+          cables: s.cables.filter((k) => !inside(k)),
+        };
+      }
+    }
+  }
+  return s;
 }
 
 /**

@@ -8,12 +8,19 @@
  * be added later without touching the sim." §7.1: "A building is operable
  * this tick only if it is connected to the network (section 6)".
  *
+ * Two networks, laid tile by tile (the user: "roads are not like earth city
+ * roads, here they are thin corridors ... differentiate between connective
+ * roads, for people, greenhouses and space stations, and energy, thinner
+ * cables, yellow"):
+ *   - CORRIDORS carry water, oxygen, food and materials;
+ *   - CABLES carry power.
+ *
  * The rule (behind `NETWORK_ENABLED`):
- *   - Buildings join one network by touching, edge to edge, or by touching a
- *     road; roads join by touching each other. A road is a tile.
- *   - A building that draws a resource runs only if its network holds a
- *     running producer of it: a mine needs a power plant on its network, a
- *     dome a greenhouse.
+ *   - Buildings join a network by touching, edge to edge (a shared wall joins
+ *     both), or by touching a tile of it; its tiles join by touching.
+ *   - A building that draws a resource runs only if the network that carries
+ *     that resource holds a running producer of it: a mine needs a cable to a
+ *     power plant, a dome a corridor to a greenhouse.
  *
  * The stores stay one pool per settlement, as §6 has them, so what a
  * producer makes reaches the pool wherever it stands, and two networks share
@@ -30,21 +37,17 @@
 import type { Tuning } from "../tuning.js";
 import type { MicroResource, PlacedBuilding, Settlement } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
-import { gridTiles } from "./space.js";
-import { groundOf, isSteep } from "./terrain.js";
+import { siteGround } from "./rocks.js";
+import { gridTiles, keyTile, tileKey } from "./space.js";
+import { isSteep } from "./terrain.js";
 
-/**
- * A road's key: `ty * ROAD_STRIDE + tx`. Fixed, not the grid's edge, so a key
- * means the same tile whatever the grid's size is tuned to.
- */
-export const ROAD_STRIDE = 1024;
+/** The two networks a settlement lays. */
+export type Layer = "corridors" | "cables";
+export const LAYERS: readonly Layer[] = ["corridors", "cables"];
 
-export function roadKey(tx: number, ty: number): number {
-  return ty * ROAD_STRIDE + tx;
-}
-
-export function roadTile(key: number): { tx: number; ty: number } {
-  return { tx: key % ROAD_STRIDE, ty: Math.floor(key / ROAD_STRIDE) };
+/** Which network carries each resource: power by cable, everything else by corridor. */
+export function layerOf(r: MicroResource): Layer {
+  return r === "power" ? "cables" : "corridors";
 }
 
 /** Row-major over an `n`-tile grid: which building stands on each tile, or -1. */
@@ -59,11 +62,11 @@ export function ownerGrid(buildings: readonly PlacedBuilding[], n: number): Int3
   return owner;
 }
 
-/** Row-major over an `n`-tile grid: 1 where a road is. Roads off the grid are ignored. */
-export function roadGrid(roads: readonly number[], n: number): Uint8Array {
+/** Row-major over an `n`-tile grid: 1 where the network has a tile. Tiles off the grid are ignored. */
+export function linkGrid(links: readonly number[], n: number): Uint8Array {
   const grid = new Uint8Array(n * n);
-  for (const key of roads) {
-    const { tx, ty } = roadTile(key);
+  for (const key of links) {
+    const { tx, ty } = keyTile(key);
     if (tx < n && ty < n) grid[ty * n + tx] = 1;
   }
   return grid;
@@ -102,7 +105,8 @@ const cache = new WeakMap<readonly PlacedBuilding[], WeakMap<readonly number[], 
  * both lists are immutable, so the same lists always give the same answer,
  * and every substep of a settlement that has not changed reuses it.
  */
-export function networkOf(buildings: readonly PlacedBuilding[], roads: readonly number[], n: number): Network {
+export function networkOf(buildings: readonly PlacedBuilding[], links: readonly number[], n: number): Network {
+  const roads = links;
   let byRoads = cache.get(buildings);
   if (byRoads === undefined) {
     byRoads = new WeakMap();
@@ -117,7 +121,7 @@ export function networkOf(buildings: readonly PlacedBuilding[], roads: readonly 
   if (kept !== undefined) return kept;
 
   const owner = ownerGrid(buildings, n);
-  const road = roadGrid(roads, n);
+  const road = linkGrid(roads, n);
   // Nodes: buildings first, then every tile (only road tiles take part).
   const B = buildings.length;
   const parent = new Int32Array(B + n * n);
@@ -156,7 +160,7 @@ export function networkOf(buildings: readonly PlacedBuilding[], roads: readonly 
   return network;
 }
 
-/** Why the network kept a building from running: it draws these, and no running building on its network makes them. */
+/** Why the networks kept a building from running: it draws these, and no running building on the network that carries them makes them. */
 export interface NetworkIssue {
   readonly kind: "unsupplied";
   readonly resources: readonly MicroResource[];
@@ -168,28 +172,34 @@ export interface NetworkIssue {
  * fixed point stays one found from above. Returns whether anything changed.
  */
 export function applyNetwork(
-  network: Network,
+  networks: Readonly<Record<Layer, Network>>,
   consumes: readonly Partial<Record<MicroResource, number>>[],
   produces: readonly Partial<Record<MicroResource, number>>[],
   operable: boolean[],
   issues: (NetworkIssue | null)[],
 ): boolean {
-  const makes = new Map<number, Set<MicroResource>>();
+  // Per network (layer and id), what its running buildings make.
+  const makes = new Map<string, Set<MicroResource>>();
   operable.forEach((on, i) => {
     if (!on) return;
-    const id = network.of[i]!;
-    let set = makes.get(id);
-    if (set === undefined) {
-      set = new Set();
-      makes.set(id, set);
+    for (const [r, v] of Object.entries(produces[i]!) as [MicroResource, number][]) {
+      if (!(v > 0)) continue;
+      const layer = layerOf(r);
+      const key = `${layer}:${networks[layer].of[i]!}`;
+      let set = makes.get(key);
+      if (set === undefined) {
+        set = new Set();
+        makes.set(key, set);
+      }
+      set.add(r);
     }
-    for (const [r, v] of Object.entries(produces[i]!) as [MicroResource, number][]) if (v > 0) set.add(r);
   });
   let changed = false;
   operable.forEach((on, i) => {
     if (!on) return;
-    const id = network.of[i]!;
-    const missing = (Object.entries(consumes[i]!) as [MicroResource, number][]).filter(([r, v]) => v > 0 && makes.get(id)?.has(r) !== true).map(([r]) => r);
+    const missing = (Object.entries(consumes[i]!) as [MicroResource, number][])
+      .filter(([r, v]) => v > 0 && makes.get(`${layerOf(r)}:${networks[layerOf(r)].of[i]!}`)?.has(r) !== true)
+      .map(([r]) => r);
     if (missing.length === 0) return;
     operable[i] = false;
     issues[i] = { kind: "unsupplied", resources: missing };
@@ -199,21 +209,21 @@ export function applyNetwork(
 }
 
 /**
- * Roads that join every building into one network, where the ground allows:
- * each separate network is reached from the first building's by the shortest
- * path over open, buildable ground, and a road is laid along it. Returns the
- * roads to ADD (the settlement's own are kept). Deterministic: ties go to the
- * tile found first in a fixed order.
+ * Tiles of one network that join every building into one, where the ground
+ * allows: each separate network is reached from the first building's by the
+ * shortest path over open, buildable ground, and a tile is laid along it.
+ * Returns the tiles to ADD (the settlement's own are kept). Deterministic:
+ * ties go to the tile found first in a fixed order.
  *
- * Used to carry saves from before roads existed into a game that needs them,
+ * Used to carry saves from before the networks into a game that needs them,
  * for the example planet, and by the player's "connect everything".
  */
-export function roadsToConnect(s: Settlement, t: Tuning): number[] {
+export function linksToConnect(s: Settlement, layer: Layer, t: Tuning): number[] {
   const n = gridTiles(s.kind, t);
   if (s.buildings.length < 2) return [];
-  const ground = groundOf(s, t);
+  const ground = siteGround(s, t);
   const owner = ownerGrid(s.buildings, n);
-  const laid = new Set(s.roads);
+  const laid = new Set(s[layer]);
   const added: number[] = [];
   const passable = (x: number, y: number): boolean => owner[y * n + x]! < 0 && !isSteep(ground, x, y);
   // A road already there counts as crossable even on a slope: it was laid.
@@ -229,7 +239,7 @@ export function roadsToConnect(s: Settlement, t: Tuning): number[] {
     const net = networkOf(s.buildings, roads, n);
     if (net.count <= 1) break;
     const home = net.of[0]!;
-    const road = roadGrid(roads, n);
+    const road = linkGrid(roads, n);
     // A tile's network: its building's, or (for a road) any building's it reaches - found by flooding from home.
     const inHome = new Uint8Array(n * n);
     const from = new Int32Array(n * n).fill(-2);
@@ -294,7 +304,7 @@ export function roadsToConnect(s: Settlement, t: Tuning): number[] {
     // Lay the path back to home's tiles.
     for (let tile = target; tile >= 0 && from[tile] !== -1; tile = from[tile]!) {
       const x = tile % n;
-      const key = roadKey(x, (tile - x) / n);
+      const key = tileKey(x, (tile - x) / n);
       if (!laid.has(key)) {
         laid.add(key);
         added.push(key);

@@ -17,11 +17,13 @@ import { MICRO_RESOURCES } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { capacities, housing, settlementStep } from "./settlement.js";
 import { siteElevation } from "../hypsometry.js";
-import { groundOf } from "./terrain.js";
 import type { FloodState } from "./flood.js";
 import { submerged } from "./flood.js";
 import type { NetworkIssue } from "./network.js";
-import { roadGrid } from "./network.js";
+import { linkGrid } from "./network.js";
+import type { Rock } from "./rocks.js";
+import { garage, rocksOf, siteGround } from "./rocks.js";
+import { keyTile } from "./space.js";
 
 export interface CityBuildingView {
   /** Index into the settlement's `buildings`. */
@@ -83,8 +85,27 @@ export interface CityView {
   readonly floodDepthM: number | null;
   /** Null while it stands; the sea level it was lost at. */
   readonly lostAtSeaLevelM: number | null;
-  /** Row-major: the tiles that carry a road. */
-  readonly roads: readonly boolean[];
+  /** Row-major: the tiles that carry a corridor (water, oxygen, food, materials). */
+  readonly corridors: readonly boolean[];
+  /** Row-major: the tiles that carry a power cable. */
+  readonly cables: readonly boolean[];
+  /** Row-major: the rock on each tile that a rover could break. */
+  readonly rocks: readonly Rock[];
+  /** Where rovers set out from: the headquarters' middle, in tiles, or null without one. */
+  readonly garage: { readonly x: number; readonly y: number } | null;
+  /** Rovers and rockets under way: where to, and how far through, in sim-years. */
+  readonly jobs: readonly CityJobView[];
+}
+
+export interface CityJobView {
+  readonly kind: "rover" | "rocket";
+  /** The rock a rover is breaking, or the spaceport's corner. */
+  readonly tx: number;
+  readonly ty: number;
+  readonly total: number;
+  readonly remaining: number;
+  /** A rover's time at the rock, within `total`; 0 for a rocket. */
+  readonly work: number;
 }
 
 const POWER_PLANTS: ReadonlySet<BuildingType> = new Set<BuildingType>(["solar_array", "geothermal_plant", "reactor"]);
@@ -96,7 +117,8 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
   const occupancy = home > 0 ? Math.min(1, s.population / home) : 0;
   const net = {} as Record<MicroResource, number>;
   for (const r of MICRO_RESOURCES) net[r] = step.production[r] - step.consumption[r];
-  const ground = groundOf(s, t);
+  // The ground as the rovers have left it: a broken crag is buildable ground.
+  const ground = siteGround(s, t);
   const groundZ = ground.heightM.map((h) => h / t.TILE_METRES);
   const n = ground.tiles;
   return {
@@ -138,6 +160,10 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     floodState: s.lostAtSeaLevelM !== null ? "flooded" : step.flood?.state ?? "dry",
     floodDepthM: step.flood?.depthM ?? null,
     lostAtSeaLevelM: s.lostAtSeaLevelM,
-    roads: Array.from(roadGrid(s.roads, n), (r) => r === 1),
+    corridors: Array.from(linkGrid(s.corridors, n), (r) => r === 1),
+    cables: Array.from(linkGrid(s.cables, n), (r) => r === 1),
+    rocks: rocksOf(s, t),
+    garage: garage(s),
+    jobs: s.jobs.map((j) => ({ kind: j.kind, ...keyTile(j.tile), total: j.total, remaining: j.remaining, work: j.kind === "rover" ? j.work : 0 })),
   };
 }

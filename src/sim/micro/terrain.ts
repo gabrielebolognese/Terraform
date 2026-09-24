@@ -60,7 +60,7 @@ function valueNoise(seed: number, x: number, y: number, scale: number): number {
 }
 
 /** The seed for a place: its coordinate to a few millimetres on the planet (1e-9 rad). */
-function placeSeed(lat: number, lon: number): number {
+export function placeSeed(lat: number, lon: number): number {
   return hash3(Math.round(lat * 1e9), Math.round(lon * 1e9), 0x5eed);
 }
 

@@ -12,7 +12,7 @@
 import type { Tuning } from "../tuning.js";
 import { DEFAULT_TUNING } from "../tuning.js";
 import type { Settlement, SettlementKind, SimState } from "../types.js";
-import { newSettlement } from "./settlement.js";
+import { foundingBuildings, newSettlement } from "./settlement.js";
 import { wrapLongitude } from "./space.js";
 
 export interface FoundOutcome {
@@ -50,7 +50,9 @@ export function foundSettlement(
   if (Math.abs(lat) > Math.PI / 2) return refuse("That latitude is past a pole.");
 
   // Founding builds nothing, but it does land the section 2.3 step 2 stock.
-  const settlement: Settlement = newSettlement(nextId(state.settlements), kind, lat, wrapLongitude(lon), t);
+  // With the headquarters on, a settlement lands with it (and a city with one spaceport).
+  const bare = newSettlement(nextId(state.settlements), kind, lat, wrapLongitude(lon), t);
+  const settlement: Settlement = { ...bare, buildings: foundingBuildings(kind, t) };
   return {
     state: { ...state, settlements: [...state.settlements, settlement] },
     ok: true,
