@@ -1540,3 +1540,72 @@ button:hover {
   gap: 8px;
   margin-top: 12px;
 }
+
+/* ---------- travel (Batch 21) ---------- */
+
+/* Markers are buttons now: click one to travel there. The layer still lets
+   drags through to the globe; only the markers themselves take the pointer. */
+.globe-marker {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+
+.globe-marker:hover .globe-marker-label,
+.globe-marker:focus-visible .globe-marker-label {
+  background: var(--surface-3);
+  outline: 1px solid var(--accent);
+}
+
+.travel-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px 12px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.travel-prompt[hidden] {
+  display: none;
+}
+
+.travel-prompt-text {
+  margin: 0;
+  font-size: 14px;
+}
+
+.travel-prompt-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.travel-prompt-go {
+  border-color: var(--accent);
+}
+
+@keyframes city-arrive {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.city:not([hidden]) {
+  animation: city-arrive 350ms ease-out;
+}

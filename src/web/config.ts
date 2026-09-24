@@ -65,3 +65,11 @@ export const P_AXIS_HI = 1013;
 
 export const SPEEDS = [0, 1, 10, 100, 1000] as const;
 export type Speed = (typeof SPEEDS)[number];
+
+/**
+ * Micro §1.4's camera move, each way (Batch 21). Presentation only: the
+ * simulation advances identically during it, so this is not tuning.
+ */
+export const TRAVEL_MS = 1200;
+/** How far in the globe zooms at the end of a descent - well past the player's own zoom limit. */
+export const TRAVEL_ZOOM = 3.5;

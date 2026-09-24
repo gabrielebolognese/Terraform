@@ -94,6 +94,32 @@ export class Globe implements PlanetSink {
     if (typeof requestAnimationFrame === "function") requestAnimationFrame((t) => this.frame(t));
   }
 
+  /** Called when the player clicks a settlement's marker (micro §1.4: "selects a marker"). */
+  onMarker: ((id: string) => void) | null = null;
+
+  /** True while a journey drives the camera: the player's hand and the idle spin wait. */
+  private posed = false;
+
+  /**
+   * Drive the camera to a pose (a journey's camera move, Batch 21), or hand
+   * it back to the player with null. Handing back keeps the pose, still.
+   */
+  setPose(pose: { yaw: number; pitch: number; zoom: number } | null): void {
+    if (pose === null) {
+      this.posed = false;
+      this.orbit = hold(this.orbit);
+      return;
+    }
+    this.posed = true;
+    this.dragging = null;
+    this.orbit = { ...hold(this.orbit), yaw: pose.yaw, pitch: pose.pitch, zoom: pose.zoom };
+  }
+
+  /** The camera as it stands: where a journey's pull-back should return to. */
+  currentPose(): { yaw: number; pitch: number; zoom: number } {
+    return { yaw: this.orbit.yaw, pitch: this.orbit.pitch, zoom: this.orbit.zoom };
+  }
+
   /** Stop drawing (the city view covers the planet) without losing the camera. */
   setPaused(paused: boolean): void {
     this.paused = paused;
@@ -118,8 +144,11 @@ export class Globe implements PlanetSink {
         this.markers.set(s.id, { el: existing.el, settlement: s });
         continue;
       }
-      const el = document.createElement("div");
+      const el = document.createElement("button");
+      el.type = "button";
       el.className = "globe-marker";
+      el.setAttribute("aria-label", `Travel to ${settlementLabel(s)}`);
+      el.addEventListener("click", () => this.onMarker?.(s.id));
       el.dataset["kind"] = s.kind;
       el.dataset["id"] = s.id;
       const pin = document.createElement("span");
@@ -175,7 +204,7 @@ export class Globe implements PlanetSink {
   private bindInput(): void {
     const c = this.canvas;
     c.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || this.posed) return;
       c.setPointerCapture(e.pointerId);
       c.classList.add("dragging");
       this.pressedAt = { x: e.clientX, y: e.clientY };
@@ -215,6 +244,7 @@ export class Globe implements PlanetSink {
       "wheel",
       (e) => {
         e.preventDefault();
+        if (this.posed) return;
         this.orbit = zoomBy(this.orbit, e.deltaY);
       },
       { passive: false },
@@ -252,7 +282,7 @@ export class Globe implements PlanetSink {
     const dt = this.lastFrame === 0 ? 1 / 60 : Math.min((now - this.lastFrame) / 1000, 0.1);
     const frameMs = now - this.lastFrame;
     this.lastFrame = now;
-    if (this.dragging === null) this.orbit = coast(this.orbit, dt);
+    if (this.dragging === null && !this.posed) this.orbit = coast(this.orbit, dt);
     this.adaptScale(frameMs);
 
     if (this.gl !== null) this.drawGl(now);

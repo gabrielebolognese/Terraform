@@ -16,6 +16,7 @@ that state.
 | [`docs/design/macro-world.md`](docs/design/macro-world.md) | The design doc. What we are building, and the physics. |
 | [`docs/design/economy.md`](docs/design/economy.md) | The economy, the tech tree, and the contract the city layer reads the planet through. |
 | [`docs/design/micro-world.md`](docs/design/micro-world.md) | The settlement (micro) layer: cities, outposts, the 2.5D view, and the two-way coupling to the planet. Queued as Batches 17-21. |
+| [`docs/design/micro-detail.md`](docs/design/micro-detail.md) | The detailed micro layer: terrain with depth, procedural structures, resource deposits, and flooding from the rising sea. Queued as Batches 22-28. |
 | [`BUILD_PLAN.md`](BUILD_PLAN.md) | The build order, batched, with exit gates and cross-batch invariants. |
 | [`docs/balance/batch1-calibration.md`](docs/balance/batch1-calibration.md) | Where the current constants actually put the curve, measured. |
 | [`docs/balance/batch2-levers.md`](docs/balance/batch2-levers.md) | What the nine player levers do, and what the playthrough exposed. |
@@ -37,6 +38,7 @@ that state.
 | [`docs/balance/batch18-settlement-sim.md`](docs/balance/batch18-settlement-sim.md) | A settlement as a pure simulation: ten buildings, brownouts, population, and CO2-to-oxygen processors that move the planet. |
 | [`docs/balance/batch19-settlement-save.md`](docs/balance/batch19-settlement-save.md) | Settlements in the save (schema v5): exact round trip, retune-safe loading, and offline progression proven exact. |
 | [`docs/balance/batch20-city-view.md`](docs/balance/batch20-city-view.md) | The 2.5D city view: procedural buildings, rough ground, placement, the inspector, and a golden city render. |
+| [`docs/balance/batch21-travel.md`](docs/balance/batch21-travel.md) | Travel between orbit and a city: markers, the camera move, and proof the world advances the same in either view. |
 | [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) | The whole visual arc, twelve frames at fixed progress values. |
 
 ## Status
@@ -56,7 +58,8 @@ which is computed from section 8.1's own weighted geometric mean rather than scr
 through its prerequisites to something you can actually do today. A **Build** panel lists every
 lever with its price, what is ordered and what is online, and lets you order, dismantle or switch
 each one off. Under **Settlements** you can found a city or an outpost by clicking the planet;
-each gets a marker that stays on its spot as the globe turns, and **Open** takes you down to its
+each gets a marker that stays on its spot as the globe turns. Click a marker (or **Open** in the
+list) and the camera flies down to it, into its
 2.5D view: build from the palette on the ground (rough outcrops refuse), click a building to see
 what it is doing and why it might be offline (the settlement layer, Batches 17-21,
 is being built from `docs/design/micro-world.md`). The planet fills the whole

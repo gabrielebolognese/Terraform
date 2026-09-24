@@ -10,6 +10,10 @@ import { readWorld } from "./readout.js";
 import { buildRows, orderDelta } from "./build.js";
 import { Globe } from "./globe.js";
 import { CityScreen } from "./city.js";
+import { WorldDriver } from "./driver.js";
+import { Journey } from "./journey.js";
+import { TravelPrompt } from "./travel-prompt.js";
+import { formatLatLon, settlementLabel } from "./settlement-label.js";
 import type { FacilityType, SettlementKind, SimConfig, SimState } from "../sim/index.js";
 import {
   makeTuning,
@@ -23,7 +27,6 @@ import {
   computeStep,
   deriveVisuals,
   facilityOf,
-  latchPhase,
   marsStart,
   scrubberThrottled,
   seedBiosphere,
@@ -101,6 +104,8 @@ function config(): SimConfig {
 }
 
 const clock = new SimClock(config, speed);
+/** The one thing that advances the world, whatever view is showing (Batch 21). */
+const driver = new WorldDriver(state, clock, tuning);
 
 const rings = {
   T: new Ring(SPARK_CAPACITY),
@@ -238,7 +243,8 @@ const hud: Hud = new Hud(
     onFocusLever: (type: FacilityType) => hud.focusLever(type),
     onFound: (kind: SettlementKind) => startFounding(kind),
     onCancelFound: () => cancelFounding(),
-    onOpenSettlement: (id: string) => openCity(id),
+    // The HUD's button is itself the confirmation: straight into the journey.
+    onOpenSettlement: (id: string) => journey.goTo(id, performance.now()),
   },
   tuning,
 );
@@ -263,24 +269,49 @@ const city = new CityScreen(
       state = outcome.state;
       return outcome;
     },
-    onBack: () => closeCity(),
+    onBack: () => journey.goToOrbit(performance.now()),
   },
   tuning,
 );
 
-function openCity(id: string): void {
-  if (!state.settlements.some((s) => s.id === id)) return;
-  if (founding !== null) cancelFounding();
-  city.open(id);
-  globe.setPaused(true);
-  for (const node of [stage, hudRoot, inspectorRoot, instrumentsToggle, hint]) node.hidden = true;
-}
+/**
+ * Travel between orbit and a city (micro §1.4, Batch 21). The journey owns
+ * the sequence - camera down, load, and on the way back flush, unload, camera
+ * up - and this is what each step does to the page. None of it touches the
+ * world: `driver` advances it the same whichever view is showing.
+ */
+const journey = new Journey(
+  {
+    load: (id: string) => {
+      if (founding !== null) cancelFounding();
+      city.open(id);
+      globe.setPaused(true);
+      for (const node of [stage, hudRoot, inspectorRoot, instrumentsToggle, hint]) node.hidden = true;
+    },
+    unload: () => {
+      city.close();
+      globe.setPaused(false);
+      for (const node of [stage, hudRoot, inspectorRoot, instrumentsToggle, hint]) node.hidden = false;
+    },
+    flush: () => {
+      void autosaver?.save(state);
+    },
+    pose: (p) => globe.setPose(p),
+    currentPose: () => globe.currentPose(),
+  },
+  (id: string) => {
+    const s = state.settlements.find((x) => x.id === id);
+    return s === undefined ? null : { lat: s.lat, lon: s.lon };
+  },
+);
 
-function closeCity(): void {
-  city.close();
-  globe.setPaused(false);
-  for (const node of [stage, hudRoot, inspectorRoot, instrumentsToggle, hint]) node.hidden = false;
-}
+// Micro §1.4: "Player selects a marker and confirms travel."
+const travelPrompt = new TravelPrompt(root);
+globe.onMarker = (id: string) => {
+  const s = state.settlements.find((x) => x.id === id);
+  if (s === undefined || journey.phase !== "orbit" || founding !== null) return;
+  travelPrompt.ask(settlementLabel(s), formatLatLon(s.lat, s.lon), () => journey.goTo(id, performance.now()));
+};
 
 const inspector = new Inspector(
   inspectorRoot,
@@ -290,6 +321,8 @@ const inspector = new Inspector(
     onToggleLever: (type: FacilityType) => toggle(type),
     onSeed: () => seed(),
     onReset: () => {
+      journey.abort();
+      travelPrompt.close();
       state = marsStart(undefined, tuning);
       // Clear the slot too. Resetting the planet and then reloading into the
       // old save would look like the reset silently failed.
@@ -357,24 +390,29 @@ function leverViews(throttled: boolean): readonly LeverView[] {
 }
 
 function render(timestamp: number): void {
-  const outcome = clock.frame(state, timestamp);
-  state = outcome.state;
-  droppedYears = outcome.droppedYears;
+  // The world advances here and only here, whichever view is showing. `state`
+  // stays the one copy the player's actions change; the driver takes it,
+  // advances it and hands it back.
+  driver.state = state;
+  const advanced = driver.frame(timestamp);
+  state = driver.state;
+  droppedYears = advanced.droppedYears;
 
-  const world = readWorld(state, tuning);
+  const world = advanced.world;
   const env = world.env;
   const d = world.derived;
   const throttled = scrubberThrottled(state, d, tuning);
   const progress = world.progress;
   const phase = world.phase;
-  const reached = latchPhase(state.phaseReached, phase);
-  if (reached !== state.phaseReached) state = { ...state, phaseReached: reached };
+  const reached = advanced.reached;
 
   const year = simYear(state, tuning);
 
-  if (city.openId !== null) {
-    const here = state.settlements.find((s) => s.id === city.openId);
-    if (here === undefined) closeCity();
+  journey.frame(timestamp);
+  const resident = journey.resident;
+  if (resident !== null) {
+    const here = state.settlements.find((s) => s.id === resident);
+    if (here === undefined) journey.abort();
     else city.frame(here, habitat(state.reservoirs, d, tuning), timestamp);
   }
 

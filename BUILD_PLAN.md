@@ -1,6 +1,6 @@
 # Terraforming Game — Batched Build Plan
 
-Source of truth for *what* we are building: [`docs/design/macro-world.md`](docs/design/macro-world.md) (Macro World Design Document v0.1). The settlement layer is specified in [`docs/design/micro-world.md`](docs/design/micro-world.md) (Batches 17-21).
+Source of truth for *what* we are building: [`docs/design/macro-world.md`](docs/design/macro-world.md) (Macro World Design Document v0.1). The settlement layer is specified in [`docs/design/micro-world.md`](docs/design/micro-world.md) (Batches 17-21), and its detailed layer - terrain, structures, resources and flooding - in [`docs/design/micro-detail.md`](docs/design/micro-detail.md) (Batches 22-28).
 This file is the source of truth for *in what order* we build it, and for what "done" means at each step.
 
 **Rule: one batch at a time.** A batch is not started until the previous batch's exit gate is green. Every batch ends with `npm run typecheck` and `npm test` passing, and with something the developer can see or measure.
@@ -27,7 +27,14 @@ This file is the source of truth for *in what order* we build it, and for what "
 | 18 | Micro: one settlement as pure TypeScript + the two-way coupling | **COMPLETE** - [note](docs/balance/batch18-settlement-sim.md) - behind SETTLEMENTS_ENABLED=0; a city bootstraps and grows, processors move the planet |
 | 19 | Micro: settlement save schema + offline progression | **COMPLETE** - [note](docs/balance/batch19-settlement-save.md) - schema v5; round trip and offline catch-up exact; capacities and grid deliberately not stored |
 | 20 | Micro: the 2.5D city view | **COMPLETE** - [note](docs/balance/batch20-city-view.md) - shape list + software golden render (tolerance 0.003%, measured); topological draw order replaces §3.1's key; rough ground derived from place; browser runs settlements |
-| 21 | Micro: travel between orbit and a city | NOT STARTED - micro §1.4, §9.2, §9.3 |
+| 21 | Micro: travel between orbit and a city | **COMPLETE** - [note](docs/balance/batch21-travel.md) - world equal to the last bit with or without travel; one scene at most, none in transit; marker + confirm; no per-city deserialize |
+| 22 | Detail: terrain with depth | NOT STARTED - detail §1, §6 step 1 |
+| 23 | Detail: sea level from the macro sim | NOT STARTED - detail §4.1, §6 step 2 |
+| 24 | Detail: the flood model, headless | NOT STARTED - detail §4.2, §4.3, §4.7, §6 step 3 |
+| 25 | Detail: flood forecast and warnings | NOT STARTED - detail §4.4, §6 step 4 |
+| 26 | Detail: procedural structures and the instancing renderer | NOT STARTED - detail §2, §6 step 5 |
+| 27 | Detail: terrain resource deposits | NOT STARTED - detail §3, §6 step 6 |
+| 28 | Detail: flood mitigation and the rising water | NOT STARTED - detail §4.5, §4.6, §6 step 7 |
 
 > **Batch 10 was not in the original plan.** Every batch note from 6 onward closed with "Batches 3-N
 > have had no adversarial review". Batches 1 and 2 got one and it paid - 18 defects and a blocker.
@@ -764,19 +771,212 @@ ground grid, placement, procedural buildings, selection/inspector."
   golden frames, with a tolerance that is measured.
 - The city view reads settlement state only: the render walls, as for `VisualChannels`.
 
-## Batch 21 — Micro: travel between orbit and a city — NOT STARTED
+## Batch 21 — Micro: travel between orbit and a city — COMPLETE
+
+**Done** - see [the note](docs/balance/batch21-travel.md). Changed from the plan:
+- **No per-city deserialize or flush.** The settlement lives in the one world state throughout;
+  arriving derives the view from it, and the "flush" writes the whole save, on arrival and on
+  departure.
+- **The frame loop's world-advancing part moved into `WorldDriver`**, so the gate could be driven
+  with fixed timestamps. `main.ts`'s own wiring is still untested (recorded in the note).
 
 **Goal.** Micro §12 step 5: "Wire the travel transition (orbit marker -> load city scene -> back),
 keeping macro ticking underneath."
 
-- [ ] Orbit to city (§1.4): select a marker, confirm, the camera move, the city scene loads.
-- [ ] City to orbit: flush, unload, pull back. City to city goes via orbit.
-- [ ] Only the active settlement's scene is resident (§9.2); every settlement keeps ticking (§9.3).
+- [x] Orbit to city (§1.4): select a marker, confirm, the camera move, the city scene loads.
+- [x] City to orbit: flush, unload, pull back. City to city goes via orbit.
+- [x] Only the active settlement's scene is resident (§9.2); every settlement keeps ticking (§9.3).
 
 **Exit gate.**
 - The macro sim and every settlement advance identically whether the player is in orbit or in any
   city. Measured by running the same sim-time both ways and comparing exactly.
 - Only one city scene is ever resident.
+
+---
+
+# The detailed micro layer - Batches 22 to 28
+
+Source of truth: [`docs/design/micro-detail.md`](docs/design/micro-detail.md) (Micro World Detailed
+Design v0.1), added after Batch 20. It extends `micro-world.md` and replaces nothing in it. The
+batches follow its §6 build order one-to-one, including its rule: "Numbers first (steps 1 to 4),
+then the look (5 to 7)." The eight cross-batch invariants apply here as everywhere.
+
+## Conflicts to resolve before building (recorded, not decided)
+
+The detail doc was written against the design documents, not against this codebase. Where they
+disagree, the disagreement is recorded here and belongs to the Phase 1 of the batch named, **for
+the user to decide**:
+
+1. **The planet's elevation lives in the renderer.** `samplePlanetaryTerrain(lat, lon)` (§1.2)
+   needs a planetary heightmap in the simulation. Today the only one is the renderer's
+   `elevationField` (`src/render/planet.ts`), and the globe fills oceans up that field to match
+   `oceanCoverage` (Batch 15's sphere CDF). If the simulation gets a separate elevation, a city
+   drawn under the globe's ocean may be dry in the sim, or the reverse. One field has to own
+   elevation, in `src/sim/`, and the renderer must draw from it. That crosses the render wall
+   (only `VisualChannels` may enter `src/render/`). *Batch 22* decides how: pass the field through
+   the visual contract, or keep an exact mirror checked by a test (as `toPlanetJs` mirrors the
+   shader).
+2. **Two hypsometries.** The macro sim already has a "hypsometric stand-in":
+   `ocean_frac = OCEAN_FRAC_MAX * (1 - exp(-h2o_liq/OCEAN_M_REF))` (see Deferred decisions).
+   §4.1's `seaLevelCurve(ocean_frac)` is a second mapping. Both, plus the globe's water, must
+   describe the same planet, so sea level should be the elevation below which exactly `ocean_frac`
+   of the surface lies, read off the one elevation field in conflict 1. *Batch 23*. Measured
+   context: the Batch 1 reference run ends at ocean 36.4%, against an `OCEAN_FRAC_MAX` of 75%.
+3. **Batch 20's rough ground vs slope.** Batch 20 made "blocked terrain" rough outcrops derived
+   from the settlement's place (`TERRAIN_ROUGH_FRACTION`, 12% in the browser). §1.3 makes
+   buildability a slope rule instead. *Batch 22* decides whether outcrops become steep ground in
+   the heightmap, stay as a separate tile type, or go.
+4. **Storing `seed_terrain` and `base_elev_m` (§1.4).** Both are derivable from the settlement's
+   coordinate: `seed_terrain = hash(planet_seed, lat, lon)`, and `base_elev_m` is sampled from the
+   planet. The doc's own rule, and invariant 3, say never to store a derived value. Storing them
+   only earns its place if the planet's terrain can change after founding. *Batch 22*. `terraces`,
+   `dike_height`, `destroyed` and flood losses are true state and do belong in the save (schema
+   v6, with a migration, to Batch 19's standard).
+5. **Flooding perturbs the calibrated game.** It destroys buildings and settlements, and a
+   settlement's processors feed the planet. By this project's rule it ships behind a constant
+   (`FLOODING_ENABLED`, default 0), and the browser opts in. Offline catch-up must apply threshold
+   crossings (§4.7) inside `advance`, per substep, chunk-independent. *Batch 24*.
+6. **The instancing renderer vs the golden city frame.** §2.1 and §2.5 ask for real 3D, drawn as
+   GPU instances. Batch 20 found a GPU render cannot be a golden frame, because its pixels differ
+   by driver. It drew flat shapes instead, with a software rasteriser for the committed reference.
+   *Batch 26* decides: GPU instancing on screen plus a software path for the golden frame (the
+   planet's arrangement), or keep the shape pipeline and add the greeble generator to it.
+7. **Complexity by level (§2.4) has no levels.** Every building is level 1. The foundational doc
+   leaves upgrades out of scope (its §11: "the `level` field is a stub"). Until something raises a
+   level, the greeble budget cannot grow. *Batch 26* either adds upgrades or leaves §2.4 dormant.
+8. **Evacuation and relocation need a destination.** Population is one number per city, and
+   nothing moves people between settlements. §4.5's "evacuate population" needs a rule for where
+   they go. *Batch 28*.
+9. **Deposits change production** (§3.1), which is settlement balance. They go through
+   `efficiency`, so they stay behind `SETTLEMENTS_ENABLED`, and the bootstrap measured in Batch 18
+   must be re-measured. *Batch 27*.
+10. **The detail doc names the foundational doc `terraforming-micro-design.md`**, which is
+    `docs/design/micro-world.md` here.
+
+## Batch 22 - Detail: terrain with depth - NOT STARTED
+
+**Goal.** Detail §6 step 1: "Add the two-layer elevation to the settlement model (section 1):
+`base_elev_m` sampled from the planet, `local_height` from a stored seed. Render the grid with
+height. No new buildings yet."
+
+- [ ] One planetary elevation field owned by the simulation (conflict 1), and `base_elev_m` read
+  from it at each settlement's coordinate.
+- [ ] A deterministic local heightmap and slope per tile (§1.2, §1.3), with modest relief.
+- [ ] Slope-limited placement (§1.3). The terracing action itself waits for Batch 28.
+- [ ] The city view drawn with height; elevation shown when founding and when placing.
+- [ ] The rough-ground decision (conflict 3) and the storage decision (conflict 4) applied.
+
+**Exit gate.**
+- The same coordinate always gives the same terrain, and the save needs no terrain beyond what
+  conflict 4 decides.
+- A settlement's `base_elev_m` agrees with the elevation the globe draws at its marker (one field,
+  not two).
+- Placement refuses a too-steep footprint and accepts a flat one, both by test.
+- The golden city frame is re-rendered deliberately, with the diff looked at.
+
+## Batch 23 - Detail: sea level from the macro sim - NOT STARTED
+
+**Goal.** Detail §6 step 2: "Add `seaLevelCurve` to the macro layer and expose `sea_level_m` and
+its rate as derived outputs."
+
+- [ ] `sea_level_m` derived from `ocean_frac` through the one elevation field (conflict 2), never
+  stored.
+- [ ] Its rate, from the same flows `advance` integrates, not a finite difference of frames.
+- [ ] Exposed through `HabitatChannels` (the city-layer wall), not read off the reservoirs.
+
+**Exit gate.**
+- Sea level is monotonic in `ocean_frac` and matches the globe: the share of the planet below
+  `sea_level_m` equals `ocean_frac` within a measured tolerance.
+- The rate agrees with the change in `sea_level_m` over a real `advance`, within a measured
+  tolerance.
+- No existing gate moves. This is a derived output only.
+
+## Batch 24 - Detail: the flood model, headless - NOT STARTED
+
+**Goal.** Detail §6 step 3: "Implement the flood model (section 4.2 to 4.3) headless: compute
+`flood_depth`, tile flooding, state, and building loss, and assert a low test city drowns as sea
+level rises. This is the highest-value feature; prove it in numbers before rendering."
+
+- [ ] `flood_depth`, per-tile flooding and the four states (§4.3), derived every substep and never
+  stored.
+- [ ] Building loss on submerged tiles, and a settlement declared flooded at `FLOOD_THRESHOLD`
+  (10 m), recorded as true state (§4.7).
+- [ ] Behind `FLOODING_ENABLED`, default 0 (conflict 5). Save schema v6 with a migration.
+- [ ] Offline catch-up applies crossings that happened while away, and "while you were away" says
+  so.
+
+**Exit gate.**
+- A low test city drowns from its lowest tiles inward as sea level rises, and a high one does not.
+  Both measured, not assumed.
+- Chunk-independence holds with flooding on: `advance(s, 4000)` equals a thousand `advance(s, 4)`
+  calls exactly.
+- Offline catch-up equals live play through a threshold crossing, exactly.
+- Off by default: the golden run, the Batch 3 score and the golden frames are unchanged.
+
+## Batch 25 - Detail: flood forecast and warnings - NOT STARTED
+
+**Goal.** Detail §6 step 4: "Add the forecast (4.4) and wire warnings into the macro overview."
+
+- [ ] `years_to_base` and `years_to_destroy` per settlement (§4.4), derived and never stored.
+- [ ] Warnings in the orbit HUD ("submersion begins in ~14 yr, total loss in ~31 yr at current
+  rate"), readable without colour.
+
+**Exit gate.**
+- The forecast is checked against the simulation: the predicted year of each crossing matches when
+  the sim actually crosses it, within a measured tolerance, on a run at a steady rate.
+- The forecast responds to throttling: slowing the water pushes the predicted year later.
+
+## Batch 26 - Detail: procedural structures and the instancing renderer - NOT STARTED
+
+**Goal.** Detail §6 step 5: "Build the procedural structure generator and the primitive-instancing
+renderer (section 2). Start with three signatures (dome, reactor, extractor) to validate the look,
+then fill in the rest."
+
+- [ ] A seeded generator, `(type, seed, level)` to an instance list: foundation, signature masses
+  and a greeble budget (§2.2, §2.3).
+- [ ] The renderer decision (conflict 6) and the level decision (conflict 7).
+- [ ] Three signatures first (dome, reactor, extractor), looked at, then the other seven.
+- [ ] Aliveness still driven from `CityView`, never stored.
+
+**Exit gate.**
+- The same `(type, seed, level)` always gives the same instance list, and nothing about the
+  geometry is saved.
+- Each of the ten types is recognisable: a reference sheet of all ten, committed and compared per
+  pixel with a measured tolerance.
+- The draw cost is measured: draw calls and frame time for a dense reference city, stated with
+  the numbers.
+
+## Batch 27 - Detail: terrain resource deposits - NOT STARTED
+
+**Goal.** Detail §6 step 6: "Add terrain resource deposits (section 3.1) and siting bonuses."
+
+- [ ] Deposits derived from the terrain (§3.1): ore on ridges, ice in basins, vents on faults, and
+  high flats for solar.
+- [ ] Siting bonuses through each building's `efficiency`, behind `SETTLEMENTS_ENABLED`
+  (conflict 9).
+- [ ] Deposits visible in the city view before placing.
+
+**Exit gate.**
+- The same site always has the same deposits, and none are stored unless depletion is modelled.
+- A mine on an ore vein out-produces one on bare ground by the tuned factor, measured through a
+  real `advance`.
+- The Batch 18 bootstrap is re-measured with deposits, and the note records how it changed.
+
+## Batch 28 - Detail: flood mitigation and the rising water - NOT STARTED
+
+**Goal.** Detail §6 step 7: "Add mitigation: dikes, terracing, evacuation, and the macro
+throttle-for-time link (section 4.5), plus the rising water-plane visualization (4.6)."
+
+- [ ] Dikes (a building that raises `dike_height`), terracing (flatten a footprint for
+  materials), and evacuation or relocation (conflict 8). All saved as true state.
+- [ ] The throttle link: a forecast that shows how much time slowing the water buys.
+- [ ] The water plane at `sea_level_m`, with a shoreline that moves inland as it rises (§4.6).
+
+**Exit gate.**
+- Each defence measurably buys time: the flood-crossing year with the defence minus without,
+  measured through a real `advance`.
+- A city can be saved by good play and lost by neglect, both shown by test.
+- The water plane is part of a committed reference frame, with a measured tolerance.
 
 ---
 
