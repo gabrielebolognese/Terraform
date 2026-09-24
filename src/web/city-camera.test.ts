@@ -13,6 +13,7 @@ import {
   footprintOrigin,
   isoToScreen,
   pan,
+  qualityFor,
   screenToIso,
   tileAt,
   zoomAt,
@@ -72,5 +73,28 @@ describe("the city camera", () => {
     expect(footprintOrigin(10, 10, 1)).toEqual({ tx: 10, ty: 10 });
     expect(footprintOrigin(10, 10, 2)).toEqual({ tx: 10, ty: 10 });
     expect(footprintOrigin(10, 10, 3)).toEqual({ tx: 9, ty: 9 });
+  });
+
+  describe("level of detail (a zoomed-out metropolis lagged)", () => {
+    const at = (zoom: number): CityCamera => ({ cx: 0, cy: 0, zoom });
+
+    it("drops as the player zooms out of a metropolis, and comes back as they zoom in", () => {
+      const levels = [3, 1.5, 1, 0.75, 0.5, 0.4, CITY_ZOOM_MIN].map((z) => qualityFor(at(z), 1600, 900, 96));
+      expect(levels[0]).toBe("high");
+      expect(levels.at(-1)).toBe("low");
+      expect(levels).toContain("medium");
+      // Never back up the ladder while zooming out.
+      const rank = { high: 0, medium: 1, low: 2 } as const;
+      for (let i = 1; i < levels.length; i += 1) expect(rank[levels[i]!]).toBeGreaterThanOrEqual(rank[levels[i - 1]!]);
+    });
+
+    it("keeps an ordinary city at full detail at every zoom: it never lagged", () => {
+      for (const z of [CITY_ZOOM_MIN, 0.5, 1, CITY_ZOOM_MAX]) expect(qualityFor(at(z), 2560, 1440, 32), `zoom ${z}`).toBe("high");
+    });
+
+    it("counts what is on screen: a bigger window shows more and draws less of each", () => {
+      expect(qualityFor(at(0.8), 800, 600, 96)).toBe("high");
+      expect(qualityFor(at(0.8), 2560, 1440, 96)).not.toBe("high");
+    });
   });
 });

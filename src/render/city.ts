@@ -60,6 +60,8 @@ export interface CitySceneOptions {
    * and hundreds of buildings, and a screen shows a fraction of them.
    */
   readonly viewport?: { readonly minX: number; readonly maxX: number; readonly minY: number; readonly maxY: number };
+  /** Level of detail; absent means "high" (the golden frames are drawn at high). */
+  readonly quality?: CityQuality;
 }
 
 // ---------------------------------------------------------------------------
@@ -1065,6 +1067,148 @@ function groundStrip(ax: number, ay: number, bx: number, by: number, half: numbe
 // The scene
 // ---------------------------------------------------------------------------
 
+/**
+ * Three levels of detail, chosen by the host from the zoom (requested by the
+ * user: a zoomed-out metropolis lagged). The picture a player sees up close is
+ * unchanged; further out, buildings keep only their signature masses, and
+ * furthest out a building is one block in its type's colour and flat ground
+ * merges into 4 x 4 patches.
+ */
+export type CityQuality = "high" | "medium" | "low";
+
+/**
+ * The colour a building reads as from far away: the mean colour of its
+ * full-detail drawing on screen (measured one by one on flat ground; the
+ * first version used each building's main material, and green greenhouses
+ * and white depots made the far city look less like the near one than bare
+ * ground did).
+ */
+const FAR_COLOUR: Readonly<Record<string, Rgb>> = {
+  habitat_dome: rgb(0.647, 0.749, 0.804),
+  solar_array: rgb(0.42, 0.528, 0.698),
+  geothermal_plant: rgb(0.721, 0.716, 0.684),
+  reactor: rgb(0.621, 0.674, 0.67),
+  water_extractor: rgb(0.621, 0.651, 0.652),
+  atmosphere_processor: rgb(0.758, 0.76, 0.747),
+  greenhouse: rgb(0.645, 0.684, 0.684),
+  regolith_mine: rgb(0.427, 0.378, 0.332),
+  storage_depot: rgb(0.78, 0.73, 0.68),
+  spaceport: rgb(0.574, 0.573, 0.538),
+};
+
+/** Medium detail: each building's signature masses, coarse curves, no greebles, nothing animated. */
+function assembleMedium(b: CityBuildingView): Kit {
+  const s = b.size;
+  const x0 = b.tx;
+  const y0 = b.ty;
+  const cx = x0 + s / 2;
+  const cy = y0 + s / 2;
+  const on = b.operable;
+  const act = Math.round(b.activity * 20) / 20;
+  const k = kit();
+  const add = k.s;
+  const slab = (h = 0.05): void => add(() => part(box(x0 + 0.08, y0 + 0.08, 0, x0 + s - 0.08, y0 + s - 0.08, h), CONCRETE));
+  switch (b.type) {
+    case "habitat_dome":
+      add(() => part(frustum(cx, cy, 1.42, 1.34, 0, 0.2, 16), PAINT_WHITE));
+      add(() => part(dome(cx, cy, 0.2, 1.24, 16, 4), GLASS));
+      break;
+    case "solar_array":
+      slab(0.035);
+      for (const [u, v] of [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ] as const) {
+        const px = x0 + u + 0.08;
+        const py = y0 + v + 0.1;
+        add(() => part(sheet([[px, py, 0.54], [px + 0.84, py, 0.54], [px + 0.84, py + 0.66, 0.2], [px, py + 0.66, 0.2]]), mix(FRAME, on ? mix(mix(CELL_DARK, CELL_LIGHT, 0.5), PANEL_ON, 0.25) : CELL_DARK, 0.75), { twoSided: true }));
+      }
+      break;
+    case "geothermal_plant":
+      slab();
+      add(() => part(frustum(x0 + 1.4, y0 + 0.55, 0.44, 0.32, 0.06, 1.16, 10), PAINT_WHITE));
+      add(() => part(box(x0 + 0.18, y0 + 1.0, 0.06, x0 + 1.52, y0 + 1.82, 0.62), CONCRETE));
+      break;
+    case "reactor":
+      slab();
+      add(() => part(frustum(x0 + 0.42, y0 + 0.38, 0.2, 0.13, 0.06, 1.3, 8), PAINT_WHITE));
+      add(() => part(frustum(x0 + 0.38, y0 + 1.12, 0.2, 0.13, 0.06, 1.3, 8), PAINT_WHITE));
+      add(() => part(frustum(x0 + 1.25, y0 + 1.1, 0.56, 0.55, 0.06, 0.8, 12), CONCRETE));
+      add(() => part(frustum(x0 + 1.25, y0 + 1.1, 0.565, 0.565, 0.4, 0.52, 12), on ? mix(UNLIT, COLD_LIGHT, 0.25 + 0.75 * act) : UNLIT, { emissive: true }));
+      add(() => part(dome(x0 + 1.25, y0 + 1.1, 0.8, 0.55, 12, 3), CONCRETE));
+      break;
+    case "water_extractor":
+      slab(0.16);
+      add(() => part(frustum(cx, cy, 0.3, 0.08, 0.16, 1.28, 4), DARK_METAL));
+      add(() => part(frustum(x0 + 0.52, y0 + 1.45, 0.33, 0.33, 0.16, 0.8, 10), WATER));
+      add(() => part(box(x0 + 1.2, y0 + 1.18, 0.16, x0 + 1.8, y0 + 1.8, 0.62), PAINT_WHITE));
+      break;
+    case "atmosphere_processor":
+      slab();
+      add(() => part(box(x0 + 0.25, y0 + 0.5, 0.06, x0 + 1.7, y0 + 1.6, 0.7), METAL));
+      add(() => part(frustum(x0 + 1.45, y0 + 1.1, 0.17, 0.12, 0.7, 1.45, 8), CONCRETE));
+      break;
+    case "greenhouse":
+      slab(0.1);
+      add(() => part(box(x0 + 0.15, y0 + 0.35, 0.1, x0 + 1.85, y0 + 1.65, 0.3), CONCRETE));
+      // The crops as one bed, seen through the same glass as up close.
+      add(() => part(box(x0 + 0.27, cy - 0.5, 0.3, x0 + 1.73, cy + 0.5, 0.42), on ? LEAF : LEAF_OFF));
+      add(() => part(vault(x0 + 0.15, x0 + 1.85, cy, 0.65, 0.3, 6), GLASS, { alpha: 0.42 }));
+      break;
+    case "regolith_mine":
+      add(() => part(box(x0 + 0.08, y0 + 0.08, 0, x0 + 1.12, y0 + 1.12, 0.02), rgb(0.29, 0.18, 0.13)));
+      add(() => part(box(x0 + 1.2, y0 + 0.2, 0, x0 + 1.86, y0 + 0.95, 0.72), DARK_METAL));
+      add(() => part(box(x0 + 1.25, y0 + 1.15, 0, x0 + 1.86, y0 + 1.86, 0.4), CONCRETE));
+      break;
+    case "storage_depot":
+      add(() => part(frustum(x0 + 0.3, y0 + 0.32, 0.17, 0.17, 0, 0.6, 8), PAINT_WHITE));
+      add(() => part(frustum(x0 + 0.7, y0 + 0.32, 0.17, 0.17, 0, 0.5, 8), PAINT_WHITE));
+      add(() => part(frustum(x0 + 0.3, y0 + 0.72, 0.17, 0.17, 0, 0.5, 8), PAINT_WHITE));
+      break;
+    case "spaceport":
+      add(() => part(frustum(cx - 0.1, cy - 0.1, 1.32, 1.3, 0, 0.1, 16), CONCRETE));
+      add(() => part(frustum(cx - 0.1, cy - 0.1, 0.2, 0.2, 0.1, 1.12, 8), PAINT_WHITE));
+      add(() => part(frustum(cx - 0.1, cy - 0.1, 0.2, 0, 1.12, 1.48, 8), PAINT_WHITE));
+      add(() => part(box(x0 + 2.35, y0 + 2.35, 0, x0 + 2.85, y0 + 2.85, 1.1), CONCRETE));
+      break;
+  }
+  return k;
+}
+
+/** Low detail: one block per building, in the colour it reads as from far away. */
+function assembleLow(b: CityBuildingView): Kit {
+  const k = kit();
+  const inset = b.size === 1 ? 0.12 : 0.2;
+  const h = buildingTop(b.type) * (b.type === "solar_array" ? 0.5 : 0.62);
+  const colour = FAR_COLOUR[b.type] ?? CONCRETE;
+  const fill = b.operable ? colour : shade(colour, 0.55);
+  if (b.type === "habitat_dome" || b.type === "spaceport") {
+    // Round buildings stay round: a square block covers their corners' ground.
+    const r = b.type === "habitat_dome" ? 1.3 : 1.25;
+    k.s(() => part(frustum(b.tx + b.size / 2, b.ty + b.size / 2, r, r * 0.55, 0, h, 8), fill));
+  } else {
+    k.s(() => part(box(b.tx + inset, b.ty + inset, 0, b.tx + b.size - inset, b.ty + b.size - inset, h), fill));
+  }
+  return k;
+}
+
+/** Loose rocks on open ground: derived from where the tile is, drawn only up close. */
+function scatter(tx: number, ty: number, z: number): Part[] {
+  const out: Part[] = [];
+  if (hash2(tx * 7 + 3, ty * 13 - 5) > 0.08) return out;
+  const count = 1 + Math.floor(hash2(tx + 11, ty + 29) * 3);
+  for (let i = 0; i < count; i += 1) {
+    const rx = tx + 0.2 + 0.6 * hash2(tx * 31 + i, ty * 17 - i);
+    const ry = ty + 0.2 + 0.6 * hash2(tx * 19 - i, ty * 23 + i);
+    const r = 0.05 + 0.11 * hash2(tx + i * 5, ty - i * 3);
+    const h = 0.04 + 0.1 * hash2(tx - i * 7, ty + i * 11);
+    out.push(part(frustum(rx, ry, r, r * 0.5, z, z + h, 6), ROCK));
+  }
+  return out;
+}
+
 /** The iso-pixel box a grid of `tiles` occupies, with room for the tallest building and the highest hill. */
 export function sceneBounds(tiles: number, maxGroundZ = 0): { minX: number; maxX: number; minY: number; maxY: number } {
   const half = (tiles * TILE_W) / 2;
@@ -1106,14 +1250,17 @@ interface Occupant extends FootprintBox {
  * of them is quadratic, so the order is kept until the layout changes - it
  * depends on nothing else.
  */
-let orderCache: {
+interface SceneCache {
   key: string;
   occupants: Occupant[];
   order: number[];
   ground: Map<number, Shape[]>;
   /** Each building's static shapes, as the runs between its live parts. */
   buildings: Map<string, Shape[][]>;
-} | null = null;
+}
+
+/** One cache per level of detail, so zooming in and out never throws one away. */
+const sceneCaches = new Map<CityQuality, SceneCache>();
 
 const asList = (made: Part | readonly Part[]): readonly Part[] => (Array.isArray(made) ? (made as readonly Part[]) : [made as Part]);
 
@@ -1124,6 +1271,7 @@ const asList = (made: Part | readonly Part[]): readonly Part[] => (Array.isArray
  * and slots them back in, so painter's order is exactly the assembly's.
  */
 function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][]>, out: Shape[]): void {
+  // `cache` belongs to one level of detail's scene cache, so the level needs no place in the key.
   const key = `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}|${Math.round(b.activity * 20)}`;
   const kept = cache.get(key);
   if (kept === undefined) {
@@ -1149,7 +1297,7 @@ function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][
 
 /** Forget the cached order and ground shapes: the next frame is built from scratch. */
 export function resetSceneCache(): void {
-  orderCache = null;
+  sceneCaches.clear();
 }
 
 /**
@@ -1166,22 +1314,49 @@ function groundKey(view: CityView): string {
   return `${sum}|${weighted}|${view.steep.filter(Boolean).length}`;
 }
 
-function occupantsInOrder(view: CityView): { occupants: Occupant[]; order: number[]; ground: Map<number, Shape[]>; buildings: Map<string, Shape[][]> } {
+/** At low detail, open ground is drawn in patches this many tiles across. */
+const LOW_PATCH = 4;
+
+function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
   const n = view.tiles;
   const key = `${view.id}|${n}|${groundKey(view)}|${view.buildings.map((b) => `${b.tx},${b.ty},${b.size}`).join(";")}`;
-  if (orderCache !== null && orderCache.key === key) return orderCache;
+  const cached = sceneCaches.get(quality);
+  if (cached !== undefined && cached.key === key) return cached;
   const covered = new Set<number>();
   const occupants: Occupant[] = view.buildings.map((b) => {
     for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
     return { tx: b.tx, ty: b.ty, w: b.size, h: b.size, building: b.index };
   });
-  for (let ty = 0; ty < n; ty += 1) {
-    for (let tx = 0; tx < n; tx += 1) {
-      if (!covered.has(ty * n + tx)) occupants.push({ tx, ty, w: 1, h: 1, building: -1 });
+  // Open ground: tile by tile, or at low detail in patches wherever a whole
+  // patch is open (a patch that a building touches falls back to its tiles).
+  const done = new Uint8Array(n * n);
+  if (quality === "low") {
+    for (let py = 0; py + LOW_PATCH <= n; py += LOW_PATCH) {
+      for (let px = 0; px + LOW_PATCH <= n; px += LOW_PATCH) {
+        let open = true;
+        // Only a patch that is flat: merging slopes erased the terraces and
+        // painted whole patches steep, and the far view looked less like the
+        // near one than bare ground did (measured).
+        const z0 = view.groundZ[py * n + px] ?? 0;
+        for (let y = py; y < py + LOW_PATCH && open; y += 1) {
+          for (let x = px; x < px + LOW_PATCH; x += 1) {
+            if (covered.has(y * n + x) || view.steep[y * n + x] === true || (view.groundZ[y * n + x] ?? 0) !== z0) open = false;
+          }
+        }
+        if (!open) continue;
+        for (let y = py; y < py + LOW_PATCH; y += 1) for (let x = px; x < px + LOW_PATCH; x += 1) done[y * n + x] = 1;
+        occupants.push({ tx: px, ty: py, w: LOW_PATCH, h: LOW_PATCH, building: -1 });
+      }
     }
   }
-  orderCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map() };
-  return orderCache;
+  for (let ty = 0; ty < n; ty += 1) {
+    for (let tx = 0; tx < n; tx += 1) {
+      if (!covered.has(ty * n + tx) && !done[ty * n + tx]) occupants.push({ tx, ty, w: 1, h: 1, building: -1 });
+    }
+  }
+  const fresh: SceneCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map() };
+  sceneCaches.set(quality, fresh);
+  return fresh;
 }
 
 /** Lift a solid by `dz` tiles: a building assembled at ground zero, stood on its own ground. */
@@ -1198,7 +1373,8 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   const floor = range.lo - 0.5;
   const span = Math.max(1e-9, range.hi - range.lo);
 
-  const { occupants, order, ground, buildings } = occupantsInOrder(view);
+  const quality: CityQuality = options.quality ?? "high";
+  const { occupants, order, ground, buildings } = occupantsInOrder(view, quality);
   const badges: Shape[] = [];
   const vp = options.viewport;
   for (const i of order) {
@@ -1222,6 +1398,23 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
         continue;
       }
       const start = out.length;
+      if (o.w > 1) {
+        // A low-detail patch: its mean height, steep-coloured if any of it is steep.
+        let sum = 0;
+        let anySteep = false;
+        for (let y = o.ty; y < o.ty + o.h; y += 1) {
+          for (let x = o.tx; x < o.tx + o.w; x += 1) {
+            sum += view.groundZ[y * n + x] ?? 0;
+            anySteep = anySteep || view.steep[y * n + x] === true;
+          }
+        }
+        const zp = sum / (o.w * o.h);
+        const patch = box(o.tx, o.ty, floor, o.tx + o.w, o.ty + o.h, zp);
+        emitParts([part(patch.slice(1, 3), CLIFF)], out);
+        out.push({ rings: [ringOf(patch[0]!.pts)], fill: { ...(anySteep ? GROUND_STEEP : mix(GROUND_LOW, GROUND_HIGH, (zp - range.lo) / span)), a: 1 } });
+        ground.set(i, out.slice(start));
+        continue;
+      }
       const z = view.groundZ[o.ty * n + o.tx] ?? 0;
       const steep = view.steep[o.ty * n + o.tx] === true;
       // Height as a colour ramp, and a faint checker so single tiles read.
@@ -1237,10 +1430,13 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       if (south < z) sides.push(faces[2]!);
       emitParts([part(sides, CLIFF)], out);
       out.push({ rings: [ringOf(faces[0]!.pts)], fill: { ...top, a: 1 } });
-      if (steep) {
+      if (steep && quality !== "low") {
         const h = 0.18 + 0.3 * hash2(o.tx, o.ty);
         const r = 0.22 + 0.1 * hash2(o.ty + 91, o.tx);
-        emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, r, r * 0.45, z, z + h, 7), ROCK)], out);
+        emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, r, r * 0.45, z, z + h, quality === "high" ? 7 : 5), ROCK)], out);
+      } else if (quality === "high") {
+        // Loose rocks on open ground (requested by the user: not only hills).
+        emitParts(scatter(o.tx, o.ty, z), out);
       }
       ground.set(i, out.slice(start));
       continue;
@@ -1250,9 +1446,10 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
     const plinth = box(b.tx, b.ty, floor, b.tx + b.size, b.ty + b.size, b.baseZ);
     emitParts([part(plinth.slice(1, 3), CLIFF)], out);
     out.push({ rings: [ringOf(plinth[0]!.pts)], fill: { ...mix(GROUND_LOW, GROUND_HIGH, (b.baseZ - range.lo) / span), a: 1 } });
-    const built = assemble(b, options.time);
+    const built = quality === "high" ? assemble(b, options.time) : quality === "medium" ? assembleMedium(b) : assembleLow(b);
     emitBuilding(built, b, buildings, out);
-    out.push(...built.extras);
+    // Steam and other particles only up close.
+    if (quality === "high") out.push(...built.extras);
     if (!b.operable) badges.push(...offlineBadge(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + buildingTop(b.type) + 0.35));
   }
 

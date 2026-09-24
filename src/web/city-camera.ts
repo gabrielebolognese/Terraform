@@ -5,6 +5,7 @@
  * Pure functions, so the clamps are testable without a browser.
  */
 
+import type { CityQuality } from "../render/city.js";
 import { sceneBounds } from "../render/city.js";
 import { TILE_H, TILE_W, Z_PX, isoProject, isoToGround } from "../render/iso.js";
 
@@ -22,6 +23,27 @@ export const CITY_ZOOM_MAX = 3;
 
 export function clampZoom(zoom: number): number {
   return Math.min(CITY_ZOOM_MAX, Math.max(CITY_ZOOM_MIN, zoom));
+}
+
+/**
+ * The level of detail for what is on screen (requested by the user: a
+ * zoomed-out metropolis lagged). It follows how many tiles the view shows,
+ * not the zoom alone, so a window's size counts and an ordinary city - whose
+ * whole grid is 1,024 tiles - keeps full detail at every zoom.
+ *
+ * Measured on the example's largest metropolis (758 buildings) at 1600 x 900:
+ * zoom 1 shows ~1,400 tiles, 58,900 shapes at high; zoom 0.5 shows ~5,600,
+ * 162,600 at high but 25,900 at medium; zoom 0.3 shows all 9,216, 226,400 at
+ * high, 38,600 at medium, 14,300 at low.
+ */
+export const QUALITY_HIGH_TILES = 1500;
+export const QUALITY_MEDIUM_TILES = 6000;
+
+export function qualityFor(cam: CityCamera, viewW: number, viewH: number, tiles: number): CityQuality {
+  const onScreen = Math.min(tiles * tiles, (viewW / cam.zoom) * (viewH / cam.zoom) / ((TILE_W * TILE_H) / 2));
+  if (onScreen <= QUALITY_HIGH_TILES) return "high";
+  if (onScreen <= QUALITY_MEDIUM_TILES) return "medium";
+  return "low";
 }
 
 /** The centre may not leave the grid's own box, so the city can never be panned off-screen. */

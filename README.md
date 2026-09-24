@@ -42,6 +42,7 @@ that state.
 | [`docs/balance/batch22-terrain.md`](docs/balance/batch22-terrain.md) | Terrain with depth: one elevation field for the globe and the settlements, metres on the planet, hills and slope, exact picking. |
 | [`docs/balance/batch23-sea-level.md`](docs/balance/batch23-sea-level.md) | Sea level from the ocean, and how fast it rises: the input the flooding batches build on. |
 | [`docs/balance/detail-pass-buildings.md`](docs/balance/detail-pass-buildings.md) | The ten buildings rebuilt with far more detail; a close-up of all ten is `docs/frames/city-buildings.png`. |
+| [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) | The whole visual arc, twelve frames at fixed progress values. |
 
 ## Status
@@ -71,7 +72,9 @@ window behind it, shaded on the GPU at full resolution: drag to turn it, scroll 
 instruments open as a drawer from the top right, with a scrubber that drags the planet through the
 whole reference playthrough in seconds, and **See example planet** - Mars fully terraformed, with
 27 cities (three of them metropolises, 3 x 3 a city's ground) and 15 outposts; your own planet
-is kept aside, never saved over, and comes back with **Back to my planet**. See
+is kept aside, never saved over, and comes back with **Back to my planet**. A metropolis steps down to lighter
+detail as you zoom out (three levels, chosen by how much of the city is on screen), so it stays
+smooth to move around. See
 [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) for the visual arc at a glance.
 
 Dust storms, cometary impacts and solar variability run in the browser. They are **seeded on

@@ -20,7 +20,7 @@ import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, cityView } from "../sim/index.js";
 import type { CityCamera } from "./city-camera.js";
-import { centreCamera, footprintOrigin, pan, screenToIso, zoomAt } from "./city-camera.js";
+import { centreCamera, footprintOrigin, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
 import { formatMetres } from "./settlement-label.js";
 import { formatLatLon, settlementLabel } from "./settlement-label.js";
 
@@ -308,7 +308,7 @@ export class CityScreen {
     const halfW = size.w / 2 / cam.zoom;
     const halfH = size.h / 2 / cam.zoom;
     const viewport = { minX: cam.cx - halfW, maxX: cam.cx + halfW, minY: cam.cy - halfH, maxY: cam.cy + halfH };
-    fillShapes(ctx, cityScene(view, { ...this.sceneOptions(now), viewport }));
+    fillShapes(ctx, cityScene(view, { ...this.sceneOptions(now), viewport, quality: qualityFor(cam, size.w, size.h, view.tiles) }));
   }
 
   // ---- panel -----------------------------------------------------------------
