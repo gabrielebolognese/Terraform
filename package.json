@@ -1,0 +1,33 @@
+{
+  "name": "terraforming-game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "dev:node": "tsx watch src/index.ts",
+    "sim:run": "tsx src/harness/run.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "build:web": "vite build",
+    "preview": "vite preview",
+    "start": "node dist/index.js",
+    "clean": "node -e \"const f=require('node:fs');for(const d of ['dist','dist-web'])f.rmSync(d,{recursive:true,force:true})\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "sim:sweep": "tsx src/harness/sweep.ts",
+    "sim:frames": "tsx src/harness/frames.ts",
+    "sim:city": "tsx src/harness/city-frames.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "happy-dom": "^20.14.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2023"
+    ],
+    "types": [
+      "node"
+    ],
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": [
+    "src/index.ts",
+    "src/index.test.ts",
+    "src/sim/**/*",
+    "src/render/**/*",
+    "src/harness/**/*",
+    "src/testkit/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-web"
+  ]
+}
