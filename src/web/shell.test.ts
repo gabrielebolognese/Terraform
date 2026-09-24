@@ -154,10 +154,38 @@ describe("the planet is fed by the instruments (the globe has no other source)",
       {
         simYear: 0, state, derived: d, progress: p.progress, progressRaw: p.progressRaw, axes: p.axes,
         phase: 0, phaseReached: 0, dTdt: 0, droppedYears: 0, env: NEUTRAL_ENV, levers: [], shieldStrength: 0,
-        speed: 1, seedMessage: null, awayMessage: null, storageWarning: null, visuals,
+        speed: 1, seedMessage: null, awayMessage: null, storageWarning: null, visuals, seaLevel: { m: -8200, ratePerYear: 0 },
       },
       { T: new Ring(8), P: new Ring(8), progress: new Ring(8) },
     );
     expect(received).toEqual([visuals]);
+  });
+
+  it("reads out the sea level and its rate - and says so plainly before there is a sea (Batch 23)", async () => {
+    const { NEUTRAL_ENV, derive, computeProgress, deriveVisuals, computeStep, marsStart } = await import("../sim/index.js");
+    const { Ring } = await import("./ring.js");
+    const host = document.createElement("div");
+    document.body.append(host);
+    const inspector = new Inspector(host, INSPECTOR_HOOKS, t);
+    const show = (liquid: number, sea: { m: number; ratePerYear: number }): string => {
+      const base = marsStart();
+      const state = { ...base, reservoirs: { ...base.reservoirs, h2o_liq: liquid } };
+      const d = derive(state.reservoirs, NEUTRAL_ENV, t);
+      const p = computeProgress(state.reservoirs, d, t);
+      const visuals = deriveVisuals(state.reservoirs, d, computeStep(state, d, t, t.SUBSTEP_YEARS, null).flows, t);
+      inspector.update(
+        {
+          simYear: 0, state, derived: d, progress: p.progress, progressRaw: p.progressRaw, axes: p.axes,
+          phase: 0, phaseReached: 0, dTdt: 0, droppedYears: 0, env: NEUTRAL_ENV, levers: [], shieldStrength: 0,
+          speed: 1, seedMessage: null, awayMessage: null, storageWarning: null, visuals, seaLevel: sea,
+        },
+        { T: new Ring(8), P: new Ring(8), progress: new Ring(8) },
+      );
+      const cell = [...host.querySelectorAll(".stat")].find((c) => c.querySelector(".stat-label")?.textContent === "sea level");
+      return cell?.querySelector(".stat-value")?.textContent ?? "missing";
+    };
+    expect(show(0, { m: -8200, ratePerYear: 0 })).toBe("no sea yet");
+    expect(show(20, { m: -3097.4, ratePerYear: 0.4 })).toBe("−3,097 m (+0.40 m/yr)");
+    expect(show(20, { m: -3097.4, ratePerYear: -1.25 })).toBe("−3,097 m (−1.25 m/yr)");
   });
 });

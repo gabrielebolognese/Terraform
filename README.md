@@ -40,6 +40,7 @@ that state.
 | [`docs/balance/batch20-city-view.md`](docs/balance/batch20-city-view.md) | The 2.5D city view: procedural buildings, rough ground, placement, the inspector, and a golden city render. |
 | [`docs/balance/batch21-travel.md`](docs/balance/batch21-travel.md) | Travel between orbit and a city: markers, the camera move, and proof the world advances the same in either view. |
 | [`docs/balance/batch22-terrain.md`](docs/balance/batch22-terrain.md) | Terrain with depth: one elevation field for the globe and the settlements, metres on the planet, hills and slope, exact picking. |
+| [`docs/balance/batch23-sea-level.md`](docs/balance/batch23-sea-level.md) | Sea level from the ocean, and how fast it rises: the input the flooding batches build on. |
 | [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) | The whole visual arc, twelve frames at fixed progress values. |
 
 ## Status

@@ -25,6 +25,8 @@ import type { BuildingType, CityView, SimState } from "../sim/index.js";
 import {
   NEUTRAL_ENV,
   cityView,
+  liquidWaterRate,
+  nextSubstepFlows,
   derive,
   foundSettlement,
   habitat,
@@ -86,7 +88,8 @@ export function referenceCity(): { state: SimState; view: CityView; options: Cit
     settlements: state.settlements.map((s) => ({ ...s, population: 12, stores: { ...s.stores, water: 0, power: 5 } })),
   };
   const env = worldEnv(state, NEUTRAL_ENV, t);
-  const channels = habitat(state.reservoirs, derive(state.reservoirs, env, t), t);
+  const d = derive(state.reservoirs, env, t);
+  const channels = habitat(state.reservoirs, d, t, liquidWaterRate(nextSubstepFlows(state, { tuning: t, env: NEUTRAL_ENV, forcing: null })));
   const view = cityView(state.settlements[0]!, channels, t);
   // A water extractor ghosted half on the spaceport: refused. The reactor selected.
   return { state, view, options: { time: 0, selected: 1, ghost: { tx: 10, ty: 11, size: 2, valid: false } } };

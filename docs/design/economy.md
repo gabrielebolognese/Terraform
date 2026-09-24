@@ -37,7 +37,9 @@ habitability, and the **tech tree** refuses to sell you a lever the planet is no
 is that cities "consume the same derived channels (local `T`, `P`, `o2`, water access) as
 environmental inputs, so a city's viable footprint grows as the planet terraforms".
 
-`habitat(reservoirs, derived, tuning) -> HabitatChannels` is that contract. It is deliberately the
+`habitat(reservoirs, derived, tuning, liquidRate) -> HabitatChannels` is that contract. (`liquidRate`, the
+net flow into liquid water, joined in Batch 23: the sea level's rate needs a flow, which reservoirs
+and derived values cannot supply.) It is deliberately the
 **same shape as §9's visual contract**: a small struct of numbers, derived fresh every read, never
 stored, never written back. §9 is the wall between the simulation and the graphics; this is the wall
 between the simulation and the city layer. Neither wall has a door.
@@ -54,6 +56,8 @@ rewritten underneath, exactly as §9 promises for the renderer.
 | `temperature`, `pressure`, `oxygen`, `carbonDioxide` | §12.3's readings, in the doc's own units |
 | `waterAccess` | 0..1, liquid water within reach |
 | `insolation` | sunlight at the ground relative to bare Mars: 1 untouched, higher under mirrors (Batch 18, for the Solar Array) |
+| `seaLevelM` | the waterline against the areoid, metres: the hypsometric curve at the ocean fraction (Batch 23, detail §4.1) |
+| `seaLevelRateMPerYear` | how fast it moves, metres per sim-year, from this substep's net flow into liquid water (Batch 23; powers the flood forecast) |
 | `maskFraction` | 0..1, where you can go outside in a breathing mask |
 | `openAirFraction` | 0..1, where you can go outside with nothing |
 | `supportIndex` | 0..1, what a city scales its capacity by |

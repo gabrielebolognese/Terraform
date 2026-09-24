@@ -29,7 +29,7 @@ This file is the source of truth for *in what order* we build it, and for what "
 | 20 | Micro: the 2.5D city view | **COMPLETE** - [note](docs/balance/batch20-city-view.md) - shape list + software golden render (tolerance 0.003%, measured); topological draw order replaces §3.1's key; rough ground derived from place; browser runs settlements |
 | 21 | Micro: travel between orbit and a city | **COMPLETE** - [note](docs/balance/batch21-travel.md) - world equal to the last bit with or without travel; one scene at most, none in transit; marker + confirm; no per-city deserialize |
 | 22 | Detail: terrain with depth | **COMPLETE** - [note](docs/balance/batch22-terrain.md) - one shared elevation field; hypsometry to metres; slope-limited hills (browser 12 m); exact picking; a terrain golden frame |
-| 23 | Detail: sea level from the macro sim | NOT STARTED - detail §4.1, §6 step 2 |
+| 23 | Detail: sea level from the macro sim | **COMPLETE** - [note](docs/balance/batch23-sea-level.md) - sea level and its rate through HabitatChannels; rate within 0.104% of advance away from the curve's kinks; nextSubstepFlows |
 | 24 | Detail: the flood model, headless | NOT STARTED - detail §4.2, §4.3, §4.7, §6 step 3 |
 | 25 | Detail: flood forecast and warnings | NOT STARTED - detail §4.4, §6 step 4 |
 | 26 | Detail: procedural structures and the instancing renderer | NOT STARTED - detail §2, §6 step 5 |
@@ -882,15 +882,20 @@ height. No new buildings yet."
 - Placement refuses a too-steep footprint and accepts a flat one, both by test.
 - The golden city frame is re-rendered deliberately, with the diff looked at.
 
-## Batch 23 - Detail: sea level from the macro sim - NOT STARTED
+## Batch 23 - Detail: sea level from the macro sim - COMPLETE
+
+**Done** - see [the note](docs/balance/batch23-sea-level.md). Changed from the plan: `habitat()`
+takes the net liquid-water rate as a fourth input (the rate needs a flow), and
+`nextSubstepFlows` was added so every reader gets the flows `advance` integrates - the browser's
+readout had been leaving out the weather.
 
 **Goal.** Detail §6 step 2: "Add `seaLevelCurve` to the macro layer and expose `sea_level_m` and
 its rate as derived outputs."
 
-- [ ] `sea_level_m` derived from `ocean_frac` through the one elevation field (conflict 2), never
+- [x] `sea_level_m` derived from `ocean_frac` through the one elevation field (conflict 2), never
   stored.
-- [ ] Its rate, from the same flows `advance` integrates, not a finite difference of frames.
-- [ ] Exposed through `HabitatChannels` (the city-layer wall), not read off the reservoirs.
+- [x] Its rate, from the same flows `advance` integrates, not a finite difference of frames.
+- [x] Exposed through `HabitatChannels` (the city-layer wall), not read off the reservoirs.
 
 **Exit gate.**
 - Sea level is monotonic in `ocean_frac` and matches the globe: the share of the planet below

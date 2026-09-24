@@ -29,6 +29,7 @@ import { derive } from "./derive.js";
 import { effectiveEnv, stepFacilities, stepShield } from "./facilities/index.js";
 import type { ForcingFn } from "./rates/index.js";
 import { computeStep } from "./rates/index.js";
+import { liquidWaterRate } from "./sea-level.js";
 import type { Tuning } from "./tuning.js";
 import type {
   AccountKey,
@@ -327,7 +328,7 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
      * Computed from the state BEFORE this substep's flows, so it uses the same
      * `d` the flows did rather than a half-updated world.
      */
-    const economy = t.ECONOMY_ENABLED ? accrue(working.economy, habitat(working.reservoirs, d, t), working, h, t) : working.economy;
+    const economy = t.ECONOMY_ENABLED ? accrue(working.economy, habitat(working.reservoirs, d, t, liquidWaterRate(contribution.flows)), working, h, t) : working.economy;
 
     /**
      * Phase latch and tech unlock, EVERY substep, on the `d` already computed.
@@ -420,6 +421,22 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
  * undeclared water-escape leg (4.8e-10) and nitrogen leaks up to 17,000x
  * larger than before pass the browser's small calls indefinitely.
  */
+/**
+ * The flows the next substep of `advance` will integrate: the same
+ * environment, the same weather, the same forcing, built the same way.
+ *
+ * For readers that need a RATE the way the engine sees it - the sea level's
+ * (Batch 23) - rather than a finite difference. Before this existed the
+ * browser rebuilt the flows with no forcing, which silently dropped the
+ * seeded weather's flows from every rate it showed.
+ */
+export function nextSubstepFlows(state: SimState, cfg: SimConfig): readonly Flow[] {
+  const t = cfg.tuning;
+  const year = state.steps * t.SUBSTEP_YEARS;
+  const d = derive(state.reservoirs, worldEnv(state, cfg.env, t), t);
+  return computeStep(state, d, t, t.SUBSTEP_YEARS, composeForcing(cfg.forcing, state.seed, year, t)).flows;
+}
+
 export const CONSERVATION_REL_TOL = 1e-12;
 
 function assertConserved(name: string, before: number, after: number, magnitude: number, years: number): void {

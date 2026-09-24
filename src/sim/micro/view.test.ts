@@ -29,7 +29,7 @@ function city(plan: readonly (readonly [BuildingType, number, number])[], stores
 }
 
 function envOf(s: SimState): HabitatChannels {
-  return habitat(s.reservoirs, derive(s.reservoirs, worldEnv(s, NEUTRAL_ENV, t), t), t);
+  return habitat(s.reservoirs, derive(s.reservoirs, worldEnv(s, NEUTRAL_ENV, t), t), t, 0);
 }
 
 describe("the city view", () => {

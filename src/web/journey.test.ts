@@ -126,7 +126,7 @@ function trip(frames: number, plan: ReadonlyMap<number, (j: Journey, now: number
     if (resident !== null) {
       residents.add(resident);
       const here = traveller.state.settlements.find((s) => s.id === resident)!;
-      city.frame(here, habitat(traveller.state.reservoirs, f.world.derived, tuning), now);
+      city.frame(here, habitat(traveller.state.reservoirs, f.world.derived, tuning, 0), now);
     }
     if (journey.phase === "descending" || journey.phase === "ascending") {
       transitFrames += 1;

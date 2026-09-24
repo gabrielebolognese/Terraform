@@ -36,6 +36,7 @@ import type { PlanetSink } from "./globe.js";
 
 const NO_PLANET: PlanetSink = { update: () => undefined };
 import { Sparkline } from "./sparkline.js";
+import { formatMetres } from "./settlement-label.js";
 
 /** One row of the facility panel: what is ordered, and what is online. */
 export interface LeverView {
@@ -74,6 +75,8 @@ export interface InspectorView {
   readonly storageWarning: string | null;
   /** The section 9 channels. This is everything a renderer is allowed to read. */
   readonly visuals: VisualChannels;
+  /** Detail §4.1 (Batch 23): the waterline and how fast it moves. */
+  readonly seaLevel: { readonly m: number; readonly ratePerYear: number };
 }
 
 export interface InspectorHooks {
@@ -252,6 +255,7 @@ export class Inspector {
       ["cloud", "cloud cover"],
       ["dTdt", "warming rate"],
       ["solar", "solar flux"],
+      ["sea", "sea level"],
     ];
     for (const [key, label] of stats) {
       const cell = el("div", "stat");
@@ -495,6 +499,14 @@ ${def.caution}`;
     this.setStat("dTdt", `${view.dTdt >= 0 ? "+" : ""}${(view.dTdt * 100).toFixed(2)} K/century`);
     // The mirror/shade multiplier is the one player input nothing else shows.
     this.setStat("solar", `x${view.env.sMultiplier.toFixed(3)}`);
+    // Before any ocean the curve's floor is the lowest point on the planet, not a waterline.
+    const sea = view.seaLevel;
+    this.setStat(
+      "sea",
+      d.oceanFrac <= 0
+        ? "no sea yet"
+        : `${formatMetres(sea.m)} (${sea.ratePerYear >= 0 ? "+" : "\u2212"}${Math.abs(sea.ratePerYear).toFixed(2)} m/yr)`,
+    );
 
     const axes: readonly [string, number][] = [
       ["nT", view.axes.nT],

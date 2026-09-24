@@ -27,6 +27,8 @@ import { marsStart } from "./planets/mars.js";
 import { buildFacility, seedBiosphere } from "./actions.js";
 import { makeTuning, DEFAULT_TUNING } from "./tuning.js";
 import { habitat } from "./habitat.js";
+import { computeStep } from "./rates/index.js";
+import { liquidWaterRate } from "./sea-level.js";
 import { eventEnv } from "./events.js";
 
 const t = DEFAULT_TUNING;
@@ -44,7 +46,8 @@ const RUN = (() => {
     const env = effectiveEnv(NEUTRAL_ENV, state.facilities, t);
     const d = derive(state.reservoirs, env, t);
     if (!state.seeded) state = seedBiosphere(state, t, env).state;
-    out.push({ year: i * 8, r: state.reservoirs, d, h: habitat(state.reservoirs, d, t) });
+    const water = liquidWaterRate(computeStep(state, d, t, t.SUBSTEP_YEARS, null).flows);
+    out.push({ year: i * 8, r: state.reservoirs, d, h: habitat(state.reservoirs, d, t, water) });
     state = advance(state, Math.round(8 / t.SUBSTEP_YEARS), { tuning: t, env: NEUTRAL_ENV, forcing: null });
   }
   return out;
@@ -132,7 +135,7 @@ describe("water access is a band, not a level", () => {
   it("peaks inside the §2.3 ocean band", () => {
     const base = marsStart();
     const d0 = derive(base.reservoirs, NEUTRAL_ENV, t);
-    const at = (oceanFrac: number) => habitat(base.reservoirs, { ...d0, oceanFrac }, t).waterAccess;
+    const at = (oceanFrac: number) => habitat(base.reservoirs, { ...d0, oceanFrac }, t, 0).waterAccess;
 
     expect(at(0)).toBe(0);
     expect(at(0.4)).toBe(1);
@@ -167,14 +170,14 @@ describe("the contract does not flicker", () => {
     expect(differs, "the weather made no difference to the environment at all").toBe(true);
 
     // habitat() takes reservoirs and derived - it never sees a seed or a time.
-    const h = habitat(state.reservoirs, derive(state.reservoirs, calm, stormy), stormy);
+    const h = habitat(state.reservoirs, derive(state.reservoirs, calm, stormy), stormy, 0);
     expect(Number.isFinite(h.supportIndex)).toBe(true);
-    expect(habitat(state.reservoirs, derive(state.reservoirs, calm, stormy), stormy)).toEqual(h);
+    expect(habitat(state.reservoirs, derive(state.reservoirs, calm, stormy), stormy, 0)).toEqual(h);
   });
 
   it("is a pure function of the world", () => {
     const base = marsStart();
     const d = derive(base.reservoirs, NEUTRAL_ENV, t);
-    expect(habitat(base.reservoirs, d, t)).toEqual(habitat(base.reservoirs, d, t));
+    expect(habitat(base.reservoirs, d, t, 0)).toEqual(habitat(base.reservoirs, d, t, 0));
   });
 });

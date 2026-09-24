@@ -18,6 +18,7 @@ import { lossFlows } from "./loss.js";
 import { nitrogenFlows } from "./nitrogen.js";
 import { waterFlows } from "./water.js";
 import { habitat } from "../habitat.js";
+import { liquidWaterRate } from "../sea-level.js";
 import { microStep } from "../micro/coupling.js";
 import type { Settlement } from "../types.js";
 
@@ -62,14 +63,22 @@ export function computeStep(
   // Micro doc section 2: the settlements, seen through the city-layer wall and
   // summed into the same list. Skipped entirely - not even `habitat` is
   // computed - while settlements are off, so off is exactly the old world.
+  // The forcing is computed here but appended after the settlements' flows,
+  // exactly where it always was: moving it in the list would reorder the
+  // sums `applyFluxes` makes, and the golden run would drift by ulps.
+  const forced = forcing ? forcing(r, d, t, h) : [];
+
   let settlementsNext = state.settlements;
   if (t.SETTLEMENTS_ENABLED && state.settlements.length > 0) {
-    const micro = microStep(state.settlements, habitat(r, d, t), r, d, t, h);
+    // Batch 23: the sea level's rate, from every flow the settlements do not
+    // themselves add (none of theirs touches water).
+    const water = liquidWaterRate(flows) + liquidWaterRate(forced);
+    const micro = microStep(state.settlements, habitat(r, d, t, water), r, d, t, h);
     flows.push(...micro.flows);
     settlementsNext = micro.settlementsNext;
   }
 
-  if (forcing) flows.push(...forcing(r, d, t, h));
+  flows.push(...forced);
 
   return { flows, biomassNext: bio.next, suitability: bio.suitability, settlementsNext };
 }

@@ -95,7 +95,7 @@ describe("a facility costs something", () => {
       facilities: state.facilities.map((f) => ({ ...f, deployed: f.count * f.level })),
     };
     const d = derive(state.reservoirs, NEUTRAL_ENV, ON);
-    const next = accrue(state.economy, habitat(state.reservoirs, d, ON), state, 1, ON);
+    const next = accrue(state.economy, habitat(state.reservoirs, d, ON, 0), state, 1, ON);
     expect(next.credits).toBeGreaterThanOrEqual(0);
   });
 
@@ -204,14 +204,14 @@ describe("income follows the habitat contract", () => {
   it("pays nothing on a dead planet with the economy off", () => {
     const start = marsStart(123456, OFF);
     const d = derive(start.reservoirs, NEUTRAL_ENV, OFF);
-    expect(incomeRate(habitat(start.reservoirs, d, OFF), OFF)).toBe(0);
+    expect(incomeRate(habitat(start.reservoirs, d, OFF, 0), OFF)).toBe(0);
   });
 
   it("pays something even on a dead planet when it is on", () => {
     // Somebody has to be there to order the mirrors.
     const start = marsStart(123456, ON);
     const d = derive(start.reservoirs, NEUTRAL_ENV, ON);
-    expect(incomeRate(habitat(start.reservoirs, d, ON), ON)).toBeGreaterThan(0);
+    expect(incomeRate(habitat(start.reservoirs, d, ON, 0), ON)).toBeGreaterThan(0);
   });
 
   it("pays more as the planet becomes more habitable", () => {
@@ -220,8 +220,8 @@ describe("income follows the habitat contract", () => {
     const rich = { ...start.reservoirs, o2: 215, co2_atm: 1 };
     const good = { ...dead, T: 288, P: 1013, oceanFrac: 0.4 };
 
-    const poorIncome = incomeRate(habitat(start.reservoirs, dead, ON), ON);
-    const richIncome = incomeRate(habitat(rich, good, ON), ON);
+    const poorIncome = incomeRate(habitat(start.reservoirs, dead, ON, 0), ON);
+    const richIncome = incomeRate(habitat(rich, good, ON, 0), ON);
     expect(richIncome).toBeGreaterThan(poorIncome * 5);
   });
 

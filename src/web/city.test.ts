@@ -62,7 +62,7 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
   let now = 0;
   const frame = (): void => {
     now += 1000;
-    const env = habitat(state.reservoirs, derive(state.reservoirs, worldEnv(state, NEUTRAL_ENV, t), t), t);
+    const env = habitat(state.reservoirs, derive(state.reservoirs, worldEnv(state, NEUTRAL_ENV, t), t), t, 0);
     screen.frame(state.settlements[0]!, env, now);
   };
   screen.open("settlement-1");

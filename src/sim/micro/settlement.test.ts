@@ -26,7 +26,7 @@ const ON = makeTuning({ SETTLEMENTS_ENABLED: 1 });
 const cfg = { tuning: ON, env: NEUTRAL_ENV, forcing: null };
 
 function step(s: SimState) {
-  const env = habitat(s.reservoirs, derive(s.reservoirs, worldEnv(s, NEUTRAL_ENV, ON), ON), ON);
+  const env = habitat(s.reservoirs, derive(s.reservoirs, worldEnv(s, NEUTRAL_ENV, ON), ON), ON, 0);
   return settlementStep(s.settlements[0]!, env, ON, ON.SUBSTEP_YEARS);
 }
 

@@ -29,6 +29,7 @@ import type { Derived, Reservoirs } from "./types.js";
 import type { Tuning } from "./tuning.js";
 import { clamp01, ramp } from "./math.js";
 import { TARGETS } from "./targets.js";
+import { seaLevel } from "./sea-level.js";
 
 /**
  * Everything the city layer is allowed to see.
@@ -56,6 +57,14 @@ export interface HabitatChannels {
    * 2.1 needs that this contract did not already carry.
    */
   readonly insolation: number;
+  /**
+   * Detail doc §4.1 (Batch 23): the waterline's elevation against the areoid,
+   * metres - the planet's hypsometric curve at the ocean fraction. A place is
+   * under the sea when its elevation is below this (and the globe draws it so).
+   */
+  readonly seaLevelM: number;
+  /** How fast the waterline is moving, metres per sim-year: what powers the flood forecast. */
+  readonly seaLevelRateMPerYear: number;
 
   /**
    * 0..1. Where a person can go outside in a breathing mask - warm enough for
@@ -111,7 +120,14 @@ function waterAccessOf(d: Derived): number {
  * storm is a §9 visual and a few kelvin, not a reason to evacuate, and letting
  * it into this contract would make a city's capacity flicker.
  */
-export function habitat(r: Reservoirs, d: Derived, t: Tuning): HabitatChannels {
+/**
+ * `liquidRatePerYear` is the net flow into liquid water this substep
+ * (`liquidWaterRate` of the flows) - the one input the sea level's RATE needs
+ * that reservoirs and derived values cannot supply. Required, so no caller
+ * can leave the rate silently at zero.
+ */
+export function habitat(r: Reservoirs, d: Derived, t: Tuning, liquidRatePerYear: number): HabitatChannels {
+  const sea = seaLevel(r, t, liquidRatePerYear);
   const waterAccess = waterAccessOf(d);
 
   /**
@@ -151,6 +167,8 @@ export function habitat(r: Reservoirs, d: Derived, t: Tuning): HabitatChannels {
     carbonDioxide: r.co2_atm,
     waterAccess,
     insolation: d.sEff / t.S_MARS,
+    seaLevelM: sea.m,
+    seaLevelRateMPerYear: sea.ratePerYear,
     maskFraction,
     openAirFraction,
     supportIndex: clamp01(t.HAB_SEALED_BASE + maskWeight * maskFraction + openWeight * openAirFraction),

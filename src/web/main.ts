@@ -38,6 +38,9 @@ import {
   placeBuilding,
   removeBuilding,
   siteElevation,
+  liquidWaterRate,
+  nextSubstepFlows,
+  seaLevel,
 } from "../sim/index.js";
 import type { BuildingType } from "../sim/index.js";
 import { AUTOSAVE_INTERVAL_MS, READOUT_HZ, SPARK_CAPACITY, SPARK_HZ } from "./config.js";
@@ -366,6 +369,8 @@ window.addEventListener("pagehide", () => {
 });
 
 let lastReadout = 0;
+/** Net flow into liquid water at the last readout, m/yr: the sea level's rate reads it (Batch 23). */
+let liquidRate = 0;
 let lastSample = 0;
 
 /** Trailing window for the warming-rate readout, so it is not a per-frame jitter. */
@@ -419,7 +424,7 @@ function render(timestamp: number): void {
   if (resident !== null) {
     const here = state.settlements.find((s) => s.id === resident);
     if (here === undefined) journey.abort();
-    else city.frame(here, habitat(state.reservoirs, d, tuning), timestamp);
+    else city.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp);
   }
 
   if (timestamp - lastSample >= 1000 / SPARK_HZ) {
@@ -443,6 +448,9 @@ function render(timestamp: number): void {
     // rate. A substep does not need them and `deriveVisuals` is deliberately
     // outside `tick` for exactly that reason.
     const flows = computeStep(state, d, tuning, tuning.SUBSTEP_YEARS, null).flows;
+    // The flows the next substep of `advance` will integrate - weather included,
+    // which `flows` above (built with no forcing) leaves out.
+    liquidRate = liquidWaterRate(nextSubstepFlows(state, config()));
     // §9's dust channel carries the weather as well as the outgassing.
     const storm = stormIntensity(state.seed, year, tuning);
     const visuals = deriveVisuals(state.reservoirs, d, flows, tuning, storm);
@@ -509,7 +517,7 @@ function render(timestamp: number): void {
       economy: tuning.ECONOMY_ENABLED
         ? {
             credits: state.economy.credits,
-            income: incomeRate(habitat(state.reservoirs, d, tuning), tuning),
+            income: incomeRate(habitat(state.reservoirs, d, tuning, liquidRate), tuning),
             upkeep: upkeepRate(state.facilities, tuning),
           }
         : null,
@@ -542,6 +550,7 @@ function render(timestamp: number): void {
         awayMessage,
         storageWarning,
         visuals,
+        seaLevel: seaLevel(state.reservoirs, tuning, liquidRate),
       },
       rings,
     );
