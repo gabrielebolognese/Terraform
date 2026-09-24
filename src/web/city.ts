@@ -21,6 +21,8 @@ import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement
 import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, cityView, roadKey } from "../sim/index.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
+import type { CardKind } from "./city-cards.js";
+import { makePreviews } from "./city-cards.js";
 import { formatMetres } from "./settlement-label.js";
 import { formatLatLon, settlementLabel } from "./settlement-label.js";
 
@@ -143,6 +145,12 @@ export class CityScreen {
   private readonly storeRows = new Map<MicroResource, { value: HTMLElement; rate: HTMLElement; bar: HTMLElement }>();
   private readonly palette: HTMLElement;
   private readonly hint: HTMLElement;
+  /** The build bar along the bottom (at the user's request, as in Clash of Clans). */
+  private readonly dock: HTMLElement;
+  /** One tooltip for every card, outside the scrolling row so it is never clipped. */
+  private readonly tip: HTMLElement;
+  private tipFor: CardKind | null = null;
+  private readonly previews: Map<CardKind, HTMLCanvasElement>;
   private readonly inspector: HTMLElement;
   private readonly inspectorName: HTMLElement;
   private readonly inspectorStatus: HTMLElement;
@@ -205,12 +213,19 @@ export class CityScreen {
     }
     stores.append(list);
 
-    const build = el("section", "city-build");
-    build.append(el("h3", "city-section-title", "Build"));
-    this.palette = el("div", "city-palette");
+    // The build bar: a row of cards along the bottom, with the hint above it.
+    this.dock = el("section", "city-dock");
+    this.dock.setAttribute("aria-label", "Build");
+    this.palette = el("div", "city-cards");
+    this.palette.setAttribute("role", "toolbar");
     this.hint = el("p", "city-hint", "");
     this.hint.setAttribute("role", "status");
-    build.append(this.palette, this.hint);
+    this.dock.append(this.hint, this.palette);
+    this.tip = el("div", "city-tip");
+    this.tip.id = "city-tip";
+    this.tip.setAttribute("role", "tooltip");
+    this.tip.hidden = true;
+    this.previews = makePreviews();
 
     this.inspector = el("section", "city-inspector");
     this.inspector.hidden = true;
@@ -225,8 +240,8 @@ export class CityScreen {
     );
     this.inspector.append(this.inspectorName, this.inspectorStatus, this.inspectorSummary, this.inspectorFlows, actions);
 
-    panel.append(head, this.status, stores, build, this.inspector);
-    this.root.append(this.canvas, panel);
+    panel.append(head, this.status, stores, this.inspector);
+    this.root.append(this.canvas, panel, this.dock, this.tip);
     host.append(this.root);
     this.bindInput();
   }
@@ -436,25 +451,103 @@ export class CityScreen {
     const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}`;
     if (!force && key === this.paletteKind) return;
     this.paletteKind = key;
-    const buttons = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].kinds.includes(s.kind)).map((type) => {
-      const def = BUILDING_DEFS[type];
-      const cost = def.cost(this.tuning);
-      const b = button("city-build-option", "", () => this.arm(this.placing === type ? null : type));
-      b.dataset["type"] = type;
-      b.setAttribute("aria-pressed", String(this.placing === type));
-      b.title = def.summary;
-      b.append(el("span", "city-build-name", def.name), el("span", "city-build-cost", `${cost} materials`));
-      if (s.stores.materials < cost) b.append(el("span", "city-build-short", "not enough materials"));
-      return b;
+    const cards = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].kinds.includes(s.kind)).map((type) => {
+      const cost = BUILDING_DEFS[type].cost(this.tuning);
+      const c = this.card(type, BUILDING_DEFS[type].name, `${cost}`, s.stores.materials < cost, this.placing === type, () => this.arm(this.placing === type ? null : type));
+      c.dataset["type"] = type;
+      return c;
     });
-    const road = button("city-build-option city-road", "", () => this.armRoad(!this.paving));
-    road.setAttribute("aria-pressed", String(this.paving));
-    road.title = "Roads join buildings into one network: a building runs only when its network holds a producer of everything it draws.";
-    road.append(el("span", "city-build-name", "Road"), el("span", "city-build-cost", `${this.tuning.COST_ROAD} material a tile`));
-    const connect = button("city-build-option city-connect", "", () => this.connect());
-    connect.title = "Lay the shortest roads that join every building into one network, where the ground allows.";
-    connect.append(el("span", "city-build-name", "Connect everything"), el("span", "city-build-cost", `${this.tuning.COST_ROAD} material a road`));
-    this.palette.replaceChildren(...buttons, road, connect);
+    const road = this.card("road", "Road", `${this.tuning.COST_ROAD} / tile`, s.stores.materials < this.tuning.COST_ROAD, this.paving, () => this.armRoad(!this.paving));
+    road.classList.add("city-road");
+    const connect = this.card("connect", "Connect all", `${this.tuning.COST_ROAD} / road`, false, null, () => this.connect());
+    connect.classList.add("city-connect");
+    this.palette.replaceChildren(...cards, road, connect);
+    // A card rebuilt under the pointer keeps its tooltip.
+    if (this.tipFor !== null) {
+      const again = [...this.palette.children].find((c) => (c as HTMLElement).dataset["card"] === this.tipFor) as HTMLElement | undefined;
+      if (again !== undefined) this.showTip(this.tipFor, again);
+      else this.hideTip();
+    }
+  }
+
+  /**
+   * One card: the picture, the name, the price - and, when it cannot be
+   * afforded, a mark that says so in words. `pressed` is null for a card that
+   * acts at once rather than arming a tool.
+   */
+  private card(kind: CardKind, name: string, cost: string, short: boolean, pressed: boolean | null, onClick: () => void): HTMLButtonElement {
+    const c = button("city-card", "", onClick);
+    c.dataset["card"] = kind;
+    if (pressed !== null) c.setAttribute("aria-pressed", String(pressed));
+    if (short) c.dataset["short"] = "true";
+    c.setAttribute("aria-describedby", "city-tip");
+    const picture = el("canvas", "city-card-preview");
+    const drawn = this.previews.get(kind);
+    if (drawn !== undefined) {
+      picture.width = drawn.width;
+      picture.height = drawn.height;
+      picture.getContext("2d")?.drawImage(drawn, 0, 0);
+    }
+    picture.setAttribute("aria-hidden", "true");
+    const price = el("span", "city-card-cost");
+    price.append(el("span", "city-card-material", ""), document.createTextNode(cost));
+    c.append(picture, el("span", "city-card-name", name), price);
+    if (short) c.append(el("span", "city-card-short", "not enough materials"));
+    const show = (): void => this.showTip(kind, c);
+    c.addEventListener("pointerenter", show);
+    c.addEventListener("focus", show);
+    c.addEventListener("pointerleave", () => this.hideTip());
+    c.addEventListener("blur", () => this.hideTip());
+    return c;
+  }
+
+  /** What a card's structure does, in words: shown above the card while it is hovered or focused. */
+  tipText(kind: CardKind): { title: string; lines: string[] } {
+    const t = this.tuning;
+    if (kind === "road") {
+      return {
+        title: "Road",
+        lines: [
+          "Joins buildings into one network. A building runs only when its network holds a producer of everything it uses: a mine needs a road to a power plant, a dome one to a greenhouse.",
+          "Buildings that share a wall are joined without one.",
+          `Costs ${t.COST_ROAD} material a tile. Click or drag to lay it; start a drag on a road to take it up.`,
+        ],
+      };
+    }
+    if (kind === "connect") {
+      return {
+        title: "Connect everything",
+        lines: ["Lays the shortest roads that join every building into one network, round the hills.", `Costs ${t.COST_ROAD} material a road laid.`],
+      };
+    }
+    const def = BUILDING_DEFS[kind];
+    const lines = [def.summary];
+    if (this.env !== null) {
+      lines.push(`Uses ${rateList(def.consumes(t, this.env))}.`, `Makes ${rateList(def.produces(t))}.`);
+    }
+    if (def.housing(t) > 0) lines.push(`Houses ${def.housing(t)}.`);
+    const cap = MICRO_RESOURCES.filter((r) => (def.capacity(t)[r] ?? 0) > 0);
+    if (cap.length > 0) lines.push(`Stores more ${cap.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")}.`);
+    lines.push(`${def.footprint} x ${def.footprint} tiles. Costs ${def.cost(t)} materials.`);
+    return { title: def.name, lines };
+  }
+
+  private showTip(kind: CardKind, card: HTMLElement): void {
+    const { title, lines } = this.tipText(kind);
+    this.tip.replaceChildren(el("strong", "city-tip-title", title), ...lines.map((line) => el("p", "city-tip-line", line)));
+    this.tip.hidden = false;
+    this.tipFor = kind;
+    // Above the card, centred on it, kept inside the window.
+    const r = card.getBoundingClientRect();
+    const width = this.tip.offsetWidth || 280;
+    const left = Math.max(8, Math.min(r.left + r.width / 2 - width / 2, (globalThis.innerWidth || 1024) - width - 8));
+    this.tip.style.left = `${left}px`;
+    this.tip.style.bottom = `${(globalThis.innerHeight || 768) - r.top + 10}px`;
+  }
+
+  private hideTip(): void {
+    this.tip.hidden = true;
+    this.tipFor = null;
   }
 
   // ---- input -----------------------------------------------------------------

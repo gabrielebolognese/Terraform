@@ -130,7 +130,7 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
     if (e === null) throw new Error(`missing ${sel}`);
     return e;
   };
-  const option = (type: BuildingType): HTMLButtonElement => q(`.city-build-option[data-type="${type}"]`) as HTMLButtonElement;
+  const option = (type: BuildingType): HTMLButtonElement => q(`.city-card[data-type="${type}"]`) as HTMLButtonElement;
   return { host, screen, calls, frame, clickTile, clickAt, hoverAt, dragTiles, q, option, state: () => state };
 }
 
@@ -141,10 +141,10 @@ beforeEach(() => {
 describe("the city view", () => {
   it("offers only what this kind of settlement may build", () => {
     const city = mount("city");
-    expect(city.host.querySelectorAll(".city-build-option[data-type]").length).toBe(10);
+    expect(city.host.querySelectorAll(".city-card[data-type]").length).toBe(10);
     document.body.replaceChildren();
     const outpost = mount("outpost");
-    const offered = [...outpost.host.querySelectorAll<HTMLElement>(".city-build-option[data-type]")].map((b) => b.dataset["type"]);
+    const offered = [...outpost.host.querySelectorAll<HTMLElement>(".city-card[data-type]")].map((b) => b.dataset["type"]);
     expect(offered).not.toContain("habitat_dome");
     expect(offered).not.toContain("greenhouse");
     expect(offered.length).toBe(8);
@@ -340,5 +340,56 @@ describe("roads (at the user's request: connect the power plant to the mines)", 
     expect(page.q(".city-road").getAttribute("aria-pressed")).toBe("false");
     page.clickTile(10, 14);
     expect(page.calls).toEqual([]);
+  });
+});
+
+describe("the build bar (at the user's request: cards along the bottom, as in Clash of Clans)", () => {
+  it("puts every structure on a card in a bar along the bottom, not in the sidebar", () => {
+    const page = mount();
+    const dock = page.q(".city-dock");
+    const cards = [...dock.querySelectorAll<HTMLElement>(".city-card")];
+    // Ten buildings, the road and "connect everything".
+    expect(cards.length).toBe(12);
+    expect(page.q(".city-panel").querySelector(".city-card")).toBeNull();
+    for (const c of cards) {
+      expect(c.querySelector("canvas.city-card-preview"), c.dataset["card"]).not.toBeNull();
+      expect(c.querySelector(".city-card-name")?.textContent, c.dataset["card"]).not.toBe("");
+      expect(c.querySelector(".city-card-cost")?.textContent, c.dataset["card"]).toMatch(/\d/);
+    }
+    expect(page.option("reactor").querySelector(".city-card-name")?.textContent).toBe("Reactor");
+    expect(page.option("reactor").querySelector(".city-card-cost")?.textContent).toBe(String(t.COST_REACTOR));
+  });
+
+  it("tells what a structure does while its card is hovered, and stops when the pointer leaves", () => {
+    const page = mount();
+    const tip = page.q(".city-tip");
+    expect(tip.hidden).toBe(true);
+    page.option("greenhouse").dispatchEvent(new PointerEvent("pointerenter"));
+    expect(tip.hidden).toBe(false);
+    expect(tip.textContent).toContain("Greenhouse");
+    expect(tip.textContent).toContain("power and water into food");
+    expect(tip.textContent).toMatch(/Uses power [\d.]+\/yr, water [\d.]+\/yr\./);
+    expect(tip.textContent).toMatch(/Makes food [\d.]+\/yr\./);
+    page.option("greenhouse").dispatchEvent(new PointerEvent("pointerleave"));
+    expect(tip.hidden).toBe(true);
+    // The road's card explains the network.
+    page.q(".city-road").dispatchEvent(new PointerEvent("pointerenter"));
+    expect(tip.textContent).toMatch(/a mine needs a road to a power plant/);
+  });
+
+  it("tells it from the keyboard too: focus shows the same words", () => {
+    const page = mount();
+    page.option("habitat_dome").focus();
+    expect(page.q(".city-tip").hidden).toBe(false);
+    expect(page.q(".city-tip").textContent).toContain("Houses");
+    expect(page.option("habitat_dome").getAttribute("aria-describedby")).toBe("city-tip");
+  });
+
+  it("marks, in words, a card the settlement cannot afford", () => {
+    const page = mount("city", { materials: 25 });
+    // A reactor costs more than 25; a depot does not.
+    expect(page.option("reactor").dataset["short"]).toBe("true");
+    expect(page.option("reactor").textContent).toContain("not enough materials");
+    expect(page.option("storage_depot").dataset["short"]).toBeUndefined();
   });
 });
