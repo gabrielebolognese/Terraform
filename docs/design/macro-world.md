@@ -570,6 +570,7 @@ COST_SHIELD = 1800         # the capstone megaproject, priced like one
 TILE_METRES = 10           # one build tile; a 32-tile city is 320 m across
 CITY_GRID_TILES = 32       # a city starts on a 32 x 32 grid
 OUTPOST_GRID_TILES = 16    # an outpost on 16 x 16
+METROPOLIS_GRID_TILES = 96 # a metropolis: 3 x 3 a city's ground
 TERRAIN_RELIEF_M = 0       # Batch 22: local relief, metres either side of the base; OFF (flat) by default, the browser opts in
 TERRAIN_FEATURE_TILES = 10 # hill size, tiles per noise cell; at 12 m relief, 16.1% of ground too steep (measured)
 TERRAIN_CLEAR_TILES = 4    # half-width of the levelled landing zone at the centre
@@ -579,6 +580,12 @@ TERRAIN_MAX_SLOPE = 0.15   # steepest buildable ground, rise over run to a neigh
 HYPSO_ELEV_0 = -8200       HYPSO_ELEV_1 = -4600       HYPSO_ELEV_2 = -4100
 HYPSO_ELEV_3 = -3000       HYPSO_ELEV_4 = -1000       HYPSO_ELEV_5 = 500
 HYPSO_ELEV_6 = 1600        HYPSO_ELEV_7 = 3000        HYPSO_ELEV_8 = 8000
+
+# Flooding (detail §4.2, §4.3; Batch 24). OFF by default; the browser opts in with the forecast.
+FLOODING_ENABLED = 0
+FLOOD_WARN_MARGIN_M = 20     # warning begins with the sea this far below the base
+FLOOD_THRESHOLD_M = 10       # the sea this far above the base declares the settlement lost
+FLOOD_BUILDING_LOSS_M = 2    # a building is lost with this much water over its highest tile
 
 # The settlement simulation (micro-world.md sections 5-7; Batch 18). Per sim-year.
 SETTLEMENTS_ENABLED = 0    # OFF by default; the browser opts in when there is UI for it

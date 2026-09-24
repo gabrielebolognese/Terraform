@@ -64,49 +64,91 @@ export function drawsBefore(a: FootprintBox, b: FootprintBox): boolean {
  * A far-to-near drawing order for non-overlapping footprints: a topological
  * sort of `drawsBefore`, taking the ready footprint with the smallest
  * `tx + ty` (then `tx`, then index) first so ties are stable. Returns indices.
+ *
+ * Only pairs whose screen COLUMNS overlap can ever cover one another - a
+ * footprint's image spans screen x from (tx - ty - h) to (tx + w - ty) half
+ * tiles, whatever its height - so only those pairs get an edge. A sweep over
+ * the columns finds them. The first version compared every pair, which for a
+ * metropolis's ~9,000 tiles is 85 million comparisons; the order is the same,
+ * because a constraint between footprints that never overlap on screen never
+ * decided anything.
  */
 export function depthOrder(items: readonly FootprintBox[]): number[] {
   const n = items.length;
+  const left = items.map((b) => b.tx - b.ty - b.h);
+  const right = items.map((b) => b.tx + b.w - b.ty);
+  const byLeft = [...Array(n).keys()].sort((i, j) => left[i]! - left[j]! || i - j);
   const blockers = new Array<number>(n).fill(0);
   const after: number[][] = items.map(() => []);
-  for (let i = 0; i < n; i += 1) {
-    for (let j = 0; j < n; j += 1) {
-      if (i !== j && drawsBefore(items[i]!, items[j]!)) {
+  let active: number[] = [];
+  for (const i of byLeft) {
+    active = active.filter((j) => right[j]! > left[i]!);
+    for (const j of active) {
+      if (drawsBefore(items[i]!, items[j]!)) {
         after[i]!.push(j);
         blockers[j]! += 1;
+      } else if (drawsBefore(items[j]!, items[i]!)) {
+        after[j]!.push(i);
+        blockers[i]! += 1;
       }
     }
+    active.push(i);
   }
-  const key = (i: number): readonly [number, number, number] => [items[i]!.tx + items[i]!.ty, items[i]!.tx, i];
   const less = (i: number, j: number): boolean => {
-    const a = key(i);
-    const b = key(j);
-    return a[0] !== b[0] ? a[0] < b[0] : a[1] !== b[1] ? a[1] < b[1] : a[2] < b[2];
+    const a = items[i]!;
+    const b = items[j]!;
+    const ka = a.tx + a.ty;
+    const kb = b.tx + b.ty;
+    return ka !== kb ? ka < kb : a.tx !== b.tx ? a.tx < b.tx : i < j;
   };
-  const ready: number[] = [];
-  for (let i = 0; i < n; i += 1) if (blockers[i] === 0) ready.push(i);
+  // A binary heap of the footprints with nothing left to wait for.
+  const heap: number[] = [];
+  const push = (v: number): void => {
+    heap.push(v);
+    let k = heap.length - 1;
+    while (k > 0) {
+      const p = (k - 1) >> 1;
+      if (!less(heap[k]!, heap[p]!)) break;
+      [heap[k], heap[p]] = [heap[p]!, heap[k]!];
+      k = p;
+    }
+  };
+  const pop = (): number => {
+    const top = heap[0]!;
+    const last = heap.pop()!;
+    if (heap.length > 0) {
+      heap[0] = last;
+      let k = 0;
+      for (;;) {
+        const l = 2 * k + 1;
+        const r = l + 1;
+        let m = k;
+        if (l < heap.length && less(heap[l]!, heap[m]!)) m = l;
+        if (r < heap.length && less(heap[r]!, heap[m]!)) m = r;
+        if (m === k) break;
+        [heap[k], heap[m]] = [heap[m]!, heap[k]!];
+        k = m;
+      }
+    }
+    return top;
+  };
+  for (let i = 0; i < n; i += 1) if (blockers[i] === 0) push(i);
   const order: number[] = [];
   const placed = new Array<boolean>(n).fill(false);
-  while (order.length < n) {
-    if (ready.length === 0) {
-      // Only reachable if footprints overlap, which placement forbids. Draw
-      // the rest by the doc's key rather than dropping them.
-      const rest = [...Array(n).keys()].filter((i) => !placed[i]).sort((i, j) => (less(i, j) ? -1 : 1));
-      for (const i of rest) {
-        placed[i] = true;
-        order.push(i);
-      }
-      break;
-    }
-    let best = 0;
-    for (let k = 1; k < ready.length; k += 1) if (less(ready[k]!, ready[best]!)) best = k;
-    const i = ready.splice(best, 1)[0]!;
+  while (heap.length > 0) {
+    const i = pop();
     placed[i] = true;
     order.push(i);
     for (const j of after[i]!) {
       blockers[j]! -= 1;
-      if (blockers[j] === 0) ready.push(j);
+      if (blockers[j] === 0) push(j);
     }
+  }
+  if (order.length < n) {
+    // Only reachable if footprints overlap, which placement forbids. Draw
+    // the rest by the doc's key rather than dropping them.
+    const rest = [...Array(n).keys()].filter((i) => !placed[i]).sort((i, j) => (less(i, j) ? -1 : 1));
+    order.push(...rest);
   }
   return order;
 }

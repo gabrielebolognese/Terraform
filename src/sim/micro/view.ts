@@ -18,6 +18,8 @@ import { BUILDING_DEFS } from "./buildings.js";
 import { capacities, housing, settlementStep } from "./settlement.js";
 import { siteElevation } from "../hypsometry.js";
 import { groundOf } from "./terrain.js";
+import type { FloodState } from "./flood.js";
+import { submerged } from "./flood.js";
 
 export interface CityBuildingView {
   /** Index into the settlement's `buildings`. */
@@ -31,6 +33,8 @@ export interface CityBuildingView {
   readonly operable: boolean;
   /** Height the building stands at, in tiles: the highest ground under its footprint (Batch 22). */
   readonly baseZ: number;
+  /** Batch 24: water over some tile of its footprint - offline for that reason. */
+  readonly submerged: boolean;
   /**
    * How hard it is working, 0..1, for the aliveness layer. A power plant's is
    * the share of the settlement's power being drawn ("reactor core brightness
@@ -67,6 +71,14 @@ export interface CityView {
   readonly net: Readonly<Record<MicroResource, number>>;
   /** The resources that ran short this substep - why a building browned out. */
   readonly shortages: readonly MicroResource[];
+  /** Batch 24: row-major, the tiles under water this substep. All false with flooding off or no sea. */
+  readonly wet: readonly boolean[];
+  /** Detail §4.3's state: dry, warning, partial or flooded. */
+  readonly floodState: FloodState;
+  /** The sea above (+) or below (-) the settlement's base, metres, or null with no sea. */
+  readonly floodDepthM: number | null;
+  /** Null while it stands; the sea level it was lost at. */
+  readonly lostAtSeaLevelM: number | null;
 }
 
 const POWER_PLANTS: ReadonlySet<BuildingType> = new Set<BuildingType>(["solar_array", "geothermal_plant", "reactor"]);
@@ -106,7 +118,8 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
           if (x >= 0 && y >= 0 && x < n && y < n) baseZ = Math.max(baseZ, groundZ[y * n + x] ?? 0);
         }
       }
-      return { index, type: b.type, tx: b.tx, ty: b.ty, size, operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0 };
+      const drowned = step.flood !== null && submerged(b, step.flood);
+      return { index, type: b.type, tx: b.tx, ty: b.ty, size, operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned };
     }),
     population: s.population,
     housing: home,
@@ -115,5 +128,9 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     capacities: capacities(s, t),
     net,
     shortages: step.shortages,
+    wet: step.flood?.wet ?? new Array<boolean>(n * n).fill(false),
+    floodState: s.lostAtSeaLevelM !== null ? "flooded" : step.flood?.state ?? "dry",
+    floodDepthM: step.flood?.depthM ?? null,
+    lostAtSeaLevelM: s.lostAtSeaLevelM,
   };
 }

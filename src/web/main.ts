@@ -13,10 +13,13 @@ import { CityScreen } from "./city.js";
 import { WorldDriver } from "./driver.js";
 import { Journey } from "./journey.js";
 import { TravelPrompt } from "./travel-prompt.js";
+import { ExampleMode } from "./example-mode.js";
+import { examplePlanet } from "../harness/example.js";
 import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.js";
 import type { FacilityType, SettlementKind, SimConfig, SimState } from "../sim/index.js";
 import {
   makeTuning,
+  DEFAULT_TUNING,
   FACILITY_LIST,
   NEUTRAL_ENV,
   buildFacility,
@@ -88,6 +91,14 @@ let orderMessage: string | null = null;
 let awayMessage: string | null = null;
 let storageWarning: string | null = null;
 let autosaver: Autosaver | null = null;
+
+/** The example planet, and the player's own world while it is showing. */
+const example = new ExampleMode();
+/** Every save goes through here: nothing is written while the example is showing. */
+function persist(): void {
+  if (!example.mayPersist) return;
+  void autosaver?.save(state);
+}
 
 /**
  * The environment the player has produced.
@@ -302,15 +313,14 @@ const journey = new Journey(
       globe.setPaused(false);
       for (const node of [stage, hudRoot, inspectorRoot, instrumentsToggle, hint]) node.hidden = false;
     },
-    flush: () => {
-      void autosaver?.save(state);
-    },
+    flush: () => persist(),
     pose: (p) => globe.setPose(p),
     currentPose: () => globe.currentPose(),
   },
   (id: string) => {
     const s = state.settlements.find((x) => x.id === id);
-    return s === undefined ? null : { lat: s.lat, lon: s.lon };
+    // A settlement lost to the sea is a ruin: there is nothing to go down to.
+    return s === undefined || s.lostAtSeaLevelM !== null ? null : { lat: s.lat, lon: s.lon };
   },
 );
 
@@ -318,9 +328,65 @@ const journey = new Journey(
 const travelPrompt = new TravelPrompt(root);
 globe.onMarker = (id: string) => {
   const s = state.settlements.find((x) => x.id === id);
-  if (s === undefined || journey.phase !== "orbit" || founding !== null) return;
+  if (s === undefined || s.lostAtSeaLevelM !== null || journey.phase !== "orbit" || founding !== null) return;
   travelPrompt.ask(settlementLabel(s), formatLatLon(s.lat, s.lon), () => journey.goTo(id, performance.now()));
 };
+
+/**
+ * "See example planet": the banner says what is showing and that nothing is
+ * saved, and the way back. Building the example takes under a second; the
+ * banner says so first, so the click never seems to do nothing.
+ */
+const exampleBanner = document.createElement("div");
+exampleBanner.className = "example-banner";
+exampleBanner.setAttribute("role", "status");
+exampleBanner.hidden = true;
+const exampleText = document.createElement("span");
+const exampleBack = document.createElement("button");
+exampleBack.type = "button";
+exampleBack.textContent = "Back to my planet";
+exampleBack.addEventListener("click", () => leaveExample());
+exampleBanner.append(exampleText, exampleBack);
+root.append(exampleBanner);
+
+function freshViews(): void {
+  journey.abort();
+  travelPrompt.close();
+  seedMessage = null;
+  awayMessage = null;
+  droppedYears = 0;
+  rings.T.clear();
+  rings.P.clear();
+  rings.progress.clear();
+  events.clear();
+  hud.clear();
+  clock.resync();
+}
+
+function enterExample(): void {
+  if (example.active) return;
+  exampleText.textContent = "Building the example planet...";
+  exampleBack.hidden = true;
+  exampleBanner.hidden = false;
+  // Let the banner paint before the (sub-second) build.
+  setTimeout(() => {
+    state = example.enter(state, () => examplePlanet(DEFAULT_TUNING, tuning).state);
+    freshViews();
+    const counts = { city: 0, metropolis: 0, outpost: 0 };
+    for (const s of state.settlements) counts[s.kind] += 1;
+    exampleText.textContent =
+      `Example planet: fully terraformed, with ${counts.city + counts.metropolis} cities ` +
+      `(${counts.metropolis} of them metropolises) and ${counts.outpost} outposts. Nothing here is saved.`;
+    exampleBack.hidden = false;
+  }, 30);
+}
+
+function leaveExample(): void {
+  const mine = example.leave();
+  if (mine !== null) state = mine;
+  freshViews();
+  exampleBanner.hidden = true;
+}
 
 const inspector = new Inspector(
   inspectorRoot,
@@ -329,13 +395,15 @@ const inspector = new Inspector(
     onOrder: (type: FacilityType, delta: number) => order(type, delta),
     onToggleLever: (type: FacilityType) => toggle(type),
     onSeed: () => seed(),
+    onExample: () => enterExample(),
     onReset: () => {
       journey.abort();
       travelPrompt.close();
       state = marsStart(undefined, tuning);
       // Clear the slot too. Resetting the planet and then reloading into the
-      // old save would look like the reset silently failed.
-      void autosaver?.save(state);
+      // old save would look like the reset silently failed. (Not while the
+      // example is showing: that reset is of the example, never of the save.)
+      persist();
       seedMessage = null;
       awayMessage = null;
       droppedYears = 0;
@@ -356,7 +424,7 @@ const inspector = new Inspector(
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) {
     // Hiding is the moment a tab is most likely never to come back.
-    void autosaver?.save(state);
+    persist();
   } else {
     clock.resync();
   }
@@ -365,7 +433,7 @@ document.addEventListener("visibilitychange", () => {
 // `pagehide` fires on close and on bfcache eviction, where `beforeunload` does
 // not. The write is best-effort: the browser may not wait for it.
 window.addEventListener("pagehide", () => {
-  void autosaver?.save(state);
+  persist();
 });
 
 let lastReadout = 0;
@@ -556,7 +624,7 @@ function render(timestamp: number): void {
     );
   }
 
-  if (autosaver !== null && autosaver.due(AUTOSAVE_INTERVAL_MS)) {
+  if (autosaver !== null && example.mayPersist && autosaver.due(AUTOSAVE_INTERVAL_MS)) {
     void autosaver.save(state);
     if (autosaver.failureCount > 0) {
       storageWarning = `saving is failing (${autosaver.failureCount} attempts) - progress may not survive a reload`;

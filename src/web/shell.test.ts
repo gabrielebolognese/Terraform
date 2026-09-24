@@ -43,6 +43,7 @@ const INSPECTOR_HOOKS: InspectorHooks = {
   onToggleLever: () => undefined,
   onSeed: () => undefined,
   onReset: () => undefined,
+  onExample: () => undefined,
 };
 
 /** Exactly what `main.ts` builds: one #app, two containers, two components. */

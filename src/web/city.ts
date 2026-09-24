@@ -49,6 +49,8 @@ const RESOURCE_NAMES: Readonly<Record<MicroResource, string>> = {
 /** How often the panel's numbers are rewritten. The picture animates every frame; text need not. */
 const PANEL_HZ = 4;
 const DRAG_THRESHOLD_PX = 4;
+/** How often the city view is re-derived from the settlement, ms. */
+const VIEW_MS = 200;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -80,6 +82,7 @@ function rateList(rates: Partial<Record<MicroResource, number>>): string {
 export function offlineReason(view: CityView, index: number, env: HabitatChannels, t: Tuning): string | null {
   const b = view.buildings[index];
   if (b === undefined || b.operable) return null;
+  if (b.submerged) return "Offline: under water.";
   const def = BUILDING_DEFS[b.type];
   if (!def.canOperate(env, t)) return "Offline: the planet does not allow it here yet - the air needs more CO2.";
   const draws = def.consumes(t, env);
@@ -138,6 +141,8 @@ export class CityScreen {
   private lastPanel = -Infinity;
   private drag: { x: number; y: number; moved: boolean } | null = null;
   private paletteKind: string | null = null;
+  private viewAt = -Infinity;
+  private viewBuildings: Settlement["buildings"] | null = null;
 
   constructor(
     host: HTMLElement,
@@ -242,8 +247,16 @@ export class CityScreen {
     if (this.settlementId !== settlement.id) return;
     this.settlement = settlement;
     this.env = env;
-    const view = cityView(settlement, env, this.tuning);
-    this.view = view;
+    // The view is re-derived a few times a second, not every frame: for a
+    // metropolis it costs ~15 ms. A change of buildings - a placement, a
+    // removal - refreshes it at once, so the player never waits for their click.
+    let view = this.view;
+    if (view === null || view.id !== settlement.id || settlement.buildings !== this.viewBuildings || now - this.viewAt >= VIEW_MS) {
+      view = cityView(settlement, env, this.tuning);
+      this.view = view;
+      this.viewAt = now;
+      this.viewBuildings = settlement.buildings;
+    }
     if (this.selected !== null && this.selected >= view.buildings.length) this.selected = null;
     const size = this.viewSize();
     if (this.camera === null) this.camera = centreCamera(view.tiles, size.w);
@@ -290,7 +303,12 @@ export class CityScreen {
     ctx.fillRect(0, 0, pw, ph);
     const k = dpr * this.camera.zoom;
     ctx.setTransform(k, 0, 0, k, dpr * (size.w / 2 - this.camera.cx * this.camera.zoom), dpr * (size.h / 2 - this.camera.cy * this.camera.zoom));
-    fillShapes(ctx, cityScene(view, this.sceneOptions(now)));
+    // Only what the camera can see: a metropolis draws a fraction of itself.
+    const cam = this.camera;
+    const halfW = size.w / 2 / cam.zoom;
+    const halfH = size.h / 2 / cam.zoom;
+    const viewport = { minX: cam.cx - halfW, maxX: cam.cx + halfW, minY: cam.cy - halfH, maxY: cam.cy + halfH };
+    fillShapes(ctx, cityScene(view, { ...this.sceneOptions(now), viewport }));
   }
 
   // ---- panel -----------------------------------------------------------------
@@ -298,9 +316,9 @@ export class CityScreen {
   private renderPanel(view: CityView, s: Settlement, env: HabitatChannels): void {
     this.title.textContent = settlementLabel(s);
     // Detail §1.3: "Elevation is shown at founding and at placement."
-    this.where.textContent = `${s.kind === "city" ? "City" : "Outpost"} - ${formatLatLon(s.lat, s.lon)} - ${formatMetres(view.baseElevationM)} on the planet`;
+    this.where.textContent = `${s.kind === "city" ? "City" : s.kind === "metropolis" ? "Metropolis" : "Outpost"} - ${formatLatLon(s.lat, s.lon)} - ${formatMetres(view.baseElevationM)} on the planet`;
     const people =
-      view.kind === "city"
+      view.kind !== "outpost"
         ? `${Math.floor(view.population)} of ${view.housing} people housed. `
         : "An outpost: no residents. ";
     const need =

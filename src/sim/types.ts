@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 5;
+  readonly schemaVersion: 6;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -357,7 +357,16 @@ export interface SimState {
 }
 
 /** Micro doc §4: a populated city, or a small specialised outpost. */
-export type SettlementKind = "city" | "outpost";
+/**
+ * A metropolis (added at the user's request) is a city with 3 x 3 the ground:
+ * everything a city may build, on a grid three times as wide.
+ */
+export type SettlementKind = "city" | "outpost" | "metropolis";
+
+/** Kinds that house people and may build everything a city may. */
+export function isCityKind(kind: SettlementKind): boolean {
+  return kind === "city" || kind === "metropolis";
+}
 
 export interface Settlement {
   /** Deterministic: `settlement-<n>`, never random - invariant #1. */
@@ -375,6 +384,12 @@ export interface Settlement {
   readonly population: number;
   readonly stores: Readonly<Record<MicroResource, number>>;
   readonly buildings: readonly PlacedBuilding[];
+  /**
+   * Detail doc §4.7 (Batch 24): null while the settlement stands; once the
+   * sea declares it flooded, the sea level it fell at, for the record. True
+   * state - the flood that caused it may recede, the loss does not.
+   */
+  readonly lostAtSeaLevelM: number | null;
 }
 
 /** Micro §6. Networked: power, water, oxygen. Stored: food, materials. Population is separate. */

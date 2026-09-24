@@ -161,3 +161,25 @@ describe("while you were away", () => {
     expect(Number.isFinite(summary.deltas.oceanFrac)).toBe(true);
   });
 });
+
+describe("what the sea took while the player was away (Batch 24)", () => {
+  it("leads with a lost settlement, and names lost buildings when the settlement stood", async () => {
+    const { summariseAway } = await import("./offline.js");
+    const { foundSettlement } = await import("./micro/registry.js");
+    const { placeBuilding } = await import("./micro/settlement.js");
+    const { marsStart } = await import("./planets/mars.js");
+    const { makeTuning } = await import("./tuning.js");
+    const tf = makeTuning({ SETTLEMENTS_ENABLED: 1 });
+    let before = foundSettlement(marsStart(), "city", 0.3, 1.0, tf).state;
+    before = foundSettlement(before, "city", -0.3, 2.0, tf).state;
+    before = { ...before, settlements: before.settlements.map((c) => ({ ...c, stores: { ...c.stores, materials: 999 } })) };
+    before = placeBuilding(before, "settlement-2", "reactor", 14, 14, tf).state;
+    before = placeBuilding(before, "settlement-2", "geothermal_plant", 17, 14, tf).state;
+    const later = { ...before, steps: before.steps + 40 };
+    const oneLost = { ...later, settlements: later.settlements.map((c, i) => (i === 0 ? { ...c, buildings: [], population: 0, lostAtSeaLevelM: -3000 } : c)) };
+    expect(summariseAway(before, oneLost, tf).headline).toBe("10 sim-years passed. The sea rose over a settlement - lost.");
+    const damaged = { ...later, settlements: later.settlements.map((c, i) => (i === 1 ? { ...c, buildings: c.buildings.slice(1) } : c)) };
+    expect(summariseAway(before, damaged, tf).headline).toBe("10 sim-years passed. Rising water took 1 building.");
+    expect(summariseAway(before, later, tf).headline).not.toMatch(/sea|water/i);
+  });
+});

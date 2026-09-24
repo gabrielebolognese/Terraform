@@ -69,7 +69,9 @@ what it is doing and why it might be offline (the settlement layer, Batches 17-2
 is being built from `docs/design/micro-world.md`). The planet fills the whole
 window behind it, shaded on the GPU at full resolution: drag to turn it, scroll to zoom. The
 instruments open as a drawer from the top right, with a scrubber that drags the planet through the
-whole reference playthrough in seconds. See
+whole reference playthrough in seconds, and **See example planet** - Mars fully terraformed, with
+27 cities (three of them metropolises, 3 x 3 a city's ground) and 15 outposts; your own planet
+is kept aside, never saved over, and comes back with **Back to my planet**. See
 [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) for the visual arc at a glance.
 
 Dust storms, cometary impacts and solar variability run in the browser. They are **seeded on

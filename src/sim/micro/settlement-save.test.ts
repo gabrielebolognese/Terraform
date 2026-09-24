@@ -74,7 +74,42 @@ describe("a world with settlements round-trips through the save exactly", () => 
 
   it("stores only true state - no capacities, no grid size, nothing derived", () => {
     const saved = toSave(s, ON, AT).settlements?.[0] as unknown as Record<string, unknown>;
-    expect(Object.keys(saved).sort()).toEqual(["buildings", "id", "kind", "lat", "lon", "population", "stores"]);
+    // Batch 24 added `lost_at_sea_level_m`: true state, the record of a loss.
+    expect(Object.keys(saved).sort()).toEqual(["buildings", "id", "kind", "lat", "lon", "lost_at_sea_level_m", "population", "stores"]);
+  });
+});
+
+describe("a settlement lost to the sea (v6, Batch 24)", () => {
+  const ruin = (): SimState => {
+    const s = world(2);
+    return { ...s, settlements: s.settlements.map((c, i) => (i === 0 ? { ...c, population: 0, buildings: [], stores: { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 }, lostAtSeaLevelM: -3065.77 } : c)) };
+  };
+
+  it("keeps the record through the save, exactly", () => {
+    const s = ruin();
+    expect(deserialize(serialize(s, ON, AT), ON)).toEqual(s);
+  });
+
+  it("brings a v5 settlement forward as standing", () => {
+    const v6 = toSave(world(2), ON, AT) as unknown as Record<string, unknown>;
+    const list = (v6["settlements"] as Record<string, unknown>[]).map((c) => {
+      const { lost_at_sea_level_m: _gone, ...rest } = c;
+      return rest;
+    });
+    const loaded = fromSave({ ...v6, schema_version: 5, settlements: list }, ON);
+    expect(loaded.settlements.map((c) => c.lostAtSeaLevelM)).toEqual([null, null]);
+  });
+
+  it("refuses a ruin that still has buildings or people, and a loss that is not a number", () => {
+    const save = toSave(ruin(), ON, AT) as unknown as Record<string, unknown>;
+    const withCity = (mutate: (c: Record<string, unknown>) => void): unknown => {
+      const list = JSON.parse(JSON.stringify(save["settlements"])) as Record<string, unknown>[];
+      mutate(list[0]!);
+      return { ...save, settlements: list };
+    };
+    expect(() => fromSave(withCity((c) => (c["population"] = 5)), ON)).toThrow(/settlements\[0\] was lost to the sea but still has people/);
+    expect(() => fromSave(withCity((c) => (c["buildings"] = [{ type: "reactor", tx: 2, ty: 2, level: 1 }])), ON)).toThrow(/settlements\[0\] was lost to the sea but still has buildings/);
+    expect(() => fromSave(withCity((c) => (c["lost_at_sea_level_m"] = "deep")), ON)).toThrow(/settlements\[0\]\.lost_at_sea_level_m/);
   });
 });
 

@@ -45,7 +45,7 @@ export function foundSettlement(
   t: Tuning = DEFAULT_TUNING,
 ): FoundOutcome {
   const refuse = (reason: string): FoundOutcome => ({ state, ok: false, settlement: null, reason });
-  if (kind !== "city" && kind !== "outpost") return refuse(`"${String(kind)}" is not a kind of settlement.`);
+  if (kind !== "city" && kind !== "outpost" && kind !== "metropolis") return refuse(`"${String(kind)}" is not a kind of settlement.`);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return refuse("That is not a place on the planet.");
   if (Math.abs(lat) > Math.PI / 2) return refuse("That latitude is past a pole.");
 

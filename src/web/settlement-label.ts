@@ -8,7 +8,7 @@ import type { Settlement } from "../sim/index.js";
 /** "City 1", "Outpost 2" - the number is the one in the settlement's id. */
 export function settlementLabel(s: Settlement): string {
   const n = /(\d+)$/.exec(s.id)?.[1] ?? "?";
-  return `${s.kind === "city" ? "City" : "Outpost"} ${n}`;
+  return `${s.kind === "city" ? "City" : s.kind === "metropolis" ? "Metropolis" : "Outpost"} ${n}`;
 }
 
 /** "12.3°N 45.6°E" - north for positive latitude, east for positive longitude (see tangentFrame). */

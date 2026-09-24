@@ -103,6 +103,18 @@ describe("founding a settlement from the HUD", () => {
     expect(page.q<HTMLElement>(".hud-found-prompt").textContent).not.toContain("Under the cursor");
   });
 
+  it("shows a settlement lost to the sea as a ruin: where the water stood, and nothing to open (Batch 24)", () => {
+    const page = mount();
+    let s = foundSettlement(marsStart(), "city", -0.72, 1.31).state;
+    s = foundSettlement(s, "outpost", 1.34, -0.1).state;
+    s = { ...s, settlements: s.settlements.map((c, i) => (i === 0 ? { ...c, buildings: [], population: 0, lostAtSeaLevelM: -3065.77 } : c)) };
+    page.show(s, null);
+    const rows = [...page.root.querySelectorAll<HTMLElement>(".hud-settlement")];
+    expect(rows[0]!.textContent).toBe("City 1Lost to the sea at −3,066 m");
+    expect(rows[0]!.querySelector(".hud-settlement-open")).toBeNull();
+    expect(rows[1]!.querySelector(".hud-settlement-open")).not.toBeNull();
+  });
+
   it("hides the prompt when not founding", () => {
     const page = mount();
     page.show(marsStart(), null);

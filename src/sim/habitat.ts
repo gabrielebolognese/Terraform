@@ -63,6 +63,12 @@ export interface HabitatChannels {
    * under the sea when its elevation is below this (and the globe draws it so).
    */
   readonly seaLevelM: number;
+  /**
+   * 0..1, the share of the planet under ocean (Batch 24). Zero means there
+   * is no sea at all - `seaLevelM` is then only the curve's floor, the
+   * lowest point on the planet, and nothing can flood.
+   */
+  readonly oceanFraction: number;
   /** How fast the waterline is moving, metres per sim-year: what powers the flood forecast. */
   readonly seaLevelRateMPerYear: number;
 
@@ -168,6 +174,7 @@ export function habitat(r: Reservoirs, d: Derived, t: Tuning, liquidRatePerYear:
     waterAccess,
     insolation: d.sEff / t.S_MARS,
     seaLevelM: sea.m,
+    oceanFraction: clamp01(d.oceanFrac),
     seaLevelRateMPerYear: sea.ratePerYear,
     maskFraction,
     openAirFraction,

@@ -146,7 +146,7 @@ export function buildingSheet(): { view: CityView; options: CitySceneOptions } {
     heightM: new Array<number>(tiles * tiles).fill(0),
     steep: new Array<boolean>(tiles * tiles).fill(false),
     baseElevationM: 0,
-    buildings: layout.map(([type, tx, ty, size], index) => ({ index, type, tx, ty, size, operable: true, activity: 0.8, baseZ: 0 })),
+    buildings: layout.map(([type, tx, ty, size], index) => ({ index, type, tx, ty, size, operable: true, activity: 0.8, baseZ: 0, submerged: false })),
     population: 0,
     housing: 0,
     supported: true,
@@ -154,6 +154,10 @@ export function buildingSheet(): { view: CityView; options: CitySceneOptions } {
     capacities: { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 },
     net: { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 },
     shortages: [],
+    wet: new Array<boolean>(tiles * tiles).fill(false),
+    floodState: "dry",
+    floodDepthM: null,
+    lostAtSeaLevelM: null,
   };
   return { view, options: { time: 1.3, selected: null, ghost: null } };
 }

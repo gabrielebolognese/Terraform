@@ -99,7 +99,7 @@ export function planetToWorld(lat: number, lon: number, p: Vec3, radiusM: number
 
 /** §3.3: a city starts on a 32 x 32 grid, an outpost on 16 x 16. */
 export function gridTiles(kind: SettlementKind, t: Tuning): number {
-  return kind === "city" ? t.CITY_GRID_TILES : t.OUTPOST_GRID_TILES;
+  return kind === "metropolis" ? t.METROPOLIS_GRID_TILES : kind === "city" ? t.CITY_GRID_TILES : t.OUTPOST_GRID_TILES;
 }
 
 /**

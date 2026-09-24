@@ -58,7 +58,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 5;
+export const SAVE_SCHEMA_VERSION = 6;
 
 export interface SavedFacility {
   readonly type: string;
@@ -114,6 +114,11 @@ export interface SavedSettlement {
   readonly population?: number;
   readonly stores?: Record<string, number>;
   readonly buildings?: readonly { readonly type: string; readonly tx: number; readonly ty: number; readonly level: number }[];
+  /**
+   * Added in v6 (Batch 24): null while the settlement stands, or the sea
+   * level it was lost at. True state - detail §4.7 keeps the record.
+   */
+  readonly lost_at_sea_level_m?: number | null;
 }
 
 /**
@@ -189,6 +194,7 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       population: s.population,
       stores: { ...s.stores },
       buildings: s.buildings.map((b) => ({ type: b.type, tx: b.tx, ty: b.ty, level: b.level })),
+      lost_at_sea_level_m: s.lostAtSeaLevelM,
     })),
   };
 }
@@ -265,6 +271,7 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 3) current = migrateV2toV3(current);
   if (version < 4) current = migrateV3toV4(current);
   if (version < 5) current = migrateV4toV5(current, t);
+  if (version < 6) current = migrateV5toV6(current);
   return current;
 }
 
@@ -274,6 +281,14 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
  * nothing else, so each one comes forward exactly as it loaded before - newly
  * founded, with the founding stock.
  */
+/** v5 -> v6: every settlement stood - nothing could be lost to a sea that did not flood yet. */
+function migrateV5toV6(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  if (!Array.isArray(list)) return { ...save, schema_version: 6 };
+  const settlements = list.map((raw) => (typeof raw === "object" && raw !== null ? { ...(raw as Record<string, unknown>), lost_at_sea_level_m: null } : raw));
+  return { ...save, schema_version: 6, settlements };
+}
+
 function migrateV4toV5(save: Record<string, unknown>, t: Tuning): Record<string, unknown> {
   const list = save["settlements"];
   if (!Array.isArray(list)) return { ...save, schema_version: 5 };
@@ -514,8 +529,8 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     if (seen.has(id)) throw new SaveError(`settlements[${i}].id "${id}" appears more than once`);
     seen.add(id);
     const kind = s["kind"];
-    if (kind !== "city" && kind !== "outpost") {
-      throw new SaveError(`settlements[${i}].kind must be "city" or "outpost", got ${describe(kind)}`);
+    if (kind !== "city" && kind !== "outpost" && kind !== "metropolis") {
+      throw new SaveError(`settlements[${i}].kind must be "city", "outpost" or "metropolis", got ${describe(kind)}`);
     }
     const lat = numberAt(s, "lat", `settlements[${i}].lat`);
     if (Math.abs(lat) > Math.PI / 2) throw new SaveError(`settlements[${i}].lat ${lat} is past a pole`);
@@ -541,7 +556,17 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     const population = numberAt(s, "population", `${where}.population`);
     if (population < 0) throw new SaveError(`${where}.population is negative (${population})`);
     // Above today's housing is legal after a retune shrank the domes: clamp.
-    return { ...draft, stores, population: Math.min(population, housing(draft, t)) };
+    // v6: a settlement lost to the sea. A ruin that still has buildings or
+    // people is not a state the game can produce, and no retune makes it one.
+    const lostRaw = s["lost_at_sea_level_m"];
+    let lostAtSeaLevelM: number | null = null;
+    if (lostRaw !== null) {
+      lostAtSeaLevelM = numberAt(s, "lost_at_sea_level_m", `${where}.lost_at_sea_level_m`);
+      if (buildings.length > 0 || population > 0) {
+        throw new SaveError(`${where} was lost to the sea but still has ${buildings.length > 0 ? "buildings" : "people"}`);
+      }
+    }
+    return { ...draft, stores, population: Math.min(population, housing(draft, t)), lostAtSeaLevelM };
   });
 }
 

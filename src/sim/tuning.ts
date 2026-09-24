@@ -677,6 +677,8 @@ export const BASE_TUNING = Object.freeze({
   /** Micro §3.3: "start 32x32 for a city, 16x16 for an outpost". */
   CITY_GRID_TILES: 32,
   OUTPOST_GRID_TILES: 16,
+  /** A metropolis: 3 x 3 a city's ground. */
+  METROPOLIS_GRID_TILES: 96,
   /**
    * Detail §1 (Batch 22): the local heightmap's relief, metres either side of
    * the settlement's base elevation. OFF (0, flat ground) by default - every
@@ -717,6 +719,24 @@ export const BASE_TUNING = Object.freeze({
   HYPSO_ELEV_6: 1600,
   HYPSO_ELEV_7: 3000,
   HYPSO_ELEV_8: 8000,
+
+  // -------------------------------------------------------------------------
+  // Flooding (detail doc §4.2 and §4.3, Batch 24)
+  //
+  // OFF by default: a flood destroys buildings and settlements, which moves
+  // the balance. The browser opts in once the forecast can warn (Batch 25).
+  // -------------------------------------------------------------------------
+  FLOODING_ENABLED: 0,
+  /** §4.3: how far below a settlement's base the sea may be before its warning begins, metres. */
+  FLOOD_WARN_MARGIN_M: 20,
+  /** §4.3: the sea this far above a settlement's base declares it flooded - lost, metres. */
+  FLOOD_THRESHOLD_M: 10,
+  /**
+   * §4.3's "go offline, then are lost": a building is offline while water
+   * covers any tile of its footprint, and lost once the water stands this far
+   * over the highest one, metres. Measured in the Batch 24 note.
+   */
+  FLOOD_BUILDING_LOSS_M: 2,
 
   // -------------------------------------------------------------------------
   // The settlement simulation (micro-world.md sections 5 to 7, Batch 18)
@@ -901,6 +921,9 @@ export function validateTuning(t: Tuning): void {
   }
   if (!(t.TERRAIN_RELIEF_M >= 0)) fail("TERRAIN_RELIEF_M must be >= 0");
   if (!(t.TERRAIN_MAX_SLOPE > 0)) fail("TERRAIN_MAX_SLOPE must be > 0");
+  if (!(t.FLOOD_WARN_MARGIN_M >= 0)) fail("FLOOD_WARN_MARGIN_M must be >= 0");
+  if (!(t.FLOOD_THRESHOLD_M > 0)) fail("FLOOD_THRESHOLD_M must be > 0");
+  if (!(t.FLOOD_BUILDING_LOSS_M >= 0)) fail("FLOOD_BUILDING_LOSS_M must be >= 0");
   if (!(t.P_LIFE_OK > t.P_LIFE_MIN)) fail("P_LIFE_OK must exceed P_LIFE_MIN");
   if (!(t.T_CEIL_K > t.T_FLOOR_K)) fail("T_CEIL_K must exceed T_FLOOR_K");
   if (!(t.ALBEDO_MAX > t.ALBEDO_MIN)) fail("ALBEDO_MAX must exceed ALBEDO_MIN");

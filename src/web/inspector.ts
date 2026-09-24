@@ -86,6 +86,8 @@ export interface InspectorHooks {
   readonly onToggleLever: (type: FacilityType) => void;
   readonly onSeed: () => void;
   readonly onReset: () => void;
+  /** Show the example planet: fully terraformed and settled (requested by the user). */
+  readonly onExample: () => void;
 }
 
 interface LeverRow {
@@ -224,7 +226,10 @@ export class Inspector {
     seedButton.addEventListener("click", hooks.onSeed);
     const resetButton = el("button", "action", "Reset planet");
     resetButton.addEventListener("click", hooks.onReset);
-    actionRow.append(seedButton, resetButton);
+    const exampleButton = el("button", "action", "See example planet");
+    exampleButton.title = "A fully terraformed Mars with 27 cities (3 of them metropolises) and 15 outposts. Your own planet is kept aside and never overwritten.";
+    exampleButton.addEventListener("click", hooks.onExample);
+    actionRow.append(seedButton, resetButton, exampleButton);
     this.seedNote = el("div", "note", "");
     this.shieldLabel = el("div", "note", "");
     this.awayNote = el("div", "note away", "");

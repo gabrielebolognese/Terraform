@@ -54,6 +54,12 @@ export interface CitySceneOptions {
   readonly selected: number | null;
   /** A placement preview: its footprint and whether the sim would accept it. */
   readonly ghost: { readonly tx: number; readonly ty: number; readonly size: number; readonly valid: boolean } | null;
+  /**
+   * The visible area, in iso pixels, or absent for everything. Anything whose
+   * image lies wholly outside it is skipped - a metropolis has ~9,000 tiles
+   * and hundreds of buildings, and a screen shows a fraction of them.
+   */
+  readonly viewport?: { readonly minX: number; readonly maxX: number; readonly minY: number; readonly maxY: number };
 }
 
 // ---------------------------------------------------------------------------
@@ -505,7 +511,9 @@ function assemble(b: CityBuildingView, time: number): Kit {
   const cx = x0 + s / 2;
   const cy = y0 + s / 2;
   const on = b.operable;
-  const act = b.activity;
+  // Load, in twentieths: what the lights and glows show. Rounded, so the
+  // parts it colours can be kept (keyed by it) instead of rebuilt every frame.
+  const act = Math.round(b.activity * 20) / 20;
   const k = kit();
   const { s: add, l: live } = k;
   const pad = (h = 0.06, inset = 0.08): void => add(() => part(box(x0 + inset, y0 + inset, 0, x0 + s - inset, y0 + s - inset, h), CONCRETE));
@@ -528,7 +536,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
       add(() => part(tube([cx, cy, zb + r + 0.1], [cx, cy, zb + r + 0.42], 0.012, 5), METAL));
       live(() => part(box(cx - 0.025, cy - 0.025, zb + r + 0.42, cx + 0.025, cy + 0.025, zb + r + 0.46), on && Math.floor(time * 1.5) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
       // Window lights around the near half of the ring: how full the dome is.
-      live(() => {
+      add(() => {
         const lit = Math.round(act * 14);
         const out: Part[] = [];
         for (let i = 0; i < 14; i += 1) {
@@ -597,7 +605,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
         part(box(x0 + 1.72, y0 + 0.8, 0.28, x0 + 1.94, y0 + 1.02, 0.3), DARK_METAL),
         part(box(x0 + 1.76, y0 + 1.02, 0.08, x0 + 1.9, y0 + 1.024, 0.22), RUBBER),
       ]);
-      live(() => part(box(x0 + 1.94, y0 + 0.87, 0.22, x0 + 1.944, y0 + 0.9, 0.25), on ? GREEN_LIGHT : UNLIT, { emissive: true }));
+      add(() => part(box(x0 + 1.94, y0 + 0.87, 0.22, x0 + 1.944, y0 + 0.9, 0.25), on ? GREEN_LIGHT : UNLIT, { emissive: true }));
       table(0, 1);
       table(1, 1);
       return k;
@@ -635,7 +643,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
         ...railing([x0 + 0.2, y0 + 1.8, 0.62], [x0 + 1.5, y0 + 1.8, 0.62], 0.07, 8, HAZARD),
         ...railing([x0 + 1.5, y0 + 1.02, 0.62], [x0 + 1.5, y0 + 1.8, 0.62], 0.07, 5, HAZARD),
       ]);
-      live(() => {
+      add(() => {
         const glow = on ? WARM_LIGHT : UNLIT;
         const out: Part[] = [];
         for (let i = 0; i < 6; i += 1) {
@@ -689,7 +697,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
       // stacked rings so the glowing core band sits in its wall, with bolt collars.
       add(() => part(frustum(rx, ry, 0.56, 0.55, 0.06, 0.4, 28), CONCRETE));
       add(() => part(band(rx, ry, 0.565, 0.16, 0.025, 28), DARK_METAL));
-      live(() => part(frustum(rx, ry, 0.565, 0.565, 0.4, 0.52, 28), on ? mix(UNLIT, COLD_LIGHT, 0.25 + 0.75 * act) : UNLIT, { emissive: true }));
+      add(() => part(frustum(rx, ry, 0.565, 0.565, 0.4, 0.52, 28), on ? mix(UNLIT, COLD_LIGHT, 0.25 + 0.75 * act) : UNLIT, { emissive: true }));
       add(() => [
         part(frustum(rx, ry, 0.55, 0.55, 0.52, 0.8, 28), CONCRETE),
         part(band(rx, ry, 0.56, 0.66, 0.025, 28), DARK_METAL),
@@ -700,7 +708,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
       // The turbine hall at the front, with roof vents and a lit strip.
       add(() => part(box(x0 + 0.12, y0 + 1.6, 0.06, x0 + 0.62, y0 + 1.92, 0.5), METAL));
       add(() => [...vent(x0 + 0.18, y0 + 1.66, 0.5, 0.1, 0.06), ...vent(x0 + 0.36, y0 + 1.66, 0.5, 0.1, 0.06)]);
-      live(() => part(box(x0 + 0.16, y0 + 1.92, 0.3, x0 + 0.58, y0 + 1.925, 0.36), on ? COLD_LIGHT : UNLIT, { emissive: true }));
+      add(() => part(box(x0 + 0.16, y0 + 1.92, 0.3, x0 + 0.58, y0 + 1.925, 0.36), on ? COLD_LIGHT : UNLIT, { emissive: true }));
       return k;
     }
     case "water_extractor": {
@@ -736,7 +744,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
         ...vent(x0 + 1.3, y0 + 1.28, 0.63),
         part(tube([cx + 0.1, cy + 0.1, 0.3], [x0 + 1.25, y0 + 1.25, 0.3], 0.03, 8), METAL),
       ]);
-      live(() => part(box(x0 + 1.35, y0 + 1.8, 0.34, x0 + 1.65, y0 + 1.805, 0.46), on ? COLD_LIGHT : UNLIT, { emissive: true }));
+      add(() => part(box(x0 + 1.35, y0 + 1.8, 0.34, x0 + 1.65, y0 + 1.805, 0.46), on ? COLD_LIGHT : UNLIT, { emissive: true }));
       return k;
     }
     case "atmosphere_processor": {
@@ -772,7 +780,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
         ...railing([x0 + 0.27, y0 + 1.58, 0.7], [x0 + 1.68, y0 + 1.58, 0.7], 0.07, 10, HAZARD),
         ...railing([x0 + 1.68, y0 + 0.52, 0.7], [x0 + 1.68, y0 + 1.58, 0.7], 0.07, 7, HAZARD),
       ]);
-      live(() => part(box(x0 + 0.45, y0 + 1.605, 0.32, x0 + 1.2, y0 + 1.61, 0.44), on ? COLD_LIGHT : UNLIT, { emissive: true }));
+      add(() => part(box(x0 + 0.45, y0 + 1.605, 0.32, x0 + 1.2, y0 + 1.61, 0.44), on ? COLD_LIGHT : UNLIT, { emissive: true }));
       // The exhaust stack, banded, with its beacon.
       add(() => [
         part(frustum(x0 + 1.45, y0 + 1.1, 0.17, 0.12, 0.7, 1.45, 16), CONCRETE),
@@ -806,7 +814,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
         return rows;
       });
       // Grow lights over the rows while it runs.
-      live(() => (on ? [part(box(x0 + 0.3, cy - 0.5, 0.62, x0 + 1.7, cy + 0.5, 0.63), GROW_LIGHT, { emissive: true, alpha: 0.18 + 0.12 * act })] : []));
+      add(() => (on ? [part(box(x0 + 0.3, cy - 0.5, 0.62, x0 + 1.7, cy + 0.5, 0.63), GROW_LIGHT, { emissive: true, alpha: 0.18 + 0.12 * act })] : []));
       // The glass vault, see-through, then its arches over it.
       add(() => part(vault(x0 + 0.15, x0 + 1.85, cy, 0.65, 0.3, 16), GLASS, { alpha: 0.42 }));
       add(() => {
@@ -980,7 +988,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
         }
         return out;
       });
-      live(() => {
+      add(() => {
         const out: Part[] = [];
         for (let i = 0; i < 3; i += 1) {
           const a = Math.PI / 4 + (i - 1) * 0.45;
@@ -995,7 +1003,7 @@ function assemble(b: CityBuildingView, time: number): Kit {
         part(box(x0 + 2.35, y0 + 2.35, 0, x0 + 2.85, y0 + 2.85, 0.9), CONCRETE),
         part(box(x0 + 2.3, y0 + 2.3, 0.9, x0 + 2.9, y0 + 2.9, 0.93), DARK_METAL),
       ]);
-      live(() => part(box(x0 + 2.3, y0 + 2.3, 0.93, x0 + 2.9, y0 + 2.9, 1.1), on ? mix(GLASS, WARM_LIGHT, 0.35) : DARK_METAL, { emissive: on }));
+      add(() => part(box(x0 + 2.3, y0 + 2.3, 0.93, x0 + 2.9, y0 + 2.9, 1.1), on ? mix(GLASS, WARM_LIGHT, 0.35) : DARK_METAL, { emissive: on }));
       add(() => [
         part(box(x0 + 2.28, y0 + 2.28, 1.1, x0 + 2.92, y0 + 2.92, 1.14), DARK_METAL),
         part(tube([x0 + 2.8, y0 + 2.4, 1.14], [x0 + 2.8, y0 + 2.4, 1.45], 0.012, 5), METAL),
@@ -1116,7 +1124,7 @@ const asList = (made: Part | readonly Part[]): readonly Part[] => (Array.isArray
  * and slots them back in, so painter's order is exactly the assembly's.
  */
 function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][]>, out: Shape[]): void {
-  const key = `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}`;
+  const key = `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}|${Math.round(b.activity * 20)}`;
   const kept = cache.get(key);
   if (kept === undefined) {
     const runs: Shape[][] = [[]];
@@ -1192,8 +1200,19 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
 
   const { occupants, order, ground, buildings } = occupantsInOrder(view);
   const badges: Shape[] = [];
+  const vp = options.viewport;
   for (const i of order) {
     const o = occupants[i]!;
+    if (vp !== undefined) {
+      // The occupant's image: its columns across, and from the floor up to
+      // the tallest thing it could carry (a building, a badge, a plume).
+      const x0 = ((o.tx - o.ty - o.h) * TILE_W) / 2;
+      const x1 = ((o.tx + o.w - o.ty) * TILE_W) / 2;
+      const top = (o.building >= 0 ? (view.buildings[o.building]?.baseZ ?? 0) + buildingTop(view.buildings[o.building]!.type) + 1.5 : view.groundZ[o.ty * n + o.tx] ?? 0) + 0.6;
+      const y0 = ((o.tx + o.ty) * TILE_H) / 2 - top * Z_PX;
+      const y1 = ((o.tx + o.w + o.ty + o.h) * TILE_H) / 2 - floor * Z_PX;
+      if (x1 < vp.minX || x0 > vp.maxX || y1 < vp.minY || y0 > vp.maxY) continue;
+    }
     if (o.building < 0) {
       // Ground never animates: its shapes are built once per layout and kept
       // (Batch 22 - rebuilding ~1,000 columns cost most of a 9 ms frame).

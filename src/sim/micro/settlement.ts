@@ -15,10 +15,12 @@
 import type { HabitatChannels } from "../habitat.js";
 import type { Tuning } from "../tuning.js";
 import type { BuildingType, MicroResource, PlacedBuilding, Settlement, SettlementKind, SimState } from "../types.js";
-import { MICRO_RESOURCES } from "../types.js";
+import { MICRO_RESOURCES, isCityKind } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { footprintFits, footprintTiles, gridTiles } from "./space.js";
 import { groundOf, isSteep, slopeAt } from "./terrain.js";
+import type { FloodReading } from "./flood.js";
+import { applyFlood, floodReading, submerged } from "./flood.js";
 
 /** Section 7.2: the resources whose shortage is a life-support emergency. */
 const LIFE_SUPPORT: readonly MicroResource[] = ["power", "water", "oxygen", "food"];
@@ -34,6 +36,7 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     population: 0,
     stores: { power: 0, water: life, oxygen: life, food: life, materials: t.FOUND_MATERIALS },
     buildings: [],
+    lostAtSeaLevelM: null,
   };
 }
 
@@ -96,6 +99,7 @@ export function placeBuilding(
   const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
   const s = state.settlements.find((x) => x.id === settlementId);
   if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
+  if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
   const def = BUILDING_DEFS[type];
   if (def === undefined) return refuse(`"${String(type)}" is not a building`);
   if (!def.kinds.includes(s.kind)) return refuse(`${def.name} cannot be built in an ${s.kind}`);
@@ -153,6 +157,8 @@ export interface SettlementStep {
   readonly consumption: Readonly<Record<MicroResource, number>>;
   /** Every resource that ran short this substep, in `MICRO_RESOURCES` order: why buildings browned out. */
   readonly shortages: readonly MicroResource[];
+  /** Batch 24: the flood as it stood this substep, or null with flooding off. Derived, never stored. */
+  readonly flood: FloodReading | null;
 }
 
 /**
@@ -165,10 +171,21 @@ export interface SettlementStep {
  * only ever switches buildings OFF, so it settles in at most one pass per
  * resource and never depends on building order.
  */
-export function settlementStep(s: Settlement, env: HabitatChannels, t: Tuning, h: number): SettlementStep {
+export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tuning, h: number): SettlementStep {
+  // Batch 24 - detail §4: the flood first. Its consequences are true state
+  // (lost buildings, a lost settlement); whether a building stands in water
+  // this substep is derived and only switches it off.
+  const flood = t.FLOODING_ENABLED && standing.lostAtSeaLevelM === null ? floodReading(standing, env, t) : null;
+  const s = flood === null ? standing : applyFlood(standing, flood, t);
+  if (s.lostAtSeaLevelM !== null) {
+    // A ruin: nothing runs, nothing grows, nothing reaches the planet.
+    const none = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
+    return { next: s, operable: [], supported: false, planetaryCo2: 0, production: none, consumption: none, shortages: [], flood };
+  }
   const defs = s.buildings.map((b) => BUILDING_DEFS[b.type]);
   // Section 6: in the basic version every building on the grid is on the network.
-  const operable = defs.map((def) => def.canOperate(env, t));
+  // A building with water over any tile of its footprint is offline (detail §4.3).
+  const operable = defs.map((def, i) => def.canOperate(env, t) && !(flood !== null && submerged(s.buildings[i]!, flood)));
 
   const totals = (): { prod: Record<MicroResource, number>; cons: Record<MicroResource, number> } => {
     const prod = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
@@ -231,7 +248,7 @@ export function settlementStep(s: Settlement, env: HabitatChannels, t: Tuning, h
   const supported = shortLife.size === 0 && LIFE_SUPPORT.every((r) => stores[r] > 0);
 
   let population = s.population;
-  if (s.kind === "city") {
+  if (isCityKind(s.kind)) {
     const home = housing(s, t);
     // The first settlers arrive once there is somewhere to live and every need is met.
     if (supported && home > 0) population = Math.max(population, Math.min(home, t.MICRO_SEED_POPULATION));
@@ -245,5 +262,5 @@ export function settlementStep(s: Settlement, env: HabitatChannels, t: Tuning, h
     if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env);
   });
 
-  return { next: { ...s, stores, population }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)) };
+  return { next: { ...s, stores, population }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood };
 }

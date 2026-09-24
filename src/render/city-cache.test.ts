@@ -21,7 +21,7 @@ const withDepot: CityView = {
   ...view,
   buildings: [
     ...view.buildings,
-    { index: view.buildings.length, type: "storage_depot", tx: 19, ty: 19, size: 1, operable: true, activity: 1, baseZ: 0 },
+    { index: view.buildings.length, type: "storage_depot", tx: 19, ty: 19, size: 1, operable: true, activity: 1, baseZ: 0, submerged: false },
   ],
 };
 

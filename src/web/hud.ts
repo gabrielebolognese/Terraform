@@ -692,7 +692,7 @@ export class Hud {
         `Click the planet where the new ${view.founding} should stand. Esc cancels.` + (site === null ? "" : ` Under the cursor: ${site}.`);
     }
     // The list only changes when the registry does; rebuild it only then.
-    const key = view.settlements.map((s) => `${s.id}:${s.lat}:${s.lon}`).join("|");
+    const key = view.settlements.map((s) => `${s.id}:${s.lat}:${s.lon}:${s.lostAtSeaLevelM}`).join("|");
     if (key === this.renderedSettlements) return;
     this.renderedSettlements = key;
     if (view.settlements.length === 0) {
@@ -703,6 +703,17 @@ export class Hud {
       ...view.settlements.map((s) => {
         const item = el("li", "hud-settlement");
         item.dataset["kind"] = s.kind;
+        if (s.lostAtSeaLevelM !== null) {
+          // A ruin (Batch 24): named, with where the sea stood when it fell, and nothing to open.
+          item.dataset["lost"] = "true";
+          const gone = el("span", "hud-settlement-text");
+          gone.append(
+            el("span", "hud-settlement-name", settlementLabel(s)),
+            el("span", "hud-settlement-where", `Lost to the sea at ${formatMetres(s.lostAtSeaLevelM)}`),
+          );
+          item.append(gone);
+          return item;
+        }
         const open = el("button", "hud-settlement-open", "Open");
         (open as HTMLButtonElement).type = "button";
         open.setAttribute("aria-label", `Open ${settlementLabel(s)}`);

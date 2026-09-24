@@ -1609,3 +1609,32 @@ button:hover {
 .city:not([hidden]) {
   animation: city-arrive 350ms ease-out;
 }
+
+/* ---------- the example planet ---------- */
+
+.example-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: min(760px, calc(100vw - 32px));
+  padding: 10px 12px 10px 18px;
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.example-banner[hidden] {
+  display: none;
+}
+
+.example-banner button[hidden] {
+  display: none;
+}

@@ -89,6 +89,10 @@ export interface AwayDeltas {
   readonly biomass: number;
   readonly oceanFrac: number;
   readonly progress: number;
+  /** Batch 24: settlements the sea declared lost while the player was away, by id. */
+  readonly settlementsLost: readonly string[];
+  /** Buildings the water took from settlements still standing. */
+  readonly buildingsLost: number;
 }
 
 export interface AwaySummary {
@@ -125,6 +129,13 @@ export function summariseAway(before: SimState, after: SimState, t: Tuning): Awa
     biomass: after.reservoirs.biomass - before.reservoirs.biomass,
     oceanFrac: b.d.oceanFrac - a.d.oceanFrac,
     progress: b.progress - a.progress,
+    settlementsLost: after.settlements
+      .filter((s) => s.lostAtSeaLevelM !== null && before.settlements.find((x) => x.id === s.id)?.lostAtSeaLevelM === null)
+      .map((s) => s.id),
+    // Nothing but the water removes a building while the player is away.
+    buildingsLost: after.settlements
+      .filter((s) => s.lostAtSeaLevelM === null)
+      .reduce((n, s) => n + Math.max(0, (before.settlements.find((x) => x.id === s.id)?.buildings.length ?? 0) - s.buildings.length), 0),
   };
 
   return { simYears, phasesGained, deltas, headline: headlineFor(simYears, phasesGained, deltas) };
@@ -133,7 +144,16 @@ export function summariseAway(before: SimState, after: SimState, t: Tuning): Awa
 function headlineFor(simYears: number, phasesGained: readonly Phase[], d: AwayDeltas): string {
   const years = `${simYears.toFixed(0)} sim-year${simYears === 1 ? "" : "s"} passed`;
 
-  // A milestone always wins: it is the thing the player came back for.
+  // Detail §4.7: "The 'while you were away' summary should call this out
+  // prominently." A loss outranks even a milestone.
+  if (d.settlementsLost.length > 0) {
+    const n = d.settlementsLost.length;
+    return `${years}. The sea rose over ${n === 1 ? "a settlement" : `${n} settlements`} - lost.`;
+  }
+  if (d.buildingsLost > 0) {
+    return `${years}. Rising water took ${d.buildingsLost} building${d.buildingsLost === 1 ? "" : "s"}.`;
+  }
+  // A milestone always wins otherwise: it is the thing the player came back for.
   const latest = phasesGained[phasesGained.length - 1];
   if (latest !== undefined) {
     return `${years}. The world reached ${PHASE_INFO[latest].name}.`;

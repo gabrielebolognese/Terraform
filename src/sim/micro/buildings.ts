@@ -46,8 +46,8 @@ const NONE = (): ResourceRates => ({});
 const ZERO = (): number => 0;
 const ALWAYS = (): boolean => true;
 const ONE = (): number => 1;
-const BOTH: readonly SettlementKind[] = ["city", "outpost"];
-const CITY: readonly SettlementKind[] = ["city"];
+const BOTH: readonly SettlementKind[] = ["city", "outpost", "metropolis"];
+const CITY: readonly SettlementKind[] = ["city", "metropolis"];
 
 export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object.freeze({
   habitat_dome: {
