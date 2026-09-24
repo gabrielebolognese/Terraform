@@ -1,0 +1,538 @@
+/**
+ * Entry point for the Vite dev server.
+ *
+ * Owns the simulation state, the animation frame loop and the player-facing
+ * controls, and hands a read-only view to the inspector. The simulation itself
+ * knows nothing about any of this.
+ */
+
+import { readWorld } from "./readout.js";
+import { buildRows, orderDelta } from "./build.js";
+import { Globe } from "./globe.js";
+import { CityScreen } from "./city.js";
+import type { FacilityType, SettlementKind, SimConfig, SimState } from "../sim/index.js";
+import {
+  makeTuning,
+  FACILITY_LIST,
+  NEUTRAL_ENV,
+  buildFacility,
+  habitat,
+  incomeRate,
+  upkeepRate,
+  orderCost,
+  computeStep,
+  deriveVisuals,
+  facilityOf,
+  latchPhase,
+  marsStart,
+  scrubberThrottled,
+  seedBiosphere,
+  setFacilityEnabled,
+  simYear,
+  stormIntensity,
+  validateTuning,
+  foundSettlement,
+  placeBuilding,
+  removeBuilding,
+} from "../sim/index.js";
+import type { BuildingType } from "../sim/index.js";
+import { AUTOSAVE_INTERVAL_MS, READOUT_HZ, SPARK_CAPACITY, SPARK_HZ } from "./config.js";
+import type { Speed } from "./config.js";
+import { EventLog } from "./events.js";
+import { advise, withAffordability } from "./guidance.js";
+import { Hud } from "./hud.js";
+import type { LeverView } from "./inspector.js";
+import { Inspector } from "./inspector.js";
+import { SimClock } from "./loop.js";
+import { Ring } from "./ring.js";
+import { Autosaver, boot } from "./session.js";
+import { openSaveStore } from "./storage.js";
+import "./style.css";
+
+/**
+ * The game runs WITH §12.2's seeded events; the default tuning does not.
+ *
+ * They are off by default so the golden frames, the balance sweep and a dozen
+ * exactness tests are not at the mercy of the weather. The game is the one
+ * place they belong, and enabling them is a tuning variant rather than a
+ * config flag precisely so the balance sweep could measure their effect if it
+ * ever needed to.
+ *
+ * Settlements tick and push the planet here (Batch 18's promise, kept in
+ * Batch 20 now that there is a view to build them in), and their ground has
+ * rough outcrops - 12% of it outside the 8 x 8 landing zone, which stays
+ * clear. Measured over 200 sites: at least 599 of the 900 places a 3 x 3
+ * building could start are open (Batch 20 note).
+ */
+const tuning = makeTuning({
+  EVENTS_ENABLED: 1,
+  ECONOMY_ENABLED: 1,
+  TECH_GATE_ENABLED: 1,
+  SETTLEMENTS_ENABLED: 1,
+  TERRAIN_ROUGH_FRACTION: 0.12,
+});
+validateTuning(tuning);
+
+let state: SimState = marsStart(undefined, tuning);
+let speed: Speed = 1;
+let droppedYears = 0;
+let seedMessage: string | null = null;
+let orderMessage: string | null = null;
+let awayMessage: string | null = null;
+let storageWarning: string | null = null;
+let autosaver: Autosaver | null = null;
+
+/**
+ * The environment the player has produced.
+ *
+ * Derived from the deployed facilities rather than tracked separately - the
+ * simulation does the same thing internally every substep, and a second copy
+ * here would be a second source of truth that drifts.
+ */
+/** The world's environment now, weather included - see `readout.ts`. */
+function currentEnv() {
+  return readWorld(state, tuning).env;
+}
+
+function config(): SimConfig {
+  // The external environment is neutral: dust storms and solar variability are
+  // Batch 8. Everything the player does reaches the sim through facilities.
+  return { tuning, env: NEUTRAL_ENV, forcing: null };
+}
+
+const clock = new SimClock(config, speed);
+
+const rings = {
+  T: new Ring(SPARK_CAPACITY),
+  P: new Ring(SPARK_CAPACITY),
+  progress: new Ring(SPARK_CAPACITY),
+};
+
+const root = document.getElementById("app");
+if (root === null) throw new Error("no #app element to mount into");
+
+/**
+ * The shell and the instruments get their own containers.
+ *
+ * Not tidiness: `Inspector` clears the element it is given, so mounting both
+ * into #app deleted the entire HUD the moment the inspector was built. Every
+ * unit test still passed, because each one mounts its component alone - the
+ * collision only exists when the two are put on one page, which is what
+ * `shell.test.ts` now does.
+ */
+const hudRoot = document.createElement("div");
+hudRoot.className = "shell-hud";
+const inspectorRoot = document.createElement("div");
+inspectorRoot.className = "shell-instruments";
+
+/**
+ * The planet fills the page, and everything else floats over it.
+ *
+ * The stage comes first so it sits behind the panels; the HUD is a panel on
+ * the left, and the instruments are a drawer on the right that opens on
+ * demand - they are a debug view, not the game.
+ */
+const stage = document.createElement("div");
+stage.className = "stage";
+const globe = new Globe(stage);
+const instrumentsToggle = document.createElement("button");
+instrumentsToggle.type = "button";
+instrumentsToggle.className = "instruments-toggle";
+instrumentsToggle.textContent = "Instruments";
+instrumentsToggle.setAttribute("aria-expanded", "false");
+function setInstrumentsOpen(open: boolean): void {
+  inspectorRoot.classList.toggle("open", open);
+  instrumentsToggle.setAttribute("aria-expanded", String(open));
+  instrumentsToggle.textContent = open ? "Close instruments" : "Instruments";
+}
+instrumentsToggle.addEventListener("click", () => setInstrumentsOpen(!inspectorRoot.classList.contains("open")));
+const hint = document.createElement("div");
+hint.className = "globe-hint";
+hint.textContent = "drag to turn the planet - scroll to zoom";
+root.append(stage, hudRoot, inspectorRoot, instrumentsToggle, hint);
+
+// The disc centres in the space the HUD panel leaves free.
+function syncInset(): void {
+  const box = hudRoot.getBoundingClientRect();
+  globe.setInsetLeft(box.width > 0 ? box.right : 0);
+}
+if (typeof ResizeObserver === "function") new ResizeObserver(syncInset).observe(hudRoot);
+window.addEventListener("resize", syncInset);
+
+/**
+ * The player's actions, in one place.
+ *
+ * Both the shell and the instrument panel can order a facility or seed the
+ * biosphere, and two copies of "order one more" would eventually disagree
+ * about what that means.
+ */
+function setSpeed(next: Speed): void {
+  speed = next;
+  clock.speed = next;
+  if (next !== 0) clock.resync();
+}
+
+function order(type: FacilityType, delta: number): void {
+  // The same function the build panel dry-runs, so a button it offers is an
+  // order that goes through.
+  const outcome = orderDelta(state, type, delta, tuning);
+  state = outcome.state;
+  // A refused order must SAY so. Silently doing nothing is how a player
+  // learns the buttons are unreliable.
+  orderMessage = outcome.ok ? null : `Cannot order: ${outcome.reason ?? "refused"}`;
+}
+
+/** Switch a lever off (it keeps its order and ramps down) or back on. Both panels use this. */
+function toggle(type: FacilityType): void {
+  const existing = facilityOf(state, type);
+  if (existing === undefined) return;
+  state = setFacilityEnabled(state, type, !existing.enabled);
+}
+
+function seed(): void {
+  const outcome = seedBiosphere(state, tuning, currentEnv());
+  state = outcome.state;
+  seedMessage = outcome.seeded ? "Biosphere seeded. Watch the oxygen." : `Cannot seed: ${outcome.reason ?? ""}`;
+}
+
+const events = new EventLog();
+
+/**
+ * The player-facing shell goes first in the DOM; the debug inspector stays
+ * below it. Batch 7's gate is that a new player can tell what to do next, and
+ * a reservoir table is not that - but the instruments are still how the
+ * simulation gets debugged, so they are kept rather than replaced.
+ */
+/**
+ * Founding (micro §2.3 step 1): choose a kind, then the next click on the
+ * planet founds it there. The globe owns the click; the simulation owns the
+ * rules - `foundSettlement` refuses what is not a place, and says why.
+ */
+let founding: SettlementKind | null = null;
+function startFounding(kind: SettlementKind): void {
+  founding = kind;
+  globe.beginPick(({ lat, lon }) => {
+    const outcome = foundSettlement(state, kind, lat, lon, tuning);
+    state = outcome.state;
+    orderMessage = outcome.ok ? null : `Cannot found: ${outcome.reason ?? "refused"}`;
+    founding = null;
+  });
+}
+function cancelFounding(): void {
+  founding = null;
+  globe.cancelPick();
+}
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && founding !== null) cancelFounding();
+});
+
+const hud: Hud = new Hud(
+  hudRoot,
+  {
+    onSpeed: (next) => setSpeed(next),
+    onOrder: (type: FacilityType, delta: number) => order(type, delta),
+    onToggleLever: (type: FacilityType) => toggle(type),
+    onSeed: () => seed(),
+    // The advised lever now has a row in the HUD's own build panel; the
+    // instruments are a debug view and stay closed.
+    onFocusLever: (type: FacilityType) => hud.focusLever(type),
+    onFound: (kind: SettlementKind) => startFounding(kind),
+    onCancelFound: () => cancelFounding(),
+    onOpenSettlement: (id: string) => openCity(id),
+  },
+  tuning,
+);
+
+/**
+ * The city view (Batch 20). Going down is a plain switch for now; Batch 21
+ * makes it a journey. The simulation keeps running either way - the frame
+ * loop below advances it whichever view is showing.
+ */
+const city = new CityScreen(
+  root,
+  {
+    onPlace: (id: string, type: BuildingType, tx: number, ty: number) => {
+      const outcome = placeBuilding(state, id, type, tx, ty, tuning);
+      state = outcome.state;
+      return outcome;
+    },
+    // A dry run of the same call: the returned state is dropped.
+    canPlace: (id: string, type: BuildingType, tx: number, ty: number) => placeBuilding(state, id, type, tx, ty, tuning),
+    onRemove: (id: string, tx: number, ty: number) => {
+      const outcome = removeBuilding(state, id, tx, ty);
+      state = outcome.state;
+      return outcome;
+    },
+    onBack: () => closeCity(),
+  },
+  tuning,
+);
+
+function openCity(id: string): void {
+  if (!state.settlements.some((s) => s.id === id)) return;
+  if (founding !== null) cancelFounding();
+  city.open(id);
+  globe.setPaused(true);
+  for (const node of [stage, hudRoot, inspectorRoot, instrumentsToggle, hint]) node.hidden = true;
+}
+
+function closeCity(): void {
+  city.close();
+  globe.setPaused(false);
+  for (const node of [stage, hudRoot, inspectorRoot, instrumentsToggle, hint]) node.hidden = false;
+}
+
+const inspector = new Inspector(
+  inspectorRoot,
+  {
+    onSpeed: (next) => setSpeed(next),
+    onOrder: (type: FacilityType, delta: number) => order(type, delta),
+    onToggleLever: (type: FacilityType) => toggle(type),
+    onSeed: () => seed(),
+    onReset: () => {
+      state = marsStart(undefined, tuning);
+      // Clear the slot too. Resetting the planet and then reloading into the
+      // old save would look like the reset silently failed.
+      void autosaver?.save(state);
+      seedMessage = null;
+      awayMessage = null;
+      droppedYears = 0;
+      rings.T.clear();
+      rings.P.clear();
+      rings.progress.clear();
+      events.clear();
+      hud.clear();
+      clock.resync();
+    },
+  },
+  tuning,
+  globe,
+);
+
+// The tab stops receiving animation frames when hidden, so the first frame
+// back would otherwise carry the whole absence as one enormous delta.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    // Hiding is the moment a tab is most likely never to come back.
+    void autosaver?.save(state);
+  } else {
+    clock.resync();
+  }
+});
+
+// `pagehide` fires on close and on bfcache eviction, where `beforeunload` does
+// not. The write is best-effort: the browser may not wait for it.
+window.addEventListener("pagehide", () => {
+  void autosaver?.save(state);
+});
+
+let lastReadout = 0;
+let lastSample = 0;
+
+/** Trailing window for the warming-rate readout, so it is not a per-frame jitter. */
+let dTdt = 0;
+let windowT: number | null = null;
+let windowYear = 0;
+
+/** Project the facility state into rows the inspector can render. */
+function leverViews(throttled: boolean): readonly LeverView[] {
+  return FACILITY_LIST.filter((def) => def.kind !== "action").map((def) => {
+    const built = facilityOf(state, def.type);
+    return {
+      type: def.type,
+      name: def.name,
+      summary: def.summary,
+      caution: def.caution,
+      kind: def.kind,
+      unit: def.unit,
+      // Mirrors `orderedUnits` in the sim, which returns 0 for a disabled
+      // facility. Computing it without `enabled` made a retiring lever read
+      // "5 of 0 units online" and captioned it "coming online".
+      ordered: built !== undefined && built.enabled ? built.count * built.level : 0,
+      deployed: built?.deployed ?? 0,
+      enabled: built?.enabled ?? true,
+      throttled: def.type === "carbon_scrubber" && throttled,
+    };
+  });
+}
+
+function render(timestamp: number): void {
+  const outcome = clock.frame(state, timestamp);
+  state = outcome.state;
+  droppedYears = outcome.droppedYears;
+
+  const world = readWorld(state, tuning);
+  const env = world.env;
+  const d = world.derived;
+  const throttled = scrubberThrottled(state, d, tuning);
+  const progress = world.progress;
+  const phase = world.phase;
+  const reached = latchPhase(state.phaseReached, phase);
+  if (reached !== state.phaseReached) state = { ...state, phaseReached: reached };
+
+  const year = simYear(state, tuning);
+
+  if (city.openId !== null) {
+    const here = state.settlements.find((s) => s.id === city.openId);
+    if (here === undefined) closeCity();
+    else city.frame(here, habitat(state.reservoirs, d, tuning), timestamp);
+  }
+
+  if (timestamp - lastSample >= 1000 / SPARK_HZ) {
+    lastSample = timestamp;
+    rings.T.push(d.T);
+    rings.P.push(d.P);
+    rings.progress.push(progress.progress);
+
+    // Warming rate over the sampling window rather than over one frame, so
+    // the readout is legible instead of flickering.
+    if (windowT !== null && year > windowYear) {
+      dTdt = (d.T - windowT) / (year - windowYear);
+    }
+    windowT = d.T;
+    windowYear = year;
+  }
+
+  if (timestamp - lastReadout >= 1000 / READOUT_HZ) {
+    lastReadout = timestamp;
+    // Visuals are computed at READOUT rate, not substep rate and not frame
+    // rate. A substep does not need them and `deriveVisuals` is deliberately
+    // outside `tick` for exactly that reason.
+    const flows = computeStep(state, d, tuning, tuning.SUBSTEP_YEARS, null).flows;
+    // §9's dust channel carries the weather as well as the outgassing.
+    const storm = stormIntensity(state.seed, year, tuning);
+    const visuals = deriveVisuals(state.reservoirs, d, flows, tuning, storm);
+
+    // The shell's two derived views. Both are pure functions of the world, so
+    // neither can drift from it and neither needs a place in the save.
+    const fresh = events.observe({
+      year,
+      state,
+      reservoirs: state.reservoirs,
+      derived: d,
+      phaseReached: reached,
+      tuning,
+    });
+    const bareAdvice = advise({
+      state,
+      reservoirs: state.reservoirs,
+      derived: d,
+      axes: progress.axes,
+      tuning,
+      dTdt,
+    });
+
+    // What the advised lever would actually cost right now, asked of the sim
+    // rather than re-derived here - the shell must never recommend something
+    // the simulation would refuse.
+    const advice = withAffordability(
+      bareAdvice,
+      bareAdvice.lever === null || bareAdvice.lever === "biosphere_seeding"
+        ? null
+        : {
+            cost: orderCost(
+              bareAdvice.lever,
+              facilityOf(state, bareAdvice.lever)?.count ?? 0,
+              (facilityOf(state, bareAdvice.lever)?.count ?? 0) + 1,
+              facilityOf(state, bareAdvice.lever)?.level ?? 1,
+              tuning,
+            ),
+            credits: state.economy.credits,
+          },
+    );
+
+    hud.update({
+      simYear: year,
+      phase,
+      phaseReached: reached,
+      progress: progress.progress,
+      axes: progress.axes,
+      derived: d,
+      reservoirs: state.reservoirs,
+      advice,
+      events: events.log,
+      fresh,
+      speed,
+      // Asking the sim rather than re-deriving the gates here: the shell must
+      // never offer a button the simulation would refuse.
+      canSeed: !state.seeded && seedBiosphere(state, tuning, env).seeded,
+      // Ask the sim, do not guess: a dry run of the exact order the button
+      // would place.
+      canOrder:
+        advice.lever === null || advice.lever === "biosphere_seeding"
+          ? false
+          : orderDelta(state, advice.lever, 1, tuning).ok,
+      economy: tuning.ECONOMY_ENABLED
+        ? {
+            credits: state.economy.credits,
+            income: incomeRate(habitat(state.reservoirs, d, tuning), tuning),
+            upkeep: upkeepRate(state.facilities, tuning),
+          }
+        : null,
+      notice: orderMessage,
+      build: buildRows(state, tuning),
+      seeded: state.seeded,
+      settlements: state.settlements,
+      founding,
+    });
+
+    globe.setSettlements(state.settlements);
+    inspector.update(
+      {
+        simYear: year,
+        state,
+        derived: d,
+        progress: progress.progress,
+        progressRaw: progress.progressRaw,
+        axes: progress.axes,
+        phase,
+        phaseReached: reached,
+        dTdt,
+        droppedYears,
+        env,
+        levers: leverViews(throttled),
+        shieldStrength: state.shieldStrength,
+        speed,
+        seedMessage,
+        awayMessage,
+        storageWarning,
+        visuals,
+      },
+      rings,
+    );
+  }
+
+  if (autosaver !== null && autosaver.due(AUTOSAVE_INTERVAL_MS)) {
+    void autosaver.save(state);
+    if (autosaver.failureCount > 0) {
+      storageWarning = `saving is failing (${autosaver.failureCount} attempts) - progress may not survive a reload`;
+    }
+  }
+
+  requestAnimationFrame(render);
+}
+
+/**
+ * Boot, then start the loop.
+ *
+ * The inspector is built first so the page is never blank while storage is
+ * opening, and the world is swapped in when the save has been read and
+ * advanced by whatever the absence was worth.
+ */
+async function start(): Promise<void> {
+  const store = await openSaveStore();
+  const booted = await boot(store, config(), () => Date.now());
+
+  state = booted.state;
+  autosaver = new Autosaver(store, config(), () => Date.now());
+
+  if (booted.summary !== null) awayMessage = `While you were away: ${booted.summary.headline}`;
+  if (booted.problem !== null) storageWarning = `Could not load the previous save - ${booted.problem}`;
+  if (!store.durable) {
+    storageWarning = "this browser has no durable storage available, so progress will not survive a reload";
+  }
+
+  requestAnimationFrame(render);
+}
+
+void start();

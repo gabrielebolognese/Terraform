@@ -1,0 +1,1542 @@
+:root {
+  /* One dark-gray system. Surfaces step up in lightness; text steps down.
+     Colour is reserved for meaning: one calm accent, and green / amber / red
+     only where something is good, needs attention, or is wrong. */
+  --bg: #0e0f11;
+  --surface-solid: #16171a;
+  --surface: rgba(22, 23, 26, 0.84);
+  --surface-2: #1c1d21;
+  --surface-3: #25272c;
+  --line: #2d2f34;
+  --line-strong: #3a3d44;
+  --text: #ececee;
+  --text-2: #b3b5bb;
+  --text-3: #83868e;
+  --accent: #82b4ff;
+  --good: #7fd49a;
+  --warn: #e3b46e;
+  --warn-bg: #2a261f;
+  --bad: #e88b7c;
+  /* Legacy names, kept so no rule silently loses its colour. */
+  --panel: var(--surface-solid);
+  --panel-edge: var(--line);
+  --dim: var(--text-2);
+  --rust: var(--accent);
+  --rust-bright: var(--accent);
+  --ice: #8fd3ff;
+  --life: var(--good);
+  --font: "Lexend", Arial, Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 350;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Numbers that update in place should not jitter sideways. */
+.hud-row-value,
+.stat-value,
+.axis-value,
+.res-value,
+.lever-status,
+.hud-year,
+.year {
+  font-variant-numeric: tabular-nums;
+}
+
+.app {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.header,
+.panel.wide,
+.footer {
+  grid-column: 1 / -1;
+}
+
+/* ---------- header ---------- */
+
+.header {
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  background: linear-gradient(160deg, var(--surface-solid) 0%, var(--panel) 70%);
+  padding: 20px 22px;
+}
+
+.title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.title {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rust-bright);
+}
+
+.subtitle {
+  color: var(--dim);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.phase-name {
+  margin-top: 14px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.phase-caption {
+  color: var(--dim);
+  max-width: 68ch;
+}
+
+.pips {
+  display: flex;
+  gap: 6px;
+  margin: 12px 0 10px;
+}
+
+.pip {
+  width: 34px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  transition: background 240ms linear;
+}
+
+.pip.on {
+  background: var(--rust);
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--rust), var(--life));
+  transition: width 140ms linear;
+}
+
+.progress-label {
+  min-width: 56px;
+  text-align: right;
+  color: var(--life);
+}
+
+.year {
+  margin-top: 8px;
+  color: var(--dim);
+}
+
+.dropped {
+  color: var(--warn);
+  min-height: 1.5em;
+  font-size: 12px;
+}
+
+/* ---------- panels ---------- */
+
+.panel {
+  border: 1px solid var(--panel-edge);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 16px 18px;
+}
+
+.panel-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.row-label {
+  color: var(--dim);
+  min-width: 48px;
+}
+
+/* ---------- buttons ---------- */
+
+button {
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 7px 13px;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:hover {
+  border-color: var(--rust);
+}
+
+.chip.on {
+  background: var(--rust);
+  border-color: var(--rust);
+  color: var(--bg);
+  font-weight: 600;
+}
+
+.action.primary {
+  border-color: var(--rust);
+}
+
+.note {
+  color: var(--dim);
+  min-height: 1.5em;
+  font-size: 12px;
+}
+
+/* ---------- stats ---------- */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.stat {
+  background: var(--surface-solid);
+  border-radius: 7px;
+  padding: 8px 10px;
+}
+
+.stat-value {
+  font-size: 15px;
+  color: var(--rust-bright);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+}
+
+/* ---------- sparklines ---------- */
+
+.sparks {
+  display: grid;
+  gap: 10px;
+}
+
+.spark-label {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.spark-canvas {
+  display: block;
+  width: 100%;
+  background: var(--surface-solid);
+  border-radius: 6px;
+}
+
+.spark-note {
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+/* ---------- axes and reservoirs ---------- */
+
+.axis,
+.res {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  margin-bottom: 9px;
+}
+
+.axis-label,
+.res-label {
+  color: var(--dim);
+}
+
+.axis-value,
+.res-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.axis-track,
+.res-track {
+  grid-column: 1 / -1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.axis-fill {
+  height: 100%;
+  width: 0;
+  background: var(--life);
+  transition: width 140ms linear;
+}
+
+.res-fill {
+  height: 100%;
+  width: 0;
+  background: var(--ice);
+  transition: width 140ms linear;
+}
+
+.panel.wide {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 24px;
+}
+
+.panel.wide .panel-title {
+  grid-column: 1 / -1;
+}
+
+/* ---------- footer ---------- */
+
+.footer {
+  color: var(--text-3);
+  font-size: 12px;
+  text-align: center;
+  padding-top: 4px;
+}
+
+@media (max-width: 860px) {
+  .app,
+  .panel.wide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ---------- lever panel (section 5) ---------- */
+
+.levers-panel {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+}
+
+.lever-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  background: var(--surface-solid);
+  border-radius: 7px;
+}
+
+.lever-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.lever-name {
+  font-weight: 600;
+}
+
+.lever-status {
+  color: var(--dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.lever-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.lever-fill {
+  height: 100%;
+  width: 0;
+  background: var(--rust-bright);
+  transition: width 200ms linear;
+}
+
+.lever-buttons {
+  display: flex;
+  gap: 5px;
+}
+
+.chip.tiny {
+  padding: 3px 8px;
+  font-size: 12px;
+  min-width: 34px;
+}
+
+.chip.tiny.toggle {
+  margin-left: auto;
+}
+
+.lever-note {
+  color: var(--warn);
+  font-size: 11px;
+  min-height: 1.2em;
+  line-height: 1.3;
+}
+
+@media (max-width: 860px) {
+  .levers-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.note.away {
+  color: var(--life);
+}
+
+.note.warn {
+  color: var(--warn);
+}
+
+/* ---------- section 9 channels ---------- */
+
+.panel-note {
+  color: var(--text-3);
+  font-size: 11px;
+  margin: -6px 0 12px;
+  line-height: 1.4;
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.swatch-chip {
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-edge);
+  transition: background 180ms linear;
+}
+
+.swatch-label {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+  margin-top: 5px;
+}
+
+.swatch-value {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.axis-fill.visual {
+  background: var(--rust-bright);
+}
+
+/* ---- the arc scrubber ---------------------------------------------------
+   Drags through a recorded reference playthrough, so the whole visual arc can
+   be reviewed in seconds instead of sim-millennia. */
+.scrub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.scrub-toggle {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.scrub-toggle:hover:not(:disabled) {
+  background: var(--line);
+}
+
+.scrub-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.scrub-range {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.scrub-range:disabled {
+  opacity: 0.35;
+}
+
+.scrub-label {
+  flex: 0 0 auto;
+  min-width: 128px;
+  font-size: 12px;
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ======================================================================
+   The game shell (Batch 7)
+
+   Colour is never the only carrier of state here. The planet's own colours
+   are the progress signal - section 9's whole contract is a palette - so the
+   UI signals through words, numbers and position, and uses colour only to
+   reinforce them. Every rule below that sets a colour has a sibling that
+   sets text.
+   ====================================================================== */
+.hud {
+  display: block;
+  margin: 0 0 28px;
+  padding: 20px;
+  background: var(--surface-solid);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.hud-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.hud-phase-index {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.hud-phase-name {
+  margin: 2px 0 6px;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hud-phase-caption {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.hud-clock {
+  text-align: right;
+  flex: 0 0 auto;
+}
+
+.hud-year {
+  font-size: 14px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 8px;
+}
+
+.hud-speeds {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.hud-speed {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.hud-speed:hover {
+  background: var(--line);
+}
+
+/* The active speed is bold and outlined, not merely tinted. */
+.hud-speed.on {
+  background: var(--line-strong);
+  border-color: var(--accent);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.hud-banner {
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface-2);
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+}
+
+.hud-progress {
+  margin: 20px 0 0;
+}
+
+.hud-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 5px;
+}
+
+.hud-row-label {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.hud-row-value {
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-bar {
+  position: relative;
+  height: 9px;
+  background: var(--surface-3);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.hud-bar-wide {
+  height: 14px;
+}
+
+.hud-bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent));
+  border-radius: 5px;
+  transition: width 120ms linear;
+}
+
+/* Band markers: a notch in the bar, with a title for the detail. */
+.hud-bar-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text-2);
+}
+
+.hud-bar-mark-min {
+  background: var(--text-3);
+}
+
+.hud-bar-mark-target {
+  background: var(--text);
+}
+
+/* The win condition, beside the bar that does not measure it. */
+.hud-living {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.hud-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* ---- what the planet needs next --------------------------------------- */
+.hud-advice {
+  margin: 22px 0 0;
+  padding: 16px 18px;
+  background: var(--surface-2);
+  border: 1px solid var(--surface-3);
+  border-radius: 9px;
+}
+
+.hud-advice-eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+/* The state is a WORD first. The colour behind it is reinforcement. */
+.hud-advice-state {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--line-strong);
+  color: var(--text-2);
+}
+
+.hud-advice-state[data-state="action"] {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
+.hud-advice-state[data-state="waiting"] {
+  color: var(--accent);
+  border-color: var(--line-strong);
+  background: var(--surface-3);
+}
+
+.hud-advice-title {
+  margin: 8px 0 6px;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hud-advice-problem {
+  margin: 0 0 6px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.hud-advice-action {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
+.hud-advice-because {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-2);
+  font-style: italic;
+}
+
+.hud-advice-button {
+  margin: 14px 0 0;
+  padding: 7px 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--surface-solid);
+  background: var(--accent);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.hud-advice-button:hover {
+  background: var(--accent);
+}
+
+/* ---- target bands ------------------------------------------------------ */
+.hud-metrics {
+  margin: 24px 0 0;
+}
+
+.hud-section-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  font-weight: 600;
+}
+
+.hud-metric {
+  margin: 0 0 13px;
+}
+
+.hud-metric-status {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.hud-metric-status[data-state="at-target"] {
+  color: var(--good);
+}
+
+.hud-metric-status[data-state="habitable"],
+.hud-metric-status[data-state="safe"] {
+  color: var(--accent);
+}
+
+.hud-metric-status[data-state="below-minimum"],
+.hud-metric-status[data-state="too-high"],
+.hud-metric-status[data-state="above-band"] {
+  color: var(--warn);
+}
+
+/* ---- log --------------------------------------------------------------- */
+.hud-feed-box {
+  margin: 24px 0 0;
+}
+
+.hud-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.hud-feed-item {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--surface-3);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.hud-feed-year {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "warning" is printed, not just coloured. */
+.hud-feed-tone {
+  flex: 0 0 auto;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.hud-feed-text {
+  color: var(--text-2);
+}
+
+.hud-feed-item[data-tone="milestone"] .hud-feed-text {
+  color: var(--text);
+}
+
+/* Flash a lever the shell has just acted on, so the change is not off-screen. */
+@keyframes lever-flash {
+  from { background: var(--surface-3); }
+  to { background: transparent; }
+}
+
+.lever-flash {
+  animation: lever-flash 1.1s ease-out;
+}
+
+/* ---- the economy (Batch 9) --------------------------------------------- */
+.hud-bank {
+  font-size: 14px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: 8px;
+}
+
+/* The sign is already in the text; this only reinforces it. */
+.hud-bank[data-state="losing"] {
+  color: var(--warn);
+}
+
+.hud-notice {
+  margin: 14px 0 0;
+  padding: 9px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--surface-2);
+  border-left: 3px solid var(--warn);
+  border-radius: 6px;
+}
+
+/* ======================================================================
+   The page: the planet fills it, everything else floats over it.
+   There is no page scroll. The HUD panel and the instruments drawer scroll
+   inside themselves when their content is taller than the window.
+   ====================================================================== */
+#app {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.globe-canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: grab;
+  /* Drags turn the planet; they must not scroll or zoom the page. */
+  touch-action: none;
+}
+
+.globe-canvas.dragging {
+  cursor: grabbing;
+}
+
+.shell-hud {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  bottom: 16px;
+  width: min(390px, calc(100vw - 32px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 2;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.shell-hud .hud {
+  margin: 0;
+  background: var(--surface);
+  border-color: var(--line);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.shell-hud .hud-header {
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shell-hud .hud-phase-name {
+  font-size: 22px;
+}
+
+.shell-instruments {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: min(640px, 94vw);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 3;
+  background: var(--surface);
+  border-left: 1px solid var(--panel-edge);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform 240ms ease,
+    visibility 0s linear 240ms;
+  scrollbar-width: thin;
+}
+
+.shell-instruments.open {
+  transform: none;
+  visibility: visible;
+  transition: transform 240ms ease;
+}
+
+/* One column in the drawer; the page-wide grid was for a full-width page. */
+.shell-instruments .app {
+  display: block;
+  max-width: none;
+  padding: 64px 16px 28px;
+}
+
+.shell-instruments .app > * + * {
+  margin-top: 16px;
+}
+
+.instruments-toggle {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 4;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.instruments-toggle:hover {
+  border-color: var(--accent);
+}
+
+.instruments-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.globe-hint {
+  position: fixed;
+  bottom: 14px;
+  right: 20px;
+  z-index: 1;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Narrow screens: the HUD becomes a sheet along the bottom, the planet keeps the top. */
+@media (max-width: 760px) {
+  .shell-hud {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100vw;
+    max-height: 46vh;
+  }
+
+  .shell-hud .hud {
+    border-radius: 12px 12px 0 0;
+  }
+
+  .globe-hint {
+    display: none;
+  }
+}
+
+/* ======================================================================
+   The build panel (Batch 16). Every state is also in words: the status line
+   says "switched off", a refusal says why. Colour only reinforces.
+   ====================================================================== */
+.hud-build {
+  margin: 22px 0 0;
+}
+
+.hud-build > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-build > summary::-webkit-details-marker {
+  display: none;
+}
+
+.hud-build > summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid var(--text-3);
+  border-bottom: 1.5px solid var(--text-3);
+  transform: rotate(-45deg);
+  transition: transform 160ms ease;
+}
+
+.hud-build[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.hud-lever {
+  margin: 8px 0 0;
+  padding: 11px 12px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: 10px;
+  transition: border-color 160ms ease;
+}
+
+.hud-lever[data-state="running"] {
+  border-left-color: var(--accent);
+}
+
+.hud-lever[data-state="off"] {
+  border-left-color: var(--warn);
+}
+
+.hud-lever.focused {
+  animation: hud-lever-focus 1.6s ease;
+}
+
+@keyframes hud-lever-focus {
+  0%,
+  40% {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(130, 180, 255, 0.18);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.hud-lever-name {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.hud-lever-status {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-lever-summary {
+  margin: 3px 0 9px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+.hud-lever-controls {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.hud-lever-controls button {
+  padding: 5px 11px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-lever-more {
+  border-color: var(--accent);
+}
+
+.hud-lever-more:hover:not(:disabled) {
+  background: rgba(130, 180, 255, 0.12);
+}
+
+.hud-lever-toggle {
+  margin-left: auto;
+}
+
+.hud-lever-reason {
+  margin: 7px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--warn);
+}
+
+/* ======================================================================
+   Settlements (Batch 17): markers on the globe, and founding from the HUD.
+   A marker's kind is in its label ("City 1" / "Outpost 2"); the pin colour
+   only reinforces it.
+   ====================================================================== */
+.globe-canvas.picking {
+  cursor: crosshair;
+}
+
+.globe-markers {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.globe-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  will-change: transform;
+}
+
+.globe-marker-pin {
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 2px rgba(130, 180, 255, 0.35);
+}
+
+.globe-marker[data-kind="outpost"] .globe-marker-pin {
+  background: var(--warn);
+  border-radius: 2px;
+  box-shadow: 0 0 0 2px rgba(227, 180, 110, 0.35);
+}
+
+.globe-marker-label {
+  margin-top: -5px;
+  padding: 2px 7px;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(14, 15, 17, 0.72);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.hud-settlements {
+  margin: 22px 0 0;
+}
+
+.hud-found-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hud-found-prompt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+
+.hud-found-prompt[hidden] {
+  display: none;
+}
+
+.hud-found-text {
+  flex: 1;
+}
+
+.hud-settlement-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.hud-settlement,
+.hud-settlement-empty {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 0;
+  font-size: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.hud-settlement-empty {
+  color: var(--text-3);
+}
+
+.hud-settlement-where {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The shell's floating pieces are hidden while a city view is open; their own
+   display rules must not win over the attribute. */
+.stage[hidden],
+.shell-hud[hidden],
+.shell-instruments[hidden],
+.instruments-toggle[hidden],
+.globe-hint[hidden] {
+  display: none;
+}
+
+.hud-settlement {
+  align-items: center;
+}
+
+.hud-settlement-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.hud-settlement-open {
+  padding: 5px 12px;
+}
+
+/* ---------- the city view (Batch 20) ---------- */
+
+.city {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  background: #16171a;
+}
+
+.city[hidden] {
+  display: none;
+}
+
+.city-canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: grab;
+  touch-action: none;
+}
+
+.city-panel {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  bottom: 16px;
+  width: min(340px, calc(100vw - 32px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.city-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.city-back {
+  margin-bottom: 10px;
+}
+
+.city-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.city-where {
+  color: var(--text-3);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.city-status {
+  margin: 14px 0 0;
+  padding: 9px 12px;
+  font-size: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--good);
+  border-radius: 8px;
+}
+
+.city-status[data-state="short"] {
+  border-left-color: var(--warn);
+  background: var(--warn-bg);
+}
+
+.city-section-title {
+  margin: 20px 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.city-store-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.city-store {
+  display: grid;
+  grid-template-columns: 1fr auto 72px;
+  column-gap: 10px;
+  row-gap: 4px;
+  padding: 6px 0;
+  font-size: 13px;
+  border-top: 1px solid var(--line);
+}
+
+.city-store-value,
+.city-store-rate {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.city-store-rate {
+  color: var(--text-3);
+}
+
+.city-store-track {
+  grid-column: 1 / -1;
+  height: 3px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.city-store-bar {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.city-palette {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.city-build-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.city-build-option[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.city-build-name {
+  font-size: 13px;
+}
+
+.city-build-cost,
+.city-build-short {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.city-build-short {
+  color: var(--warn);
+}
+
+.city-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.city-inspector {
+  margin: 20px 0 0;
+  padding: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+}
+
+.city-inspector[hidden] {
+  display: none;
+}
+
+.city-inspector-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.city-inspector-status {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.city-inspector-status[data-state="off"] {
+  color: var(--warn);
+}
+
+.city-inspector-summary,
+.city-inspector-flows {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.city-inspector-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
