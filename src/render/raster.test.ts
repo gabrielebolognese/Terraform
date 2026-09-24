@@ -44,6 +44,17 @@ describe("the rasteriser", () => {
     for (let i = 0; i < f.pixels.length; i += 4) expect(f.pixels[i]).toBe(64);
   });
 
+  it("counts a vertex on a pixel-centre row once, so that row is filled and not cancelled", () => {
+    // A diamond whose side vertices sit exactly on row 5's centres (y = 5.5).
+    // Each side vertex joins two edges; counted by both, the row's crossings
+    // pair up as (0, 0) and (10, 10) and fill nothing. Half-open edges count
+    // it once. Every centre on that row, x = 0.5 .. 9.5, is strictly inside.
+    const diamond: Shape = { rings: [[5, 0, 10, 5.5, 5, 11, 0, 5.5]], fill: { r: 1, g: 1, b: 1, a: 1 } };
+    const f = rasterize([diamond], 10, 11, ID, BLACK);
+    const row5 = Array.from({ length: 10 }, (_, x) => f.pixels[(5 * 10 + x) * 4]);
+    expect(row5).toEqual(Array(10).fill(255));
+  });
+
   it("cuts holes even-odd", () => {
     const ring: Shape = { rings: [square(0, 0, 10, 10), square(3, 3, 7, 7)], fill: { r: 1, g: 1, b: 1, a: 1 } };
     expect(lit(rasterize([ring], 10, 10, ID, BLACK))).toBe(100 - 16);

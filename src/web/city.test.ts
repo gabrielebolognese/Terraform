@@ -66,21 +66,23 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
   };
   screen.open("settlement-1");
   frame();
-  /** Click the middle of a tile, as a pointer would. */
-  const clickTile = (tx: number, ty: number): void => {
-    const iso = isoProject(tx + 0.5, ty + 0.5);
+  /** Click the screen point where a world point (x, y, z) is drawn, as a pointer would. */
+  const clickAt = (x: number, y: number, z: number): void => {
+    const iso = isoProject(x, y, z);
     const p = isoToScreen(centreCamera(32, W), W, H, iso.sx, iso.sy);
     canvas.dispatchEvent(new PointerEvent("pointerdown", { clientX: p.px, clientY: p.py, pointerId: 1 }));
     canvas.dispatchEvent(new PointerEvent("pointerup", { clientX: p.px, clientY: p.py, pointerId: 1 }));
     frame();
   };
+  /** Click the middle of a tile on the ground. */
+  const clickTile = (tx: number, ty: number): void => clickAt(tx + 0.5, ty + 0.5, 0);
   const q = (sel: string): HTMLElement => {
     const e = host.querySelector<HTMLElement>(sel);
     if (e === null) throw new Error(`missing ${sel}`);
     return e;
   };
   const option = (type: BuildingType): HTMLButtonElement => q(`.city-build-option[data-type="${type}"]`) as HTMLButtonElement;
-  return { host, screen, calls, frame, clickTile, q, option, state: () => state };
+  return { host, screen, calls, frame, clickTile, clickAt, q, option, state: () => state };
 }
 
 beforeEach(() => {
@@ -135,6 +137,21 @@ describe("the city view", () => {
     expect(page.q(".city-inspector-name").textContent).toBe("Habitat Dome");
     expect(page.q(".city-inspector-status").textContent).toBe("Offline: this city is short of water.");
     expect(page.q(".city-status").textContent).toMatch(/Short of water/);
+  });
+
+  it("selects a tall building by its upper part, which is drawn over ground behind it", () => {
+    // A dome at tiles 15..17. Its surface at (15.8, 15.8, 0.93) - on the
+    // sphere of radius 1.24 about (16.5, 16.5, 0.18) - is drawn over the
+    // ground point (14.87, 14.87), tile 14,14: bare ground, off its footprint.
+    // Picking only the ground under the pointer would select nothing.
+    const page = mount();
+    page.option("habitat_dome").click();
+    page.clickTile(16, 16);
+    page.option("habitat_dome").click(); // disarm
+    expect(page.state().settlements[0]!.buildings[0]).toMatchObject({ tx: 15, ty: 15 });
+    page.clickAt(15.8, 15.8, 0.93);
+    expect(page.q(".city-inspector").hidden, "clicking the dome's upper part selected nothing").toBe(false);
+    expect(page.q(".city-inspector-name").textContent).toBe("Habitat Dome");
   });
 
   it("removes the selected building", () => {

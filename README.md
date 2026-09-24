@@ -36,6 +36,7 @@ that state.
 | [`docs/balance/batch17-micro-coordinates.md`](docs/balance/batch17-micro-coordinates.md) | The settlement layer's first batch: coordinate spaces, founding from orbit, markers on the globe. |
 | [`docs/balance/batch18-settlement-sim.md`](docs/balance/batch18-settlement-sim.md) | A settlement as a pure simulation: ten buildings, brownouts, population, and CO2-to-oxygen processors that move the planet. |
 | [`docs/balance/batch19-settlement-save.md`](docs/balance/batch19-settlement-save.md) | Settlements in the save (schema v5): exact round trip, retune-safe loading, and offline progression proven exact. |
+| [`docs/balance/batch20-city-view.md`](docs/balance/batch20-city-view.md) | The 2.5D city view: procedural buildings, rough ground, placement, the inspector, and a golden city render. |
 | [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) | The whole visual arc, twelve frames at fixed progress values. |
 
 ## Status
@@ -55,7 +56,9 @@ which is computed from section 8.1's own weighted geometric mean rather than scr
 through its prerequisites to something you can actually do today. A **Build** panel lists every
 lever with its price, what is ordered and what is online, and lets you order, dismantle or switch
 each one off. Under **Settlements** you can found a city or an outpost by clicking the planet;
-each gets a marker that stays on its spot as the globe turns (the settlement layer, Batches 17-21,
+each gets a marker that stays on its spot as the globe turns, and **Open** takes you down to its
+2.5D view: build from the palette on the ground (rough outcrops refuse), click a building to see
+what it is doing and why it might be offline (the settlement layer, Batches 17-21,
 is being built from `docs/design/micro-world.md`). The planet fills the whole
 window behind it, shaded on the GPU at full resolution: drag to turn it, scroll to zoom. The
 instruments open as a drawer from the top right, with a scrubber that drags the planet through the
@@ -94,6 +97,7 @@ npm install
 | `npm run sim:run` | Headless fast-forward, ASCII S-curve plot, optional CSV |
 | `npm run sim:sweep` | Score tuning variants against the section 0 pacing goals |
 | `npm run sim:frames` | Re-render the twelve golden frames and the contact sheet |
+| `npm run sim:city` | Re-render the golden city frame and its two larger previews |
 | `npm run sim:run -- --events` | Same, with section 12.2's seeded weather turned on |
 | `npm run dev:node` | One-shot summary of the starting world |
 | `npm test` | Run the test suite once |

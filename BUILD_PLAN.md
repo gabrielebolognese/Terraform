@@ -26,7 +26,7 @@ This file is the source of truth for *in what order* we build it, and for what "
 | 17 | Micro: coordinate spaces + settlement markers | **COMPLETE** - [note](docs/balance/batch17-micro-coordinates.md) - founding from orbit; registry saved as schema v4 |
 | 18 | Micro: one settlement as pure TypeScript + the two-way coupling | **COMPLETE** - [note](docs/balance/batch18-settlement-sim.md) - behind SETTLEMENTS_ENABLED=0; a city bootstraps and grows, processors move the planet |
 | 19 | Micro: settlement save schema + offline progression | **COMPLETE** - [note](docs/balance/batch19-settlement-save.md) - schema v5; round trip and offline catch-up exact; capacities and grid deliberately not stored |
-| 20 | Micro: the 2.5D city view | NOT STARTED - micro §3, §8 |
+| 20 | Micro: the 2.5D city view | **COMPLETE** - [note](docs/balance/batch20-city-view.md) - shape list + software golden render (tolerance 0.003%, measured); topological draw order replaces §3.1's key; rough ground derived from place; browser runs settlements |
 | 21 | Micro: travel between orbit and a city | NOT STARTED - micro §1.4, §9.2, §9.3 |
 
 > **Batch 10 was not in the original plan.** Every batch note from 6 onward closed with "Batches 3-N
@@ -734,17 +734,29 @@ settlement."
 - Offline catch-up equals live play over the same sim-time, exactly, with settlements present.
 - The offline design cap still bounds what an absence is worth.
 
-## Batch 20 — Micro: the 2.5D city view — NOT STARTED
+## Batch 20 — Micro: the 2.5D city view — COMPLETE
+
+**Done** - see [the note](docs/balance/batch20-city-view.md). Changed from the plan:
+- **No GPU instancing yet.** The renderer emits flat shapes; a software rasteriser fills them for
+  the golden render and the browser's 2D API fills them on screen. A GPU render cannot be a golden
+  frame (its pixels differ by driver); instancing later replaces only the fill.
+- **§3.1's `tx + ty` sort was replaced** by a topological order over footprints: the doc's key drew
+  5.7% of overlapping samples wrong against a ray-cast oracle.
+- **Blocked terrain is derived** from the settlement's coordinate, behind `TERRAIN_ROUGH_FRACTION`
+  (default 0; the browser uses 0.12). "Reserved" tiles and connectivity have no cases: nothing in
+  the doc produces either yet.
+- **The golden tolerance is 0.003%, not Batch 6's 0.2%**, which would pass a building switching off.
+- **Entering a city is a plain switch** until Batch 21's travel.
 
 **Goal.** Micro §12 step 4: "Build the 2.5D renderer against the tile/instancing model (section 8):
 ground grid, placement, procedural buildings, selection/inspector."
 
-- [ ] Isometric projection and depth sort (§3.1); pan and clamped zoom, no rotation (§3.2).
-- [ ] Placement validity (§3.3): the footprint fits, the tiles are buildable and empty, and any
+- [x] Isometric projection and depth sort (§3.1); pan and clamped zoom, no rotation (§3.2).
+- [x] Placement validity (§3.3): the footprint fits, the tiles are buildable and empty, and any
   connectivity requirement is met.
-- [ ] Procedural parametric buildings (§8); render-time "aliveness" driven by settlement state and
+- [x] Procedural parametric buildings (§8); render-time "aliveness" driven by settlement state and
   never stored.
-- [ ] Selection and an inspector panel. Readable without colour, as Batch 7 requires of the HUD.
+- [x] Selection and an inspector panel. Readable without colour, as Batch 7 requires of the HUD.
 
 **Exit gate.**
 - Placement rules proven by tests that try every rejection case and at least one acceptance.

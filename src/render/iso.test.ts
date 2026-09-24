@@ -11,7 +11,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { FootprintBox } from "./iso.js";
-import { Z_PX, depthOrder, isoProject, isoToGround } from "./iso.js";
+import { Z_PX, depthOrder, drawsBefore, isoProject, isoToGround } from "./iso.js";
 
 interface Solid extends FootprintBox {
   readonly height: number;
@@ -144,6 +144,24 @@ describe("the drawing order", () => {
       wrong += audit(solids, docKey, 10).wrong;
     }
     expect(wrong).toBeGreaterThan(0);
+  });
+
+  it("orders a footprint wholly behind on both axes before the one in front, as a rule of its own", () => {
+    // Geometry, not the sort: every line of sight through both boxes meets
+    // the one at larger x AND larger y first, whatever their heights. Today
+    // the tie-break (smallest tx + ty first) happens to put such a pair right
+    // anyway - 200,000 random layouts (2-5 footprints, 7x7 grid) found no picture that dropping this rule
+    // changes - so it is pinned here directly, where a new tie-break cannot
+    // quietly make it matter.
+    const back = { tx: 0, ty: 0, w: 1, h: 1 };
+    const front = { tx: 1, ty: 1, w: 3, h: 3 };
+    expect(drawsBefore(back, front), "a footprint behind on both axes must be drawn before the one in front").toBe(true);
+    expect(drawsBefore(front, back)).toBe(false);
+    // Side by side on screen - behind on one axis, in front on the other - no order is owed either way.
+    const left = { tx: 0, ty: 3, w: 1, h: 1 };
+    const right = { tx: 3, ty: 0, w: 1, h: 1 };
+    expect(drawsBefore(left, right)).toBe(false);
+    expect(drawsBefore(right, left)).toBe(false);
   });
 
   it("returns every footprint exactly once", () => {
