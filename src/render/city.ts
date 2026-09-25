@@ -1303,16 +1303,14 @@ function assembleLow(b: CityBuildingView): Kit {
 const HARD_ROCK = rgb(0.4, 0.29, 0.24);
 
 /**
- * Whether hard rock on a tile is drawn as boulders. On open ground always, at
- * every level: it is what stands in the way of building. On a cliff - every
- * steep tile is hard rock too, and already drawn as bare rock - on one tile in
- * four, and only up close: a boulder on every steep tile carpeted the
- * mountains and took the metropolis's low detail from 35,000 shapes to 61,000
- * (measured).
+ * Whether hard rock on a tile is drawn as boulders: in its clusters, at every
+ * level - it is what stands in the way of building. A cliff is hard rock too
+ * (a rover can break it), but it is drawn as the bare, banded rock of the
+ * slope itself (the user: "the hard rocks are all only in clusters"; a
+ * boulder on every steep tile had also carpeted the mountains).
  */
-function showBoulders(tx: number, ty: number, steep: boolean, quality: CityQuality): boolean {
-  if (!steep) return true;
-  return quality !== "low" && hash2(tx * 3 + 101, ty * 7 - 59) < 0.25;
+function showBoulders(_tx: number, _ty: number, steep: boolean, _quality: CityQuality): boolean {
+  return !steep;
 }
 
 /**
@@ -1435,49 +1433,135 @@ const GREEN_THRESHOLD: readonly number[] = (() => {
 export function groundColour(x: number, y: number, z: number, slope: number, greenery: number): Rgb {
   const h = smoothstep(-4, 7, z);
   let c = h < 0.5 ? mix(REGOLITH_LOW, REGOLITH_MID, h * 2) : mix(REGOLITH_MID, REGOLITH_HIGH, h * 2 - 1);
-  c = shade(c, 0.94 + 0.12 * patchNoise(x, y, 3.3, 11));
-  c = mix(c, BARE_ROCK, smoothstep(0.35, 1.0, slope));
+  // Broad, soft variation - two scales, never tile-sized speckle.
+  c = shade(c, 0.95 + 0.07 * patchNoise(x, y, 6.5, 11) + 0.03 * patchNoise(x, y, 2.2, 13));
+  // Rock faces - canyon walls, crater bowls, mountainsides - show their
+  // strata: bands by height, wavering a little across the face.
+  const rock = smoothstep(0.3, 0.95, slope);
+  if (rock > 0) {
+    const band = 0.5 + 0.5 * Math.sin(z * 2.4 + 1.3 * patchNoise(x, y, 5, 71));
+    c = mix(c, shade(BARE_ROCK, 0.84 + 0.3 * band), rock);
+  }
   if (greenery > 0) {
-    // Valleys a little ahead, heights a little behind; cliffs never.
+    // Valleys a little ahead, heights a little behind; cliffs never. A soft
+    // band at the edge of a patch - moss before grass - so green blends into
+    // the regolith instead of stopping at a triangle's edge.
     const level = greenReadiness(x, y, z);
     const threshold = GREEN_THRESHOLD[Math.round(Math.min(1, greenery) * 100)]!;
-    const green = smoothstep(threshold - 0.04, threshold + 0.04, level) * (1 - smoothstep(0.3, 0.7, slope));
-    if (green > 0) c = mix(c, mix(GRASS, GRASS_DEEP, patchNoise(x, y, 4.1, 51)), 0.92 * green);
+    const green = smoothstep(threshold - 0.09, threshold + 0.09, level) * (1 - smoothstep(0.3, 0.7, slope));
+    if (green > 0) c = mix(c, mix(GRASS, GRASS_DEEP, patchNoise(x, y, 5.3, 51)), 0.9 * green);
   }
   return c;
 }
 
+/** A height sampler over tile space, in tiles. */
+type HeightAt = (x: number, y: number) => number;
+
 /**
- * A quad of ground through its four corner heights, as two lit triangles,
- * coloured at each triangle's middle. `fade` mixes toward the haze (the
- * world's far edge).
+ * Ground as a mesh over [x0, x0 + w] x [y0, y0 + w], a vertex every `step`
+ * tiles, far to near: each triangle lit by its slope and coloured at its
+ * middle. Up close the step is half a tile, so canyon walls and crater bowls
+ * curve instead of breaking into tile-wide facets; with a colour field that
+ * varies broadly and a soft edge to the green, that is what smoothed the
+ * ground (the user: "inconsistent ... smooth out the graphics"). Colouring
+ * and lighting at the vertices and averaging, tried as well, made no
+ * measurable difference across shared edges (a mean jump of 0.095 against
+ * 0.085) and was dropped.
  */
-function groundQuad(x0: number, y0: number, s: number, z00: number, z10: number, z01: number, z11: number, greenery: number, fade: ((x: number, y: number) => number) | null, out: Shape[]): void {
-  const x1 = x0 + s;
-  const y1 = y0 + s;
-  // Split along the diagonal that bends least, so a ridge line is not cut across.
-  const alongMain = Math.abs(z00 - z11) <= Math.abs(z10 - z01);
-  const tris: [V3, V3, V3][] = alongMain
-    ? [
-        [[x0, y0, z00], [x1, y0, z10], [x1, y1, z11]],
-        [[x0, y0, z00], [x1, y1, z11], [x0, y1, z01]],
-      ]
-    : [
-        [[x0, y0, z00], [x1, y0, z10], [x0, y1, z01]],
-        [[x1, y0, z10], [x1, y1, z11], [x0, y1, z01]],
-      ];
-  for (const tri of tris) {
-    const face = sheet(tri)[0]!;
-    const n = face.n;
-    const slope = Math.hypot(n[0], n[1]) / Math.max(1e-6, n[2]);
-    const mx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
-    const my = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
-    const mz = (tri[0][2] + tri[1][2] + tri[2][2]) / 3;
-    let colour = groundColour(mx, my, mz, slope, greenery);
-    const f = fade === null ? 0 : fade(mx, my);
-    if (f > 0) colour = mix(colour, HAZE, f);
-    emitParts([part([face], colour)], out);
+function groundMesh(x0: number, y0: number, w: number, step: number, z: HeightAt, greenery: number, fade: ((x: number, y: number) => number) | null, out: Shape[]): void {
+  const k = Math.max(1, Math.round(w / step));
+  for (let d = 0; d <= 2 * (k - 1); d += 1) {
+    for (let j = Math.max(0, d - (k - 1)); j <= Math.min(k - 1, d); j += 1) {
+      const i = d - j;
+      const xa = x0 + i * step;
+      const ya = y0 + j * step;
+      const xb = xa + step;
+      const yb = ya + step;
+      const z00 = z(xa, ya);
+      const z10 = z(xb, ya);
+      const z01 = z(xa, yb);
+      const z11 = z(xb, yb);
+      // Split along the diagonal that bends least, so a ridge line is not cut across.
+      const alongMain = Math.abs(z00 - z11) <= Math.abs(z10 - z01);
+      const tris: [V3, V3, V3][] = alongMain
+        ? [
+            [[xa, ya, z00], [xb, ya, z10], [xb, yb, z11]],
+            [[xa, ya, z00], [xb, yb, z11], [xa, yb, z01]],
+          ]
+        : [
+            [[xa, ya, z00], [xb, ya, z10], [xa, yb, z01]],
+            [[xb, ya, z10], [xb, yb, z11], [xa, yb, z01]],
+          ];
+      for (const tri of tris) {
+        const face = sheet(tri)[0]!;
+        const n = face.n;
+        const facing = dot(n, TOWARD_VIEWER);
+        if (facing <= 1e-9) continue;
+        const mx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+        const my = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+        const mz = (tri[0][2] + tri[1][2] + tri[2][2]) / 3;
+        let colour = shade(groundColour(mx, my, mz, Math.hypot(n[0], n[1]) / Math.max(1e-6, n[2]), greenery), AMBIENT + DIFFUSE * Math.max(0, dot(n, LIGHT)));
+        const f = fade === null ? 0 : fade(mx, my);
+        if (f > 0) colour = mix(colour, HAZE, f);
+        out.push({ rings: [ringOf(face.pts)], fill: { ...colour, a: 1 } });
+      }
+    }
   }
+}
+
+/**
+ * Low plants on green ground, up close: a shrub on some of the tiles the
+ * biosphere has greened well (the user: "higher quality, especially when the
+ * planet is being terraformed"). Placed by the tile; drawn with the ground.
+ */
+function shrubs(tx: number, ty: number, z: HeightAt, greenery: number, out: Shape[]): void {
+  if (greenery <= 0 || hash2(tx * 5 + 3, ty * 9 - 7) > 0.35) return;
+  const x = tx + 0.25 + 0.5 * hash2(tx + 31, ty - 17);
+  const y = ty + 0.25 + 0.5 * hash2(tx - 13, ty + 29);
+  const here = z(x, y);
+  const gx = z(x + 0.5, y) - z(x - 0.5, y);
+  const gy = z(x, y + 0.5) - z(x, y - 0.5);
+  const c = groundColour(x, y, here, Math.hypot(gx, gy), greenery);
+  // Only where the ground itself reads green.
+  if (!(c.g > c.r * 1.05)) return;
+  const r = 0.09 + 0.07 * hash2(tx + 7, ty + 3);
+  const tone = mix(GRASS_DEEP, GRASS, hash2(tx - 3, ty + 11) * 0.6);
+  emitParts([part(frustum(x, y, r, r * 0.35, here, here + r * 1.3, 6), shade(tone, 0.85)), part(frustum(x, y, r * 0.5, 0.01, here + r * 1.3, here + r * 1.8, 5), tone)], out);
+}
+
+/**
+ * The height at any point of the view's world, in tiles: from the half-tile
+ * samples where the view has them (up close), else bilinear between the
+ * corners of the tile it falls in.
+ */
+function heightAt(view: CityView, fine: boolean): HeightAt {
+  const w = view.world;
+  const samples = fine ? w.fine : undefined;
+  if (samples !== undefined) {
+    const f = 2 * w.size + 1;
+    const at = (i: number, j: number): number => samples[Math.min(f - 1, Math.max(0, j)) * f + Math.min(f - 1, Math.max(0, i))] ?? 0;
+    return (x, y) => {
+      const u = (x + w.margin) * 2;
+      const v = (y + w.margin) * 2;
+      const i = Math.floor(u);
+      const j = Math.floor(v);
+      const fu = u - i;
+      const fv = v - j;
+      return (at(i, j) * (1 - fu) + at(i + 1, j) * fu) * (1 - fv) + (at(i, j + 1) * (1 - fu) + at(i + 1, j + 1) * fu) * fv;
+    };
+  }
+  return (x, y) => {
+    const i = Math.floor(x);
+    const j = Math.floor(y);
+    const fu = x - i;
+    const fv = y - j;
+    const c = (a: number, b: number): number => {
+      // Inside the grid its own corners; beyond, the world's.
+      if (a >= 0 && b >= 0 && a <= view.tiles && b <= view.tiles) return corner(view, a, b);
+      return worldCorner(view, a, b);
+    };
+    return (c(i, j) * (1 - fu) + c(i + 1, j) * fu) * (1 - fv) + (c(i, j + 1) * (1 - fu) + c(i + 1, j + 1) * fu) * fv;
+  };
 }
 
 /** A grid corner's height, in tiles. */
@@ -1545,6 +1629,8 @@ function worldCells(view: CityView, quality: CityQuality): { back: WorldCell[]; 
   let floorZ = Infinity;
   for (const z of w.corners) floorZ = Math.min(floorZ, z);
   floorZ -= 1;
+  const fineZ = heightAt(view, true);
+  const coarseZ = heightAt(view, false);
   const caves = new Map<string, (typeof w.caves)[number][]>();
   for (const c of w.caves) {
     const key = `${Math.floor(c.x / s) * s},${Math.floor(c.y / s) * s}`;
@@ -1568,7 +1654,9 @@ function worldCells(view: CityView, quality: CityQuality): { back: WorldCell[]; 
       const shapes: Shape[] = [];
       // The world fades into haze over its last sixteen tiles, triangle by triangle.
       const fade = (px: number, py: number): number => 1 - smoothstep(0, 16, Math.min(px - lo, py - lo, hi - px, hi - py));
-      groundQuad(x, y, s, z00, z10, z01, z11, view.greenery, fade, shapes);
+      // Up close through the half-tile samples; further away through the cell's corners.
+      groundMesh(x, y, s, quality === "high" ? 0.5 : s, quality === "high" ? fineZ : coarseZ, view.greenery, fade, shapes);
+      if (quality === "high") shrubs(x, y, fineZ, view.greenery, shapes);
       // The world's near edges stand on a skirt of rock, down to a common floor.
       if (x + s >= hi) emitParts([part([{ pts: [[x + s, y, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x + s, y, z10]], n: [1, 0, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
       if (y + s >= hi) emitParts([part([{ pts: [[x, y + s, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x, y + s, z01]], n: [0, 1, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
@@ -2164,6 +2252,8 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   const rockets = rocketsAt(view, since);
   const vp = options.viewport;
   cache.world ??= worldCells(view, quality);
+  // Up close the ground is drawn through the half-tile samples; further away through tile corners.
+  const gridZ = heightAt(view, quality === "high");
   const drawWorld = (cells: readonly WorldCell[]): void => {
     for (const c of cells) {
       if (vp !== undefined && (c.maxX < vp.minX || c.minX > vp.maxX || c.maxY < vp.minY || c.minY > vp.maxY)) continue;
@@ -2196,14 +2286,15 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       const start = out.length;
       if (o.w > 1) {
         // A patch of open ground further away, through its four corners.
-        groundQuad(o.tx, o.ty, o.w, corner(view, o.tx, o.ty), corner(view, o.tx + o.w, o.ty), corner(view, o.tx, o.ty + o.h), corner(view, o.tx + o.w, o.ty + o.h), view.greenery, null, out);
+        groundMesh(o.tx, o.ty, o.w, o.w, gridZ, view.greenery, null, out);
         ground.set(i, out.slice(start));
         continue;
       }
       const z = view.groundZ[o.ty * n + o.tx] ?? 0;
       const rock = view.rocks[o.ty * n + o.tx] ?? "none";
       // Smooth ground: the tile through its four corners - no steps.
-      groundQuad(o.tx, o.ty, 1, corner(view, o.tx, o.ty), corner(view, o.tx + 1, o.ty), corner(view, o.tx, o.ty + 1), corner(view, o.tx + 1, o.ty + 1), view.greenery, null, out);
+      groundMesh(o.tx, o.ty, 1, quality === "high" ? 0.5 : 1, gridZ, view.greenery, null, out);
+      if (quality === "high" && rock === "none") shrubs(o.tx, o.ty, gridZ, view.greenery, out);
       // The rocks the simulation knows (a rover can break exactly what is drawn).
       if (rock === "crag") {
         if (showBoulders(o.tx, o.ty, view.steep[o.ty * n + o.tx] === true, quality)) emitParts(boulders(o.tx, o.ty, z, quality), out);

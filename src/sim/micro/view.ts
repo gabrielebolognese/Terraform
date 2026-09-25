@@ -76,6 +76,8 @@ export interface CityView {
     readonly size: number;
     readonly corners: readonly number[];
     readonly caves: readonly { readonly x: number; readonly y: number; readonly dx: number; readonly dy: number }[];
+    /** The world's heights every half tile, in tiles: (2 * size + 1) a side. Absent, the ground is drawn through `corners` alone. */
+    readonly fine?: readonly number[];
     /** Rocks on the world's tiles outside the grid, in grid tiles. */
     readonly rocks: readonly { readonly x: number; readonly y: number; readonly kind: "loose" | "crag" }[];
   };
@@ -149,7 +151,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     tiles: n,
     groundZ,
     corners: ground.cornersM.map((h) => h / t.TILE_METRES),
-    world: { margin: world.margin, size: world.size, corners: world.cornersM.map((h) => h / t.TILE_METRES), caves: world.caves, rocks: world.rocks },
+    world: { margin: world.margin, size: world.size, corners: world.cornersM.map((h) => h / t.TILE_METRES), fine: world.fineM.map((h) => h / t.TILE_METRES), caves: world.caves, rocks: world.rocks },
     greenery: env.greenery,
     heightM: ground.heightM,
     steep: ground.steep,

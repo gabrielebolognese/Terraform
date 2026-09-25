@@ -784,11 +784,16 @@ export const BASE_TUNING = Object.freeze({
   /** Share of open, buildable tiles with loose rocks on. */
   ROCK_LOOSE_SHARE: 0.08,
   /**
-   * Share of open ground under hard rock - boulders that block building until
-   * a rover breaks them. 0 by default: they change where anything can be
-   * built, and every layout the tests were written for. The browser uses 0.03.
+   * Hard rock comes in rare clusters of 7 to 23 connected tiles (the user):
+   * the chance that one lies in each ROCK_CLUSTER_CELL-tile square of the
+   * lattice. Clusters block building until a rover breaks them. 0 by
+   * default: they change where anything can be built, and every layout the
+   * tests were written for. The browser uses 0.65: about four in a city's
+   * world once its grid is 96 tiles (measured over 20 sites: 3 to 8, 4.4 on
+   * average; a cell loses its cluster to a cliff or the founding site).
    */
-  ROCK_BOULDER_SHARE: 0,
+  ROCK_CLUSTER_CHANCE: 0,
+  ROCK_CLUSTER_CELL: 64,
   /** A supply rocket's round trip: one real minute at 1x (60 x 0.03). */
   ROCKET_TRIP_YEARS: 1.8,
   /** Materials a rocket brings back, or as many as the stores have room for. */
@@ -985,7 +990,8 @@ export function validateTuning(t: Tuning): void {
   if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");
   if (!(t.ROCKET_TRIP_YEARS > 0)) fail("ROCKET_TRIP_YEARS must be > 0");
   if (!(t.ROCK_LOOSE_SHARE >= 0 && t.ROCK_LOOSE_SHARE <= 1)) fail("ROCK_LOOSE_SHARE must be in [0, 1]");
-  if (!(t.ROCK_BOULDER_SHARE >= 0 && t.ROCK_BOULDER_SHARE <= 1)) fail("ROCK_BOULDER_SHARE must be in [0, 1]");
+  if (!(t.ROCK_CLUSTER_CHANCE >= 0 && t.ROCK_CLUSTER_CHANCE <= 1)) fail("ROCK_CLUSTER_CHANCE must be in [0, 1]");
+  if (!(t.ROCK_CLUSTER_CELL >= 46)) fail("ROCK_CLUSTER_CELL must be >= 46 (twice the largest cluster)");
   if (!(t.P_LIFE_OK > t.P_LIFE_MIN)) fail("P_LIFE_OK must exceed P_LIFE_MIN");
   if (!(t.T_CEIL_K > t.T_FLOOR_K)) fail("T_CEIL_K must exceed T_FLOOR_K");
   if (!(t.ALBEDO_MAX > t.ALBEDO_MIN)) fail("ALBEDO_MAX must exceed ALBEDO_MIN");

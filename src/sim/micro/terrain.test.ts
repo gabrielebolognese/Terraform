@@ -120,6 +120,54 @@ describe("the open world round it", () => {
     expect(steep / all, "and it does have its mountains and canyons").toBeGreaterThan(0.03);
   });
 
+  it("holds a few clusters of hard rock, each 7 to 23 connected tiles (the user: \"4-5 max\")", () => {
+    // Measured over 12 worlds of a 96-tile city at the browser's chance: 2 to 6
+    // clusters, 3.9 on average; every whole cluster 7 to 23 tiles.
+    const BIG = makeTuning({ TERRAIN_RELIEF_M: 12, ROCK_CLUSTER_CHANCE: 0.65, CITY_GRID_TILES: 96 });
+    const counts: number[] = [];
+    for (let k = 0; k < 12; k += 1) {
+      const world = worldOf({ kind: "city", lat: -1 + 0.17 * k, lon: -3 + 0.5 * k }, BIG);
+      const m = world.size + 1;
+      const steep = (x: number, y: number): boolean => {
+        const c = (i: number, j: number): number => world.cornersM[(y + world.margin + j) * m + x + world.margin + i]!;
+        return Math.max(Math.abs(c(0, 0) - c(1, 0)), Math.abs(c(0, 1) - c(1, 1)), Math.abs(c(0, 0) - c(0, 1)), Math.abs(c(1, 0) - c(1, 1))) / BIG.TILE_METRES > BIG.TERRAIN_MAX_SLOPE;
+      };
+      // The world lists rocks beyond the grid: a cluster may be cut by the grid's or the world's edge.
+      const hard = new Set(world.rocks.filter((r) => r.kind === "crag" && !steep(r.x, r.y)).map((r) => `${r.x},${r.y}`));
+      const cut = (x: number, y: number): boolean => x <= 0 && x >= -1 || y <= 0 && y >= -1 || (x >= 95 && x <= 96) || (y >= 95 && y <= 96) || x <= -world.margin + 1 || y <= -world.margin + 1 || x >= 96 + world.margin - 2 || y >= 96 + world.margin - 2;
+      const seen = new Set<string>();
+      let n = 0;
+      for (const start of hard) {
+        if (seen.has(start)) continue;
+        const stack = [start];
+        seen.add(start);
+        let size = 0;
+        let whole = true;
+        while (stack.length > 0) {
+          const [x, y] = stack.pop()!.split(",").map(Number) as [number, number];
+          size += 1;
+          if (cut(x, y)) whole = false;
+          for (const next of [`${x + 1},${y}`, `${x - 1},${y}`, `${x},${y + 1}`, `${x},${y - 1}`]) {
+            if (hard.has(next) && !seen.has(next)) {
+              seen.add(next);
+              stack.push(next);
+            }
+          }
+        }
+        if (whole) {
+          expect(size).toBeGreaterThanOrEqual(7);
+          expect(size).toBeLessThanOrEqual(23);
+        }
+        n += 1;
+      }
+      counts.push(n);
+    }
+    const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
+    expect(mean).toBeGreaterThan(2);
+    expect(mean).toBeLessThan(6);
+    expect(Math.max(...counts)).toBeLessThanOrEqual(8);
+  });
+
   it("has caves, each in a real rock face", () => {
     // Measured: 3 here, 6.3 on average over 100 sites (the calmer landscape has fewer faces).
     expect(w.caves.length).toBeGreaterThan(0);

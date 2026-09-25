@@ -53,7 +53,7 @@ export function rocksOf(s: Settlement, t: Tuning): Rock[] {
     for (let tx = 0; tx < n; tx += 1) {
       if (covered.has(tileKey(tx, ty))) continue;
       const i = ty * n + tx;
-      out[i] = natureRock(seed, tx, ty, ground.steep[i] === true, t);
+      out[i] = natureRock(seed, n, tx, ty, ground.steep[i] === true, t);
     }
   }
   return out;
@@ -73,7 +73,7 @@ export function rockAt(s: Settlement, tx: number, ty: number, t: Tuning): Rock {
     const size = BUILDING_DEFS[b.type].footprint;
     if (tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + size) return "none";
   }
-  return natureRock(placeSeed(s.lat, s.lon), tx, ty, ground.steep[ty * n + tx] === true, t);
+  return natureRock(placeSeed(s.lat, s.lon), n, tx, ty, ground.steep[ty * n + tx] === true, t);
 }
 
 /** Where the rovers set out from and come back to: the headquarters' middle, or null without one. */

@@ -155,39 +155,91 @@ describe("rovers", () => {
   });
 });
 
-describe("hard rock (the user: \"the hard rocks disappeared entirely, please bring them back\")", () => {
-  const BOULDERS = makeTuning({ SETTLEMENTS_ENABLED: 1, NETWORK_ENABLED: 1, HEADQUARTERS_ENABLED: 1, TERRAIN_RELIEF_M: 12, ROCK_BOULDER_SHARE: 0.03 });
-  // Within the stores' capacity, so a rover's haul is not clamped away.
-  const site = (): SimState => withMaterials(foundSettlement(marsStart(undefined, BOULDERS), "city", 0.31, -1.2, BOULDERS).state, 100);
-  /** A boulder on open, buildable ground - hard rock that is not a cliff. */
-  const boulder = (s: SimState): [number, number] => {
-    const ground = siteGround(s.settlements[0]!, BOULDERS);
-    const k = rocksOf(s.settlements[0]!, BOULDERS).findIndex((r, i) => r === "crag" && !ground.steep[i]);
-    expect(k, "a boulder on open ground at this site").toBeGreaterThanOrEqual(0);
-    return [k % 32, Math.floor(k / 32)];
-  };
+describe("hard rock, in rare clusters (the user: \"big clusters from 7 to 23 tiles, all connected together, that generate rarely\")", () => {
+  // A 96-tile grid, as the browser will found cities with: clusters never
+  // grow within 30 tiles of the founding site, and all of a 32-tile grid is.
+  const BIG = makeTuning({ SETTLEMENTS_ENABLED: 1, NETWORK_ENABLED: 1, HEADQUARTERS_ENABLED: 1, TERRAIN_RELIEF_M: 12, ROCK_CLUSTER_CHANCE: 0.65, CITY_GRID_TILES: 96 });
+  const at = (lat: number, lon: number): SimState => withMaterials(foundSettlement(marsStart(undefined, BIG), "city", lat, lon, BIG).state, 100);
 
-  it("lies on open ground, not only on cliffs, at the browser's share", () => {
-    const s = site();
-    const ground = siteGround(s.settlements[0]!, BOULDERS);
-    const onOpen = rocksOf(s.settlements[0]!, BOULDERS).filter((r, i) => r === "crag" && !ground.steep[i]).length;
-    // About 3% of the open ground; none at all with the share at its default of 0.
-    expect(onOpen).toBeGreaterThan(10);
-    const none = rocksOf(city().settlements[0]!, HQ).filter((r, i) => r === "crag" && !siteGround(city().settlements[0]!, HQ).steep[i]).length;
-    expect(none).toBe(0);
+  /** The clusters on a grid: its hard rock that is not a cliff, grouped by edge-connection. */
+  const clusters = (s: SimState): [number, number][][] => {
+    const settlement = s.settlements[0]!;
+    const ground = siteGround(settlement, BIG);
+    const n = ground.tiles;
+    const rocks = rocksOf(settlement, BIG);
+    const hard = new Set<number>();
+    rocks.forEach((r, i) => {
+      if (r === "crag" && !ground.steep[i]) hard.add(i);
+    });
+    const out: [number, number][][] = [];
+    const seen = new Set<number>();
+    for (const start of hard) {
+      if (seen.has(start)) continue;
+      const group: [number, number][] = [];
+      const stack = [start];
+      seen.add(start);
+      while (stack.length > 0) {
+        const i = stack.pop()!;
+        const x = i % n;
+        const y = Math.floor(i / n);
+        group.push([x, y]);
+        for (const j of [x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1, i - n, i + n]) {
+          if (j >= 0 && hard.has(j) && !seen.has(j)) {
+            seen.add(j);
+            stack.push(j);
+          }
+        }
+      }
+      out.push(group);
+    }
+    return out;
+  };
+  // Sites whose grids hold clusters wholly inside them (a cluster may cross the grid's edge).
+  const sites = Array.from({ length: 12 }, (_, k) => at(-0.9 + 0.15 * k, -2.8 + 0.47 * k));
+
+  it("comes only in clusters of 7 to 23 connected tiles, off the cliffs and away from the founding site", () => {
+    let seen = 0;
+    for (const s of sites) {
+      for (const group of clusters(s)) {
+        // Cut by the grid's edge a cluster can show fewer tiles; never more than 23.
+        const inside = group.every(([x, y]) => x > 0 && y > 0 && x < 95 && y < 95);
+        if (inside) expect(group.length, `a cluster at ${group[0]!.join(",")}`).toBeGreaterThanOrEqual(7);
+        expect(group.length).toBeLessThanOrEqual(23);
+        for (const [x, y] of group) expect(Math.hypot(x + 0.5 - 48, y + 0.5 - 48)).toBeGreaterThan(20);
+        seen += 1;
+      }
+    }
+    expect(seen, "clusters at these sites, or this test tests nothing").toBeGreaterThan(5);
+  });
+
+  it("is rare: a handful on a city's grid, and none at all with the chance at its default of 0", () => {
+    // Measured over these 12 sites: 0 to 4 clusters on a 96-tile grid, 0.8 on average (a city's
+    // world round it holds 3 to 8, 4.4 on average over 20 sites).
+    for (const s of sites) expect(clusters(s).length).toBeLessThanOrEqual(6);
+    const plain = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, CITY_GRID_TILES: 96 });
+    const s = foundSettlement(marsStart(undefined, plain), "city", 0.31, -1.2, plain).state.settlements[0]!;
+    const ground = siteGround(s, plain);
+    expect(rocksOf(s, plain).filter((r, i) => r === "crag" && !ground.steep[i]).length).toBe(0);
+  });
+
+  it("leaves the small rocks scattered across the field", () => {
+    const s = sites[0]!.settlements[0]!;
+    const loose = rocksOf(s, BIG).filter((r) => r === "loose").length / (96 * 96);
+    // About ROCK_LOOSE_SHARE of the ground: scattered, not clustered.
+    expect(loose).toBeGreaterThan(0.04);
+    expect(loose).toBeLessThan(0.1);
   });
 
   it("stands in the way of building and of corridors, until a rover breaks it", () => {
-    const s = site();
-    const [tx, ty] = boulder(s);
-    expect(placeBuilding(s, id(s), "storage_depot", tx, ty, BOULDERS).reason).toMatch(/hard rock/);
-    expect(placeLink(s, id(s), "corridors", tx, ty, BOULDERS).reason).toMatch(/hard rock/);
-    const sent = sendRover(s, id(s), tx, ty, BOULDERS);
+    const s = sites.find((x) => clusters(x).length > 0)!;
+    const [tx, ty] = clusters(s)[0]![0]!;
+    expect(placeBuilding(s, id(s), "storage_depot", tx, ty, BIG).reason).toMatch(/hard rock/);
+    expect(placeLink(s, id(s), "corridors", tx, ty, BIG).reason).toMatch(/hard rock/);
+    const sent = sendRover(s, id(s), tx, ty, BIG);
     expect(sent.ok, sent.reason ?? "").toBe(true);
-    const done = advance(sent.state, Math.ceil(sent.state.settlements[0]!.jobs[0]!.total / BOULDERS.SUBSTEP_YEARS), { tuning: BOULDERS, env: NEUTRAL_ENV, forcing: null });
-    // Five materials home, and the ground free.
-    expect(materials(done) - materials(sent.state)).toBeCloseTo(BOULDERS.ROCK_CRAG_MATERIALS, 9);
-    expect(placeBuilding(done, id(done), "storage_depot", tx, ty, BOULDERS).ok).toBe(true);
+    const done = advance(sent.state, Math.ceil(sent.state.settlements[0]!.jobs[0]!.total / BIG.SUBSTEP_YEARS), { tuning: BIG, env: NEUTRAL_ENV, forcing: null });
+    expect(materials(done) - materials(sent.state)).toBeCloseTo(BIG.ROCK_CRAG_MATERIALS, 9);
+    expect(placeBuilding(done, id(done), "storage_depot", tx, ty, BIG).ok).toBe(true);
   });
 });
 

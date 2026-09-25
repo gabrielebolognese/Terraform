@@ -30,7 +30,7 @@
 
 import type { Tuning } from "../tuning.js";
 import type { SettlementKind } from "../types.js";
-import { gridTiles } from "./space.js";
+import { gridTiles, tileKey } from "./space.js";
 
 /** 32-bit integer hash of three integers (a murmur-style finaliser). Pure. */
 function hash3(a: number, b: number, c: number): number {
@@ -190,18 +190,86 @@ function tileHash(seed: number, tx: number, ty: number): number {
 
 export type Rock = "none" | "loose" | "crag";
 
+/** Whether the ground at tile (tx, ty) is too steep to build on, straight from the height function. */
+function steepAt(seed: number, tiles: number, tx: number, ty: number, t: Tuning): boolean {
+  const a = terrainHeight(seed, tiles, tx, ty, t);
+  const b = terrainHeight(seed, tiles, tx + 1, ty, t);
+  const c = terrainHeight(seed, tiles, tx, ty + 1, t);
+  const d = terrainHeight(seed, tiles, tx + 1, ty + 1, t);
+  return Math.max(Math.abs(a - b), Math.abs(c - d), Math.abs(a - c), Math.abs(b - d)) / t.TILE_METRES > t.TERRAIN_MAX_SLOPE;
+}
+
+/** Tiles a hard-rock cluster may reach from its seed: always less than a cell. */
+const CLUSTER_MIN = 7;
+const CLUSTER_MAX = 23;
+
+const clusterCells = new Map<string, readonly number[]>();
+
+/**
+ * The hard-rock cluster seeded in one cell of the `ROCK_CLUSTER_CELL`
+ * lattice, as tile keys - or none. A cluster is 7 to 23 tiles, all
+ * connected (the user: "the hard rocks are all only in clusters, big clusters
+ * from 7 to 23 tiles, all connected together, that generate rarely"), grown
+ * from its seed tile by a walk over buildable ground that never steps onto a
+ * cliff. None near the founding site. Deterministic; kept per cell.
+ */
+function clusterIn(seed: number, tiles: number, cx: number, cy: number, t: Tuning): readonly number[] {
+  const cell = Math.max(CLUSTER_MAX * 2, Math.round(t.ROCK_CLUSTER_CELL));
+  const key = `${seed}|${tiles}|${cx}|${cy}|${cell}|${t.ROCK_CLUSTER_CHANCE}|${t.TERRAIN_RELIEF_M}|${t.TERRAIN_MAX_SLOPE}|${t.TERRAIN_CLEAR_TILES}`;
+  const kept = clusterCells.get(key);
+  if (kept !== undefined) return kept;
+  const made = ((): number[] => {
+    if (lattice(seed ^ 0xc1a5, cx, cy) >= t.ROCK_CLUSTER_CHANCE) return [];
+    // The seed tile, in the middle of the cell, so the cluster stays within reach of its neighbours' checks.
+    const sx = Math.floor((cx + 0.3 + 0.4 * lattice(seed ^ 0x5eed1, cx, cy)) * cell);
+    const sy = Math.floor((cy + 0.3 + 0.4 * lattice(seed ^ 0x5eed2, cx, cy)) * cell);
+    if (Math.hypot(sx + 0.5 - tiles / 2, sy + 0.5 - tiles / 2) < 30) return [];
+    if (steepAt(seed, tiles, sx, sy, t)) return [];
+    const size = CLUSTER_MIN + Math.floor(lattice(seed ^ 0x512e, cx, cy) * (CLUSTER_MAX - CLUSTER_MIN + 1));
+    const tilesIn: [number, number][] = [[sx, sy]];
+    const taken = new Set<string>([`${sx},${sy}`]);
+    for (let step = 0; tilesIn.length < size && step < size * 12; step += 1) {
+      // From a tile already in the cluster, to one of its four neighbours - so every tile is connected.
+      const from = tilesIn[Math.floor(lattice(seed ^ 0x77a1, cx * 131 + step, cy) * tilesIn.length)]!;
+      const dir = Math.floor(lattice(seed ^ 0x77a2, cx, cy * 137 + step) * 4);
+      const nx = from[0] + (dir === 0 ? 1 : dir === 1 ? -1 : 0);
+      const ny = from[1] + (dir === 2 ? 1 : dir === 3 ? -1 : 0);
+      if (taken.has(`${nx},${ny}`) || steepAt(seed, tiles, nx, ny, t)) continue;
+      taken.add(`${nx},${ny}`);
+      tilesIn.push([nx, ny]);
+    }
+    // Hemmed in by cliffs, a walk can stop short: a cluster is 7 tiles or none
+    // (at a higher chance, one came out at 4 - measured).
+    if (tilesIn.length < CLUSTER_MIN) return [];
+    return tilesIn.map(([x, y]) => tileKey(x, y));
+  })();
+  clusterCells.set(key, made);
+  if (clusterCells.size > 4096) clusterCells.delete(clusterCells.keys().next().value as string);
+  return made;
+}
+
+/** Whether tile (tx, ty) lies in a hard-rock cluster. */
+function inCluster(seed: number, tiles: number, tx: number, ty: number, t: Tuning): boolean {
+  if (!(t.ROCK_CLUSTER_CHANCE > 0)) return false;
+  const cell = Math.max(CLUSTER_MAX * 2, Math.round(t.ROCK_CLUSTER_CELL));
+  const cx = Math.floor(tx / cell);
+  const cy = Math.floor(ty / cell);
+  const k = tileKey(tx, ty);
+  for (let dy = -1; dy <= 1; dy += 1) for (let dx = -1; dx <= 1; dx += 1) if (clusterIn(seed, tiles, cx + dx, cy + dy, t).includes(k)) return true;
+  return false;
+}
+
 /**
  * The rock nature put on a tile, before anyone built or broke anything:
- *   - a crag on ground too steep to build on (a mountain, a canyon wall);
- *   - a crag - hard rock, a cluster of boulders - on a share
- *     `ROCK_BOULDER_SHARE` of open ground (the user: "the hard rocks
- *     disappeared entirely, please bring them back": on the calmer
- *     landscape, steep ground alone left almost none);
- *   - loose rocks on a share `ROCK_LOOSE_SHARE` of the rest.
+ *   - a crag on ground too steep to build on (a mountain, a canyon wall) -
+ *     rock a rover can break, drawn as the bare rock of the slope itself;
+ *   - hard rock, in the rare clusters of `clusterIn`;
+ *   - loose rocks, scattered: a share `ROCK_LOOSE_SHARE` of the rest.
+ * `tiles` is the grid's edge (the founding site is its middle).
  */
-export function natureRock(seed: number, tx: number, ty: number, steep: boolean, t: Tuning): Rock {
+export function natureRock(seed: number, tiles: number, tx: number, ty: number, steep: boolean, t: Tuning): Rock {
   if (steep) return "crag";
-  if (tileHash(seed ^ 0xb01d, tx, ty) < t.ROCK_BOULDER_SHARE) return "crag";
+  if (inCluster(seed, tiles, tx, ty, t)) return "crag";
   if (tileHash(seed, tx, ty) < t.ROCK_LOOSE_SHARE) return "loose";
   return "none";
 }
@@ -234,6 +302,13 @@ export interface World {
   readonly size: number;
   /** Row-major (`y * (size + 1) + x`), corner heights in metres; corner (0, 0) is the grid's (-margin, -margin). */
   readonly cornersM: readonly number[];
+  /**
+   * The same ground sampled every half tile, row-major over (2 * size + 1)
+   * points a side, metres - what the ground is drawn through up close, so
+   * canyon walls and crater bowls have curvature, not facets a tile wide.
+   * Even points are `cornersM`.
+   */
+  readonly fineM: readonly number[];
   /** Cave mouths, in grid tile coordinates (the world's corner is at -margin). */
   readonly caves: readonly Cave[];
   /** Rocks on the world's tiles OUTSIDE the grid, in grid tile coordinates (the grid's own are the settlement's: `rocksOf`). */
@@ -275,7 +350,8 @@ function terrainKey(kind: string, place: Place, t: Tuning): string {
     t.TERRAIN_CANYON_SCALE,
     t.TERRAIN_PIT_SCALE,
     t.TERRAIN_WORLD_MARGIN,
-    t.ROCK_BOULDER_SHARE,
+    t.ROCK_CLUSTER_CHANCE,
+    t.ROCK_CLUSTER_CELL,
     t.ROCK_LOOSE_SHARE,
   ].join("|");
 }
@@ -323,6 +399,13 @@ export function worldOf(place: Place, t: Tuning): World {
     const m = size + 1;
     const cornersM = new Array<number>(m * m);
     for (let y = 0; y < m; y += 1) for (let x = 0; x < m; x += 1) cornersM[y * m + x] = clean(terrainHeight(seed, tiles, x - margin, y - margin, t));
+    const f = 2 * size + 1;
+    const fineM = new Array<number>(f * f);
+    for (let y = 0; y < f; y += 1) {
+      for (let x = 0; x < f; x += 1) {
+        fineM[y * f + x] = x % 2 === 0 && y % 2 === 0 ? cornersM[(y / 2) * m + x / 2]! : clean(terrainHeight(seed, tiles, x / 2 - margin, y / 2 - margin, t));
+      }
+    }
     // Caves: at most one per 16-tile cell, in its steepest face, if that face is steep enough.
     const caves: Cave[] = [];
     const cell = 16;
@@ -360,11 +443,11 @@ export function worldOf(place: Place, t: Tuning): World {
         const c = cornersM[(y + 1) * m + x]!;
         const d = cornersM[(y + 1) * m + x + 1]!;
         const steep = Math.max(Math.abs(a - b), Math.abs(c - d), Math.abs(a - c), Math.abs(b - d)) / t.TILE_METRES > t.TERRAIN_MAX_SLOPE;
-        const kind = natureRock(seed, gx, gy, steep, t);
+        const kind = natureRock(seed, tiles, gx, gy, steep, t);
         if (kind !== "none") rocks.push({ x: gx, y: gy, kind });
       }
     }
-    return { margin, size, cornersM, caves, rocks };
+    return { margin, size, cornersM, fineM, caves, rocks };
   });
 }
 

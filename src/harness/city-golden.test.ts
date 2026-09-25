@@ -89,18 +89,25 @@ describe("the reference city render", () => {
     expect(frameDifference(golden, rendered)).toBeLessThanOrEqual(TOLERANCE_TERRAIN);
   });
 
-  it("would notice one corner of ground two metres lower - the terrain tolerance is not vacuous", () => {
+  it("would notice one tile of ground a metre lower - the terrain tolerance is not vacuous", () => {
     const golden = decodePng(readFileSync(join(FRAMES_DIR, CITY_GOLDEN_WHOLE.name)));
     const { view, options } = referenceCity();
-    // The ground is drawn through tile corners, and smooth: a change spreads
-    // over the four tiles round a corner and moves few pixels. Measured, one
-    // corner lowered at 26,25 / 10,28 / 5,5 / 20,8: a metre, 0.00074% to
-    // 0.00089% - under one full-contrast pixel, so under the tolerance; two
-    // metres, 0.00108% to 0.00157% - over it everywhere. Two metres at 26,25:
-    // 0.00146%. (Lowering a tile's own height, as this test did on stepped
-    // ground, now changes almost nothing drawn: 0.00059%.)
-    const k = 25 * 33 + 26;
-    const lower = { ...view, corners: view.corners.map((z, i) => (i === k ? z - 0.2 : z)) };
+    // Tile 26,25 a metre (0.1 tile) lower: its four corners, and the nine
+    // half-tile samples the ground is drawn through up close. Measured at
+    // 26,25 / 10,28 / 5,5 / 20,8: 0.00152%, 0.00125%, 0.00150%, 0.00143% -
+    // over the tolerance everywhere. (One corner alone, in the corner array
+    // only, changed nothing drawn once the ground was drawn through the
+    // half-tile samples; before that, a metre at one corner was under one
+    // full-contrast pixel.)
+    const f = 2 * view.world.size + 1;
+    const samples = new Set<number>();
+    for (let j = 0; j <= 2; j += 1) for (let i = 0; i <= 2; i += 1) samples.add((2 * (25 + view.world.margin) + j) * f + 2 * (26 + view.world.margin) + i);
+    const corners = new Set([25 * 33 + 26, 25 * 33 + 27, 26 * 33 + 26, 26 * 33 + 27]);
+    const lower = {
+      ...view,
+      corners: view.corners.map((z, i) => (corners.has(i) ? z - 0.1 : z)),
+      world: { ...view.world, fine: (view.world.fine ?? []).map((z, i) => (samples.has(i) ? z - 0.1 : z)) },
+    };
     expect(frameDifference(golden, renderCity(lower, options, CITY_GOLDEN_WHOLE.width, CITY_GOLDEN_WHOLE.height, false))).toBeGreaterThan(TOLERANCE_TERRAIN);
   });
 

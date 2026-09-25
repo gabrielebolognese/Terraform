@@ -127,3 +127,70 @@ describe("foundations", () => {
     expect(onSlope).toBeGreaterThan(onFlat);
   });
 });
+
+describe("the ground up close (the user: \"smooth out the graphics ... canyons and craters higher quality\")", () => {
+  // The site's ground alone: no buildings, no rocks, no world round it.
+  const ground: CityView = { ...site, buildings: [], rocks: site.rocks.map(() => "none"), world: { ...site.world, rocks: [], caves: [] } };
+
+  it("is drawn through the half-tile samples up close, and through tile corners further away", () => {
+    // A bump between the corners, in the half-tile samples only: seen at full detail, not at medium.
+    const fine = [...(ground.world.fine ?? [])];
+    const f = 2 * ground.world.size + 1;
+    const i = (2 * (10 + ground.world.margin) + 1) * f + 2 * (10 + ground.world.margin) + 1;
+    fine[i] = (fine[i] ?? 0) + 0.6;
+    const bumped: CityView = { ...ground, world: { ...ground.world, fine } };
+    const differs = (q: CityQuality): boolean => {
+      resetSceneCache();
+      const a = cityScene(ground, at(q));
+      resetSceneCache();
+      return JSON.stringify(cityScene(bumped, at(q))) !== JSON.stringify(a);
+    };
+    expect(differs("high")).toBe(true);
+    expect(differs("medium")).toBe(false);
+  });
+
+  it("shows strata on rock faces - canyon walls, crater bowls - and none on level ground", () => {
+    // Up a face the colour goes light, dark, light in bands; on level ground it
+    // only shades steadily with height (the regolith's ramp). Count the turns.
+    const turns = (slope: number): number => {
+      const r = Array.from({ length: 13 }, (_, k) => groundColour(40.5, 40.5, k * 0.25, slope, 0).r);
+      let n = 0;
+      for (let k = 2; k < r.length; k += 1) if ((r[k]! - r[k - 1]!) * (r[k - 1]! - r[k - 2]!) < 0) n += 1;
+      return n;
+    };
+    expect(turns(1)).toBeGreaterThanOrEqual(2);
+    expect(turns(0)).toBe(0);
+  });
+
+  it("grows shrubs on the green, up close only - more of them as the planet greens, none on bare ground", () => {
+    // The grid alone (the world round it grows its own).
+    const { fine: _drop, ...plainWorld } = ground.world;
+    const grid: CityView = { ...ground, world: { ...plainWorld, margin: 0, size: ground.tiles, corners: ground.corners } };
+    const leaves = (v: CityView, q: CityQuality): number => {
+      resetSceneCache();
+      // Shrubs are the only shapes with more green than red that are not ground triangles.
+      return cityScene(v, at(q)).filter((sh) => sh.rings[0]!.length > 6 && sh.fill.g > sh.fill.r * 1.1).length;
+    };
+    const some = leaves({ ...grid, greenery: 0.3 }, "high");
+    expect(some).toBeGreaterThan(0);
+    // Only where the ground reads green: more of it green, more shrubs.
+    expect(leaves({ ...grid, greenery: 0.9 }, "high")).toBeGreaterThan(some);
+    expect(leaves({ ...grid, greenery: 0 }, "high")).toBe(0);
+    expect(leaves({ ...grid, greenery: 0.8 }, "medium")).toBe(0);
+  });
+});
+
+describe("hard rock in the picture", () => {
+  const plain = flatten(site);
+  const withRock = (steep: boolean): CityView => ({ ...plain, buildings: [], steep: plain.steep.map((_, i) => (i === 12 * 32 + 12 ? steep : false)), rocks: plain.rocks.map((_, i) => (i === 12 * 32 + 12 ? "crag" : "none")) });
+  const boulderShapes = (v: CityView): number => {
+    resetSceneCache();
+    return cityScene(v, at("high")).length;
+  };
+
+  it("draws a cluster's boulders, but not a boulder on every cliff: a cliff is its own bare rock", () => {
+    const none: CityView = { ...plain, buildings: [], rocks: plain.rocks.map(() => "none") };
+    expect(boulderShapes(withRock(false))).toBeGreaterThan(boulderShapes(none));
+    expect(boulderShapes(withRock(true))).toBe(boulderShapes({ ...none, steep: withRock(true).steep }));
+  });
+});
