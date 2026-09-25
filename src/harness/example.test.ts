@@ -11,6 +11,11 @@ import {
   BUILDING_DEFS,
   DEFAULT_TUNING,
   NEUTRAL_ENV,
+  chunkKey,
+  groundOf,
+  routeKm,
+  rocksOf,
+  claimTest,
   cityView,
   computeProgress,
   derive,
@@ -48,6 +53,24 @@ const game = makeTuning({
 });
 const { state, sizes } = examplePlanet(DEFAULT_TUNING, game);
 const env = habitat(state.reservoirs, derive(state.reservoirs, worldEnv(state, NEUTRAL_ENV, game), game), game, 0);
+const C = game.CLAIM_CHUNK_TILES;
+
+/**
+ * A city's own layout, as it was laid out on its founding square before it
+ * grew (at the user's request: "even normal cities way bigger"): its
+ * buildings there, not the works nor the districts it grew - in the founding
+ * square's own tiles.
+ */
+function laidOut(s: (typeof state.settlements)[number]): { n: number; buildings: typeof s.buildings; corridors: number[] } {
+  const f = frameOf(s, game);
+  const grown = new Set(s.zones.filter((z) => /^(Works and stores|Solar farm|Wind farm|Commerce|Agriculture|Industry|Port|Research|Suburb|Storage|Parkland) ?\d*$/.test(z.name)).flatMap((z) => z.tiles));
+  const inSquare = (x: number, y: number): boolean => x >= -f.x0 && y >= -f.y0 && x < -f.x0 + s.base && y < -f.y0 + s.base;
+  return {
+    n: s.base,
+    buildings: s.buildings.filter((b) => inSquare(b.tx, b.ty) && !grown.has(b.ty * 1024 + b.tx)).map((b) => ({ ...b, tx: b.tx + f.x0, ty: b.ty + f.y0 })),
+    corridors: s.corridors.filter((k) => inSquare(k & 1023, k >> 10)),
+  };
+}
 
 const byKind = (kind: Settlement["kind"]): Settlement[] => state.settlements.filter((s) => s.kind === kind);
 
@@ -174,9 +197,10 @@ describe("the example planet", () => {
       ["habitat_dome", "greenhouse", "freezer", "biosphere"].includes(t) ? "home" : ["solar_array", "geothermal_plant", "reactor", "wind_turbine", "battery_bank"].includes(t) ? "power" : t === "spaceport" ? "port" : t === "headquarters" ? "hq" : t === "park" ? "park" : "industry";
     let cities = 0;
     for (const s of state.settlements) {
-      if (s.kind === "outpost" || s.buildings.length < 30) continue;
+      if (s.kind === "outpost" || laidOut(s).buildings.length < 30) continue;
       cities += 1;
-      const mid = s.buildings.map((b) => ({ k: kindOf(b.type), x: b.tx + BUILDING_DEFS[b.type].footprint / 2, y: b.ty + BUILDING_DEFS[b.type].depth / 2 }));
+      // Its own layout: the works it grew into are a mix on purpose.
+      const mid = laidOut(s).buildings.map((b) => ({ k: kindOf(b.type), x: b.tx + BUILDING_DEFS[b.type].footprint / 2, y: b.ty + BUILDING_DEFS[b.type].depth / 2 }));
       // Neighbours looked for in cells of 16 tiles, ring by ring (sorting the whole city for each building took 31 s a metropolis).
       const cells = new Map<string, typeof mid>();
       for (const m of mid) {
@@ -224,8 +248,11 @@ describe("the example planet", () => {
       expect(s.rails.filter((k) => !on.has((k >> 10) * view.tiles + (k & 1023))), `${s.id}: rails no train runs on`).toEqual([]);
       // One line, not doubled: a 2 x 2 square of rail is a stretch laid twice side by side. Measured: at most 4
       // a city, where legs meet at their stops (laid without keeping off the line before, up to 27).
-      const rails = new Set(s.rails);
-      expect(s.rails.filter((k) => rails.has(k + 1) && rails.has(k + 1024) && rails.has(k + 1025)).length, `${s.id}: doubled`).toBeLessThanOrEqual(5);
+      // (On its founding square: the avenues a big city grew run double track, and cross.)
+      const f = frameOf(s, game);
+      const own = s.rails.filter((k) => (k & 1023) >= -f.x0 && k >> 10 >= -f.y0 && (k & 1023) < -f.x0 + s.base && k >> 10 < -f.y0 + s.base);
+      const rails = new Set(own);
+      expect(own.filter((k) => rails.has(k + 1) && rails.has(k + 1024) && rails.has(k + 1025)).length, `${s.id}: doubled`).toBeLessThanOrEqual(5);
     }
     expect(railed, "vacuity: cities big enough for a railway").toBeGreaterThanOrEqual(15);
   });
@@ -252,13 +279,15 @@ describe("the example planet", () => {
 
   it("joins its cities by the shortest traces, not a street round every building", () => {
     // The user: "the metropolis and cities have far, far too many corridors".
-    // Measured over every city: 0.49 tiles of corridor for each tile under a
-    // building (a street round every building, as before: 1.66).
+    // Over every city, off its avenues (which carry many, as asked: "in the spaces
+    // many corridors"): measured 0.20 tiles of corridor for each tile under a building
+    // (0.49 before the cities grew; a street round every building, as once: 1.66).
     let corridor = 0;
     let built = 0;
     for (const s of state.settlements) {
       if (s.kind !== "city") continue;
-      corridor += s.corridors.length;
+      const avenues = new Set(s.zones.filter((z) => z.name.startsWith("Avenues")).flatMap((z) => z.tiles));
+      corridor += s.corridors.filter((k) => !avenues.has(k)).length;
       for (const b of s.buildings) built += BUILDING_DEFS[b.type].footprint * BUILDING_DEFS[b.type].depth;
     }
     expect(built, "vacuity: cities").toBeGreaterThan(1000);
@@ -271,9 +300,11 @@ describe("the example planet", () => {
     // buildings in its centre and in 3 or 4 of its corners (the outer thirds
     // both ways); no two buildings closer than 2 tiles, but the headquarters
     // and the spaceport it lands with, which share a wall.
+    // Each city's own layout on its founding square: the works it grew into stand wall to wall, as asked.
     for (const s of state.settlements) {
-      const n = frameOf(s, game).n;
-      const box = s.buildings.map((b) => {
+      const own = s.kind === "metropolis" ? { n: frameOf(s, game).n, buildings: s.buildings } : laidOut(s);
+      const n = own.n;
+      const box = own.buildings.map((b) => {
         const z = BUILDING_DEFS[b.type].footprint;
         const d = BUILDING_DEFS[b.type].depth;
         return { x0: b.tx, y0: b.ty, x1: b.tx + z, y1: b.ty + d, cx: b.tx + z / 2, cy: b.ty + d / 2 };
@@ -293,7 +324,7 @@ describe("the example planet", () => {
             if (x < 0 || y < 0 || x >= n || y >= n) continue;
             const o = owner[y * n + x]!;
             if (o < 0 || o === i || (o < founded && i < founded)) continue;
-            close.push(`${s.id}: ${s.buildings[i]!.type} at ${b.x0},${b.y0} and ${s.buildings[o]!.type}`);
+            close.push(`${s.id}: ${own.buildings[i]!.type} at ${b.x0},${b.y0} and ${own.buildings[o]!.type}`);
           }
         }
       });
@@ -303,6 +334,104 @@ describe("the example planet", () => {
       expect(corners, s.id).toBeGreaterThanOrEqual(3);
       expect(box.some((b) => Math.abs(b.cx - n / 2) < n / 6 && Math.abs(b.cy - n / 2) < n / 6), s.id).toBe(true);
     }
+  });
+
+  it("grows its cities from 3 to 17 chunks across, each a blob, every chunk with room full", () => {
+    // The user: "even normal cities should be way bigger - at least 3x3 tiles, a max of 17x17, still blob shaped".
+    const spans: number[] = [];
+    for (const s of state.settlements) {
+      if (s.kind !== "city") continue;
+      const f = frameOf(s, game);
+      const cu = f.n / C;
+      const claims = new Set(s.claims);
+      const held = (u: number, v: number): boolean => {
+        const i = u + f.x0 / C;
+        const j = v + f.y0 / C;
+        return claims.has(chunkKey(i, j)) || (i >= 0 && j >= 0 && i < s.base / C && j < s.base / C);
+      };
+      let minU = cu;
+      let maxU = -1;
+      let minV = cu;
+      let maxV = -1;
+      let count = 0;
+      for (let v = 0; v < cu; v += 1) for (let u = 0; u < cu; u += 1) if (held(u, v)) {
+        count += 1;
+        minU = Math.min(minU, u);
+        maxU = Math.max(maxU, u);
+        minV = Math.min(minV, v);
+        maxV = Math.max(maxV, v);
+      }
+      const span = Math.max(maxU - minU + 1, maxV - minV + 1);
+      spans.push(span);
+      expect(Math.min(maxU - minU + 1, maxV - minV + 1), `${s.id}: at least 3 x 3`).toBeGreaterThanOrEqual(3);
+      expect(span, `${s.id}: at most 17 x 17`).toBeLessThanOrEqual(17);
+      // A blob, not a square, once it is big enough to be either.
+      if (span >= 9) {
+        expect(count / ((maxU - minU + 1) * (maxV - minV + 1)), `${s.id}: share of its box`).toBeLessThan(0.9);
+        expect([held(minU, minV), held(maxU, minV), held(minU, maxV), held(maxU, maxV)].filter(Boolean).length, `${s.id}: box corners held`).toBeLessThanOrEqual(1);
+      }
+      // No chunk with room left empty.
+      const count3 = new Int32Array(cu * cu);
+      for (const b of s.buildings) count3[Math.floor(b.ty / C) * cu + Math.floor(b.tx / C)]! += 1;
+      const g = groundOf(s, game);
+      const avenue = new Set(s.zones.filter((z) => z.name.startsWith("Avenues")).flatMap((z) => z.tiles));
+      // Room is ground the city can reach from its headquarters over buildable land: a city keeps its hard rock
+      // (a metropolis is cleared of it), and crags and slopes wall some chunks off altogether.
+      const rocks = rocksOf(s, game);
+      const ours = claimTest(s, game);
+      const n = f.n;
+      const reach = new Uint8Array(n * n);
+      const hq = s.buildings.find((b) => b.type === "headquarters")!;
+      const stack = [(hq.ty + 5) * n + hq.tx + 2];
+      while (stack.length > 0) {
+        const i = stack.pop()!;
+        if (reach[i] || g.steep[i] || rocks[i] === "crag" || !ours(i % n, Math.floor(i / n))) continue;
+        reach[i] = 1;
+        const x = i % n;
+        if (x > 0) stack.push(i - 1);
+        if (x < n - 1) stack.push(i + 1);
+        if (i >= n) stack.push(i - n);
+        if (i < n * n - n) stack.push(i + n);
+      }
+      for (let v = 0; v < cu; v += 1) {
+        for (let u = 0; u < cu; u += 1) {
+          if (!held(u, v)) continue;
+          let free = 0;
+          for (let y = v * C; y < (v + 1) * C; y += 1) for (let x = u * C; x < (u + 1) * C; x += 1) if (!avenue.has(y * 1024 + x) && reach[y * n + x]) free += 1;
+          if (free >= (C * C) / 3) expect(count3[v * cu + u], `${s.id}: chunk ${u},${v}`).toBeGreaterThanOrEqual(3);
+        }
+      }
+    }
+    // Measured: spans of 3, 5, 7, 9, 11, 13, 15 and 16-17, three cities each.
+    expect(Math.min(...spans)).toBe(3);
+    expect(Math.max(...spans)).toBeGreaterThanOrEqual(16);
+    expect(new Set(spans).size).toBeGreaterThanOrEqual(7);
+  });
+
+  it("joins every settlement to every other by railway: one network, with loops round the cities", () => {
+    // The user: "we also need interconnected cities".
+    const ids = state.settlements.map((s) => s.id);
+    const next = new Map(ids.map((id) => [id, [] as string[]]));
+    const seen = new Set<string>();
+    for (const r of state.routes) {
+      expect(ids).toContain(r.a);
+      expect(ids).toContain(r.b);
+      const key = r.a < r.b ? `${r.a}|${r.b}` : `${r.b}|${r.a}`;
+      expect(seen.has(key), key).toBe(false);
+      seen.add(key);
+      expect(r.km).toBeCloseTo(routeKm(state.settlements.find((s) => s.id === r.a)!, state.settlements.find((s) => s.id === r.b)!), 6);
+      next.get(r.a)!.push(r.b);
+      next.get(r.b)!.push(r.a);
+    }
+    const reached = new Set([ids[0]!]);
+    const queue = [ids[0]!];
+    while (queue.length > 0) for (const o of next.get(queue.pop()!)!) if (!reached.has(o)) {
+      reached.add(o);
+      queue.push(o);
+    }
+    expect(reached.size).toBe(ids.length);
+    // Every city and metropolis on two lines or more: one cut leaves none alone.
+    for (const s of state.settlements) if (s.kind !== "outpost") expect(next.get(s.id)!.length, s.id).toBeGreaterThanOrEqual(2);
   });
 
   it("is the same planet every time, and survives the save exactly", () => {

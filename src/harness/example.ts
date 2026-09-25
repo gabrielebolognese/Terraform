@@ -16,7 +16,7 @@
  * build it too.
  */
 
-import type { BuildingType, HabitatChannels, PlacedBuilding, Settlement, SettlementKind, SimState, Tuning, Zone as PlannerZone } from "../sim/index.js";
+import type { BuildingType, HabitatChannels, PlacedBuilding, Route, Settlement, SettlementKind, SimState, Tuning, Zone as PlannerZone } from "../sim/index.js";
 import {
   BUILDING_DEFS,
   NEUTRAL_ENV,
@@ -36,11 +36,13 @@ import {
   nextSubstepFlows,
   linksToConnect,
   tileKey,
+  routeKm,
   seedBiosphere,
   siteElevation,
   worldEnv,
 } from "../sim/index.js";
 import { buildMetropolis } from "./metropolis.js";
+import { cityPlan, growCity } from "./metropolis-outer.js";
 import { REFERENCE_POLICY, applyOrdersDue } from "./policy.js";
 
 /** Where the reference playthrough has plateaued: progress 98.6%, Phase 6 (measured). */
@@ -378,8 +380,9 @@ const ZONE_LOOK: Readonly<Record<Zone, { name: string; colour: string }>> = {
   mixed: { name: "Centre", colour: "#c46ad6" },
   habitat: { name: "Homes", colour: "#4f9dde" },
   power: { name: "Power", colour: "#f0b429" },
-  industry: { name: "Industry", colour: "#e0803b" },
-  port: { name: "Port", colour: "#48c2b5" },
+  // Not "Industry" and "Port": the districts a city grows are named those.
+  industry: { name: "Old works", colour: "#e0803b" },
+  port: { name: "Spaceport", colour: "#48c2b5" },
 };
 
 /**
@@ -524,6 +527,7 @@ export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
   }
 
   const sizes: Record<string, number> = {};
+  let cities = 0;
   plan.forEach(({ kind, size }, i) => {
     const site = sites[i];
     if (site === undefined) return;
@@ -546,8 +550,56 @@ export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
     const cap = capacities(built, game);
     const settled: Settlement = { ...built, stores: { ...cap }, population: Math.floor(housing(built, game) * 0.9) };
     state = { ...state, settlements: state.settlements.map((s) => (s.id === founded.id ? settled : s)) };
+    if (kind === "city") {
+      // Grown round its founding square (the user: "even normal cities way bigger - at least 3x3 tiles, at
+      // most 17x17, blob shaped"): 3, 5, ... 17 chunks across, three cities of each, the bigger to the bigger.
+      const K = 3 + 2 * Math.floor(cities / 3);
+      cities += 1;
+      state = growCity(state, founded.id, env, game, rnd, cityPlan(K));
+    }
     sizes[founded.id] = size;
   });
   void env;
-  return { state, sizes };
+  return { state: { ...state, routes: interconnect(state.settlements) }, sizes };
+}
+
+/**
+ * The railways between the example's settlements (the user: "we also need
+ * interconnected cities"): every settlement joined to the rest by the
+ * shortest lines that join them all, then each city and metropolis to the
+ * nearest settlement it is not yet joined to - so the network has loops, and
+ * no one line cut leaves a city alone.
+ */
+export function interconnect(settlements: readonly Settlement[]): Route[] {
+  const list = settlements.filter((s) => s.lostAtSeaLevelM === null);
+  if (list.length < 2) return [];
+  const routes: Route[] = [];
+  const joined = new Set<string>();
+  const key = (a: string, b: string): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
+  const add = (a: Settlement, b: Settlement): void => {
+    if (joined.has(key(a.id, b.id))) return;
+    joined.add(key(a.id, b.id));
+    routes.push({ a: a.id, b: b.id, km: routeKm(a, b) });
+  };
+  // Prim's tree, from the first settlement.
+  const inTree = new Set([list[0]!.id]);
+  while (inTree.size < list.length) {
+    let best: [Settlement, Settlement, number] | null = null;
+    for (const a of list) {
+      if (!inTree.has(a.id)) continue;
+      for (const b of list) {
+        if (inTree.has(b.id)) continue;
+        const km = routeKm(a, b);
+        if (best === null || km < best[2]) best = [a, b, km];
+      }
+    }
+    add(best![0], best![1]);
+    inTree.add(best![1].id);
+  }
+  for (const a of list) {
+    if (a.kind === "outpost") continue;
+    const others = list.filter((b) => b.id !== a.id && !joined.has(key(a.id, b.id))).sort((p, q) => routeKm(a, p) - routeKm(a, q));
+    if (others[0] !== undefined) add(a, others[0]);
+  }
+  return routes;
 }

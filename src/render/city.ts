@@ -3360,7 +3360,7 @@ export function trainLinesOf(view: CityView): TrainLine[] {
         tile += DX[out]! + DY[out]! * n;
         out = next(tile, out);
       }
-      if (path.length >= TRAIN_CARS * 3) lines.push({ tiles: path });
+      lines.push({ tiles: path });
     }
   }
   trainLines.set(rails, lines);
@@ -3393,6 +3393,8 @@ export function trainsAt(view: CityView, time: number): Map<number, TrainCar[]> 
   };
   trainLinesOf(view).forEach((line, li) => {
     const len = line.tiles.length;
+    // A loop shorter than a train's run (a stub a few tiles long) is line, but no train goes round it.
+    if (len < TRAIN_CARS * 3) return;
     const trains = Math.max(1, Math.floor(len / TRAIN_SPACING));
     for (let k = 0; k < trains; k += 1) {
       const head = time * TRAIN_SPEED + (k * len) / trains + li * 7.3;

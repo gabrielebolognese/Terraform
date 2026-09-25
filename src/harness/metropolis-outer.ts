@@ -79,10 +79,24 @@ interface District {
   purpose: Purpose;
 }
 
-const inQuarters = (c: number): boolean => c >= OUTER && c < OUTER + 11;
+/**
+ * The ground a city grows over, in chunks: a frame `F` a side, its core - what
+ * was built before it grew (a metropolis's quarters, 11; a city's founding
+ * square, 3) - `Q` a side in the middle, the founding square `fo` chunks in
+ * from the core's corner, and how near its middle its outline may come.
+ */
+export interface Geometry {
+  readonly F: number;
+  readonly Q: number;
+  readonly fo: number;
+  readonly least: number;
+}
 
-/** The middle of the frame, in chunks. */
-const MID = METROPOLIS_CHUNKS / 2;
+/** A metropolis: 31 chunks a side at most, its eleven of quarters in the middle. */
+export const METROPOLIS_GEOMETRY: Geometry = { F: METROPOLIS_CHUNKS, Q: 11, fo: 1, least: 11 };
+
+const outerOf = (g: Geometry): number => (g.F - g.Q) / 2;
+const inCore = (g: Geometry, c: number): boolean => c >= outerOf(g) && c < outerOf(g) + g.Q;
 
 /** A metropolis's outline: how far it reaches, in chunks from its middle, at each angle. */
 export interface Outline {
@@ -97,7 +111,8 @@ export interface Outline {
  * along its roads - scaled until it covers about `area` chunks, clipped to the
  * frame. Each metropolis its own, from `rnd`.
  */
-export function outlineOf(rnd: () => number, area = 620): Outline {
+export function outlineOf(rnd: () => number, area = 620, g: Geometry = METROPOLIS_GEOMETRY): Outline {
+  const MID = g.F / 2;
   const lobes = [2, 3, 4, 5].map((k) => ({ k, a: [0.13, 0.09, 0.06, 0.04][k - 2]! * (0.6 + 0.8 * rnd()), phase: rnd() * 2 * Math.PI }));
   const arms = Array.from({ length: 3 + Math.floor(rnd() * 2) }, () => ({ at: rnd() * 2 * Math.PI, width: 0.18 + 0.12 * rnd(), lift: 0.22 + 0.18 * rnd() }));
   const shape = (angle: number): number => {
@@ -110,17 +125,18 @@ export function outlineOf(rnd: () => number, area = 620): Outline {
     return f;
   };
   // The biggest the frame allows: a chunk short of its edge, and never inside the quarters' corners.
-  const most = MID - 0.6;
-  // Never so close that its ring (a chunk and a half inside) would meet the quarters' ring at a corner.
-  const least = 11;
+  // A chunk short of its edge (a small frame, a quarter chunk: or its edge's middle chunks never make it).
+  const most = MID - (g.F >= 21 ? 0.6 : 0.25);
+  // Never so close that its ring (a chunk and a half inside) would meet the core's ring at a corner.
+  const least = Math.min(g.least, most);
   let scale = 12;
   const covered = (k: number): number => {
     let count = 0;
-    for (let v = 0; v < METROPOLIS_CHUNKS; v += 1) for (let u = 0; u < METROPOLIS_CHUNKS; u += 1) if (inside(u, v, (angle) => Math.min(most, Math.max(least, k * shape(angle))))) count += 1;
+    for (let v = 0; v < g.F; v += 1) for (let u = 0; u < g.F; u += 1) if (inside(u, v, (angle) => Math.min(most, Math.max(least, k * shape(angle))), g)) count += 1;
     return count;
   };
   // Scaled to the area: a few rounds of bisection.
-  let lo = 6;
+  let lo = 0.5;
   let hi = 20;
   for (let i = 0; i < 18; i += 1) {
     scale = (lo + hi) / 2;
@@ -131,17 +147,17 @@ export function outlineOf(rnd: () => number, area = 620): Outline {
 }
 
 /** Whether chunk (u, v)'s middle lies inside an outline (the quarters always do). */
-function inside(u: number, v: number, reach: (angle: number) => number): boolean {
-  if (inQuarters(u) && inQuarters(v)) return true;
-  const dx = u + 0.5 - MID;
-  const dy = v + 0.5 - MID;
+function inside(u: number, v: number, reach: (angle: number) => number, g: Geometry): boolean {
+  if (inCore(g, u) && inCore(g, v)) return true;
+  const dx = u + 0.5 - g.F / 2;
+  const dy = v + 0.5 - g.F / 2;
   return Math.hypot(dx, dy) <= reach(Math.atan2(dy, dx));
 }
 
 /** The chunks of a metropolis, as "u,v", inside its outline. */
-export function chunksOf(outline: Outline): Set<string> {
+export function chunksOf(outline: Outline, g: Geometry = METROPOLIS_GEOMETRY): Set<string> {
   const out = new Set<string>();
-  for (let v = 0; v < METROPOLIS_CHUNKS; v += 1) for (let u = 0; u < METROPOLIS_CHUNKS; u += 1) if (inside(u, v, outline.reach)) out.add(`${u},${v}`);
+  for (let v = 0; v < g.F; v += 1) for (let u = 0; u < g.F; u += 1) if (inside(u, v, outline.reach, g)) out.add(`${u},${v}`);
   return out;
 }
 
@@ -156,16 +172,16 @@ interface Route {
  * half inside its outline, and eight radials from the one to the other - the
  * railways that join the city's extremes run along them.
  */
-function routesOf(outline: Outline, C: number): Route[] {
-  const c = (METROPOLIS_CHUNKS * C) / 2;
-  const half = 5.5 * C + C / 2;
+function routesOf(outline: Outline, C: number, g: Geometry): Route[] {
+  const c = (g.F * C) / 2;
+  const half = (g.Q / 2) * C + C / 2;
   const inner: [number, number][] = [
     [c - half, c - half],
     [c + half, c - half],
     [c + half, c + half],
     [c - half, c + half],
   ];
-  const ringAt = (angle: number): number => Math.max(9.2 * C, (outline.reach(angle) - 1.6) * C);
+  const ringAt = (angle: number): number => Math.max((g.least - 1.8) * C, (outline.reach(angle) - 1.6) * C);
   const outer: [number, number][] = [];
   for (let k = 0; k < 96; k += 1) {
     const angle = (k / 96) * 2 * Math.PI;
@@ -251,30 +267,69 @@ function districtList(): District[] {
   return out;
 }
 
+/** How a city grows: its geometry, how many chunks it covers, its districts, and whether avenues run through it. */
+export interface GrowPlan {
+  readonly g: Geometry;
+  readonly area: number;
+  readonly districts: readonly District[];
+  readonly avenues: boolean;
+  /** Every stone in the frame broken first (a metropolis: "clear of all the stones"); else its crags are built round. */
+  readonly clearRocks: boolean;
+}
+
 export function widenMetropolis(start: SimState, id: string, env: HabitatChannels, t: Tuning, rnd: () => number): SimState {
+  return growCity(start, id, env, t, rnd, { g: METROPOLIS_GEOMETRY, area: 620, districts: districtList(), avenues: true, clearRocks: true });
+}
+
+/**
+ * A city of `K` chunks across at most (the user: "even normal cities way
+ * bigger in the perfect planet: at least 3x3 tiles, at most 17x17, blob
+ * shaped"): its founding square the core, an outline over some 70% of its
+ * box, avenues once it is 13 chunks or more, and districts in proportion.
+ */
+export function cityPlan(K: number): GrowPlan {
+  const F = K % 2 === 1 ? K : K + 1;
+  const avenues = F >= 13;
+  const area = Math.max(9, Math.round(0.7 * K * K));
+  const outside = area - 9;
+  const out: District[] = [];
+  if (outside >= 100) out.push({ u: 0, v: 0, w: 4, h: 4, purpose: "solar" }, { u: 0, v: 0, w: 4, h: 4, purpose: "wind" });
+  else if (outside >= 40) out.push({ u: 0, v: 0, w: 3, h: 3, purpose: "solar" });
+  // Homes a third of the way round (with suburbs rarer, a 17-chunk city housed 648 people, measured).
+  const cycle: Purpose[] = ["suburb", "agriculture", "industry", "suburb", "storage", "research", "suburb", "commerce", "parkland", "port"];
+  let k = 0;
+  for (const [size, per] of [[4, 70], [3, 35], [2, 18]] as const) for (let i = 0; i < Math.floor(outside / per); i += 1) out.push({ u: 0, v: 0, w: size, h: size, purpose: cycle[k++ % cycle.length]! });
+  // Avenues need a ring's room round the founding square: 2 chunks out, the outer ring a chunk and a half in from the edge.
+  return { g: { F, Q: 3, fo: 0, least: avenues ? 5.5 : 2.2 }, area, districts: out, avenues, clearRocks: false };
+}
+
+export function growCity(start: SimState, id: string, env: HabitatChannels, t: Tuning, rnd: () => number, growth: GrowPlan): SimState {
+  const g = growth.g;
+  const OUTER = outerOf(g);
+  const inQuarters = (c: number): boolean => inCore(g, c);
   const settlementOf = (st: SimState): Settlement => st.settlements.find((c) => c.id === id)!;
   const withSettlement = (st: SimState, s: Settlement): SimState => ({ ...st, settlements: st.settlements.map((c) => (c.id === id ? s : c)) });
   const C = t.CLAIM_CHUNK_TILES;
   let state = start;
   const founding = settlementOf(state);
   const per = founding.base / C;
-  if (!Number.isInteger(per) || per + 2 !== 11) return state;
+  if (!Number.isInteger(per) || per + 2 * g.fo !== g.Q) return state;
 
-  // 1. The land: every chunk inside the city's outline, claimed outward from the quarters (a claim must touch the city's own).
-  const outline = outlineOf(rnd);
-  const shape = chunksOf(outline);
+  // 1. The land: every chunk inside the city's outline, claimed outward from the core (a claim must touch the city's own).
+  const outline = outlineOf(rnd, growth.area, g);
+  const shape = chunksOf(outline, g);
   const want = new Set([...shape].filter((k) => {
     const [u, v] = k.split(",").map(Number) as [number, number];
     return !(inQuarters(u) && inQuarters(v));
   }));
-  // Chunk (u, v) of the frame is chunk (u - OUTER - 1, v - OUTER - 1) from the founding square.
-  const mid = (METROPOLIS_CHUNKS - 1) / 2;
+  // Chunk (u, v) of the frame is chunk (u - OUTER - fo, v - OUTER - fo) from the founding square.
+  const mid = (g.F - 1) / 2;
   let pending = [...want].map((k) => k.split(",").map(Number) as [number, number]).sort((a, b) => Math.max(Math.abs(a[0] - mid), Math.abs(a[1] - mid)) - Math.max(Math.abs(b[0] - mid), Math.abs(b[1] - mid)));
   state = withSettlement(state, { ...settlementOf(state), population: 1e6 });
   for (let pass = 0; pass < 40 && pending.length > 0; pass += 1) {
     const before = pending.length;
     pending = pending.filter(([u, v]) => {
-      const o = claimLand(state, id, u - OUTER - 1, v - OUTER - 1, t);
+      const o = claimLand(state, id, u - OUTER - g.fo, v - OUTER - g.fo, t);
       if (o.ok) state = o.state;
       return !o.ok;
     });
@@ -284,19 +339,21 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
   const f0 = frameOf(s, t);
   const n = f0.n;
   // The frame is the outline's box: where it falls short of the full 31 chunks, the outline is shifted with it.
-  const du = Math.round(f0.x0 / C) + OUTER + 1;
-  const dv = Math.round(f0.y0 / C) + OUTER + 1;
+  const du = Math.round(f0.x0 / C) + OUTER + g.fo;
+  const dv = Math.round(f0.y0 / C) + OUTER + g.fo;
   const chunkIn = (u: number, v: number): boolean => shape.has(`${u + du},${v + dv}`);
   // Cleared of every rock in the frame first (the user: "a metropolis is clear of all the stones") - before
   // anything is built, as the rocks under a building are not counted once it stands (cleared at the end, the
   // outer districts had been built on crags the rules forbid, measured by replaying them).
-  {
+  if (growth.clearRocks) {
     const cleared = new Set(s.cleared);
     rocksOf(s, t).forEach((r, i) => {
       if (r !== "none") cleared.add(tileKey(i % n, Math.floor(i / n)));
     });
     s = { ...s, cleared: [...cleared].sort((a, b) => a - b) };
   }
+  // Hard rock left standing is not built on, nor laid over.
+  const crag = rocksOf(s, t);
   const ground = groundOf(s, t);
   const ours = claimTest(s, t);
 
@@ -313,7 +370,7 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
   // And the quarters' own corridors, cables and railways: nothing may stand on a link.
   const strip = new Uint8Array(n * n);
   for (const list of [s.corridors, s.cables, s.rails]) for (const k of list) strip[(k >> 10) * n + (k & 1023)] = 1;
-  for (let i = 0; i < n * n; i += 1) openAt[i] = !ground.steep[i] && ours(i % n, Math.floor(i / n)) ? 1 : 0;
+  for (let i = 0; i < n * n; i += 1) openAt[i] = !ground.steep[i] && crag[i] !== "crag" && ours(i % n, Math.floor(i / n)) ? 1 : 0;
   // Only ground a corridor can reach from the headquarters: flat land walled in by slopes is left alone (the first
   // outer city built in such pockets - 160 groups of buildings no corridor could ever join, measured).
   {
@@ -382,7 +439,7 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
   const CORRIDORS = [-12, -6, 7, 13];
   const CABLES = [-12, 13];
   const WIDTH = 14;
-  const routes = routesOf(outline, C).map((r) => ({ ...r, points: r.points.map(([x, y]) => [x - du * C, y - dv * C] as const) }));
+  const routes = (growth.avenues ? routesOf(outline, C, g) : []).map((r) => ({ ...r, points: r.points.map(([x, y]) => [x - du * C, y - dv * C] as const) }));
   for (const route of routes) {
     for (const o of RAILS) for (const i of laneOf(route, o, n)) lay(rail, i % n, Math.floor(i / n));
     for (const o of CORRIDORS) for (const i of laneOf(route, o, n)) lay(corridor, i % n, Math.floor(i / n));
@@ -433,7 +490,7 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
   const quarterChunk = (u: number, v: number): boolean => inQuarters(u + du) && inQuarters(v + dv);
   const used = new Uint8Array(cu * cu);
   const plan: District[] = [];
-  for (const wanted of districtList()) {
+  for (const wanted of growth.districts) {
     const sizes = wanted.purpose === "solar" || wanted.purpose === "wind" ? [6, 5, 4] : [wanted.w];
     for (const size of sizes) {
       const places: [number, number][] = [];
@@ -540,9 +597,11 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
   const nearIn = (type: BuildingType, ax: number, ay: number, r: Rect): PlacedBuilding | null => {
     const [w, h] = sizeOf(type);
     for (let ring = 0; ring < C; ring += 1) {
+      // The ring's own tiles only, row by row as before (the whole square walked for each ring was a
+      // tenth of building the planet, measured).
       for (let y = ay - ring; y <= ay + ring; y += 1) {
-        for (let x = ax - ring; x <= ax + ring; x += 1) {
-          if (Math.max(Math.abs(x - ax), Math.abs(y - ay)) !== ring) continue;
+        const edge = y === ay - ring || y === ay + ring;
+        for (let x = ax - ring; x <= ax + ring; x += edge || ring === 0 ? 1 : 2 * ring) {
           if (fits(x, y, w, h, r, 0)) return put(type, x, y);
         }
       }
@@ -561,13 +620,27 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
       for (let tries = 0; count < target && tries < target * 4; tries += 1) {
         const [ax, ay] = centres[tries % centres.length]!;
         // A chosen work, or where a big one will not go, a depot: the smallest there is.
-        if (nearIn(pickWork(), ax, ay, r) !== null || nearIn("storage_depot", ax, ay, r) !== null) count += 1;
+        const work = nearIn(pickWork(), ax, ay, r) ?? nearIn("storage_depot", ax, ay, r);
+        if (work === null) continue;
+        count += 1;
+        // In the core, the works are their own footprints: the core's own buildings stay in the core's zones.
+        if (quarterChunk(u, v)) {
+          const [ww, wh] = sizeOf(work.type);
+          for (let y = work.ty; y < work.ty + wh; y += 1) for (let x = work.tx; x < work.tx + ww; x += 1) worksTiles.push(tileKey(x, y));
+        }
       }
       inChunk[v * cu + u] = count;
-      // A district's or a quarter's own chunk, left thin by its open blocks, is filled too - but stays its own zone's.
+      // A district's own chunk, left thin by its open blocks, is filled too - but stays its district's; so does a
+      // core chunk but for the works' own footprints (above).
       if (used[v * cu + u] || quarterChunk(u, v)) continue;
       for (let y = r.y0; y < r.y1; y += 1) for (let x = r.x0; x < r.x1; x += 1) if (!strip[y * n + x]) worksTiles.push(tileKey(x, y));
     }
+  }
+  // A tile in one zone at most: the works take their chunks from the core's zones.
+  const worksSet = new Set(worksTiles);
+  for (let k = 0; k < zones.length; k += 1) {
+    const z = zones[k]!;
+    if (z.tiles.some((tile) => worksSet.has(tile))) zones[k] = { ...z, tiles: z.tiles.filter((tile) => !worksSet.has(tile)) };
   }
   zoneId += 1;
   zones.push({ id: zoneId, name: "Works and stores", colour: "#b0896a", tiles: worksTiles.sort((a, b) => a - b) });
@@ -607,6 +680,43 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
     // Where it belongs first; then any district with room (not the farms).
     const anywhere = plan.filter((d) => d.purpose !== "solar" && d.purpose !== "wind");
     if (!makers[short].some(([type, where]) => inDistricts(type, where.flatMap(byPurpose))) && !inDistricts(makers[short][0]![0], anywhere)) break;
+  }
+
+  // 5b. Only what the city's people allow (a city smaller than a metropolis cannot have a station below
+  // 5,000 people, a skyscraper below 1,000, a post for every 100): each such building swapped for one that
+  // fits its ground and needs nobody - until the people it leaves (a swapped skyscraper houses none) allow the rest.
+  const SWAP: Partial<Record<BuildingType, BuildingType>> = { station: "research_forum", mega_mall: "biosphere", skyscraper: "greenhouse", observatory: "laboratory", medical_center: "laboratory", rover_post: "laboratory" };
+  for (let round = 0; round < 6; round += 1) {
+    let homes = 0;
+    for (const b of placed) homes += BUILDING_DEFS[b.type].housing(t);
+    const people = Math.floor(homes * 0.9);
+    let posts = 0;
+    let changed = false;
+    placed.forEach((b, k) => {
+      const def = BUILDING_DEFS[b.type];
+      const tooFew = def.minPopulation(t) > people || (b.type === "rover_post" && ++posts > Math.floor(people / t.ROVER_POST_PEOPLE));
+      const swap = SWAP[b.type];
+      if (!tooFew || swap === undefined) return;
+      // Its ground freed and the smaller taken again, so the way to it is open.
+      const [ow, oh] = sizeOf(b.type);
+      for (let y = b.ty; y < b.ty + oh; y += 1) for (let x = b.tx; x < b.tx + ow; x += 1) taken[y * n + x] = 0;
+      occupy(b.tx, b.ty, ...sizeOf(swap));
+      placed[k] = { ...b, type: swap };
+      const at = stations.indexOf(b);
+      if (at >= 0) stations.splice(at, 1);
+      changed = true;
+    });
+    if (!changed) break;
+    // What the swaps draw, made good again.
+    counted = 0;
+    for (const r of Object.keys(net) as MicroResource[]) net[r] = 0;
+    for (let k = 0; k < 4000; k += 1) {
+      const now = supply();
+      const short = (["power", "water", "food", "oxygen"] as const).find((r) => now[r] < 2);
+      if (short === undefined) break;
+      const anywhere = plan.filter((d) => d.purpose !== "solar" && d.purpose !== "wind");
+      if (!makers[short].some(([type, where]) => inDistricts(type, where.flatMap(byPurpose))) && !inDistricts(makers[short][0]![0], anywhere)) break;
+    }
   }
 
   // 6. Joined: the quarters' corridors and rails carried out to the avenues; every district's blocks to the
@@ -657,13 +767,13 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
     }
   }
   // The quarters' edge: every corridor there carried straight out to the avenue beside it.
-  // The quarters' box in the frame.
+  // The core's box in the frame.
   const qx0 = (OUTER - du) * C;
-  const qx1 = qx0 + 11 * C - 1;
+  const qx1 = qx0 + g.Q * C - 1;
   const qy0 = (OUTER - dv) * C;
-  const qy1 = qy0 + 11 * C - 1;
+  const qy1 = qy0 + g.Q * C - 1;
   const inBox = (i: number): boolean => i % n >= qx0 && i % n <= qx1 && Math.floor(i / n) >= qy0 && Math.floor(i / n) <= qy1;
-  for (let a = 0; a <= 11 * C - 1; a += 1) {
+  for (let a = 0; a <= g.Q * C - 1; a += 1) {
     for (const [x, y, dx, dy] of [[qx0 + a, qy0, 0, -1], [qx0 + a, qy1, 0, 1], [qx0, qy0 + a, -1, 0], [qx1, qy0 + a, 1, 0]] as const) {
       if (!corridor[y * n + x]) continue;
       const path = trace(corridor, x + dx, y + dy, dx, dy, C);
@@ -758,6 +868,14 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
       const k = placed.indexOf(b);
       if (k >= 0) placed[k] = { ...b, type: "research_forum" };
     }
+  }
+
+  // A rail tile with no rail beside it (a piece of lane stranded between slopes and buildings, which nothing
+  // could join) is taken up: no train could ever run on it (three in one city, measured).
+  for (let i = 0; i < n * n; i += 1) {
+    if (!rail[i]) continue;
+    const x = i % n;
+    if (!(x > 0 && rail[i - 1]) && !(x < n - 1 && rail[i + 1]) && !(i >= n && rail[i - n]) && !(i < n * n - n && rail[i + n])) rail[i] = 0;
   }
 
   // 8. The lists.
