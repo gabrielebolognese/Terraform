@@ -15,7 +15,7 @@ import type { Tuning } from "../tuning.js";
 import type { BuildingType, MicroResource, Settlement, SettlementKind } from "../types.js";
 import { MICRO_RESOURCES } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
-import { capacities, housing, settlementStep } from "./settlement.js";
+import { capacities, claimableChunks, claimsAllowed, housing, nextClaimAt, settlementStep } from "./settlement.js";
 import { siteElevation } from "../hypsometry.js";
 import type { FloodState } from "./flood.js";
 import { submerged } from "./flood.js";
@@ -23,7 +23,8 @@ import type { NetworkIssue } from "./network.js";
 import { linkGrid } from "./network.js";
 import type { Rock } from "./rocks.js";
 import { garage, rocksOf, siteGround } from "./rocks.js";
-import { keyTile } from "./space.js";
+import { claimTest, frameOf, keyTile } from "./space.js";
+import type { World } from "./terrain.js";
 import { worldOf } from "./terrain.js";
 
 export interface CityBuildingView {
@@ -54,8 +55,18 @@ export interface CityBuildingView {
 export interface CityView {
   readonly id: string;
   readonly kind: SettlementKind;
-  /** Grid edge, tiles. */
+  /** Grid edge, tiles: the frame round the founding square and every claim. */
   readonly tiles: number;
+  /**
+   * Where the grid's tile (0, 0) lies from the founding square's corner. A
+   * claim west or north moves it - and every tile index with it - so a host
+   * keeping a camera on the ground moves the camera by the change.
+   */
+  readonly origin: { readonly x: number; readonly y: number };
+  /** Row-major: the tiles the city holds - its founding square and its claims - where it may build. */
+  readonly claimed: readonly boolean[];
+  /** Claiming land (at the user's request). */
+  readonly claims: CityClaimsView;
   /**
    * Row-major (`ty * tiles + tx`): each tile's ground height in TILES (metres
    * over `TILE_METRES`), the unit the renderer draws height in. Batch 22.
@@ -120,6 +131,19 @@ export interface CityView {
   readonly jobs: readonly CityJobView[];
 }
 
+export interface CityClaimsView {
+  /** A chunk's edge, tiles. */
+  readonly chunk: number;
+  /** Chunks claimed beyond the founding square. */
+  readonly held: number;
+  /** Chunks its people allow it to have claimed. */
+  readonly allowed: number;
+  /** The people the next claim waits for; null for a settlement that cannot claim (an outpost). */
+  readonly nextAt: number | null;
+  /** The chunks beside its land it could claim, each as the grid tile of its corner (may lie off the grid, in the world). */
+  readonly open: readonly { readonly i: number; readonly j: number; readonly tx: number; readonly ty: number }[];
+}
+
 export interface CityJobView {
   readonly kind: "rover" | "rocket";
   /** The rock a rover is breaking, or the spaceport's corner. */
@@ -133,6 +157,21 @@ export interface CityJobView {
 
 const POWER_PLANTS: ReadonlySet<BuildingType> = new Set<BuildingType>(["solar_array", "geothermal_plant", "reactor"]);
 
+/**
+ * The world in tiles, kept with the world it was made from: a view is
+ * derived five times a second, and a metropolis's world has 590,000 fine
+ * samples to convert.
+ */
+const worldsInTiles = new WeakMap<World, CityView["world"]>();
+
+function worldInTiles(world: World, t: Tuning): CityView["world"] {
+  const kept = worldsInTiles.get(world);
+  if (kept !== undefined && kept.corners.length === world.cornersM.length) return kept;
+  const made = { margin: world.margin, size: world.size, corners: world.cornersM.map((h) => h / t.TILE_METRES), fine: world.fineM.map((h) => h / t.TILE_METRES), caves: world.caves, rocks: world.rocks };
+  worldsInTiles.set(world, made);
+  return made;
+}
+
 export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityView {
   const step = settlementStep(s, env, t, t.SUBSTEP_YEARS);
   const home = housing(s, t);
@@ -145,13 +184,27 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
   const groundZ = ground.heightM.map((h) => h / t.TILE_METRES);
   const world = worldOf(s, t);
   const n = ground.tiles;
+  const frame = frameOf(s, t);
+  const ours = claimTest(s, t);
+  const claimed = new Array<boolean>(n * n);
+  for (let ty = 0; ty < n; ty += 1) for (let tx = 0; tx < n; tx += 1) claimed[ty * n + tx] = ours(tx, ty);
+  const chunk = t.CLAIM_CHUNK_TILES;
   return {
     id: s.id,
     kind: s.kind,
     tiles: n,
+    origin: { x: frame.x0, y: frame.y0 },
+    claimed,
+    claims: {
+      chunk,
+      held: s.claims.length,
+      allowed: claimsAllowed(s.population, t),
+      nextAt: nextClaimAt(s, t),
+      open: claimableChunks(s, t).map(({ i, j }) => ({ i, j, tx: i * chunk - frame.x0, ty: j * chunk - frame.y0 })),
+    },
     groundZ,
     corners: ground.cornersM.map((h) => h / t.TILE_METRES),
-    world: { margin: world.margin, size: world.size, corners: world.cornersM.map((h) => h / t.TILE_METRES), fine: world.fineM.map((h) => h / t.TILE_METRES), caves: world.caves, rocks: world.rocks },
+    world: worldInTiles(world, t),
     greenery: env.greenery,
     heightM: ground.heightM,
     steep: ground.steep,

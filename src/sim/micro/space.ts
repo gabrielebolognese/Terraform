@@ -160,3 +160,93 @@ export function tileKey(tx: number, ty: number): number {
 export function keyTile(key: number): { tx: number; ty: number } {
   return { tx: key % TILE_STRIDE, ty: Math.floor(key / TILE_STRIDE) };
 }
+
+// ---------------------------------------------------------------------------
+// Claimed land (at the user's request: "after a city reaches 200 habitats, I
+// can claim new terrain, then at 300 I can claim new one, etc, indefinitely;
+// the more I expand, the more terrain it generates in that direction")
+// ---------------------------------------------------------------------------
+
+/**
+ * Three coordinates for one tile:
+ *   site   the founding square is [0, base) on both axes, for ever: the
+ *          terrain, its rocks and its clusters are functions of site
+ *          coordinates, so claiming land never moves the ground;
+ *   chunk  land is claimed a chunk of `CLAIM_CHUNK_TILES` at a time, chunk
+ *          (i, j) covering site [i * C, (i + 1) * C) - signed;
+ *   local  what everything stored and every array uses: the frame's tiles,
+ *          0..n on both axes. local = site - (x0, y0).
+ * The frame is the smallest SQUARE holding the founding square and every
+ * claimed chunk - padded on its far sides - so every grid in the game stays
+ * `n x n`. Tiles of the frame outside the claims are ground to look at, not
+ * to build on.
+ */
+export interface Frame {
+  /** The founding square's edge, tiles. */
+  readonly base: number;
+  /** Site coordinates of local tile (0, 0). */
+  readonly x0: number;
+  readonly y0: number;
+  /** The frame's edge, tiles. */
+  readonly n: number;
+}
+
+/** What a frame is made from: a settlement, or a place with none claimed. */
+export interface FrameSource {
+  readonly kind: SettlementKind;
+  readonly base?: number;
+  readonly claims?: readonly number[];
+}
+
+/** Chunk keys hold signed chunk coordinates: this many chunks each way of the founding square. */
+export const CHUNK_OFFSET = 512;
+
+export function chunkKey(i: number, j: number): number {
+  return (j + CHUNK_OFFSET) * TILE_STRIDE + (i + CHUNK_OFFSET);
+}
+
+export function keyChunk(key: number): { i: number; j: number } {
+  return { i: (key % TILE_STRIDE) - CHUNK_OFFSET, j: Math.floor(key / TILE_STRIDE) - CHUNK_OFFSET };
+}
+
+/** A settlement's founding square: as it was founded, or - for a bare place - as the tuning has it. */
+export function baseOf(p: FrameSource, t: Tuning): number {
+  return p.base ?? gridTiles(p.kind, t);
+}
+
+export function frameOf(p: FrameSource, t: Tuning): Frame {
+  const base = baseOf(p, t);
+  const c = t.CLAIM_CHUNK_TILES;
+  let minX = 0;
+  let minY = 0;
+  let maxX = base;
+  let maxY = base;
+  for (const key of p.claims ?? []) {
+    const { i, j } = keyChunk(key);
+    minX = Math.min(minX, i * c);
+    minY = Math.min(minY, j * c);
+    maxX = Math.max(maxX, (i + 1) * c);
+    maxY = Math.max(maxY, (j + 1) * c);
+  }
+  return { base, x0: minX, y0: minY, n: Math.max(maxX - minX, maxY - minY) };
+}
+
+/** Whether chunk (i, j) lies wholly in the founding square - claimed from the start. */
+export function isBaseChunk(i: number, j: number, base: number, t: Tuning): boolean {
+  const c = t.CLAIM_CHUNK_TILES;
+  return i >= 0 && j >= 0 && (i + 1) * c <= base && (j + 1) * c <= base;
+}
+
+/** A test for "is this local tile the settlement's to build on": the founding square, or a claimed chunk. */
+export function claimTest(p: FrameSource, t: Tuning): (tx: number, ty: number) => boolean {
+  const f = frameOf(p, t);
+  const c = t.CLAIM_CHUNK_TILES;
+  const claims = new Set(p.claims ?? []);
+  return (tx, ty) => {
+    if (!onGrid(tx, ty, f.n)) return false;
+    const sx = tx + f.x0;
+    const sy = ty + f.y0;
+    if (sx >= 0 && sy >= 0 && sx < f.base && sy < f.base) return true;
+    return claims.size > 0 && claims.has(chunkKey(Math.floor(sx / c), Math.floor(sy / c)));
+  };
+}

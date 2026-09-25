@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 8;
+  readonly schemaVersion: 9;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -403,6 +403,14 @@ export interface Settlement {
   readonly cleared: readonly number[];
   /** Rovers and rockets under way. Each counts down in sim-years, one substep at a time. */
   readonly jobs: readonly SettlementJob[];
+  /**
+   * The founding square's edge, tiles, as it was founded. True state: a
+   * retune of the grid sizes must not move the ground under a city, and
+   * claimed land is counted from it.
+   */
+  readonly base: number;
+  /** Land claimed beyond the founding square: sorted chunk keys (`chunkKey`, site coordinates). */
+  readonly claims: readonly number[];
 }
 
 /**

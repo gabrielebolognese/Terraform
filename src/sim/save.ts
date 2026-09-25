@@ -26,11 +26,11 @@
 
 import { clamp01 } from "./math.js";
 import { wrapLongitude } from "./micro/space.js";
-import { capacities, housing, newSettlement } from "./micro/settlement.js";
+import { capacities, housing, newSettlement, shiftContent } from "./micro/settlement.js";
 import { LAYERS, linksToConnect } from "./micro/network.js";
 import type { Layer } from "./micro/network.js";
 import { headquartersOrigin } from "./micro/settlement.js";
-import { gridTiles, keyTile, tileKey } from "./micro/space.js";
+import { chunkKey, frameOf, gridTiles, keyChunk, keyTile, tileKey } from "./micro/space.js";
 import { BUILDING_DEFS } from "./micro/buildings.js";
 import { footprintTiles } from "./micro/space.js";
 import { unlockedFor } from "./tech.js";
@@ -63,7 +63,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 8;
+export const SAVE_SCHEMA_VERSION = 9;
 
 export interface SavedFacility {
   readonly type: string;
@@ -141,6 +141,10 @@ export interface SavedSettlement {
   readonly cleared?: readonly number[];
   /** Added in v8: rovers and rockets under way, counting down in sim-years. */
   readonly jobs?: readonly Record<string, unknown>[];
+  /** Added in v9 (claimed land, at the user's request): the founding square's edge, tiles. */
+  readonly base?: number;
+  /** Added in v9: the chunks claimed beyond it, as sorted chunk keys. */
+  readonly claims?: readonly number[];
 }
 
 /**
@@ -221,6 +225,8 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       cables: [...s.cables],
       cleared: [...s.cleared],
       jobs: s.jobs.map((j) => ({ ...j })),
+      base: s.base,
+      claims: [...s.claims],
     })),
   };
 }
@@ -300,7 +306,26 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 6) current = migrateV5toV6(current);
   if (version < 7) current = migrateV6toV7(current);
   if (version < 8) current = migrateV7toV8(current);
+  if (version < 9) current = migrateV8toV9(current);
   return current;
+}
+
+/**
+ * v8 -> v9: claimed land. Every settlement before v9 was laid out on the
+ * grid sizes every build had until then - 32 a city, 16 an outpost, 96 a
+ * metropolis - and had claimed nothing. (A build whose tuning founds larger
+ * squares re-centres such a settlement in one on load: `readSettlements`.)
+ */
+function migrateV8toV9(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  if (!Array.isArray(list)) return { ...save, schema_version: 9 };
+  const V8_GRID: Readonly<Record<string, number>> = { city: 32, outpost: 16, metropolis: 96 };
+  const settlements = list.map((raw) => {
+    if (typeof raw !== "object" || raw === null) return raw;
+    const s = raw as Record<string, unknown>;
+    return { ...s, base: V8_GRID[String(s["kind"])] ?? 32, claims: [] };
+  });
+  return { ...save, schema_version: 9, settlements };
 }
 
 /**
@@ -602,7 +627,10 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     // clamped or kept, never rejected. Rejecting would hand the player a
     // fresh Mars in place of a legitimate save.
     const base = newSettlement(id, kind, lat, lon, t);
-    const draft: Settlement = { ...base, buildings };
+    const founded = numberAt(s, "base", `${where}.base`);
+    if (!Number.isInteger(founded) || founded < 1) throw new SaveError(`${where}.base must be a whole number of tiles from 1, got ${founded}`);
+    const claims = readClaims(s, where);
+    const draft: Settlement = { ...base, buildings, base: founded, claims };
     const cap = capacities(draft, t);
     const storesRaw = asRecord(s["stores"], `${where}.stores`);
     const stores = { ...base.stores };
@@ -634,6 +662,17 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     for (const layer of LAYERS) {
       settled = { ...settled, [layer]: s[layer] === null ? [] : readKeys(s, layer, where, LINK_WORDS[layer], under) };
     }
+    // A build that founds larger squares than this settlement was founded on
+    // (the user: "make the initial boundaries at least 3x bigger") gives it
+    // one, centred on the old: what was built stays on the ground it stood
+    // on relative to the founding site. Only before any claim - a claim is
+    // counted from the square it was made against. A smaller square is kept:
+    // land is never taken away.
+    const grown = gridTiles(kind, t);
+    if (claims.length === 0 && grown > founded) {
+      const shift = Math.floor((grown - founded) / 2);
+      settled = { ...shiftContent(settled, shift, shift), base: grown };
+    }
     for (const layer of LAYERS) {
       if (s[layer] === null) settled = { ...settled, [layer]: [...linksToConnect(settled, layer, t)] };
     }
@@ -642,6 +681,20 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
 }
 
 const LINK_WORDS: Readonly<Record<Layer, string>> = { corridors: "corridor", cables: "cable" };
+
+/** Claimed chunks: whole, distinct chunk keys. Whether they touch is not the save's to judge - a retune of the chunk size would break it. */
+function readClaims(s: Record<string, unknown>, where: string): readonly number[] {
+  const seen = new Set<number>();
+  asArray(s["claims"], `${where}.claims`).forEach((raw, j) => {
+    const at = `${where}.claims[${j}]`;
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) throw new SaveError(`${at} must be a chunk key (a whole number from 0), got ${describe(raw)}`);
+    const { i, j: jj } = keyChunk(raw);
+    if (chunkKey(i, jj) !== raw) throw new SaveError(`${at} is not a chunk key`);
+    if (seen.has(raw)) throw new SaveError(`${at} claims chunk ${i},${jj} twice`);
+    seen.add(raw);
+  });
+  return [...seen].sort((a, b) => a - b);
+}
 
 function underBuildings(buildings: readonly PlacedBuilding[]): Set<number> {
   const under = new Set<number>();
@@ -703,9 +756,11 @@ function readJobs(s: Record<string, unknown>, where: string): readonly Settlemen
  */
 function withHeadquarters(s: Settlement, t: Tuning): Settlement {
   if (!t.HEADQUARTERS_ENABLED || s.lostAtSeaLevelM !== null || s.buildings.some((b) => b.type === "headquarters")) return s;
-  const n = gridTiles(s.kind, t);
+  const { n, base, x0, y0 } = frameOf(s, t);
   const under = underBuildings(s.buildings);
-  const centre = headquartersOrigin(n);
+  // The founding square's centre, in the frame's tiles.
+  const middle = headquartersOrigin(base);
+  const centre = { tx: middle.tx - x0, ty: middle.ty - y0 };
   const free = (ox: number, oy: number): boolean => {
     if (ox < 0 || oy < 0 || ox + 5 > n || oy + 5 > n) return false;
     for (let y = oy; y < oy + 5; y += 1) for (let x = ox; x < ox + 5; x += 1) if (under.has(tileKey(x, y))) return false;

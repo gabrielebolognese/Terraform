@@ -76,7 +76,7 @@ export const MARS_RADIUS_M = 3_389_500;
 /** A fresh, unplayed Mars. */
 export function marsStart(seed = 123456, t: Tuning = DEFAULT_TUNING): SimState {
   return {
-    schemaVersion: 8,
+    schemaVersion: 9,
     planetId: "mars",
     seed,
     steps: 0,

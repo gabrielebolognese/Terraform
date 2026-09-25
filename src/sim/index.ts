@@ -161,6 +161,8 @@ export {
   planetToWorld,
   tangentFrame,
   tileKey,
+  chunkKey,
+  frameOf,
   tileToWorld,
   vecToLatLon,
   worldToPlanet,
@@ -176,6 +178,9 @@ export { BUILDING_DEFS } from "./micro/buildings.js";
 export type { BuildingDef } from "./micro/buildings.js";
 export {
   capacities,
+  claimLand,
+  claimableChunks,
+  claimsAllowed,
   connectAll,
   foundingBuildings,
   headquartersOrigin,
@@ -196,7 +201,7 @@ export type { Rock } from "./micro/rocks.js";
 export type { PlaceOutcome, SettlementStep } from "./micro/settlement.js";
 export { microStep } from "./micro/coupling.js";
 export type { MicroContribution } from "./micro/coupling.js";
-export { groundOf, isSteep, slopeAt } from "./micro/terrain.js";
+export { groundOf, isSteep, slopeAt, worldOf } from "./micro/terrain.js";
 export { elevationAtRank, siteElevation } from "./hypsometry.js";
 export { liquidWaterRate, seaLevel } from "./sea-level.js";
 export { nextSubstepFlows } from "./integrate.js";

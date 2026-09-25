@@ -38,7 +38,7 @@ import type { Tuning } from "../tuning.js";
 import type { MicroResource, PlacedBuilding, Settlement } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { siteGround } from "./rocks.js";
-import { gridTiles, keyTile, tileKey } from "./space.js";
+import { claimTest, frameOf, keyTile, tileKey } from "./space.js";
 import { isSteep } from "./terrain.js";
 
 /** The two networks a settlement lays. */
@@ -219,13 +219,15 @@ export function applyNetwork(
  * for the example planet, and by the player's "connect everything".
  */
 export function linksToConnect(s: Settlement, layer: Layer, t: Tuning): number[] {
-  const n = gridTiles(s.kind, t);
+  const n = frameOf(s, t).n;
+  // Only across the land the city holds.
+  const ours = claimTest(s, t);
   if (s.buildings.length < 2) return [];
   const ground = siteGround(s, t);
   const owner = ownerGrid(s.buildings, n);
   const laid = new Set(s[layer]);
   const added: number[] = [];
-  const passable = (x: number, y: number): boolean => owner[y * n + x]! < 0 && !isSteep(ground, x, y);
+  const passable = (x: number, y: number): boolean => owner[y * n + x]! < 0 && !isSteep(ground, x, y) && ours(x, y);
   // A road already there counts as crossable even on a slope: it was laid.
   const STEPS = [
     [1, 0],

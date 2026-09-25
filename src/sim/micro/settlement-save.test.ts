@@ -72,12 +72,14 @@ describe("a world with settlements round-trips through the save exactly", () => 
     expect(advance(reloaded, 200, cfg)).toEqual(advance(s, 200, cfg));
   });
 
-  it("stores only true state - no capacities, no grid size, nothing derived", () => {
+  it("stores only true state - no capacities, no frame, nothing derived", () => {
     const saved = toSave(s, ON, AT).settlements?.[0] as unknown as Record<string, unknown>;
     // Batch 24 added `lost_at_sea_level_m`: true state, the record of a loss.
     // v8 has corridors and cables (laid by the player), the rocks rovers have
-    // broken, and the jobs under way: all true state.
-    expect(Object.keys(saved).sort()).toEqual(["buildings", "cables", "cleared", "corridors", "id", "jobs", "kind", "lat", "lon", "lost_at_sea_level_m", "population", "stores"]);
+    // broken, and the jobs under way: all true state. v9 has the founding
+    // square as founded (a retune must not move the ground under a city) and
+    // the land claimed; the frame they make is derived, and not stored.
+    expect(Object.keys(saved).sort()).toEqual(["base", "buildings", "cables", "claims", "cleared", "corridors", "id", "jobs", "kind", "lat", "lon", "lost_at_sea_level_m", "population", "stores"]);
   });
 });
 

@@ -18,7 +18,7 @@ import type { Tuning } from "../tuning.js";
 import type { BuildingType, MicroResource, PlacedBuilding, Settlement, SettlementJob, SettlementKind, SimState } from "../types.js";
 import { MICRO_RESOURCES, isCityKind } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
-import { footprintFits, footprintTiles, gridTiles, tileKey } from "./space.js";
+import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
 import { isSteep, slopeAt } from "./terrain.js";
 import type { Rock } from "./rocks.js";
 import { garage, rockAt, rocksOf, roverYears, siteGround } from "./rocks.js";
@@ -46,6 +46,8 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     cables: [],
     cleared: [],
     jobs: [],
+    base: gridTiles(kind, t),
+    claims: [],
   };
 }
 
@@ -138,7 +140,8 @@ export function placeBuilding(
   if (!def.buildable) return refuse(`the ${def.name} is founded with the settlement, never built`);
   if (!def.kinds.includes(s.kind)) return refuse(`${def.name} cannot be built in an ${s.kind}`);
   const f = { tx, ty, w: def.footprint, h: def.footprint };
-  if (!footprintFits(f, gridTiles(s.kind, t))) return refuse(`${def.name} does not fit there - it runs off the grid`);
+  const ours = claimTest(s, t);
+  if (!footprintTiles(f).every(([x, y]) => ours(x, y))) return refuse(`${def.name} does not fit there - it runs off the grid, the land the city holds (claim more as it grows)`);
   const ground = siteGround(s, t);
   // Detail §1.3: "A building footprint must fit on tiles whose slope is below a buildable maximum."
   const tooSteep = footprintTiles(f).filter(([x, y]) => isSteep(ground, x, y));
@@ -183,7 +186,7 @@ export function placeLink(state: SimState, settlementId: string, layer: Layer, t
   const s = state.settlements.find((x) => x.id === settlementId);
   if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
   if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
-  if (!footprintFits({ tx, ty, w: 1, h: 1 }, gridTiles(s.kind, t))) return refuse(`a ${words.one} must be on the grid`);
+  if (!claimTest(s, t)(tx, ty)) return refuse(`a ${words.one} must be on the grid - the land the city holds`);
   const ground = siteGround(s, t);
   if (isSteep(ground, tx, ty)) return refuse(`the ground is too steep for a ${words.one} (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE}) - send a rover to break the crag`);
   if (occupied(s).has(`${tx},${ty}`)) return refuse("a building stands there");
@@ -242,8 +245,8 @@ export function sendRover(state: SimState, settlementId: string, tx: number, ty:
   if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
   if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
   if (garage(s) === null) return refuse("there is no headquarters to send a rover from");
-  const n = gridTiles(s.kind, t);
-  if (!footprintFits({ tx, ty, w: 1, h: 1 }, n)) return refuse("that is off the grid");
+  const n = frameOf(s, t).n;
+  if (!claimTest(s, t)(tx, ty)) return refuse("that is off the grid - the land the city holds");
   const rock: Rock = rocksOf(s, t)[ty * n + tx] ?? "none";
   if (rock === "none") return refuse("there is no rock there to break");
   const key = tileKey(tx, ty);
@@ -289,6 +292,88 @@ export function removeBuilding(state: SimState, settlementId: string, tx: number
   if (!BUILDING_DEFS[s.buildings[index]!.type].buildable) return { state, ok: false, reason: `the ${BUILDING_DEFS[s.buildings[index]!.type].name} cannot be removed` };
   const next: Settlement = { ...s, buildings: s.buildings.filter((_, i) => i !== index) };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
+}
+
+// ---------------------------------------------------------------------------
+// Claiming land (at the user's request)
+// ---------------------------------------------------------------------------
+
+/** How many chunks a settlement of this many people may have claimed beyond its founding square. */
+export function claimsAllowed(population: number, t: Tuning): number {
+  if (!(population >= t.CLAIM_FIRST_POPULATION)) return 0;
+  return 1 + Math.floor((population - t.CLAIM_FIRST_POPULATION) / t.CLAIM_STEP_POPULATION);
+}
+
+/** The people the next claim waits for, or null for a settlement that cannot claim at all. */
+export function nextClaimAt(s: Settlement, t: Tuning): number | null {
+  if (!isCityKind(s.kind) || s.base % t.CLAIM_CHUNK_TILES !== 0) return null;
+  const k = s.claims.length;
+  return k === 0 ? t.CLAIM_FIRST_POPULATION : t.CLAIM_FIRST_POPULATION + k * t.CLAIM_STEP_POPULATION;
+}
+
+/**
+ * The chunks a settlement could claim next: every chunk beside its land
+ * (sharing an edge) that it does not hold. Sorted by key. Empty for a
+ * settlement that cannot claim.
+ */
+export function claimableChunks(s: Settlement, t: Tuning): { i: number; j: number }[] {
+  if (nextClaimAt(s, t) === null || s.lostAtSeaLevelM !== null) return [];
+  const base = baseOf(s, t);
+  const held = new Set(s.claims);
+  const holds = (i: number, j: number): boolean => isBaseChunk(i, j, base, t) || held.has(chunkKey(i, j));
+  const per = base / t.CLAIM_CHUNK_TILES;
+  const out = new Set<number>();
+  const around = (i: number, j: number): void => {
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) if (!holds(i + di, j + dj)) out.add(chunkKey(i + di, j + dj));
+  };
+  for (let j = 0; j < per; j += 1) for (let i = 0; i < per; i += 1) around(i, j);
+  for (const key of s.claims) {
+    const { i, j } = keyChunk(key);
+    around(i, j);
+  }
+  return [...out].sort((a, b) => a - b).map(keyChunk);
+}
+
+/**
+ * Claim chunk (i, j) - site chunk coordinates - for a city that has the
+ * people for it. Free: land is earned by growing. When the claim reaches
+ * west or north of the frame, the frame's corner moves and everything stored
+ * in local tiles - buildings, corridors, cables, broken rocks, jobs - moves
+ * with it, so it stays on the same ground.
+ */
+export function claimLand(state: SimState, settlementId: string, i: number, j: number, t: Tuning): PlaceOutcome {
+  const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
+  if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
+  const next = nextClaimAt(s, t);
+  if (next === null) return refuse(isCityKind(s.kind) ? "this settlement's ground does not divide into chunks" : "an outpost cannot claim land - only a city grows");
+  if (!Number.isInteger(i) || !Number.isInteger(j)) return refuse("a chunk is a whole number of chunks from the founding square");
+  if (!claimableChunks(s, t).some((c) => c.i === i && c.j === j)) return refuse("that land is not beside the city's own, or is already its");
+  if (claimsAllowed(s.population, t) <= s.claims.length) return refuse(`claiming more land needs ${next} people - the city has ${Math.floor(s.population)}`);
+  const claims = [...s.claims, chunkKey(i, j)].sort((a, b) => a - b);
+  const before = frameOf(s, t);
+  const after = frameOf({ ...s, claims }, t);
+  if (after.n > TILE_STRIDE || Math.abs(i) >= 500 || Math.abs(j) >= 500) return refuse("that is as far as a settlement can reach");
+  const moved = shiftContent({ ...s, claims }, before.x0 - after.x0, before.y0 - after.y0);
+  return { state: withSettlement(state, settlementId, moved), ok: true, reason: null };
+}
+
+/** Everything stored in local tiles, moved by (dx, dy): buildings, corridors, cables, broken rocks, jobs. */
+export function shiftContent(s: Settlement, dx: number, dy: number): Settlement {
+  if (dx === 0 && dy === 0) return s;
+  const move = (key: number): number => {
+    const { tx, ty } = keyTile(key);
+    return tileKey(tx + dx, ty + dy);
+  };
+  return {
+    ...s,
+    buildings: s.buildings.map((b) => ({ ...b, tx: b.tx + dx, ty: b.ty + dy })),
+    corridors: s.corridors.map(move),
+    cables: s.cables.map(move),
+    cleared: s.cleared.map(move),
+    jobs: s.jobs.map((job) => ({ ...job, tile: move(job.tile) })),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -339,7 +424,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   // A building with water over any tile of its footprint is offline (detail §4.3).
   const operable = defs.map((def, i) => def.canOperate(env, t) && !(flood !== null && submerged(s.buildings[i]!, flood)));
   // Section 6's networks: with them off, every building on the grid is on them.
-  const n = gridTiles(s.kind, t);
+  const n = frameOf(s, t).n;
   const network = t.NETWORK_ENABLED ? { corridors: networkOf(s.buildings, s.corridors, n), cables: networkOf(s.buildings, s.cables, n) } : null;
   const draws = defs.map((def) => def.consumes(t, env));
   const makes = defs.map((def) => def.produces(t));

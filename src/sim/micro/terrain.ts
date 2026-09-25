@@ -29,8 +29,8 @@
  */
 
 import type { Tuning } from "../tuning.js";
-import type { SettlementKind } from "../types.js";
-import { gridTiles, tileKey } from "./space.js";
+import type { FrameSource } from "./space.js";
+import { frameOf, tileKey } from "./space.js";
 
 /** 32-bit integer hash of three integers (a murmur-style finaliser). Pure. */
 function hash3(a: number, b: number, c: number): number {
@@ -265,7 +265,25 @@ function steepAt(seed: number, tiles: number, tx: number, ty: number, t: Tuning)
 const CLUSTER_MIN = 7;
 const CLUSTER_MAX = 23;
 
-const clusterCells = new Map<string, readonly number[]>();
+/**
+ * Clusters already grown, per site and tuning, then per cell (a number: the
+ * cell's coordinates packed). Asked nine times for every tile a view shows,
+ * a string key per cell and a list to search made clusters half the cost of
+ * a metropolis's view (measured: 51% of 683 ms).
+ */
+const clusterSites = new Map<string, Map<number, ReadonlySet<number>>>();
+const NO_CLUSTER: ReadonlySet<number> = new Set();
+
+function clusterSite(seed: number, tiles: number, t: Tuning): Map<number, ReadonlySet<number>> {
+  const key = `${seed}|${tiles}|${t.ROCK_CLUSTER_CELL}|${t.ROCK_CLUSTER_CHANCE}|${t.TERRAIN_RELIEF_M}|${t.TERRAIN_MAX_SLOPE}|${t.TERRAIN_CLEAR_TILES}|${t.TERRAIN_FEATURE_TILES}|${t.TERRAIN_MOUNTAIN_SCALE}|${t.TERRAIN_CANYON_SCALE}|${t.TERRAIN_PIT_SCALE}|${t.TILE_METRES}`;
+  let site = clusterSites.get(key);
+  if (site === undefined) {
+    if (clusterSites.size > 64) clusterSites.clear();
+    site = new Map();
+    clusterSites.set(key, site);
+  }
+  return site;
+}
 
 /**
  * The hard-rock cluster seeded in one cell of the `ROCK_CLUSTER_CELL`
@@ -275,10 +293,10 @@ const clusterCells = new Map<string, readonly number[]>();
  * from its seed tile by a walk over buildable ground that never steps onto a
  * cliff. None near the founding site. Deterministic; kept per cell.
  */
-function clusterIn(seed: number, tiles: number, cx: number, cy: number, t: Tuning): readonly number[] {
+function clusterIn(site: Map<number, ReadonlySet<number>>, seed: number, tiles: number, cx: number, cy: number, t: Tuning): ReadonlySet<number> {
   const cell = Math.max(CLUSTER_MAX * 2, Math.round(t.ROCK_CLUSTER_CELL));
-  const key = `${seed}|${tiles}|${cx}|${cy}|${cell}|${t.ROCK_CLUSTER_CHANCE}|${t.TERRAIN_RELIEF_M}|${t.TERRAIN_MAX_SLOPE}|${t.TERRAIN_CLEAR_TILES}`;
-  const kept = clusterCells.get(key);
+  const key = (cy + 32768) * 65536 + cx + 32768;
+  const kept = site.get(key);
   if (kept !== undefined) return kept;
   const made = ((): number[] => {
     if (lattice(seed ^ 0xc1a5, cx, cy) >= t.ROCK_CLUSTER_CHANCE) return [];
@@ -305,9 +323,9 @@ function clusterIn(seed: number, tiles: number, cx: number, cy: number, t: Tunin
     if (tilesIn.length < CLUSTER_MIN) return [];
     return tilesIn.map(([x, y]) => tileKey(x, y));
   })();
-  clusterCells.set(key, made);
-  if (clusterCells.size > 4096) clusterCells.delete(clusterCells.keys().next().value as string);
-  return made;
+  const set = made.length === 0 ? NO_CLUSTER : new Set(made);
+  site.set(key, set);
+  return set;
 }
 
 /** Whether tile (tx, ty) lies in a hard-rock cluster. */
@@ -317,7 +335,8 @@ function inCluster(seed: number, tiles: number, tx: number, ty: number, t: Tunin
   const cx = Math.floor(tx / cell);
   const cy = Math.floor(ty / cell);
   const k = tileKey(tx, ty);
-  for (let dy = -1; dy <= 1; dy += 1) for (let dx = -1; dx <= 1; dx += 1) if (clusterIn(seed, tiles, cx + dx, cy + dy, t).includes(k)) return true;
+  const site = clusterSite(seed, tiles, t);
+  for (let dy = -1; dy <= 1; dy += 1) for (let dx = -1; dx <= 1; dx += 1) if (clusterIn(site, seed, tiles, cx + dx, cy + dy, t).has(k)) return true;
   return false;
 }
 
@@ -337,7 +356,7 @@ export function natureRock(seed: number, tiles: number, tx: number, ty: number, 
 }
 
 export interface Ground {
-  /** Edge of the grid, in tiles. */
+  /** Edge of the grid - the settlement's frame, its founding square and every claim - in tiles. */
   readonly tiles: number;
   /** Row-major (`ty * tiles + tx`): height in metres relative to the settlement's base elevation - the mean of the tile's corners. */
   readonly heightM: readonly number[];
@@ -377,7 +396,8 @@ export interface World {
   readonly rocks: readonly { readonly x: number; readonly y: number; readonly kind: "loose" | "crag" }[];
 }
 
-type Place = { readonly kind: SettlementKind; readonly lat: number; readonly lon: number };
+/** A settlement, or a bare place (its founding square alone). */
+type Place = FrameSource & { readonly lat: number; readonly lon: number };
 
 /** Recently built grounds and worlds: every placement check, view and connect asks again for the same site. */
 const kept = new Map<string, Ground | World>();
@@ -402,7 +422,8 @@ function terrainKey(kind: string, place: Place, t: Tuning): string {
     place.kind,
     place.lat,
     place.lon,
-    gridTiles(place.kind, t),
+    // The frame: what ground is laid out, and where the founding site is in it.
+    Object.values(frameOf(place, t)).join(","),
     t.TERRAIN_RELIEF_M,
     t.TERRAIN_FEATURE_TILES,
     t.TERRAIN_CLEAR_TILES,
@@ -421,11 +442,11 @@ function terrainKey(kind: string, place: Place, t: Tuning): string {
 /** The ground of a settlement's buildable grid. */
 export function groundOf(place: Place, t: Tuning): Ground {
   return remember(terrainKey("ground", place, t), () => {
-    const tiles = gridTiles(place.kind, t);
+    const { base, x0, y0, n: tiles } = frameOf(place, t);
     const seed = placeSeed(place.lat, place.lon);
     const m = tiles + 1;
     const cornersM = new Array<number>(m * m);
-    for (let y = 0; y < m; y += 1) for (let x = 0; x < m; x += 1) cornersM[y * m + x] = clean(terrainHeight(seed, tiles, x, y, t));
+    for (let y = 0; y < m; y += 1) for (let x = 0; x < m; x += 1) cornersM[y * m + x] = clean(terrainHeight(seed, base, x + x0, y + y0, t));
     const heightM = new Array<number>(tiles * tiles);
     const slope = new Array<number>(tiles * tiles);
     const steep = new Array<boolean>(tiles * tiles);
@@ -454,30 +475,35 @@ function clean(v: number): number {
 /** The world round a settlement: its grid and `TERRAIN_WORLD_MARGIN` tiles beyond, for the picture. */
 export function worldOf(place: Place, t: Tuning): World {
   return remember(terrainKey("world", place, t), () => {
-    const tiles = gridTiles(place.kind, t);
+    // The world round the frame: claim land, and it reaches further that way.
+    const { base, x0, y0, n: tiles } = frameOf(place, t);
     const margin = Math.max(0, Math.round(t.TERRAIN_WORLD_MARGIN));
     const size = tiles + 2 * margin;
     const seed = placeSeed(place.lat, place.lon);
     const m = size + 1;
+    // World corner (x, y) in site coordinates.
+    const sx = (x: number): number => x - margin + x0;
+    const sy = (y: number): number => y - margin + y0;
     const cornersM = new Array<number>(m * m);
-    for (let y = 0; y < m; y += 1) for (let x = 0; x < m; x += 1) cornersM[y * m + x] = clean(terrainHeight(seed, tiles, x - margin, y - margin, t));
+    for (let y = 0; y < m; y += 1) for (let x = 0; x < m; x += 1) cornersM[y * m + x] = clean(terrainHeight(seed, base, sx(x), sy(y), t));
     const f = 2 * size + 1;
     const fineM = new Array<number>(f * f);
     for (let y = 0; y < f; y += 1) {
       for (let x = 0; x < f; x += 1) {
-        fineM[y * f + x] = x % 2 === 0 && y % 2 === 0 ? cornersM[(y / 2) * m + x / 2]! : clean(terrainHeight(seed, tiles, x / 2 - margin, y / 2 - margin, t));
+        fineM[y * f + x] = x % 2 === 0 && y % 2 === 0 ? cornersM[(y / 2) * m + x / 2]! : clean(terrainHeight(seed, base, sx(x / 2), sy(y / 2), t));
       }
     }
-    // Caves: at most one per 16-tile cell, in its steepest face, if that face is steep enough.
+    // Caves: at most one per 16-tile cell, in its steepest face, if that face
+    // is steep enough. Cells in site coordinates, so a claim never moves a cave.
     const caves: Cave[] = [];
     const cell = 16;
-    for (let cy = 0; cy < size; cy += cell) {
-      for (let cx = 0; cx < size; cx += cell) {
-        if (lattice(seed ^ 0x5cae, cx, cy) > 0.3) continue;
+    for (let cy = Math.floor(sy(0) / cell) * cell; cy < sy(size); cy += cell) {
+      for (let cx = Math.floor(sx(0) / cell) * cell; cx < sx(size); cx += cell) {
+        if (lattice(seed ^ 0x5cae, cx + 48, cy + 48) > 0.3) continue;
         let best = 0;
         let at: Cave | null = null;
-        for (let y = cy; y < Math.min(size, cy + cell); y += 1) {
-          for (let x = cx; x < Math.min(size, cx + cell); x += 1) {
+        for (let y = Math.max(0, cy - sy(0)); y < Math.min(size, cy - sy(0) + cell); y += 1) {
+          for (let x = Math.max(0, cx - sx(0)); x < Math.min(size, cx - sx(0) + cell); x += 1) {
             const h = cornersM[y * m + x]!;
             const gx = cornersM[y * m + x + 1]! - h;
             const gy = cornersM[(y + 1) * m + x]! - h;
@@ -505,7 +531,7 @@ export function worldOf(place: Place, t: Tuning): World {
         const c = cornersM[(y + 1) * m + x]!;
         const d = cornersM[(y + 1) * m + x + 1]!;
         const steep = Math.max(Math.abs(a - b), Math.abs(c - d), Math.abs(a - c), Math.abs(b - d)) / t.TILE_METRES > t.TERRAIN_MAX_SLOPE;
-        const kind = natureRock(seed, tiles, gx, gy, steep, t);
+        const kind = natureRock(seed, base, gx + x0, gy + y0, steep, t);
         if (kind !== "none") rocks.push({ x: gx, y: gy, kind });
       }
     }

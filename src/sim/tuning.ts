@@ -680,6 +680,17 @@ export const BASE_TUNING = Object.freeze({
   /** A metropolis: 3 x 3 a city's ground. */
   METROPOLIS_GRID_TILES: 96,
   /**
+   * Claiming land (at the user's request): a city claims ground a chunk of
+   * this many tiles square at a time, beside what it holds. The first claim
+   * opens at CLAIM_FIRST_POPULATION people, and one more with every
+   * CLAIM_STEP_POPULATION after - "at 200 I can claim new terrain, then at
+   * 300, etc, indefinitely". Only a player's action claims land: nothing
+   * here changes a settlement that does not ask.
+   */
+  CLAIM_CHUNK_TILES: 32,
+  CLAIM_FIRST_POPULATION: 200,
+  CLAIM_STEP_POPULATION: 100,
+  /**
    * Detail §1 (Batch 22): the local heightmap's relief, metres either side of
    * the settlement's base elevation. OFF (0, flat ground) by default - every
    * fixture places buildings on fixed tiles, and hills appearing under them
@@ -992,6 +1003,9 @@ export function validateTuning(t: Tuning): void {
   if (!(t.ROCK_LOOSE_SHARE >= 0 && t.ROCK_LOOSE_SHARE <= 1)) fail("ROCK_LOOSE_SHARE must be in [0, 1]");
   if (!(t.ROCK_CLUSTER_CHANCE >= 0 && t.ROCK_CLUSTER_CHANCE <= 1)) fail("ROCK_CLUSTER_CHANCE must be in [0, 1]");
   if (!(t.ROCK_CLUSTER_CELL >= 46)) fail("ROCK_CLUSTER_CELL must be >= 46 (twice the largest cluster)");
+  if (!(Number.isInteger(t.CLAIM_CHUNK_TILES) && t.CLAIM_CHUNK_TILES >= 8)) fail("CLAIM_CHUNK_TILES must be a whole number >= 8");
+  if (!(t.CLAIM_FIRST_POPULATION >= 0)) fail("CLAIM_FIRST_POPULATION must be >= 0");
+  if (!(t.CLAIM_STEP_POPULATION > 0)) fail("CLAIM_STEP_POPULATION must be > 0");
   if (!(t.P_LIFE_OK > t.P_LIFE_MIN)) fail("P_LIFE_OK must exceed P_LIFE_MIN");
   if (!(t.T_CEIL_K > t.T_FLOOR_K)) fail("T_CEIL_K must exceed T_FLOOR_K");
   if (!(t.ALBEDO_MAX > t.ALBEDO_MIN)) fail("ALBEDO_MAX must exceed ALBEDO_MIN");
