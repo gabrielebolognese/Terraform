@@ -47,6 +47,7 @@ import type {
   MutableReservoirs,
   Phase,
   Reservoirs,
+  Route,
   SimState,
   Settlement,
   SettlementJob,
@@ -64,7 +65,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 12;
+export const SAVE_SCHEMA_VERSION = 13;
 
 export interface SavedFacility {
   readonly type: string;
@@ -103,6 +104,8 @@ export interface SaveFile {
   readonly economy: EconomyState;
   /** Added in v4 (Batch 17): the micro layer's settlement registry. */
   readonly settlements?: readonly SavedSettlement[];
+  /** Added in v13: railways between settlements. */
+  readonly routes?: readonly { readonly a: string; readonly b: string; readonly km: number }[];
 }
 
 export interface SavedSettlement {
@@ -246,6 +249,7 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       planned: s.planned.map((p) => ({ layer: p.layer, tile: p.tile })),
       history: { acc: { ...s.history.acc, short: [...s.history.acc.short], net: [...s.history.acc.net] }, taken: s.history.taken, samples: s.history.samples.map((x) => ({ ...x, short: [...x.short], stores: [...x.stores], net: [...x.net] })) },
     })),
+    routes: state.routes.map((r) => ({ a: r.a, b: r.b, km: r.km })),
   };
 }
 
@@ -281,6 +285,7 @@ export function fromSave(raw: unknown, t: Tuning): SimState {
   const reservoirs = readReservoirs(save);
   const ledger = readLedger(save);
 
+  const settlements = readSettlements(save, t);
   const state: SimState = {
     schemaVersion: SAVE_SCHEMA_VERSION,
     planetId: readString(save, "planet_id"),
@@ -294,7 +299,8 @@ export function fromSave(raw: unknown, t: Tuning): SimState {
     facilities: readFacilities(save, t),
     techUnlocked: readStringArray(save, "tech_unlocked"),
     economy: readEconomy(save),
-    settlements: readSettlements(save, t),
+    settlements,
+    routes: readRoutes(save, settlements),
   };
 
   assertFiniteState(state, "fromSave");
@@ -328,7 +334,27 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 10) current = migrateV9toV10(current);
   if (version < 11) current = migrateV10toV11(current);
   if (version < 12) current = migrateV11toV12(current);
+  if (version < 13) current = { ...current, schema_version: 13, routes: [] };
   return current;
+}
+
+/** v13: railways between settlements - each between two settlements that exist, once, with a length. */
+function readRoutes(save: Record<string, unknown>, settlements: readonly Settlement[]): Route[] {
+  const ids = new Set(settlements.map((s) => s.id));
+  const seen = new Set<string>();
+  return asArray(save["routes"], "routes").map((raw, i) => {
+    const at = `routes[${i}]`;
+    const r = asRecord(raw, at);
+    const a = r["a"];
+    const b = r["b"];
+    if (typeof a !== "string" || typeof b !== "string" || !ids.has(a) || !ids.has(b) || a === b) throw new SaveError(`${at} must join two different settlements of this world`);
+    const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+    if (seen.has(key)) throw new SaveError(`${at} joins ${a} and ${b} a second time`);
+    seen.add(key);
+    const km = numberAt(r, "km", `${at}.km`);
+    if (!(km >= 0)) throw new SaveError(`${at}.km must be a length, got ${km}`);
+    return { a, b, km };
+  });
 }
 
 /** v11 -> v12: the city planner. No names, zones, queue or plan yet, and no record kept. */

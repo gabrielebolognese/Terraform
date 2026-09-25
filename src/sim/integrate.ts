@@ -29,6 +29,7 @@ import { derive } from "./derive.js";
 import { effectiveEnv, stepFacilities, stepShield } from "./facilities/index.js";
 import type { ForcingFn } from "./rates/index.js";
 import { computeStep } from "./rates/index.js";
+import { flowRoutes } from "./micro/routes.js";
 import { liquidWaterRate } from "./sea-level.js";
 import type { Tuning } from "./tuning.js";
 import type {
@@ -363,7 +364,8 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
       techUnlocked,
       facilities: stepFacilities(working.facilities, t, h),
       shieldStrength: stepShield(working.shieldStrength, working.facilities, t, h),
-      settlements: contribution.settlementsNext,
+      // The railways between settlements: stores along them, after the settlements' own substep.
+      settlements: t.INTERCITY_ENABLED ? flowRoutes(contribution.settlementsNext, working.routes, t, h) : contribution.settlementsNext,
       steps: working.steps + 1,
     };
   }

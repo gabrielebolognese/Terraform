@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 12;
+  readonly schemaVersion: 13;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -354,6 +354,15 @@ export interface SimState {
    * Inert until Batch 18 couples it to the planet.
    */
   readonly settlements: readonly Settlement[];
+  /** Railways between settlements (v13, at the user's request: "interconnected cities"), in the order laid. */
+  readonly routes: readonly Route[];
+}
+
+/** A railway from one settlement to another: which two, and how long, kilometres. */
+export interface Route {
+  readonly a: string;
+  readonly b: string;
+  readonly km: number;
 }
 
 /** Micro doc §4: a populated city, or a small specialised outpost. */

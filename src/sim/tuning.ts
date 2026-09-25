@@ -1009,6 +1009,16 @@ export const BASE_TUNING = Object.freeze({
   BUILD_YEARS_MATERIALS_DEPOT: 0.2,
   BUILD_YEARS_PARK: 0.1,
   BUILD_YEARS_BIOSPHERE: 1.5,
+  /**
+   * Railways between settlements (at the user's request: "interconnected
+   * cities"). Off by default: they move stores from city to city, which would
+   * perturb the balanced worlds; the browser turns them on. Laid for
+   * materials by the kilometre (half from each end; 1,000 km is 5,000); each
+   * carries up to INTERCITY_CARRY of water, oxygen, food and materials a year.
+   */
+  INTERCITY_ENABLED: 0,
+  INTERCITY_COST_PER_KM: 5,
+  INTERCITY_CARRY: 300,
 
   /** Habitat Dome: people housed, and life support drawn per year. */
   DOME_HOUSING: 40,
