@@ -39,6 +39,7 @@ import {
   siteElevation,
   worldEnv,
 } from "../sim/index.js";
+import { buildMetropolis } from "./metropolis.js";
 import { REFERENCE_POLICY, applyOrdersDue } from "./policy.js";
 
 /** Where the reference playthrough has plateaued: progress 98.6%, Phase 6 (measured). */
@@ -388,6 +389,12 @@ export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
     if (site === undefined) return;
     state = foundSettlement(state, kind, site.lat, site.lon, game).state;
     const founded = state.settlements[state.settlements.length - 1]!;
+    sizes[founded.id] = size;
+    if (kind === "metropolis") {
+      // In quarters, on claimed land, and at work (see `metropolis.ts`).
+      state = buildMetropolis(state, founded.id, env, game, rnd);
+      return;
+    }
     const buildings = layOut(founded, wishList(kind, size, founded.buildings.some((b) => b.type === "spaceport"), game), size, game);
     const laid: Settlement = { ...founded, buildings };
     const built: Settlement = { ...laid, ...streets(laid, game) };
