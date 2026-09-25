@@ -2,7 +2,8 @@
  * Three levels of detail (requested by the user: "in a metropolis if I zoom
  * out a lot it lags"). Measured on the example's largest metropolis, the
  * whole grid (9,216 tiles, ~740 buildings, 2,815 tiles of corridor and 500
- * of cable): 278,453 shapes at high, 45,734 at medium, 21,491 at low.
+ * of cable) and the open world round it (48 tiles each side): 396,375 shapes
+ * at high, 58,550 at medium, 35,392 at low.
  *
  * A far view is only worth drawing if it still looks like the city. The first
  * version did not: it merged sloping ground into flat patches and coloured
@@ -12,7 +13,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { referenceCity, renderCity } from "../harness/city-frames.js";
+import { flatten, referenceCity, renderCity } from "../harness/city-frames.js";
 import { examplePlanet } from "../harness/example.js";
 import type { CityView } from "../sim/index.js";
 import { BUILDING_DEFS, BUILDING_TYPES, DEFAULT_TUNING, NEUTRAL_ENV, cityView, derive, habitat, makeTuning, worldEnv } from "../sim/index.js";
@@ -60,7 +61,8 @@ function fromAfar(f: Frame, k = 8): Frame {
 
 describe("levels of detail", () => {
   it("cut a whole metropolis's shapes to a fifth, then to a tenth", () => {
-    // Measured: medium 16.4% of high, low 7.7%. (Roads first took medium to
+    // Measured: medium 14.8% of high, low 8.9% (the open world, drawn in
+    // 2-tile cells at medium and low - 4-tile cells lost the mountains' shape). (Roads first took medium to
     // 23%: kerbs and connection points on every street, now high only. Then
     // corridors drawn as a hub and four arms took it to 22%: now two bars,
     // and at medium only their roofs.)
@@ -71,8 +73,10 @@ describe("levels of detail", () => {
 
   it("still look like the city from as far as they are drawn", () => {
     // 960 x 600 is the whole metropolis about as large as it is on screen at
-    // the widest zoom. Measured, over 8 x 8 blocks: bare ground 0.0250 from
-    // the full city, medium 0.0082 (33% of that), low 0.0098 (39%).
+    // the widest zoom, its open world in the frame's corners. Measured, over
+    // 8 x 8 blocks: bare ground 0.0407 from the full city, medium 0.0145 (36%
+    // of that), low 0.0165 (41%). The world in 8-tile cells first took low to
+    // 54%; it is drawn in 2-tile cells at medium and low now.
     // Corridors drawn far away as a flat trace on the ground took low to 47%;
     // they are now a roof at the tube's height, in the colour it reads as.
     const W = 960;
@@ -94,10 +98,16 @@ describe("levels of detail", () => {
     // with spaceports undrawn: the reference city has none, and uncovering
     // the ground changes the scene whether the building was drawn or not.)
     const { view: reference } = referenceCity();
-    const flat: CityView = { ...reference, id: "one building", groundZ: reference.groundZ.map((_, i) => (i % 2) * 1e-6), steep: reference.steep.map(() => false) };
     const W = 400;
     const H = 260;
     const seen = (quality: CityQuality, type: (typeof BUILDING_TYPES)[number]): { colour: number[]; pixels: number } => {
+      // Every other corner dipped a fifth of a tile, so no patch forms and the
+      // ground is drawn tile by tile, with or without the building - except the
+      // building's own footprint, which stays level as the far colours were
+      // measured (dipped, it stood on a foundation, and they moved by 4%; a
+      // wider level area merged into patches without the building, 26%).
+      const size = BUILDING_DEFS[type].footprint;
+      const flat: CityView = { ...flatten(reference, -0.2, [10, 10, 10 + size, 10 + size]), id: "one building" };
       const bare = renderCity({ ...flat, buildings: [] }, at(quality), W, H, false);
       const b = { index: 0, type, tx: 10, ty: 10, size: BUILDING_DEFS[type].footprint, operable: true, activity: 1, baseZ: 0, submerged: false, network: null };
       const f = renderCity({ ...flat, buildings: [b] }, at(quality), W, H, false);
@@ -130,14 +140,15 @@ describe("levels of detail", () => {
     // ground at low differed from high by 0.0206. Merging only flat patches:
     // 0.0012 (measured, 480 x 300).
     // The terrain alone: no buildings, and no corridors or cables (they have tests of their own).
-    const bare: CityView = { ...metropolis, buildings: [], corridors: metropolis.corridors.map(() => false), cables: metropolis.cables.map(() => false) };
+    // The grid's ground alone: the open world round it is judged with the whole city, above.
+    const bare: CityView = { ...metropolis, buildings: [], corridors: metropolis.corridors.map(() => false), cables: metropolis.cables.map(() => false), world: { margin: 0, size: metropolis.tiles, corners: metropolis.corners, caves: [] } };
     const high = renderCity(bare, at("high"), 480, 300, false);
     expect(frameDifference(renderCity(bare, at("low"), 480, 300, false), high)).toBeLessThan(0.004);
     // And the patches are really used, where they can be: on flat open
     // ground (the metropolis's hills merge little, and there the rocks low
     // leaves out swamp the count). Measured: 192 shapes at low, 1,088 at medium.
     const { view } = referenceCity();
-    const open: CityView = { ...view, id: "open", buildings: [], groundZ: view.groundZ.map(() => 0), steep: view.steep.map(() => false) };
+    const open: CityView = { ...flatten(view), id: "open", buildings: [] };
     expect(cityScene(open, at("low")).length).toBeLessThan(0.25 * cityScene(open, at("medium")).length);
   });
 
@@ -166,11 +177,9 @@ describe("loose rocks", () => {
   // hills, no crags.
   const { view } = referenceCity();
   const open: CityView = {
-    ...view,
+    ...flatten(view),
     id: "open",
     buildings: [],
-    groundZ: view.groundZ.map(() => 0),
-    steep: view.steep.map(() => false),
     rocks: view.rocks.map((r) => (r === "loose" ? "loose" : "none")),
   };
 

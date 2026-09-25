@@ -97,6 +97,30 @@ export function referenceCity(): { state: SimState; view: CityView; options: Cit
 }
 
 /**
+ * The same view on flat ground with no open world round it: every corner at
+ * the base, nothing steep. `bumps` moves every other corner by that many
+ * tiles - enough to keep the renderer from merging tiles into patches, for
+ * a test that must see ground drawn tile by tile - except inside `level`
+ * (corner coordinates, inclusive), which stays flat.
+ */
+export function flatten(view: CityView, bumps = 0, level: readonly [number, number, number, number] | null = null): CityView {
+  const m = view.tiles + 1;
+  const corners = Array.from({ length: m * m }, (_, i) => {
+    const x = i % m;
+    const y = Math.floor(i / m);
+    if (level !== null && x >= level[0] && y >= level[1] && x <= level[2] && y <= level[3]) return 0;
+    return (x + y) % 2 === 1 ? bumps : 0;
+  });
+  return {
+    ...view,
+    groundZ: view.groundZ.map(() => bumps / 2),
+    corners,
+    steep: view.steep.map(() => false),
+    world: { margin: 0, size: view.tiles, corners, caves: [] },
+  };
+}
+
+/**
  * Render a view to fit a frame - the part of the grid the reference city
  * occupies, not the whole 32x32, so the buildings are big enough to see.
  */
@@ -143,6 +167,9 @@ export function buildingSheet(): { view: CityView; options: CitySceneOptions } {
     kind: "city",
     tiles,
     groundZ: new Array<number>(tiles * tiles).fill(0),
+    corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0),
+    world: { margin: 0, size: tiles, corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0), caves: [] },
+    greenery: 0,
     heightM: new Array<number>(tiles * tiles).fill(0),
     steep: new Array<boolean>(tiles * tiles).fill(false),
     baseElevationM: 0,

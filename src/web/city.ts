@@ -415,7 +415,7 @@ export class CityScreen {
     const halfW = size.w / 2 / cam.zoom;
     const halfH = size.h / 2 / cam.zoom;
     const viewport = { minX: cam.cx - halfW, maxX: cam.cx + halfW, minY: cam.cy - halfH, maxY: cam.cy + halfH };
-    fillShapes(ctx, cityScene(view, { ...this.sceneOptions(now), viewport, quality: qualityFor(cam, size.w, size.h, view.tiles) }));
+    fillShapes(ctx, cityScene(view, { ...this.sceneOptions(now), viewport, quality: qualityFor(cam, size.w, size.h, view.world.size) }));
   }
 
   // ---- panel -----------------------------------------------------------------
@@ -665,7 +665,7 @@ export class CityScreen {
       const dy = e.clientY - d.y;
       if (!d.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
       d.moved = true;
-      this.camera = pan(this.camera, dx, dy, this.view.tiles);
+      this.camera = pan(this.camera, dx, dy, this.view.tiles, this.view.world.margin);
       d.x = e.clientX;
       d.y = e.clientY;
     });
@@ -688,7 +688,7 @@ export class CityScreen {
         if (this.camera === null || this.view === null) return;
         const size = this.viewSize();
         const local = this.local(e);
-        this.camera = zoomAt(this.camera, Math.exp(-e.deltaY * 0.0015), local.x, local.y, size.w, size.h, this.view.tiles);
+        this.camera = zoomAt(this.camera, Math.exp(-e.deltaY * 0.0015), local.x, local.y, size.w, size.h, this.view.tiles, this.view.world.margin);
       },
       { passive: false },
     );

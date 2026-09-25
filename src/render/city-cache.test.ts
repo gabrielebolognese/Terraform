@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { referenceCity } from "../harness/city-frames.js";
+import { flatten, referenceCity } from "../harness/city-frames.js";
 import type { CityView } from "../sim/index.js";
 import { cityScene, resetSceneCache } from "./city.js";
 
@@ -26,7 +26,7 @@ const withDepot: CityView = {
 };
 
 /** A different settlement altogether: the same buildings on flat ground. */
-const flat: CityView = { ...view, id: "elsewhere", groundZ: view.groundZ.map(() => 0), steep: view.steep.map(() => false) };
+const flat: CityView = { ...flatten(view), id: "elsewhere" };
 
 describe("the scene cache", () => {
   /** The scene built from an empty cache - the oracle. */
@@ -78,7 +78,7 @@ describe("the scene cache", () => {
 
   it("is rebuilt when the ground changes under the same settlement id", () => {
     cityScene(view, options);
-    const hillsGone = { ...view, groundZ: view.groundZ.map(() => 0), steep: view.steep.map(() => false) };
+    const hillsGone = flatten(view);
     const viaCache = cityScene(hillsGone, options);
     cityScene(withDepot, options);
     expect(cityScene(hillsGone, options)).toEqual(viaCache);

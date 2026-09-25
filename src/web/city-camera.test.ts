@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
 
 import { isoProject } from "../render/iso.js";
 import type { CityCamera } from "./city-camera.js";
+import { sceneBounds } from "../render/city.js";
 import {
   CITY_ZOOM_MAX,
   CITY_ZOOM_MIN,
   centreCamera,
+  clampCamera,
   footprintOrigin,
   isoToScreen,
   pan,
@@ -75,6 +77,30 @@ describe("the city camera", () => {
     expect(footprintOrigin(10, 10, 3)).toEqual({ tx: 9, ty: 9 });
   });
 
+  describe("the open world (at the user's request)", () => {
+    const grid = sceneBounds(32);
+    const world = sceneBounds(32, 0, 48);
+
+    it("pans off the buildable grid into the world round it", () => {
+      const far = clampCamera({ cx: grid.maxX + 1500, cy: grid.maxY + 1500, zoom: 1 }, 32, 48);
+      expect(far.cx).toBeGreaterThan(grid.maxX);
+      expect(far.cy).toBeGreaterThan(grid.maxY);
+    });
+
+    it("but no further than the world's edge", () => {
+      const beyond = clampCamera({ cx: 1e6, cy: -1e6, zoom: 1 }, 32, 48);
+      expect(beyond.cx).toBe(world.maxX);
+      expect(beyond.cy).toBe(world.minY);
+      // Without a world, the grid's own box, as before.
+      expect(clampCamera({ cx: 1e6, cy: 1e6, zoom: 1 }, 32).cx).toBe(grid.maxX);
+    });
+
+    it("zooms out far enough to see a whole city's world on a laptop", () => {
+      // 128 tiles of world, 64 iso pixels a tile across, into 1,440 screen pixels.
+      expect(CITY_ZOOM_MIN * 128 * 64).toBeLessThanOrEqual(1440);
+    });
+  });
+
   describe("level of detail (a zoomed-out metropolis lagged)", () => {
     const at = (zoom: number): CityCamera => ({ cx: 0, cy: 0, zoom });
 
@@ -88,8 +114,12 @@ describe("the city camera", () => {
       for (let i = 1; i < levels.length; i += 1) expect(rank[levels[i]!]).toBeGreaterThanOrEqual(rank[levels[i - 1]!]);
     });
 
-    it("keeps an ordinary city at full detail at every zoom: it never lagged", () => {
-      for (const z of [CITY_ZOOM_MIN, 0.5, 1, CITY_ZOOM_MAX]) expect(qualityFor(at(z), 2560, 1440, 32), `zoom ${z}`).toBe("high");
+    it("keeps a city at full detail at city zoom, and steps down only once its open world fills the screen", () => {
+      // A city's world is its 32-tile grid and 48 tiles of open world each side: 128 across.
+      for (const z of [1, CITY_ZOOM_MAX]) expect(qualityFor(at(z), 1600, 900, 128), `zoom ${z}`).toBe("high");
+      expect(qualityFor(at(CITY_ZOOM_MIN), 1600, 900, 128)).toBe("low");
+      // A grid alone - no world round it - never has enough on screen to step down.
+      expect(qualityFor(at(CITY_ZOOM_MIN), 2560, 1440, 32)).toBe("high");
     });
 
     it("counts what is on screen: a bigger window shows more and draws less of each", () => {

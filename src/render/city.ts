@@ -1181,17 +1181,17 @@ export type CityQuality = "high" | "medium" | "low";
  * ground did).
  */
 const FAR_COLOUR: Readonly<Record<string, Rgb>> = {
-  habitat_dome: rgb(0.647, 0.749, 0.804),
-  solar_array: rgb(0.42, 0.528, 0.698),
-  geothermal_plant: rgb(0.721, 0.716, 0.684),
-  reactor: rgb(0.621, 0.674, 0.67),
-  water_extractor: rgb(0.621, 0.651, 0.652),
-  atmosphere_processor: rgb(0.758, 0.76, 0.747),
-  greenhouse: rgb(0.645, 0.684, 0.684),
-  regolith_mine: rgb(0.427, 0.378, 0.332),
-  storage_depot: rgb(0.78, 0.73, 0.68),
-  spaceport: rgb(0.574, 0.573, 0.538),
-  headquarters: rgb(0.624, 0.549, 0.473),
+  habitat_dome: rgb(0.632, 0.779, 0.858),
+  solar_array: rgb(0.407, 0.522, 0.698),
+  geothermal_plant: rgb(0.712, 0.708, 0.674),
+  reactor: rgb(0.611, 0.666, 0.668),
+  water_extractor: rgb(0.608, 0.644, 0.649),
+  atmosphere_processor: rgb(0.735, 0.742, 0.731),
+  greenhouse: rgb(0.609, 0.647, 0.655),
+  regolith_mine: rgb(0.449, 0.384, 0.333),
+  storage_depot: rgb(0.771, 0.752, 0.711),
+  spaceport: rgb(0.56, 0.593, 0.57),
+  headquarters: rgb(0.624, 0.548, 0.475),
 };
 
 /** Medium detail: each building's signature masses, coarse curves, no greebles, nothing animated. */
@@ -1319,9 +1319,234 @@ function scatter(tx: number, ty: number, z: number): Part[] {
 }
 
 /** The iso-pixel box a grid of `tiles` occupies, with room for the tallest building and the highest hill. */
-export function sceneBounds(tiles: number, maxGroundZ = 0): { minX: number; maxX: number; minY: number; maxY: number } {
-  const half = (tiles * TILE_W) / 2;
-  return { minX: -half, maxX: half, minY: -(2 + Math.max(0, maxGroundZ)) * Z_PX, maxY: tiles * TILE_H + 0.6 * Z_PX };
+export function sceneBounds(tiles: number, maxGroundZ = 0, margin = 0): { minX: number; maxX: number; minY: number; maxY: number } {
+  // The grid's box, grown by the world round it (a margin on every side).
+  const half = ((tiles + 2 * margin) * TILE_W) / 2;
+  return { minX: -half, maxX: half, minY: -margin * TILE_H - (2 + Math.max(0, maxGroundZ)) * Z_PX, maxY: (tiles + margin) * TILE_H + 0.6 * Z_PX };
+}
+
+// ---------------------------------------------------------------------------
+// Smooth ground and the open world (at the user's request: "the tiles
+// shouldn't show as steps - smoothed out, so the different level is visible
+// but it doesn't look fake"; "make it open world, but with building
+// boundaries"; "the amount of green spreads as the biosphere grows").
+// ---------------------------------------------------------------------------
+
+const REGOLITH_LOW = rgb(0.44, 0.25, 0.17);
+const REGOLITH_MID = rgb(0.63, 0.39, 0.26);
+const REGOLITH_HIGH = rgb(0.74, 0.55, 0.41);
+const BARE_ROCK = rgb(0.43, 0.33, 0.29);
+const GRASS = rgb(0.37, 0.53, 0.27);
+const GRASS_DEEP = rgb(0.24, 0.41, 0.2);
+const FOUNDATION = rgb(0.6, 0.59, 0.56);
+const CAVE = rgb(0.07, 0.05, 0.05);
+const HAZE = rgb(CITY_BACKGROUND.r, CITY_BACKGROUND.g, CITY_BACKGROUND.b);
+
+function smoothstep(lo: number, hi: number, x: number): number {
+  const u = Math.min(1, Math.max(0, (x - lo) / (hi - lo)));
+  return u * u * (3 - 2 * u);
+}
+
+/** Smooth value noise in [0, 1) over tile space, for the ground's patterns: never simulated, only drawn. */
+function patchNoise(x: number, y: number, scale: number, salt: number): number {
+  const fx = x / scale;
+  const fy = y / scale;
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const u = (fx - x0) * (fx - x0) * (3 - 2 * (fx - x0));
+  const v = (fy - y0) * (fy - y0) * (3 - 2 * (fy - y0));
+  const at = (i: number, j: number): number => hash2(i * 7919 + salt, j * 104729 - salt);
+  const a = at(x0, y0);
+  const b = at(x0 + 1, y0);
+  const c = at(x0, y0 + 1);
+  const d = at(x0 + 1, y0 + 1);
+  return (a + (b - a) * u) * (1 - v) + (c + (d - c) * u) * v;
+}
+
+/**
+ * The ground's colour at a point: regolith by height (dark canyon floors,
+ * dusty heights), bare rock on the steep, and - as the planet's land greens -
+ * vegetation in patches that spread. Valleys green first and cliffs never
+ * do. A threshold on fixed noise, so a patch that is green stays green as
+ * `greenery` rises: the green grows outward rather than flickering about.
+ */
+/** How likely a point is to green, before height and slope: two scales of patch noise. */
+function greenLevel(x: number, y: number): number {
+  return 0.62 * patchNoise(x, y, 7, 23) + 0.38 * patchNoise(x, y, 2.6, 37);
+}
+
+/** How ready a point is to green: the patch noise, valleys a little ahead and heights behind. */
+function greenReadiness(x: number, y: number, z: number): number {
+  return greenLevel(x, y) + 0.08 * (1 - smoothstep(-3, 4, z)) - 0.04 * smoothstep(3, 8, z);
+}
+
+/**
+ * The readiness a point must reach to be green, for each hundredth of
+ * greenery: the (1 - g) quantile of readiness over level ground at the base
+ * height, so that at greenery g a share g of it is green. Measured once, over
+ * a fixed sample. (A guessed threshold greened 70% of the ground at g = 0.5;
+ * a quantile of the noise alone, 67% - the valley bonus was left out of it;
+ * and ends of +-Infinity turned the ground bare at g = 1.)
+ */
+const GREEN_THRESHOLD: readonly number[] = (() => {
+  const sample: number[] = [];
+  for (let y = 0; y < 96; y += 1) for (let x = 0; x < 96; x += 1) sample.push(greenReadiness(x * 1.37 - 300, y * 1.29 + 170, 0));
+  sample.sort((a, b) => a - b);
+  const lo = sample[0]! - 1;
+  const hi = sample[sample.length - 1]! + 1;
+  return Array.from({ length: 101 }, (_, k) => (k === 0 ? hi : k === 100 ? lo : sample[Math.floor((1 - k / 100) * (sample.length - 1))]!));
+})();
+
+export function groundColour(x: number, y: number, z: number, slope: number, greenery: number): Rgb {
+  const h = smoothstep(-4, 7, z);
+  let c = h < 0.5 ? mix(REGOLITH_LOW, REGOLITH_MID, h * 2) : mix(REGOLITH_MID, REGOLITH_HIGH, h * 2 - 1);
+  c = shade(c, 0.94 + 0.12 * patchNoise(x, y, 3.3, 11));
+  c = mix(c, BARE_ROCK, smoothstep(0.35, 1.0, slope));
+  if (greenery > 0) {
+    // Valleys a little ahead, heights a little behind; cliffs never.
+    const level = greenReadiness(x, y, z);
+    const threshold = GREEN_THRESHOLD[Math.round(Math.min(1, greenery) * 100)]!;
+    const green = smoothstep(threshold - 0.04, threshold + 0.04, level) * (1 - smoothstep(0.3, 0.7, slope));
+    if (green > 0) c = mix(c, mix(GRASS, GRASS_DEEP, patchNoise(x, y, 4.1, 51)), 0.92 * green);
+  }
+  return c;
+}
+
+/**
+ * A quad of ground through its four corner heights, as two lit triangles,
+ * coloured at each triangle's middle. `fade` mixes toward the haze (the
+ * world's far edge).
+ */
+function groundQuad(x0: number, y0: number, s: number, z00: number, z10: number, z01: number, z11: number, greenery: number, fade: ((x: number, y: number) => number) | null, out: Shape[]): void {
+  const x1 = x0 + s;
+  const y1 = y0 + s;
+  // Split along the diagonal that bends least, so a ridge line is not cut across.
+  const alongMain = Math.abs(z00 - z11) <= Math.abs(z10 - z01);
+  const tris: [V3, V3, V3][] = alongMain
+    ? [
+        [[x0, y0, z00], [x1, y0, z10], [x1, y1, z11]],
+        [[x0, y0, z00], [x1, y1, z11], [x0, y1, z01]],
+      ]
+    : [
+        [[x0, y0, z00], [x1, y0, z10], [x0, y1, z01]],
+        [[x1, y0, z10], [x1, y1, z11], [x0, y1, z01]],
+      ];
+  for (const tri of tris) {
+    const face = sheet(tri)[0]!;
+    const n = face.n;
+    const slope = Math.hypot(n[0], n[1]) / Math.max(1e-6, n[2]);
+    const mx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3;
+    const my = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+    const mz = (tri[0][2] + tri[1][2] + tri[2][2]) / 3;
+    let colour = groundColour(mx, my, mz, slope, greenery);
+    const f = fade === null ? 0 : fade(mx, my);
+    if (f > 0) colour = mix(colour, HAZE, f);
+    emitParts([part([face], colour)], out);
+  }
+}
+
+/** A grid corner's height, in tiles. */
+function corner(view: CityView, x: number, y: number): number {
+  const m = view.tiles + 1;
+  return view.corners[Math.min(view.tiles, Math.max(0, y)) * m + Math.min(view.tiles, Math.max(0, x))] ?? 0;
+}
+
+/** A world corner's height, in tiles; (x, y) in grid tiles. */
+function worldCorner(view: CityView, x: number, y: number): number {
+  const w = view.world;
+  const m = w.size + 1;
+  const i = Math.min(w.size, Math.max(0, y + w.margin)) * m + Math.min(w.size, Math.max(0, x + w.margin));
+  return w.corners[i] ?? 0;
+}
+
+/** A piece of the world outside the grid: its shapes, and the box they fill on screen, for culling. */
+interface WorldCell {
+  readonly shapes: Shape[];
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minY: number;
+  readonly maxY: number;
+}
+
+/**
+ * Cells of the world beyond the grid, this many tiles across, by level of
+ * detail. At low, 8-tile cells lost the mountains' shape - the far world
+ * looked less like itself than bare ground did (54% of that difference,
+ * against a gate of 45%); 2-tile cells, 41% (measured).
+ */
+const WORLD_CELL: Readonly<Record<CityQuality, number>> = { high: 1, medium: 2, low: 2 };
+
+/**
+ * The world round the grid, in cells, far to near, split in two: what lies
+ * behind the grid (drawn before it) and what lies in front (drawn after, so
+ * a mountain nearer the viewer hides the buildings behind it). A cell is in
+ * front when it is past the grid's far edge on either axis.
+ */
+function worldCells(view: CityView, quality: CityQuality): { back: WorldCell[]; front: WorldCell[] } {
+  const back: WorldCell[] = [];
+  const front: WorldCell[] = [];
+  const w = view.world;
+  if (w.margin <= 0) return { back, front };
+  const n = view.tiles;
+  const s = WORLD_CELL[quality];
+  const lo = -w.margin;
+  const hi = n + w.margin;
+  const cells: { x: number; y: number }[] = [];
+  for (let y = lo; y < hi; y += s) for (let x = lo; x < hi; x += s) if (x + s <= 0 || y + s <= 0 || x >= n || y >= n) cells.push({ x, y });
+  cells.sort((a, b) => a.x + a.y - (b.x + b.y) || a.x - b.x);
+  let floorZ = Infinity;
+  for (const z of w.corners) floorZ = Math.min(floorZ, z);
+  floorZ -= 1;
+  const caves = new Map<string, (typeof w.caves)[number][]>();
+  for (const c of w.caves) {
+    const key = `${Math.floor(c.x / s) * s},${Math.floor(c.y / s) * s}`;
+    caves.set(key, [...(caves.get(key) ?? []), c]);
+  }
+  for (const { x, y } of cells) {
+    const shapes: Shape[] = [];
+    const z00 = worldCorner(view, x, y);
+    const z10 = worldCorner(view, x + s, y);
+    const z01 = worldCorner(view, x, y + s);
+    const z11 = worldCorner(view, x + s, y + s);
+    // The world fades into haze over its last sixteen tiles, triangle by triangle.
+    const fade = (px: number, py: number): number => 1 - smoothstep(0, 16, Math.min(px - lo, py - lo, hi - px, hi - py));
+    groundQuad(x, y, s, z00, z10, z01, z11, view.greenery, fade, shapes);
+    // The world's near edges stand on a skirt of rock, down to a common floor.
+    if (x + s >= hi) emitParts([part([{ pts: [[x + s, y, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x + s, y, z10]], n: [1, 0, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
+    if (y + s >= hi) emitParts([part([{ pts: [[x, y + s, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x, y + s, z01]], n: [0, 1, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
+    if (quality !== "low") for (const cave of caves.get(`${x},${y}`) ?? []) caveMouth(view, cave, shapes);
+    const zs = [z00, z10, z01, z11];
+    const top = Math.max(...zs) + 1;
+    const bottom = Math.min(...zs, x + s >= hi || y + s >= hi ? floorZ : Infinity);
+    const cell: WorldCell = {
+      shapes,
+      minX: ((x - (y + s)) * TILE_W) / 2,
+      maxX: ((x + s - y) * TILE_W) / 2,
+      minY: ((x + y) * TILE_H) / 2 - top * Z_PX,
+      maxY: ((x + s + y + s) * TILE_H) / 2 - bottom * Z_PX,
+    };
+    (x >= n || y >= n ? front : back).push(cell);
+  }
+  return { back, front };
+}
+
+/** A cave's mouth in a rock face: a dark arch, facing downhill, with a lip of rock. */
+function caveMouth(view: CityView, cave: { x: number; y: number; dx: number; dy: number }, out: Shape[]): void {
+  const z = worldCorner(view, Math.round(cave.x), Math.round(cave.y));
+  // Across the face, and a little out from it.
+  const ax = -cave.dy;
+  const ay = cave.dx;
+  const cx = cave.x + cave.dx * 0.15;
+  const cy = cave.y + cave.dy * 0.15;
+  const w = 0.55;
+  const h = 0.75;
+  const arch: V3[] = [];
+  for (let i = 0; i <= 10; i += 1) {
+    const a = Math.PI * (i / 10);
+    arch.push([cx + ax * w * Math.cos(a), cy + ay * w * Math.cos(a), z + h * Math.sin(a)]);
+  }
+  out.push({ rings: [ringOf(arch)], fill: { ...CAVE, a: 1 } });
+  emitParts([part(frustum(cx + ax * (w + 0.1), cy + ay * (w + 0.1), 0.16, 0.08, z, z + 0.25, 6), ROCK), part(frustum(cx - ax * (w + 0.12), cy - ay * (w + 0.12), 0.2, 0.09, z, z + 0.3, 6), ROCK)], out);
 }
 
 /** Lowest and highest ground in the view, in tiles. */
@@ -1372,6 +1597,8 @@ interface SceneCache {
    * building, per network.
    */
   connectors: { readonly corridors: Set<number>; readonly cables: Set<number> };
+  /** The world round the grid, built once per layout. */
+  world: { back: WorldCell[]; front: WorldCell[] } | null;
 }
 
 /** One cache per level of detail, so zooming in and out never throws one away. */
@@ -1440,11 +1667,20 @@ function groundKey(view: CityView): string {
     return `${count}:${weight}`;
   };
   const rocks = layer(view.rocks.map((r) => r !== "none"));
-  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}|${layer(view.corridors)}|${layer(view.cables)}|${rocks}`;
+  // The ground is drawn through its corners: a change to any redraws it.
+  let cornerSum = 0;
+  view.corners.forEach((z, i) => {
+    cornerSum += z * ((i % 89) + 1);
+  });
+  // The green is drawn into the ground: a new shade of it redraws the ground,
+  // in fiftieths so a slowly greening planet does not redraw every frame.
+  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}|${layer(view.corridors)}|${layer(view.cables)}|${rocks}|${Math.round(view.greenery * 50)}|${view.world.size}|${cornerSum}`;
 }
 
 /** At low detail, open ground is drawn in patches this many tiles across. */
 const LOW_PATCH = 4;
+/** A patch merges only if its corners lie within this many tiles of height of each other. */
+const PATCH_SPREAD = 0.15;
 
 function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
   const n = view.tiles;
@@ -1456,25 +1692,40 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
     for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
     return { tx: b.tx, ty: b.ty, w: b.size, h: b.size, building: b.index };
   });
-  // Open ground: tile by tile, or at low detail in patches wherever a whole
-  // patch is open (a patch that a building touches falls back to its tiles).
+  // Open ground: tile by tile up close, and further away in patches (2 x 2,
+  // then 4 x 4) wherever nothing else is drawn on a patch's tiles - no
+  // building, corridor, cable or rock. The ground is smooth now, so a patch
+  // is drawn through its four corners.
   const done = new Uint8Array(n * n);
-  if (quality === "low") {
-    for (let py = 0; py + LOW_PATCH <= n; py += LOW_PATCH) {
-      for (let px = 0; px + LOW_PATCH <= n; px += LOW_PATCH) {
+  const patch = quality === "high" ? 1 : quality === "medium" ? 2 : LOW_PATCH;
+  if (patch > 1) {
+    for (let py = 0; py + patch <= n; py += patch) {
+      for (let px = 0; px + patch <= n; px += patch) {
         let open = true;
-        // Only a patch that is flat: merging slopes erased the terraces and
-        // painted whole patches steep, and the far view looked less like the
-        // near one than bare ground did (measured).
-        const z0 = view.groundZ[py * n + px] ?? 0;
-        for (let y = py; y < py + LOW_PATCH && open; y += 1) {
-          for (let x = px; x < px + LOW_PATCH; x += 1) {
-            if (covered.has(y * n + x) || view.steep[y * n + x] === true || view.corridors[y * n + x] === true || (view.groundZ[y * n + x] ?? 0) !== z0) open = false;
+        for (let y = py; y < py + patch && open; y += 1) {
+          for (let x = px; x < px + patch; x += 1) {
+            const i = y * n + x;
+            const rock = view.rocks[i] ?? "none";
+            // Cables block a patch only where they are drawn: not furthest out.
+            if (covered.has(i) || view.corridors[i] === true || (view.cables[i] === true && quality !== "low") || (rock === "crag" && quality !== "low") || (rock === "loose" && quality === "high")) open = false;
           }
         }
+        // Only a patch that is nearly level: drawn through its four corners, a
+        // patch over a hill flattens it (the first version merged every open
+        // patch, and the far ground differed from the near by 0.027 - measured).
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (let y = py; y <= py + patch && open; y += 1) {
+          for (let x = px; x <= px + patch; x += 1) {
+            const z = corner(view, x, y);
+            lo = Math.min(lo, z);
+            hi = Math.max(hi, z);
+          }
+        }
+        if (hi - lo > PATCH_SPREAD) open = false;
         if (!open) continue;
-        for (let y = py; y < py + LOW_PATCH; y += 1) for (let x = px; x < px + LOW_PATCH; x += 1) done[y * n + x] = 1;
-        occupants.push({ tx: px, ty: py, w: LOW_PATCH, h: LOW_PATCH, building: -1 });
+        for (let y = py; y < py + patch; y += 1) for (let x = px; x < px + patch; x += 1) done[y * n + x] = 1;
+        occupants.push({ tx: px, ty: py, w: patch, h: patch, building: -1 });
       }
     }
   }
@@ -1508,7 +1759,7 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
       }
     }
   }
-  const fresh: SceneCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map(), connectors };
+  const fresh: SceneCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map(), connectors, world: null };
   sceneCaches.set(quality, fresh);
   return fresh;
 }
@@ -1790,6 +2041,30 @@ function drawRovers(list: readonly Rover[] | undefined, time: number, out: Shape
   }
 }
 
+/**
+ * The building boundary, drawn on the ground round the grid: short dashes,
+ * following the ground's height, so it reads as a survey line rather than a
+ * wall.
+ */
+function boundary(view: CityView): Shape[] {
+  const n = view.tiles;
+  const out: Shape[] = [];
+  const colour: Rgba = { r: 1, g: 0.86, b: 0.55, a: 0.55 };
+  const edges: [number, number, number, number][] = [];
+  for (let k = 0; k < n; k += 1) {
+    if (k % 2 === 1) continue;
+    edges.push([k, 0, k + 1, 0], [k, n, k + 1, n], [0, k, 0, k + 1], [n, k, n, k + 1]);
+  }
+  for (const [x0, y0, x1, y1] of edges) {
+    const z0 = corner(view, x0, y0) + 0.02;
+    const z1 = corner(view, x1, y1) + 0.02;
+    const nx = y0 === y1 ? 0 : 0.05;
+    const ny = y0 === y1 ? 0.05 : 0;
+    out.push({ rings: [ringOf([[x0 - nx, y0 - ny, z0], [x1 - nx, y1 - ny, z1], [x1 + nx, y1 + ny, z1], [x0 + nx, y0 + ny, z0]])], fill: colour });
+  }
+  return out;
+}
+
 /** Lift a solid by `dz` tiles: a building assembled at ground zero, stood on its own ground. */
 function raise(parts: readonly Part[], dz: number): Part[] {
   if (dz === 0) return [...parts];
@@ -1814,6 +2089,14 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   const rovers = quality !== "low" ? roversAt(view, since) : null;
   const rockets = rocketsAt(view, since);
   const vp = options.viewport;
+  cache.world ??= worldCells(view, quality);
+  const drawWorld = (cells: readonly WorldCell[]): void => {
+    for (const c of cells) {
+      if (vp !== undefined && (c.maxX < vp.minX || c.minX > vp.maxX || c.maxY < vp.minY || c.minY > vp.maxY)) continue;
+      for (const shape of c.shapes) out.push(shape);
+    }
+  };
+  drawWorld(cache.world.back);
   for (const i of order) {
     const o = occupants[i]!;
     if (vp !== undefined) {
@@ -1837,38 +2120,15 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       }
       const start = out.length;
       if (o.w > 1) {
-        // A low-detail patch: its mean height, steep-coloured if any of it is steep.
-        let sum = 0;
-        let anySteep = false;
-        for (let y = o.ty; y < o.ty + o.h; y += 1) {
-          for (let x = o.tx; x < o.tx + o.w; x += 1) {
-            sum += view.groundZ[y * n + x] ?? 0;
-            anySteep = anySteep || view.steep[y * n + x] === true;
-          }
-        }
-        const zp = sum / (o.w * o.h);
-        const patch = box(o.tx, o.ty, floor, o.tx + o.w, o.ty + o.h, zp);
-        emitParts([part(patch.slice(1, 3), CLIFF)], out);
-        out.push({ rings: [ringOf(patch[0]!.pts)], fill: { ...(anySteep ? GROUND_STEEP : mix(GROUND_LOW, GROUND_HIGH, (zp - range.lo) / span)), a: 1 } });
+        // A patch of open ground further away, through its four corners.
+        groundQuad(o.tx, o.ty, o.w, corner(view, o.tx, o.ty), corner(view, o.tx + o.w, o.ty), corner(view, o.tx, o.ty + o.h), corner(view, o.tx + o.w, o.ty + o.h), view.greenery, null, out);
         ground.set(i, out.slice(start));
         continue;
       }
       const z = view.groundZ[o.ty * n + o.tx] ?? 0;
-      const steep = view.steep[o.ty * n + o.tx] === true;
       const rock = view.rocks[o.ty * n + o.tx] ?? "none";
-      // Height as a colour ramp, and a faint checker so single tiles read.
-      const ramp = mix(GROUND_LOW, GROUND_HIGH, (z - range.lo) / span);
-      const checker = (o.tx + o.ty) % 2 === 0 ? 1 : 0.965;
-      const top = shade(steep ? GROUND_STEEP : ramp, checker);
-      const faces = box(o.tx, o.ty, floor, o.tx + 1, o.ty + 1, z);
-      // Only the sides that rise above the nearer neighbour can show.
-      const sides: Face[] = [];
-      const east = o.tx + 1 < n ? view.groundZ[o.ty * n + o.tx + 1] ?? floor : floor;
-      const south = o.ty + 1 < n ? view.groundZ[(o.ty + 1) * n + o.tx] ?? floor : floor;
-      if (east < z) sides.push(faces[1]!);
-      if (south < z) sides.push(faces[2]!);
-      emitParts([part(sides, CLIFF)], out);
-      out.push({ rings: [ringOf(faces[0]!.pts)], fill: { ...top, a: 1 } });
+      // Smooth ground: the tile through its four corners - no steps.
+      groundQuad(o.tx, o.ty, 1, corner(view, o.tx, o.ty), corner(view, o.tx + 1, o.ty), corner(view, o.tx, o.ty + 1), corner(view, o.tx + 1, o.ty + 1), view.greenery, null, out);
       // The rocks the simulation knows (a rover can break exactly what is drawn).
       if (rock === "crag" && quality !== "low") {
         const h = 0.18 + 0.3 * hash2(o.tx, o.ty);
@@ -1886,10 +2146,19 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       continue;
     }
     const b = view.buildings[o.building]!;
-    // The plinth: the ground under the building, levelled at its highest point.
-    const plinth = box(b.tx, b.ty, floor, b.tx + b.size, b.ty + b.size, b.baseZ);
-    emitParts([part(plinth.slice(1, 3), CLIFF)], out);
-    out.push({ rings: [ringOf(plinth[0]!.pts)], fill: { ...mix(GROUND_LOW, GROUND_HIGH, (b.baseZ - range.lo) / span), a: 1 } });
+    // The building's ground, levelled at its highest corner; on a slope a
+    // concrete foundation fills down to the lowest (the user: "building on a
+    // slope terrain builds concrete foundations under it").
+    let lowest = Infinity;
+    for (let y = b.ty; y <= b.ty + b.size; y += 1) for (let x = b.tx; x <= b.tx + b.size; x += 1) lowest = Math.min(lowest, corner(view, x, y));
+    const drop = b.baseZ - lowest;
+    if (drop > 0.02) {
+      const footing = box(b.tx, b.ty, lowest - 0.05, b.tx + b.size, b.ty + b.size, b.baseZ);
+      emitParts([part(footing.slice(1, 3), FOUNDATION)], out);
+      out.push({ rings: [ringOf(footing[0]!.pts)], fill: { ...shade(FOUNDATION, 1.08), a: 1 } });
+    } else {
+      out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + b.size, b.baseZ)], fill: { ...groundColour(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ, 0, view.greenery), a: 1 } });
+    }
     const rocket: RocketState = b.type === "spaceport" ? rockets.get(b.ty * n + b.tx) ?? null : null;
     const built = quality === "high" ? assemble(b, options.time, rocket) : quality === "medium" ? assembleMedium(b) : assembleLow(b);
     emitBuilding(built, b, buildings, out, quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") : "");
@@ -1900,6 +2169,10 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
     // Not connected to what it needs reads differently from any other reason it is off.
     if (!b.operable) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + buildingTop(b.type) + 0.35));
   }
+
+  drawWorld(cache.world.front);
+  // The building boundary: where the world stops being buildable.
+  if (quality !== "low") out.push(...boundary(view));
 
   // Overlays, on top of everything so they are never hidden - each on its own ground.
   const tile = options.selectedTile ?? null;

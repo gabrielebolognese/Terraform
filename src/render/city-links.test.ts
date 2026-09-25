@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { referenceCity, renderCity } from "../harness/city-frames.js";
+import { flatten, referenceCity, renderCity } from "../harness/city-frames.js";
 import type { CityBuildingView, CityJobView, CityView, Rock } from "../sim/index.js";
 import type { CityQuality, CitySceneOptions } from "./city.js";
 import { cityScene, resetSceneCache } from "./city.js";
@@ -17,11 +17,9 @@ const { view: reference } = referenceCity();
 const n = reference.tiles;
 /** Flat, open ground with no rocks: whatever is drawn is what the test puts there. */
 const open: CityView = {
-  ...reference,
+  ...flatten(reference),
   id: "open",
   buildings: [],
-  groundZ: reference.groundZ.map(() => 0),
-  steep: reference.steep.map(() => false),
   rocks: reference.rocks.map((): Rock => "none"),
   garage: null,
   jobs: [],
@@ -67,7 +65,7 @@ describe("corridors and cables", () => {
     // On hilly ground, where tiles are drawn one by one rather than merged
     // into flat patches (on flat ground a patch would hide a drawn cable, and
     // this check passed with cables drawn).
-    const hills: CityView = { ...open, groundZ: reference.groundZ, steep: reference.steep };
+    const hills: CityView = { ...open, groundZ: reference.groundZ, corners: reference.corners, steep: reference.steep };
     expect(changed(withLinks(hills, "cables", line), hills, "low")).toBe(0);
     expect(changed(withLinks(hills, "corridors", line), hills, "low"), "and a corridor still shows there").toBeGreaterThan(0);
   });

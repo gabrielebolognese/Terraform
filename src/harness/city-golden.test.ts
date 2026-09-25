@@ -89,12 +89,18 @@ describe("the reference city render", () => {
     expect(frameDifference(golden, rendered)).toBeLessThanOrEqual(TOLERANCE_TERRAIN);
   });
 
-  it("would notice one tile of ground a metre lower - the terrain tolerance is not vacuous", () => {
+  it("would notice one corner of ground two metres lower - the terrain tolerance is not vacuous", () => {
     const golden = decodePng(readFileSync(join(FRAMES_DIR, CITY_GOLDEN_WHOLE.name)));
     const { view, options } = referenceCity();
-    // The smallest single-tile change measured: tile 26,25, a metre (0.1 tile) lower.
-    const k = 25 * 32 + 26;
-    const lower = { ...view, groundZ: view.groundZ.map((z, i) => (i === k ? z - 0.1 : z)) };
+    // The ground is drawn through tile corners, and smooth: a change spreads
+    // over the four tiles round a corner and moves few pixels. Measured, one
+    // corner lowered at 26,25 / 10,28 / 5,5 / 20,8: a metre, 0.00074% to
+    // 0.00089% - under one full-contrast pixel, so under the tolerance; two
+    // metres, 0.00108% to 0.00157% - over it everywhere. Two metres at 26,25:
+    // 0.00146%. (Lowering a tile's own height, as this test did on stepped
+    // ground, now changes almost nothing drawn: 0.00059%.)
+    const k = 25 * 33 + 26;
+    const lower = { ...view, corners: view.corners.map((z, i) => (i === k ? z - 0.2 : z)) };
     expect(frameDifference(golden, renderCity(lower, options, CITY_GOLDEN_WHOLE.width, CITY_GOLDEN_WHOLE.height, false))).toBeGreaterThan(TOLERANCE_TERRAIN);
   });
 

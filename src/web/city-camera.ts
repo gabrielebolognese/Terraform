@@ -17,8 +17,12 @@ export interface CityCamera {
   readonly zoom: number;
 }
 
-/** A whole 32-tile city fits a laptop screen at the bottom; one tile fills a fifth of it at the top. */
-export const CITY_ZOOM_MIN = 0.3;
+/**
+ * At the bottom a city's whole world - its grid and the open world round it,
+ * 128 tiles across - fits a laptop screen; one tile fills a fifth of it at
+ * the top.
+ */
+export const CITY_ZOOM_MIN = 0.15;
 export const CITY_ZOOM_MAX = 3;
 
 export function clampZoom(zoom: number): number {
@@ -46,9 +50,12 @@ export function qualityFor(cam: CityCamera, viewW: number, viewH: number, tiles:
   return "low";
 }
 
-/** The centre may not leave the grid's own box, so the city can never be panned off-screen. */
-export function clampCamera(cam: CityCamera, tiles: number): CityCamera {
-  const b = sceneBounds(tiles);
+/**
+ * The centre may not leave the world's box - the grid and `margin` tiles of
+ * open world round it - so the city can be explored but never lost off-screen.
+ */
+export function clampCamera(cam: CityCamera, tiles: number, margin = 0): CityCamera {
+  const b = sceneBounds(tiles, 0, margin);
   return {
     cx: Math.min(b.maxX, Math.max(b.minX, cam.cx)),
     cy: Math.min(b.maxY, Math.max(b.minY, cam.cy)),
@@ -71,16 +78,16 @@ export function isoToScreen(cam: CityCamera, viewW: number, viewH: number, sx: n
 }
 
 /** Drag by a screen delta: the ground follows the pointer. */
-export function pan(cam: CityCamera, dxPx: number, dyPx: number, tiles: number): CityCamera {
-  return clampCamera({ ...cam, cx: cam.cx - dxPx / cam.zoom, cy: cam.cy - dyPx / cam.zoom }, tiles);
+export function pan(cam: CityCamera, dxPx: number, dyPx: number, tiles: number, margin = 0): CityCamera {
+  return clampCamera({ ...cam, cx: cam.cx - dxPx / cam.zoom, cy: cam.cy - dyPx / cam.zoom }, tiles, margin);
 }
 
 /** Zoom by `factor`, keeping the ground under (px, py) where it is - until a clamp says otherwise. */
-export function zoomAt(cam: CityCamera, factor: number, px: number, py: number, viewW: number, viewH: number, tiles: number): CityCamera {
+export function zoomAt(cam: CityCamera, factor: number, px: number, py: number, viewW: number, viewH: number, tiles: number, margin = 0): CityCamera {
   const zoom = clampZoom(cam.zoom * factor);
   const before = screenToIso(cam, viewW, viewH, px, py);
   const next = { cx: before.sx - (px - viewW / 2) / zoom, cy: before.sy - (py - viewH / 2) / zoom, zoom };
-  return clampCamera(next, tiles);
+  return clampCamera(next, tiles, margin);
 }
 
 /** The ground tile under a screen point, or null off the grid. */
