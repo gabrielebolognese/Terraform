@@ -15,12 +15,12 @@
  */
 
 import type { CitySceneOptions } from "../render/city.js";
-import { chunkId, cityChunkRange, cityChunkReach, cityChunkSignature, cityLiveChunks, cityScene } from "../render/city.js";
+import { CHUNK_TILES_BY_QUALITY, chunkId, cityChunkRange, cityChunkReach, cityChunkSignature, cityLiveChunks, cityScene } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { CityView } from "../sim/index.js";
 
-/** Tiles a chunk's side. */
-export const CHUNK_TILES = 8;
+/** Tiles a chunk's side up close; further out chunks are bigger (`CHUNK_TILES_BY_QUALITY`), and fewer. */
+export const CHUNK_TILES = CHUNK_TILES_BY_QUALITY.high;
 
 /** Where pictures are made and drawn: the browser's canvases, or a test's stand-in. */
 export interface ChunkBackend<P> {
@@ -64,7 +64,9 @@ export class ChunkedCity<P> {
   constructor(
     private readonly backend: ChunkBackend<P>,
     private readonly budgetMs = 8,
-    private readonly maxPixels = 48_000_000,
+    // 24 million pixels, some 96 MB of pictures (48 million, with a metropolis's 18,000 chunks to fill, was
+    // more than a browser tab could hold beside the city itself).
+    private readonly maxPixels = 24_000_000,
     /** Milliseconds a frame for chunks never drawn: a whole metropolis is seconds of work, so it fills in rather than freezing. */
     private readonly firstBudgetMs = 40,
   ) {}
@@ -84,7 +86,8 @@ export class ChunkedCity<P> {
    */
   draw(view: CityView, options: CitySceneOptions, viewport: { minX: number; maxX: number; minY: number; maxY: number }, scale: number): void {
     this.frame += 1;
-    const size = CHUNK_TILES;
+    const size = CHUNK_TILES_BY_QUALITY[options.quality ?? "high"];
+    const key = (cx: number, cy: number): string => `${size}:${chunkId(cx, cy)}`;
     const want = pictureScale(scale);
     const r = cityChunkRange(view, size);
     const visible: [number, number][] = [];
@@ -106,7 +109,7 @@ export class ChunkedCity<P> {
     const missing: [number, number][] = [];
     const stale: [number, number][] = [];
     for (const [cx, cy] of visible) {
-      const id = chunkId(cx, cy);
+      const id = key(cx, cy);
       const sig = cityChunkSignature(view, options, size, cx, cy);
       sigs.set(id, sig);
       const k = this.kept.get(id);
@@ -121,29 +124,28 @@ export class ChunkedCity<P> {
     const start = this.backend.now();
     for (const c of missing) {
       if (this.backend.now() - start >= this.firstBudgetMs) break;
-      this.render(view, options, c[0], c[1], sigs.get(chunkId(c[0], c[1]))!, want);
+      this.render(view, options, size, c[0], c[1], sigs.get(key(c[0], c[1]))!, want);
     }
     const again = this.backend.now();
     for (const c of stale) {
       if (this.backend.now() - again >= this.budgetMs) break;
-      this.render(view, options, c[0], c[1], sigs.get(chunkId(c[0], c[1]))!, want);
+      this.render(view, options, size, c[0], c[1], sigs.get(key(c[0], c[1]))!, want);
     }
-    this.settled = missing.every((c) => this.kept.has(chunkId(c[0], c[1]))) && stale.every((c) => this.kept.get(chunkId(c[0], c[1]))!.sig === sigs.get(chunkId(c[0], c[1])) && this.kept.get(chunkId(c[0], c[1]))!.scale === want);
+    this.settled = missing.every((c) => this.kept.has(key(c[0], c[1]))) && stale.every((c) => this.kept.get(key(c[0], c[1]))!.sig === sigs.get(key(c[0], c[1])) && this.kept.get(key(c[0], c[1]))!.scale === want);
     for (const [cx, cy] of visible) {
-      const id = chunkId(cx, cy);
+      const id = key(cx, cy);
       const k = this.kept.get(id);
       if (k === undefined) continue;
       k.used = this.frame;
       if (k.picture !== null) this.backend.blit(k.picture, k.minX, k.minY, k.w, k.h);
-      if (live.has(id)) this.backend.fill(cityScene(view, { ...options, chunk: { x0: cx * size, y0: cy * size, size }, layer: "live" }));
+      if (live.has(chunkId(cx, cy))) this.backend.fill(cityScene(view, { ...options, chunk: { x0: cx * size, y0: cy * size, size }, layer: "live" }));
     }
     this.backend.fill(cityScene(view, { ...options, layer: "overlay" }));
     this.evict();
   }
 
-  private render(view: CityView, options: CitySceneOptions, cx: number, cy: number, sig: string, scale: number): Kept<P> {
-    const size = CHUNK_TILES;
-    const id = chunkId(cx, cy);
+  private render(view: CityView, options: CitySceneOptions, size: number, cx: number, cy: number, sig: string, scale: number): Kept<P> {
+    const id = `${size}:${chunkId(cx, cy)}`;
     const shapes = cityScene(view, { ...options, chunk: { x0: cx * size, y0: cy * size, size }, layer: "static" });
     let minX = Infinity;
     let minY = Infinity;

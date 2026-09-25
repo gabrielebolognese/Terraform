@@ -65,7 +65,8 @@ describe("the city in chunks", () => {
     }
     expect(city.settled).toBe(true);
     const first = city.renders;
-    expect(first).toBeGreaterThan(100);
+    // Measured: 81 pictures - far away a chunk is 32 tiles a side (at 8, a million-tile metropolis was 18,000 of them).
+    expect(first).toBeGreaterThan(50);
     // What the pictures hold, with what was filled over them, is the scene.
     expect(f.painted.length + f.frame.filled).toBe(cityScene(metropolis, o).length);
     f.reset();

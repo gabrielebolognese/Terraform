@@ -2295,54 +2295,59 @@ function worldCells(view: CityView, quality: CityQuality): { back: WorldCell[]; 
     if (list === undefined) rocks.set(key, [r]);
     else list.push(r);
   }
-  for (const { x, y } of cells) {
-    const z00 = worldCorner(view, x, y);
-    const z10 = worldCorner(view, x + s, y);
-    const z01 = worldCorner(view, x, y + s);
-    const z11 = worldCorner(view, x + s, y + s);
-    const make = (): Shape[] => {
-      const shapes: Shape[] = [];
-      // The world fades into haze over its last sixteen tiles, triangle by triangle.
-      const fade = (px: number, py: number): number => 1 - smoothstep(0, 16, Math.min(px - lo, py - lo, hi - px, hi - py));
-      // Up close through the half-tile samples; further away through the cell's corners.
-      groundMesh(x, y, s, quality === "high" ? 0.5 : s, quality === "high" ? fineZ : coarseZ, view.greenery, fade, shapes);
-      if (quality === "high") shrubs(x, y, fineZ, view.greenery, shapes);
-      // The world's near edges stand on a skirt of rock, down to a common floor.
-      if (x + s >= hi) emitParts([part([{ pts: [[x + s, y, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x + s, y, z10]], n: [1, 0, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
-      if (y + s >= hi) emitParts([part([{ pts: [[x, y + s, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x, y + s, z01]], n: [0, 1, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
-      if (quality !== "low") for (const cave of caves.get(`${x},${y}`) ?? []) caveMouth(view, cave, shapes);
-      // Its rocks, far to near, like the tiles they stand on.
-      const here = (rocks.get(`${x},${y}`) ?? []).slice().sort((a, b) => a.x + a.y - (b.x + b.y));
-      for (const r of here) {
-        const c = [worldCorner(view, r.x, r.y), worldCorner(view, r.x + 1, r.y), worldCorner(view, r.x, r.y + 1), worldCorner(view, r.x + 1, r.y + 1)];
-        const rz = (c[0]! + c[1]! + c[2]! + c[3]!) / 4;
-        if (r.kind === "loose") {
-          emitParts(scatter(r.x, r.y, rz), shapes);
-          continue;
-        }
-        // Steep as the rules judge it: the steepest rise along the tile's edges, in tiles per tile.
-        const rise = Math.max(Math.abs(c[0]! - c[1]!), Math.abs(c[2]! - c[3]!), Math.abs(c[0]! - c[2]!), Math.abs(c[1]! - c[3]!));
-        if (showBoulders(r.x, r.y, rise > STEEP_RISE, quality)) emitParts(boulders(r.x, r.y, rz, quality), shapes);
-      }
-      return shapes;
-    };
-    const zs = [z00, z10, z01, z11];
-    const top = Math.max(...zs) + 1;
-    const bottom = Math.min(...zs, x + s >= hi || y + s >= hi ? floorZ : Infinity);
-    const cell: WorldCell = {
-      tx: x,
-      ty: y,
-      s,
-      shapes: null,
-      make,
-      minX: ((x - (y + s)) * TILE_W) / 2,
-      maxX: ((x + s - y) * TILE_W) / 2,
-      minY: ((x + y) * TILE_H) / 2 - top * Z_PX,
-      maxY: ((x + s + y + s) * TILE_H) / 2 - bottom * Z_PX,
-    };
-    (x >= n || y >= n ? front : back).push(cell);
-  }
+  const shared: WorldShared = { lo, hi, floorZ, fineZ, coarseZ, caves, rocks };
+  for (const { x, y } of cells) (x >= n || y >= n ? front : back).push(worldCell(view, quality, shared, x, y));
   return { back, front };
+}
+
+/** One cell of the world beyond the grid (see `worldCells`). */
+function worldCell(view: CityView, quality: CityQuality, shared: WorldShared, x: number, y: number): WorldCell {
+  const s = WORLD_CELL[quality];
+  const { lo, hi, floorZ, fineZ, coarseZ, caves, rocks } = shared;
+  const z00 = worldCorner(view, x, y);
+  const z10 = worldCorner(view, x + s, y);
+  const z01 = worldCorner(view, x, y + s);
+  const z11 = worldCorner(view, x + s, y + s);
+  const make = (): Shape[] => {
+    const shapes: Shape[] = [];
+    // The world fades into haze over its last sixteen tiles, triangle by triangle.
+    const fade = (px: number, py: number): number => 1 - smoothstep(0, 16, Math.min(px - lo, py - lo, hi - px, hi - py));
+    // Up close through the half-tile samples; further away through the cell's corners.
+    groundMesh(x, y, s, quality === "high" ? 0.5 : s, quality === "high" ? fineZ : coarseZ, view.greenery, fade, shapes);
+    if (quality === "high") shrubs(x, y, fineZ, view.greenery, shapes);
+    // The world's near edges stand on a skirt of rock, down to a common floor.
+    if (x + s >= hi) emitParts([part([{ pts: [[x + s, y, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x + s, y, z10]], n: [1, 0, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
+    if (y + s >= hi) emitParts([part([{ pts: [[x, y + s, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x, y + s, z01]], n: [0, 1, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
+    if (quality !== "low") for (const cave of caves.get(`${x},${y}`) ?? []) caveMouth(view, cave, shapes);
+    // Its rocks, far to near, like the tiles they stand on.
+    const here = (rocks.get(`${x},${y}`) ?? []).slice().sort((a, b) => a.x + a.y - (b.x + b.y));
+    for (const r of here) {
+      const c = [worldCorner(view, r.x, r.y), worldCorner(view, r.x + 1, r.y), worldCorner(view, r.x, r.y + 1), worldCorner(view, r.x + 1, r.y + 1)];
+      const rz = (c[0]! + c[1]! + c[2]! + c[3]!) / 4;
+      if (r.kind === "loose") {
+        emitParts(scatter(r.x, r.y, rz), shapes);
+        continue;
+      }
+      // Steep as the rules judge it: the steepest rise along the tile's edges, in tiles per tile.
+      const rise = Math.max(Math.abs(c[0]! - c[1]!), Math.abs(c[2]! - c[3]!), Math.abs(c[0]! - c[2]!), Math.abs(c[1]! - c[3]!));
+      if (showBoulders(r.x, r.y, rise > STEEP_RISE, quality)) emitParts(boulders(r.x, r.y, rz, quality), shapes);
+    }
+    return shapes;
+  };
+  const zs = [z00, z10, z01, z11];
+  const top = Math.max(...zs) + 1;
+  const bottom = Math.min(...zs, x + s >= hi || y + s >= hi ? floorZ : Infinity);
+  return {
+    tx: x,
+    ty: y,
+    s,
+    shapes: null,
+    make,
+    minX: ((x - (y + s)) * TILE_W) / 2,
+    maxX: ((x + s - y) * TILE_W) / 2,
+    minY: ((x + y) * TILE_H) / 2 - top * Z_PX,
+    maxY: ((x + s + y + s) * TILE_H) / 2 - bottom * Z_PX,
+  };
 }
 
 /** A cave's mouth in a rock face: a dark arch, facing downhill, with a lip of rock. */
@@ -2365,13 +2370,13 @@ function caveMouth(view: CityView, cave: { x: number; y: number; dx: number; dy:
 }
 
 /** Lowest and highest ground in the view, in tiles. */
-const groundRanges = new WeakMap<CityView, { lo: number; hi: number }>();
+const groundRanges = new WeakMap<readonly number[], { lo: number; hi: number }>();
 
 function groundRange(view: CityView): { lo: number; hi: number } {
-  const kept = groundRanges.get(view);
+  const kept = groundRanges.get(view.groundZ);
   if (kept !== undefined) return kept;
   const made = groundRangeOf(view);
-  groundRanges.set(view, made);
+  groundRanges.set(view.groundZ, made);
   return made;
 }
 
@@ -2494,80 +2499,9 @@ function buildingVariant(b: CityBuildingView, quality: CityQuality, rocket: Rock
   return quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") : "";
 }
 
-/** Whether tile (x, y) - an occupant's front corner - lies in the chunk. */
-function anchoredIn(x: number, y: number, chunk: { readonly x0: number; readonly y0: number; readonly size: number }): boolean {
-  return x >= chunk.x0 && y >= chunk.y0 && x < chunk.x0 + chunk.size && y < chunk.y0 + chunk.size;
-}
-
-const EMPTY_CELLS: readonly WorldCell[] = [];
-
-const worldIndexes = new WeakMap<object, Map<number, Map<string, { back: WorldCell[]; front: WorldCell[] }>>>();
-
-/** The world's cells by the chunk their front corner lies in - behind the grid and before it - kept with the world. */
-function worldChunks(world: { back: WorldCell[]; front: WorldCell[] }, size: number): Map<string, { back: WorldCell[]; front: WorldCell[] }> {
-  let bySize = worldIndexes.get(world);
-  if (bySize === undefined) {
-    bySize = new Map();
-    worldIndexes.set(world, bySize);
-  }
-  const kept = bySize.get(size);
-  if (kept !== undefined) return kept;
-  const made = new Map<string, { back: WorldCell[]; front: WorldCell[] }>();
-  for (const part of ["back", "front"] as const) {
-    for (const c of world[part]) {
-      const id = chunkId(Math.floor((c.tx + c.s - 1) / size), Math.floor((c.ty + c.s - 1) / size));
-      let entry = made.get(id);
-      if (entry === undefined) {
-        entry = { back: [], front: [] };
-        made.set(id, entry);
-      }
-      entry[part].push(c);
-    }
-  }
-  bySize.set(size, made);
-  return made;
-}
-
 /** A chunk's name, from its chunk coordinates. */
 export function chunkId(cx: number, cy: number): string {
   return `${cx},${cy}`;
-}
-
-interface ChunkIndex {
-  /** Per chunk, its occupants in drawing order. */
-  readonly occupants: Map<string, number[]>;
-  /** Per chunk, its buildings (by index into the view's). */
-  readonly buildings: Map<string, number[]>;
-}
-
-const chunkIndexes = new WeakMap<object, Map<number, ChunkIndex>>();
-
-/** Which occupants and buildings anchor in each chunk of `size` tiles: kept with the scene cache. */
-function chunkIndex(cache: SceneCache, view: CityView, _quality: CityQuality, size: number): ChunkIndex {
-  let bySize = chunkIndexes.get(cache);
-  if (bySize === undefined) {
-    bySize = new Map();
-    chunkIndexes.set(cache, bySize);
-  }
-  const kept = bySize.get(size);
-  if (kept !== undefined) return kept;
-  const occupants = new Map<string, number[]>();
-  const buildings = new Map<string, number[]>();
-  for (const i of cache.order) {
-    const o = cache.occupants[i]!;
-    const id = chunkId(Math.floor((o.tx + o.w - 1) / size), Math.floor((o.ty + o.h - 1) / size));
-    const list = occupants.get(id);
-    if (list === undefined) occupants.set(id, [i]);
-    else list.push(i);
-    if (o.building >= 0) {
-      const bl = buildings.get(id);
-      if (bl === undefined) buildings.set(id, [o.building]);
-      else bl.push(o.building);
-    }
-  }
-  const made = { occupants, buildings };
-  bySize.set(size, made);
-  return made;
 }
 
 /**
@@ -2578,16 +2512,36 @@ function chunkIndex(cache: SceneCache, view: CityView, _quality: CityQuality, si
  */
 export function cityChunkSignature(view: CityView, options: CitySceneOptions, size: number, cx: number, cy: number): string {
   const quality: CityQuality = options.quality ?? "high";
-  const cache = occupantsInOrder(view, quality);
-  const index = chunkIndex(cache, view, quality, size);
-  const rockets = quality === "high" ? rocketsAt(view, options.sinceYears ?? 0) : null;
-  let layout = layoutIds.get(cache);
-  if (layout === undefined) {
-    layout = nextLayoutId++;
-    layoutIds.set(cache, layout);
+  // Further away nothing in a chunk's signature moves between views of the same buildings: kept per view.
+  const memo = quality === "high" ? null : signatureMemo(view, `${quality}|${size}|${options.seeThrough === true}`);
+  const hit = memo?.get(chunkId(cx, cy));
+  if (hit !== undefined) return hit;
+  const made = chunkSignature(view, options, size, cx, cy);
+  memo?.set(chunkId(cx, cy), made);
+  return made;
+}
+
+const signatureMemos = new WeakMap<CityView, Map<string, Map<string, string>>>();
+function signatureMemo(view: CityView, key: string): Map<string, string> {
+  let byKey = signatureMemos.get(view);
+  if (byKey === undefined) {
+    byKey = new Map();
+    signatureMemos.set(view, byKey);
   }
-  const parts = [String(layout), quality, options.seeThrough === true ? "see" : ""];
-  for (const k of index.buildings.get(chunkId(cx, cy)) ?? []) {
+  let memo = byKey.get(key);
+  if (memo === undefined) {
+    memo = new Map();
+    byKey.set(key, memo);
+  }
+  return memo;
+}
+
+function chunkSignature(view: CityView, options: CitySceneOptions, size: number, cx: number, cy: number): string {
+  const quality: CityQuality = options.quality ?? "high";
+  const scene = viewScene(view, quality);
+  const rockets = quality === "high" ? rocketsAt(view, options.sinceYears ?? 0) : null;
+  const parts = [String(scene.id), quality, options.seeThrough === true ? "see" : ""];
+  for (const k of anchorsOf(view, scene, size).get(chunkId(cx, cy)) ?? []) {
     const b = view.buildings[k]!;
     const rocket: RocketState = b.type === "spaceport" && rockets !== null ? rockets.get(b.ty * view.tiles + b.tx) ?? null : null;
     parts.push(buildingKey(b, buildingVariant(b, quality, rocket)), String(b.construction ?? ""));
@@ -2625,10 +2579,6 @@ export function cityChunkReach(view: CityView, size: number, cx: number, cy: num
   return { minX: ((x0 - y1) * TILE_W) / 2, maxX: ((x1 - y0) * TILE_W) / 2, minY: ((x0 + y0) * TILE_H) / 2 - top * Z_PX, maxY: ((x1 + y1) * TILE_H) / 2 - (range.lo - 1.5) * Z_PX };
 }
 
-/** A short name for each scene layout: a new layout (anything built, laid or levelled) is a new cache. */
-const layoutIds = new WeakMap<object, number>();
-let nextLayoutId = 1;
-
 /**
  * The chunks with anything that moves this frame: up close every chunk with a
  * building (lights, rockets, steam); further out only where a rover is.
@@ -2637,10 +2587,7 @@ export function cityLiveChunks(view: CityView, options: CitySceneOptions, size: 
   const quality: CityQuality = options.quality ?? "high";
   const out = new Set<string>();
   if (quality === "low") return out;
-  if (quality === "high") {
-    const index = chunkIndex(occupantsInOrder(view, quality), view, quality, size);
-    for (const id of index.buildings.keys()) out.add(id);
-  }
+  if (quality === "high") for (const id of anchorsOf(view, viewScene(view, quality), size).keys()) out.add(id);
   const rovers = roversAt(view, options.sinceYears ?? 0);
   for (const tile of rovers.keys()) out.add(chunkId(Math.floor((tile % view.tiles) / size), Math.floor(Math.floor(tile / view.tiles) / size)));
   for (const tile of trainsAt(view, options.time).keys()) out.add(chunkId(Math.floor((tile % view.tiles) / size), Math.floor(Math.floor(tile / view.tiles) / size)));
@@ -2653,6 +2600,7 @@ const reaches = new WeakMap<CityView, { top: number; lo: number }>();
 /** Forget the cached order and ground shapes: the next frame is built from scratch. */
 export function resetSceneCache(): void {
   sceneCaches.clear();
+  viewScenes.clear();
 }
 
 /**
@@ -2716,6 +2664,7 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
 
 function occupantsInOrderFresh(view: CityView, quality: CityQuality): SceneCache {
   const n = view.tiles;
+  built.whole += 1;
   const key = `${view.id}|${n}|${groundKey(view)}|${view.buildings.map((b) => `${b.tx},${b.ty},${b.size},${b.depth ?? b.size}`).join(";")}`;
   const cached = sceneCaches.get(quality);
   if (cached !== undefined && cached.key === key) return cached;
@@ -2798,6 +2747,284 @@ function occupantsInOrderFresh(view: CityView, quality: CityQuality): SceneCache
   const fresh: SceneCache = { key, occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map(), connectors, world: null };
   sceneCaches.set(quality, fresh);
   return fresh;
+}
+
+
+// ---------------------------------------------------------------------------
+// The scene chunk by chunk (at the user's request: "when opening the
+// metropolis the app crashes because you are trying to load the whole city in
+// one go"). A metropolis is a million tiles: its whole scene - an occupant for
+// every tile, ordered against every other that shares its screen column (some
+// 2,000 each), every piece of the world round it - ran the browser out of
+// memory before the first frame (3.5 GB, measured). Now nothing is built for
+// the whole city: each chunk's occupants, their order, their shapes and its
+// piece of the world are made the first time the chunk is drawn, kept while it
+// is drawn, and let go - the longest unused first - past a fixed number.
+// ---------------------------------------------------------------------------
+
+/** Chunk sides by level of detail: further away, bigger chunks and fewer of them. */
+export const CHUNK_TILES_BY_QUALITY: Readonly<Record<CityQuality, number>> = { high: 8, medium: 16, low: 32 };
+
+/** A view drawn whole the old way, all at once, up to this many tiles a side (the city as it was: 352). */
+const WHOLE_MAX_TILES = 400;
+
+/**
+ * How many chunks' scenes are kept at each level of detail, the least
+ * recently drawn let go first. A chunk's scene up close is about a megabyte
+ * of shapes (900 of them, panning over a metropolis, held 1.4 GB, measured).
+ */
+const CHUNK_SCENES_KEPT: Readonly<Record<CityQuality, number>> = { high: 120, medium: 120, low: 240 };
+
+/** What a part of the scene is drawn from: its occupants in order, their kept shapes, and its world. */
+interface SceneSource {
+  readonly occupants: readonly Occupant[];
+  readonly order: readonly number[];
+  readonly ground: Map<number, Shape[]>;
+  readonly buildings: Map<string, Shape[][]>;
+  readonly connectors: { readonly corridors: Set<number>; readonly cables: Set<number> };
+  readonly worldBack: readonly WorldCell[];
+  readonly worldFront: readonly WorldCell[];
+}
+
+/** One layout of one view at one level of detail: what every chunk shares. */
+interface ViewScene {
+  readonly key: string;
+  readonly id: number;
+  /** Row-major: the building (index) on each tile, or -1. */
+  readonly owner: Int32Array;
+  readonly connectors: { readonly corridors: Set<number>; readonly cables: Set<number> };
+  /** Per chunk size, the buildings anchored (by their front corner) in each chunk. */
+  readonly anchors: Map<number, Map<string, number[]>>;
+  /** What the world's cells share, made when the first is. */
+  world: WorldShared | null;
+  /** Chunk scenes, least recently drawn first. */
+  readonly chunks: Map<string, SceneSource>;
+}
+
+interface WorldShared {
+  readonly lo: number;
+  readonly hi: number;
+  readonly floorZ: number;
+  readonly fineZ: HeightAt;
+  readonly coarseZ: HeightAt;
+  readonly caves: Map<string, CityView["world"]["caves"][number][]>;
+  readonly rocks: Map<string, CityView["world"]["rocks"][number][]>;
+}
+
+/** A name for each list a view is made of: views are made of the same lists while nothing changes. */
+const listIds = new WeakMap<object, number>();
+let nextListId = 1;
+function listId(list: object | undefined): number {
+  if (list === undefined) return 0;
+  let id = listIds.get(list);
+  if (id === undefined) {
+    id = nextListId++;
+    listIds.set(list, id);
+  }
+  return id;
+}
+
+/** The current layout at each level of detail: a view of the same layout reuses it, and its chunks. */
+const viewScenes = new Map<CityQuality, ViewScene>();
+let nextViewSceneId = 1;
+
+/** The layout of a view: everything the still scene is drawn from but the buildings' state. */
+function layoutKey(view: CityView): string {
+  const lists = [view.groundZ, view.corners, view.rocks, view.corridors, view.cables, view.rails, view.steep, view.claimed, view.world].map(listId).join(",");
+  return `${view.id}|${view.tiles}|${lists}|${Math.round(view.greenery * 50)}|${view.origin.x},${view.origin.y}|${view.buildings.map((b) => `${b.tx},${b.ty},${b.size},${b.depth ?? b.size}`).join(";")}`;
+}
+
+const viewSceneOf = new WeakMap<CityView, Map<CityQuality, ViewScene>>();
+
+function viewScene(view: CityView, quality: CityQuality): ViewScene {
+  const mine = viewSceneOf.get(view)?.get(quality);
+  if (mine !== undefined && viewScenes.get(quality) === mine) return mine;
+  const key = layoutKey(view);
+  let scene = viewScenes.get(quality);
+  if (scene === undefined || scene.key !== key) {
+    const n = view.tiles;
+    const owner = new Int32Array(n * n).fill(-1);
+    view.buildings.forEach((b, k) => {
+      for (let y = b.ty; y < b.ty + (b.depth ?? b.size); y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) if (x >= 0 && y >= 0 && x < n && y < n) owner[y * n + x] = k;
+    });
+    scene = { key, id: nextViewSceneId++, owner, connectors: connectorsOf(view), anchors: new Map(), world: null, chunks: new Map() };
+    viewScenes.set(quality, scene);
+  }
+  let byQuality = viewSceneOf.get(view);
+  if (byQuality === undefined) {
+    byQuality = new Map();
+    viewSceneOf.set(view, byQuality);
+  }
+  byQuality.set(quality, scene);
+  return scene;
+}
+
+/** The buildings anchored in each chunk of `size` tiles, by their front corner. */
+function anchorsOf(view: CityView, scene: ViewScene, size: number): Map<string, number[]> {
+  let made = scene.anchors.get(size);
+  if (made !== undefined) return made;
+  made = new Map();
+  view.buildings.forEach((b, k) => {
+    const id = chunkId(Math.floor((b.tx + b.size - 1) / size), Math.floor((b.ty + (b.depth ?? b.size) - 1) / size));
+    const list = made!.get(id);
+    if (list === undefined) made!.set(id, [k]);
+    else list.push(k);
+  });
+  scene.anchors.set(size, made);
+  return made;
+}
+
+/** One connection point per side of a building, per network (see `occupantsInOrderFresh`). */
+function connectorsOf(view: CityView): { corridors: Set<number>; cables: Set<number> } {
+  const n = view.tiles;
+  const connectors = { corridors: new Set<number>(), cables: new Set<number>() };
+  for (const b of view.buildings) {
+    const d = b.depth ?? b.size;
+    const walk = (len: number): number[] => {
+      const mid = Math.floor(len / 2);
+      return Array.from({ length: len }, (_, k) => mid + (k % 2 === 0 ? k / 2 : -(k + 1) / 2)).filter((k) => k >= 0 && k < len);
+    };
+    const sides: [(k: number) => [number, number, number], number][] = [
+      [(k) => [b.tx - 1, b.ty + k, 0], d],
+      [(k) => [b.tx + b.size, b.ty + k, 1], d],
+      [(k) => [b.tx + k, b.ty - 1, 2], b.size],
+      [(k) => [b.tx + k, b.ty + d, 3], b.size],
+    ];
+    for (const layer of ["corridors", "cables"] as const) {
+      for (const [side, len] of sides) {
+        for (const k of walk(len)) {
+          const [x, y, dir] = side(k);
+          if (x < 0 || y < 0 || x >= n || y >= n || view[layer][y * n + x] !== true) continue;
+          connectors[layer].add((y * n + x) * 4 + dir);
+          break;
+        }
+      }
+    }
+  }
+  return connectors;
+}
+
+/** What the world's cells share at this level of detail: its reach, its floor, its heights, its caves and rocks by cell. */
+function worldShared(view: CityView, scene: ViewScene, quality: CityQuality): WorldShared {
+  if (scene.world !== null) return scene.world;
+  const w = view.world;
+  const s = WORLD_CELL[quality];
+  let floorZ = Infinity;
+  for (const z of w.corners) floorZ = Math.min(floorZ, z);
+  const caves = new Map<string, (typeof w.caves)[number][]>();
+  for (const c of w.caves) {
+    const key = `${Math.floor(c.x / s) * s},${Math.floor(c.y / s) * s}`;
+    caves.set(key, [...(caves.get(key) ?? []), c]);
+  }
+  const rocks = new Map<string, (typeof w.rocks)[number][]>();
+  for (const r of w.rocks) {
+    if (r.kind === "loose" && quality !== "high") continue;
+    const key = `${Math.floor(r.x / s) * s},${Math.floor(r.y / s) * s}`;
+    const list = rocks.get(key);
+    if (list === undefined) rocks.set(key, [r]);
+    else list.push(r);
+  }
+  scene.world = { lo: -w.margin, hi: view.tiles + w.margin, floorZ: floorZ - 1, fineZ: heightAt(view, true), coarseZ: heightAt(view, false), caves, rocks };
+  return scene.world;
+}
+
+/** The scene of one chunk: made the first time it is drawn, then kept among the most recently drawn. */
+function chunkScene(view: CityView, quality: CityQuality, chunk: { readonly x0: number; readonly y0: number; readonly size: number }): SceneSource {
+  const scene = viewScene(view, quality);
+  const id = `${chunk.size}:${chunkId(chunk.x0 / chunk.size, chunk.y0 / chunk.size)}`;
+  const kept = scene.chunks.get(id);
+  if (kept !== undefined) {
+    // Most recently drawn: to the back of the line to be let go.
+    scene.chunks.delete(id);
+    scene.chunks.set(id, kept);
+    return kept;
+  }
+  const n = view.tiles;
+  const occupants: Occupant[] = [];
+  for (const k of anchorsOf(view, scene, chunk.size).get(chunkId(chunk.x0 / chunk.size, chunk.y0 / chunk.size)) ?? []) {
+    const b = view.buildings[k]!;
+    occupants.push({ tx: b.tx, ty: b.ty, w: b.size, h: b.depth ?? b.size, building: b.index });
+  }
+  // Open ground, as `occupantsInOrderFresh` has it: tiles up close, patches further away.
+  const xs = Math.max(0, chunk.x0);
+  const ys = Math.max(0, chunk.y0);
+  const xe = Math.min(n, chunk.x0 + chunk.size);
+  const ye = Math.min(n, chunk.y0 + chunk.size);
+  const patch = quality === "high" ? 1 : quality === "medium" ? 2 : LOW_PATCH;
+  const done = new Set<number>();
+  if (patch > 1) {
+    for (let py = ys; py + patch <= ye; py += patch) {
+      for (let px = xs; px + patch <= xe; px += patch) {
+        let open = true;
+        for (let y = py; y < py + patch && open; y += 1) {
+          for (let x = px; x < px + patch; x += 1) {
+            const i = y * n + x;
+            const rock = view.rocks[i] ?? "none";
+            if (scene.owner[i]! >= 0 || view.corridors[i] === true || (view.cables[i] === true && quality !== "low") || rock === "crag" || (rock === "loose" && quality === "high")) open = false;
+          }
+        }
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (let y = py; y <= py + patch && open; y += 1) {
+          for (let x = px; x <= px + patch; x += 1) {
+            const z = corner(view, x, y);
+            lo = Math.min(lo, z);
+            hi = Math.max(hi, z);
+          }
+        }
+        if (hi - lo > PATCH_SPREAD) open = false;
+        if (!open) continue;
+        for (let y = py; y < py + patch; y += 1) for (let x = px; x < px + patch; x += 1) done.add(y * n + x);
+        occupants.push({ tx: px, ty: py, w: patch, h: patch, building: -1 });
+      }
+    }
+  }
+  for (let ty = ys; ty < ye; ty += 1) {
+    for (let tx = xs; tx < xe; tx += 1) {
+      if (scene.owner[ty * n + tx]! < 0 && !done.has(ty * n + tx)) occupants.push({ tx, ty, w: 1, h: 1, building: -1 });
+    }
+  }
+  // Its piece of the world beyond the grid: the cells whose front corner lies in the chunk.
+  const back: WorldCell[] = [];
+  const front: WorldCell[] = [];
+  const w = view.world;
+  if (w.margin > 0 && (chunk.x0 < 0 || chunk.y0 < 0 || chunk.x0 + chunk.size > n || chunk.y0 + chunk.size > n)) {
+    const shared = worldShared(view, scene, quality);
+    const s = WORLD_CELL[quality];
+    const first = (a: number): number => shared.lo + Math.ceil((a - s + 1 - shared.lo) / s) * s;
+    const cells: { x: number; y: number }[] = [];
+    for (let y = first(chunk.y0); y + s - 1 < chunk.y0 + chunk.size && y < shared.hi; y += s) {
+      for (let x = first(chunk.x0); x + s - 1 < chunk.x0 + chunk.size && x < shared.hi; x += s) {
+        if (x < shared.lo || y < shared.lo) continue;
+        if (x + s <= 0 || y + s <= 0 || x >= n || y >= n) cells.push({ x, y });
+      }
+    }
+    cells.sort((a, b) => a.x + a.y - (b.x + b.y) || a.x - b.x);
+    for (const { x, y } of cells) (x >= n || y >= n ? front : back).push(worldCell(view, quality, shared, x, y));
+  }
+  built.chunks += 1;
+  const made: SceneSource = { occupants, order: depthOrder(occupants), ground: new Map(), buildings: new Map(), connectors: scene.connectors, worldBack: back, worldFront: front };
+  scene.chunks.set(id, made);
+  // Past the number kept, the least recently drawn chunk goes (a picture of it may still be on screen).
+  if (scene.chunks.size > CHUNK_SCENES_KEPT[quality]) scene.chunks.delete(scene.chunks.keys().next().value!);
+  return made;
+}
+
+/** What the scene has built, for tests: whole-view scenes, chunk scenes made, and chunk scenes kept now. */
+const built = { whole: 0, chunks: 0 };
+export function sceneStats(): { whole: number; chunks: number; kept: number } {
+  let kept = 0;
+  for (const scene of viewScenes.values()) kept += scene.chunks.size;
+  return { ...built, kept };
+}
+
+/** The chunks of a view's world, back to front, as the painter draws them. */
+function chunksBackToFront(view: CityView, size: number): [number, number][] {
+  const r = cityChunkRange(view, size);
+  const out: [number, number][] = [];
+  for (let cy = r.cy0; cy <= r.cy1; cy += 1) for (let cx = r.cx0; cx <= r.cx1; cx += 1) out.push([cx, cy]);
+  out.sort((a, b) => a[0] + a[1] - (b[0] + b[1]) || a[0] - b[0]);
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -2959,6 +3186,24 @@ const SKYSCRAPER_FAR_WALL = rgb(0.74, 0.657, 0.492);
 const RAIL_STEEL = rgb(0.58, 0.6, 0.63);
 const SLEEPER = rgb(0.3, 0.26, 0.22);
 
+const stationSets = new WeakMap<readonly CityBuildingView[], ReadonlySet<number>>();
+
+/** The tiles under stations, kept per building list (asked of every building for every side of every rail tile, a metropolis's railway took seconds). */
+function stationTiles(view: CityView): ReadonlySet<number> {
+  let set = stationSets.get(view.buildings);
+  if (set === undefined) {
+    const made = new Set<number>();
+    const n = view.tiles;
+    for (const b of view.buildings) {
+      if (b.type !== "station") continue;
+      for (let y = b.ty; y < b.ty + (b.depth ?? b.size); y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) made.add(y * n + x);
+    }
+    set = made;
+    stationSets.set(view.buildings, set);
+  }
+  return set;
+}
+
 /** How high a railway runs over a corridor it crosses, tiles above the ground: clear of the corridor's roof (0.2) and its lights. */
 export const BRIDGE_Z = 0.42;
 
@@ -2990,8 +3235,8 @@ function railZ(view: CityView, tx: number, ty: number): number {
  */
 function railDetail(view: CityView, tx: number, ty: number, z: number, quality: CityQuality): Part[] {
   const n = view.tiles;
-  const stationAt = (x: number, y: number): boolean =>
-    view.buildings.some((b) => b.type === "station" && x >= b.tx && y >= b.ty && x < b.tx + b.size && y < b.ty + (b.depth ?? b.size));
+  const stations = stationTiles(view);
+  const stationAt = (x: number, y: number): boolean => stations.has(y * n + x);
   const deck = railDeck(view, tx, ty);
   const zc = z + deck;
   const out: Part[] = [];
@@ -3342,7 +3587,18 @@ function drawRovers(list: readonly Rover[] | undefined, time: number, out: Shape
  * rather than a wall. It runs wherever a held tile meets one that is not -
  * round the founding square and every claim, as one outline.
  */
+const boundaries = new WeakMap<readonly boolean[], { corners: readonly number[]; shapes: Shape[] }>();
+
+/** The building boundary, kept while the land held and its ground are the same (a million tiles walked a frame, else). */
 function boundary(view: CityView): Shape[] {
+  const kept = boundaries.get(view.claimed);
+  if (kept !== undefined && kept.corners === view.corners) return kept.shapes;
+  const shapes = boundaryOf(view);
+  boundaries.set(view.claimed, { corners: view.corners, shapes });
+  return shapes;
+}
+
+function boundaryOf(view: CityView): Shape[] {
   const n = view.tiles;
   const out: Shape[] = [];
   const colour: Rgba = { r: 1, g: 0.86, b: 0.55, a: 0.55 };
@@ -3489,25 +3745,22 @@ function raise(parts: readonly Part[], dz: number): Part[] {
   return parts.map((p) => ({ ...p, faces: p.faces.map((f) => ({ ...f, pts: f.pts.map(([x, y, z]) => [x, y, z + dz] as V3) })) }));
 }
 
-export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
+/**
+ * What stands in one source - the old whole scene, or one chunk's - into
+ * the frame: the world behind, the occupants in order, the world in front.
+ * `cull`: whether occupants off the viewport are left out one by one (a
+ * chunk is culled whole).
+ */
+function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource, cull: boolean, out: Shape[], badges: Shape[]): void {
   const n = view.tiles;
-  const out: Shape[] = [];
   const range = groundRange(view);
   // Every column reaches down to the same floor, half a tile below the lowest ground.
   const floor = range.lo - 0.5;
-  const span = Math.max(1e-9, range.hi - range.lo);
-
   const quality: CityQuality = options.quality ?? "high";
-  const cache = occupantsInOrder(view, quality);
-  const { occupants, ground, buildings } = cache;
+  const { occupants, ground, buildings, order } = src;
   const layer = options.layer;
-  const chunk = options.chunk;
-  // With a chunk, only its occupants, from the index kept per chunk size.
-  const order = chunk === undefined ? cache.order : (chunkIndex(cache, view, quality, chunk.size).occupants.get(chunkId(chunk.x0 / chunk.size, chunk.y0 / chunk.size)) ?? []);
   const drawStatic = layer === undefined || layer === "static";
   const drawLive = layer === undefined || layer === "live";
-  const drawOverlay = layer === undefined || layer === "overlay";
-  const badges: Shape[] = [];
   // Rovers and rockets move every frame, so they are never cached: a rover is
   // drawn with the tile it is on, a rocket with its spaceport.
   const since = options.sinceYears ?? 0;
@@ -3515,24 +3768,20 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   const trains = quality !== "low" && drawLive ? trainsAt(view, options.time) : null;
   const rockets = rocketsAt(view, since);
   const vp = options.viewport;
-  cache.world ??= worldCells(view, quality);
   // Up close the ground is drawn through the half-tile samples; further away through tile corners.
   const gridZ = heightAt(view, quality === "high");
-  // With a chunk, only its world cells, from the index (every chunk scanning every cell was most of a first frame).
-  const worldIn = chunk === undefined ? null : worldChunks(cache.world, chunk.size).get(chunkId(chunk.x0 / chunk.size, chunk.y0 / chunk.size));
-  const drawWorld = (all: readonly WorldCell[], part: "back" | "front"): void => {
+  const drawWorld = (cells: readonly WorldCell[]): void => {
     if (!drawStatic) return;
-    const cells = worldIn === null ? all : worldIn === undefined ? EMPTY_CELLS : worldIn[part];
     for (const c of cells) {
       if (vp !== undefined && (c.maxX < vp.minX || c.minX > vp.maxX || c.maxY < vp.minY || c.minY > vp.maxY)) continue;
       c.shapes ??= c.make();
       for (const shape of c.shapes) out.push(shape);
     }
   };
-  drawWorld(cache.world.back, "back");
-  for (const i of layer === "overlay" ? [] : order) {
+  drawWorld(src.worldBack);
+  for (const i of order) {
     const o = occupants[i]!;
-    if (vp !== undefined && chunk === undefined) {
+    if (vp !== undefined && cull) {
       // The occupant's image: its columns across, and from the floor up to
       // the tallest thing it could carry (a building, a badge, a plume).
       const x0 = ((o.tx - o.ty - o.h) * TILE_W) / 2;
@@ -3589,8 +3838,8 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       } else if (rock === "loose" && quality === "medium") {
         emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, 0.14, 0.07, z, z + 0.1, 5), ROCK)], out);
       }
-      if (view.corridors[o.ty * n + o.tx] === true) emitParts(corridorDetail(view, cache.connectors.corridors, o.tx, o.ty, z, quality), out);
-      if (view.cables[o.ty * n + o.tx] === true) emitParts(cableDetail(view, cache.connectors.cables, o.tx, o.ty, z, quality), out);
+      if (view.corridors[o.ty * n + o.tx] === true) emitParts(corridorDetail(view, src.connectors.corridors, o.tx, o.ty, z, quality), out);
+      if (view.cables[o.ty * n + o.tx] === true) emitParts(cableDetail(view, src.connectors.cables, o.tx, o.ty, z, quality), out);
       if (view.rails?.[o.ty * n + o.tx] === true) emitParts(railDetail(view, o.tx, o.ty, z, quality), out);
       ground.set(i, out.slice(start));
       if (rovers !== null) drawRovers(rovers.get(o.ty * n + o.tx), options.time, out);
@@ -3631,7 +3880,38 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
     if (!b.operable && site === null && layer === undefined) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ + buildingTop(b.type) + 0.35));
   }
 
-  drawWorld(cache.world.front, "front");
+  drawWorld(src.worldFront);
+}
+
+export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
+  const n = view.tiles;
+  const out: Shape[] = [];
+  const badges: Shape[] = [];
+  const quality: CityQuality = options.quality ?? "high";
+  const layer = options.layer;
+  const chunk = options.chunk;
+  const drawOverlay = layer === undefined || layer === "overlay";
+  if (layer !== "overlay") {
+    if (chunk !== undefined) {
+      drawSource(view, options, chunkScene(view, quality, chunk), false, out, badges);
+    } else if (view.tiles <= WHOLE_MAX_TILES) {
+      // A city of the old size, drawn whole the old way: one order for all of it.
+      const cache = occupantsInOrder(view, quality);
+      cache.world ??= worldCells(view, quality);
+      drawSource(view, options, { ...cache, worldBack: cache.world.back, worldFront: cache.world.front }, true, out, badges);
+    } else {
+      // A metropolis drawn whole: chunk after chunk, back to front, those out of view left out.
+      const size = CHUNK_TILES_BY_QUALITY[quality];
+      const vp = options.viewport;
+      for (const [cx, cy] of chunksBackToFront(view, size)) {
+        if (vp !== undefined) {
+          const r = cityChunkReach(view, size, cx, cy);
+          if (r.maxX < vp.minX || r.minX > vp.maxX || r.maxY < vp.minY || r.minY > vp.maxY) continue;
+        }
+        drawSource(view, options, chunkScene(view, quality, { x0: cx * size, y0: cy * size, size }), false, out, badges);
+      }
+    }
+  }
   if (!drawOverlay) return out;
   if (layer === "overlay") {
     // The badges, drawn with the overlays when the scene is drawn in layers.
