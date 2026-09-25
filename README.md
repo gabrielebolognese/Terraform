@@ -45,6 +45,7 @@ that state.
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
 | [`docs/balance/detail-pass-colony.md`](docs/balance/detail-pass-colony.md) | Corridors and power cables, the headquarters, rock-breaking rovers and supply rockets. |
+| [`docs/balance/detail-pass-zones.md`](docs/balance/detail-pass-zones.md) | The example planet's cities in zones - homes, power, industry, a port of spaceports in a line, mixed districts - spread from centre to corners; "connect all" kept off hard rock; the level-of-detail gate split into the city and the ground round it. |
 | [`docs/balance/detail-pass-rover-post.md`](docs/balance/detail-pass-rover-post.md) | Four times the hard-rock clusters, the Rover Post (one more rover per 100 people), and the connective tools moved to the top right. |
 | [`docs/balance/detail-pass-claims.md`](docs/balance/detail-pass-claims.md) | Founding ground three times larger, and claiming land as a city grows: the frame, the save (v9), and the view kept fast at the new sizes. |
 | [`docs/balance/detail-pass-open-world.md`](docs/balance/detail-pass-open-world.md) | The open world round every city: mountains, canyons, craters and caves; smooth ground, foundations on slopes, and ground that greens with the biosphere. |

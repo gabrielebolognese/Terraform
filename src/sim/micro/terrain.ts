@@ -274,7 +274,17 @@ const CLUSTER_MAX = 23;
 const clusterSites = new Map<string, Map<number, ReadonlySet<number>>>();
 const NO_CLUSTER: ReadonlySet<number> = new Set();
 
+/** The last site asked about: a view asks for the same one tile after tile, and building its key cost 14% of the example planet's build. */
+let lastSite: { seed: number; tiles: number; t: Tuning; site: Map<number, ReadonlySet<number>> } | null = null;
+
 function clusterSite(seed: number, tiles: number, t: Tuning): Map<number, ReadonlySet<number>> {
+  if (lastSite !== null && lastSite.seed === seed && lastSite.tiles === tiles && lastSite.t === t) return lastSite.site;
+  const site = clusterSiteByKey(seed, tiles, t);
+  lastSite = { seed, tiles, t, site };
+  return site;
+}
+
+function clusterSiteByKey(seed: number, tiles: number, t: Tuning): Map<number, ReadonlySet<number>> {
   const key = `${seed}|${tiles}|${t.ROCK_CLUSTER_CELL}|${t.ROCK_CLUSTER_CHANCE}|${t.TERRAIN_RELIEF_M}|${t.TERRAIN_MAX_SLOPE}|${t.TERRAIN_CLEAR_TILES}|${t.TERRAIN_FEATURE_TILES}|${t.TERRAIN_MOUNTAIN_SCALE}|${t.TERRAIN_CANYON_SCALE}|${t.TERRAIN_PIT_SCALE}|${t.TILE_METRES}`;
   let site = clusterSites.get(key);
   if (site === undefined) {

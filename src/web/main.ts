@@ -383,7 +383,7 @@ globe.onMarker = (id: string) => {
 
 /**
  * "See example planet": the banner says what is showing and that nothing is
- * saved, and the way back. Building the example takes under a second; the
+ * saved, and the way back. Building the example takes about three seconds; the
  * banner says so first, so the click never seems to do nothing.
  */
 const exampleBanner = document.createElement("div");
@@ -417,7 +417,7 @@ function enterExample(): void {
   exampleText.textContent = "Building the example planet...";
   exampleBack.hidden = true;
   exampleBanner.hidden = false;
-  // Let the banner paint before the (sub-second) build.
+  // Let the banner paint before the build (about three seconds).
   setTimeout(() => {
     state = example.enter(state, () => examplePlanet(DEFAULT_TUNING, tuning).state);
     freshViews();

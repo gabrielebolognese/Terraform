@@ -71,21 +71,51 @@ describe("levels of detail", () => {
     expect(cityScene(metropolis, at("low")).length).toBeLessThan(0.1 * high);
   });
 
-  it("still look like the city from as far as they are drawn", () => {
+  it("still look like the city from as far as they are drawn - the city, and the ground round it", () => {
     // 960 x 600 is the whole metropolis about as large as it is on screen at
-    // the widest zoom, its open world in the frame's corners. Measured, over
-    // 8 x 8 blocks: bare ground 0.0407 from the full city, medium 0.0145 (36%
-    // of that), low 0.0165 (41%). The world in 8-tile cells first took low to
-    // 54%; it is drawn in 2-tile cells at medium and low now.
-    // Corridors drawn far away as a flat trace on the ground took low to 47%;
-    // they are now a roof at the tube's height, in the colour it reads as.
+    // the widest zoom, its open world in the frame's corners; compared over
+    // 8 x 8 blocks, in two parts.
+    //
+    // History. Over the whole frame, against the frame with no buildings:
+    // medium 36%, low 41% of that (gates 40% and 45%), the world in 8-tile
+    // cells 54%, corridors as a flat trace 47%. Then the example's cities
+    // were laid out in zones - spread out, open ground between districts,
+    // cables along every street - and the ratio went to 64%: the absolute
+    // error was unchanged (0.013 at medium both times), but the buildings
+    // now change half as much of the frame, so the same ground error was
+    // twice the share. Split, each part measures one thing:
+    //   - the city: the blocks the full-detail city changes, against its own
+    //     bare ground. Measured medium 18.3%, low 22.6% (the old dense layout:
+    //     17%, 18%). Without the cable terminals at medium, 23%; corridors
+    //     as a flat trace at low, 24.8%;
+    //   - everything else - ground and the world beyond - as an absolute
+    //     difference: medium 0.0056, low 0.0058. The world in 8-tile cells
+    //     takes low to 0.0205 (this is the part that catches it).
     const W = 960;
     const H = 600;
     const high = fromAfar(renderCity(metropolis, at("high"), W, H, false));
-    const bare = frameDifference(fromAfar(renderCity({ ...metropolis, buildings: [] }, at("high"), W, H, false)), high);
-    expect(bare, "the buildings must make a visible difference, or this test measures nothing").toBeGreaterThan(0.02);
-    expect(frameDifference(fromAfar(renderCity(metropolis, at("medium"), W, H, false)), high)).toBeLessThan(0.4 * bare);
-    expect(frameDifference(fromAfar(renderCity(metropolis, at("low"), W, H, false)), high)).toBeLessThan(0.45 * bare);
+    const bareCity = fromAfar(renderCity({ ...metropolis, buildings: [], corridors: metropolis.corridors.map(() => false), cables: metropolis.cables.map(() => false) }, at("high"), W, H, false));
+    const city: boolean[] = [];
+    for (let i = 0; i < high.pixels.length; i += 4) city.push([0, 1, 2].some((c) => Math.abs(high.pixels[i + c]! - bareCity.pixels[i + c]!) > 6));
+    const within = (a: Frame, inCity: boolean): number => {
+      let total = 0;
+      let counted = 0;
+      city.forEach((c, k) => {
+        if (c !== inCity) return;
+        for (let ch = 0; ch < 3; ch += 1) total += Math.abs(a.pixels[k * 4 + ch]! - high.pixels[k * 4 + ch]!) / 255;
+        counted += 3;
+      });
+      return total / Math.max(1, counted);
+    };
+    expect(city.filter(Boolean).length, "the city must cover part of the frame, or this test measures nothing").toBeGreaterThan(1000);
+    const signal = within(bareCity, true);
+    expect(signal).toBeGreaterThan(0.05);
+    for (const [quality, share] of [["medium", 0.2], ["low", 0.235]] as const) {
+      const far = fromAfar(renderCity(metropolis, at(quality), W, H, false));
+      expect(within(far, true), `the city at ${quality}`).toBeLessThan(share * signal);
+      expect(within(far, false), `the ground round it at ${quality}`).toBeLessThan(0.009);
+    }
+    expect(frameDifference(high, high)).toBe(0);
   });
 
   it("draw each type of building far away in the colour and size it has up close", () => {

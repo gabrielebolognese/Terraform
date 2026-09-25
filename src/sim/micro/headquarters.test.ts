@@ -27,7 +27,8 @@ import { NEUTRAL_ENV } from "../types.js";
 import { foundSettlement } from "./registry.js";
 import { rocksOf, siteGround } from "./rocks.js";
 import { capacities, launchRocket, placeBuilding, placeLink, removeBuilding, sendRover, settlementStep } from "./settlement.js";
-import { gridTiles } from "./space.js";
+import { gridTiles, keyTile } from "./space.js";
+import { linksToConnect } from "./network.js";
 
 const HQ = makeTuning({ SETTLEMENTS_ENABLED: 1, NETWORK_ENABLED: 1, HEADQUARTERS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
 const cfg = { tuning: HQ, env: NEUTRAL_ENV, forcing: null };
@@ -226,6 +227,34 @@ describe("hard rock, in rare clusters (the user: \"big clusters from 7 to 23 til
     const s = foundSettlement(marsStart(undefined, plain), "city", 0.31, -1.2, plain).state.settlements[0]!;
     const ground = siteGround(s, plain);
     expect(rocksOf(s, plain).filter((r, i) => r === "crag" && !ground.steep[i]).length).toBe(0);
+  });
+
+  it("is routed round by connect all: never a corridor or cable on hard rock, which a player could not lay", () => {
+    // A cluster between two buildings that need joining: across the whole
+    // grid, what "connect all" lays must all be layable by hand.
+    let checked = 0;
+    let crossed = 0;
+    for (const s of sites) {
+      const st = s.settlements[0]!;
+      if (clusters(s).length === 0) continue;
+      // A power plant far across the grid from the headquarters, so the cable runs a long way.
+      let placed = s;
+      for (const [x, y] of [[8, 8], [80, 80], [8, 80], [80, 8]] as const) {
+        const o = placeBuilding(withMaterials(placed, 5000), id(placed), "solar_array", x, y, BIG);
+        if (o.ok) placed = o.state;
+      }
+      const hard = new Set(clusters(placed).flat().map(([x, y]) => `${x},${y}`));
+      for (const layer of ["corridors", "cables"] as const) {
+        for (const key of linksToConnect(placed.settlements[0]!, layer, BIG)) {
+          const { tx, ty } = keyTile(key);
+          checked += 1;
+          if (hard.has(`${tx},${ty}`)) crossed += 1;
+        }
+      }
+      void st;
+    }
+    expect(checked, "vacuity: there were links to lay").toBeGreaterThan(200);
+    expect(crossed).toBe(0);
   });
 
   it("leaves the small rocks scattered across the field", () => {

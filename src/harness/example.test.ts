@@ -30,8 +30,20 @@ import {
 import { examplePlanet } from "./example.js";
 
 /** The browser's tuning: the example is built for the game as it is played. */
-const game = makeTuning({ EVENTS_ENABLED: 1, ECONOMY_ENABLED: 1, TECH_GATE_ENABLED: 1, SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, NETWORK_ENABLED: 1, HEADQUARTERS_ENABLED: 1 });
-const { state } = examplePlanet(DEFAULT_TUNING, game);
+const game = makeTuning({
+  EVENTS_ENABLED: 1,
+  ECONOMY_ENABLED: 1,
+  TECH_GATE_ENABLED: 1,
+  SETTLEMENTS_ENABLED: 1,
+  TERRAIN_RELIEF_M: 12,
+  NETWORK_ENABLED: 1,
+  HEADQUARTERS_ENABLED: 1,
+  ROCK_CLUSTER_CHANCE: 0.65,
+  CITY_GRID_TILES: 96,
+  OUTPOST_GRID_TILES: 48,
+  METROPOLIS_GRID_TILES: 288,
+});
+const { state, sizes } = examplePlanet(DEFAULT_TUNING, game);
 const env = habitat(state.reservoirs, derive(state.reservoirs, worldEnv(state, NEUTRAL_ENV, game), game), game, 0);
 
 const byKind = (kind: Settlement["kind"]): Settlement[] => state.settlements.filter((s) => s.kind === kind);
@@ -52,7 +64,7 @@ describe("the example planet", () => {
   });
 
   it("has every size, from a handful of buildings to hundreds", () => {
-    // Measured: 5 to 737 buildings; the metropolises 640, 732 and 737 (3,416 in all).
+    // Measured: 6 to 1,068 buildings; the metropolises 648, 858 and 1,068 (4,269 in all).
     const counts = state.settlements.map((s) => s.buildings.length);
     expect(Math.min(...counts)).toBeLessThanOrEqual(6);
     expect(Math.max(...counts)).toBeGreaterThan(500);
@@ -121,6 +133,79 @@ describe("the example planet", () => {
         }
         expect(networkOf(s.buildings, s[layer], gridTiles(s.kind, game)).count, `${s.id} ${layer}`).toBe(1);
       }
+    }
+  });
+
+  it("lays its cities out in zones - habitat, power, industry, a port, mixed - not a jumble", () => {
+    // The user: "add zoning: so mining zones, habitat zones, solar panel zones,
+    // some mixed of any type, a port zone". Of each building's four nearest
+    // neighbours, the share of its own kind: measured 0.74 to 0.85 over every
+    // city of 30 buildings or more; a random mix of the same buildings would
+    // give 0.30 (the sum of the squared shares of each kind).
+    const kindOf = (t: string): string => (["habitat_dome", "greenhouse"].includes(t) ? "home" : ["solar_array", "geothermal_plant", "reactor"].includes(t) ? "power" : t === "spaceport" ? "port" : t === "headquarters" ? "hq" : "industry");
+    let cities = 0;
+    for (const s of state.settlements) {
+      if (s.kind === "outpost" || s.buildings.length < 30) continue;
+      cities += 1;
+      const mid = s.buildings.map((b) => ({ k: kindOf(b.type), x: b.tx + BUILDING_DEFS[b.type].footprint / 2, y: b.ty + BUILDING_DEFS[b.type].footprint / 2 }));
+      let same = 0;
+      let all = 0;
+      for (const a of mid) {
+        const near = mid.filter((b) => b !== a).sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y)).slice(0, 4);
+        for (const b of near) {
+          all += 1;
+          if (b.k === a.k) same += 1;
+        }
+      }
+      expect(same / all, s.id).toBeGreaterThan(0.65);
+    }
+    expect(cities, "vacuity: cities big enough to zone").toBeGreaterThan(15);
+  });
+
+  it("gives every city of four homes or more a port: four spaceports in a line, six in a metropolis", () => {
+    for (const s of state.settlements) {
+      if (s.kind === "outpost" || (sizes[s.id] ?? 0) < 4) continue;
+      const rows = new Map<number, number[]>();
+      for (const b of s.buildings) if (b.type === "spaceport") rows.set(b.ty, [...(rows.get(b.ty) ?? []), b.tx]);
+      // The longest run of spaceports side by side along one row, a street apart.
+      let longest = 0;
+      for (const xs of rows.values()) {
+        xs.sort((a, b) => a - b);
+        let run = 1;
+        longest = Math.max(longest, 1);
+        for (let k = 1; k < xs.length; k += 1) {
+          run = xs[k]! - xs[k - 1]! <= 3 + 3 ? run + 1 : 1;
+          longest = Math.max(longest, run);
+        }
+      }
+      expect(longest, s.id).toBeGreaterThanOrEqual(s.kind === "metropolis" ? 6 : 4);
+    }
+  });
+
+  it("spreads each city out - its centre and its corners - with a street round every building", () => {
+    // The user: "not cramped up. Things at the corners, and things at the
+    // center, decentralized." Measured: every city of four homes or more has
+    // buildings in its centre and in 3 or 4 of its corners (the outer thirds
+    // both ways); no two buildings closer than 2 tiles, but the headquarters
+    // and the spaceport it lands with, which share a wall.
+    for (const s of state.settlements) {
+      const n = gridTiles(s.kind, game);
+      const box = s.buildings.map((b) => {
+        const z = BUILDING_DEFS[b.type].footprint;
+        return { x0: b.tx, y0: b.ty, x1: b.tx + z, y1: b.ty + z, cx: b.tx + z / 2, cy: b.ty + z / 2 };
+      });
+      const founded = foundingBuildings(s.kind, game).length;
+      for (let i = founded; i < box.length; i += 1) {
+        for (let j = 0; j < i; j += 1) {
+          const a = box[i]!;
+          const b = box[j]!;
+          expect(Math.max(a.x0 - b.x1, b.x0 - a.x1, a.y0 - b.y1, b.y0 - a.y1), `${s.id}: ${s.buildings[i]!.type} and ${s.buildings[j]!.type}`).toBeGreaterThanOrEqual(2);
+        }
+      }
+      if (s.kind === "outpost" || (sizes[s.id] ?? 0) < 4) continue;
+      const corners = [[0, 0], [1, 0], [0, 1], [1, 1]].filter(([qx, qy]) => box.some((b) => (qx ? b.cx > (2 * n) / 3 : b.cx < n / 3) && (qy ? b.cy > (2 * n) / 3 : b.cy < n / 3))).length;
+      expect(corners, s.id).toBeGreaterThanOrEqual(3);
+      expect(box.some((b) => Math.abs(b.cx - n / 2) < n / 6 && Math.abs(b.cy - n / 2) < n / 6), s.id).toBe(true);
     }
   });
 

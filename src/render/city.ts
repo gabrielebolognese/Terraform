@@ -2131,6 +2131,16 @@ function cableDetail(view: CityView, connectors: ReadonlySet<number>, tx: number
     sides.forEach((on, side) => {
       if (on) out.push(part([arm(tx, ty, side, 0.03, lift, lift)[0]!], CABLE));
     });
+    // The terminals on the walls, as blocks: where cables run round every
+    // building they are much of what a cable looks like from afar.
+    const h = onCorridor ? z + 0.26 : z + 0.24;
+    SIDES.forEach(([dx, dy], side) => {
+      if (!connectors.has((ty * view.tiles + tx) * 4 + side)) return;
+      const ex = tx + 0.5 + dx * 0.42;
+      const ey = ty + 0.5 + dy * 0.42;
+      out.push(part([box(ex - 0.07, ey - 0.07, z, ex + 0.07, ey + 0.07, h + 0.05)[0]!], CABLE));
+      out.push(part(box(ex - 0.07, ey - 0.07, z, ex + 0.07, ey + 0.07, h + 0.05).slice(1, 3), DARK_METAL));
+    });
     return out;
   }
   const h = onCorridor ? z + 0.26 : z + 0.24;
