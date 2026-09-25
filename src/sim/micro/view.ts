@@ -22,7 +22,7 @@ import { submerged } from "./flood.js";
 import type { NetworkIssue } from "./network.js";
 import { linkGrid } from "./network.js";
 import type { Rock } from "./rocks.js";
-import { garage, rocksOf, siteGround } from "./rocks.js";
+import { garage, prepareRocks, rocksOf, siteGround } from "./rocks.js";
 import { claimTest, frameOf, keyTile, tileKey } from "./space.js";
 import type { World } from "./terrain.js";
 import { worldOf } from "./terrain.js";
@@ -225,6 +225,49 @@ function kept<T>(from: object, n: number, t: Tuning, also: unknown, make: () => 
   return value;
 }
 const dry = new Map<number, readonly boolean[]>();
+
+/**
+ * Everything slow a city's first view needs, made a little at a time,
+ * yielding how far through it is, 0 to 1 - its ground and world a row of
+ * heights at a time, its rocks a row of tiles at a time, then the lists the
+ * view carries - kept where `cityView` looks for them. (Made in one go, a
+ * metropolis's froze the browser for seconds as it opened, measured.)
+ */
+export function* prepareCity(s: Settlement, t: Tuning): Generator<number, void> {
+  for (const f of prepareRocks(s, t)) yield 0.75 * f;
+  const world = worldOf(s, t);
+  const had = worldsInTiles.get(world);
+  if (had === undefined || had.corners.length !== world.cornersM.length) {
+    const corners = world.cornersM.map((h) => h / t.TILE_METRES);
+    yield 0.77;
+    const fine = new Array<number>(world.fineM.length);
+    const f = 2 * world.size + 1;
+    for (let y = 0; y < f; y += 1) {
+      for (let x = 0; x < f; x += 1) fine[y * f + x] = world.fineM[y * f + x]! / t.TILE_METRES;
+      if (y % 64 === 63) yield 0.77 + (0.1 * y) / f;
+    }
+    worldsInTiles.set(world, { margin: world.margin, size: world.size, corners, fine, caves: world.caves, rocks: world.rocks });
+  }
+  const ground = siteGround(s, t);
+  const n = ground.tiles;
+  const hit = perTile.get(ground);
+  if (hit === undefined || hit.n !== n || hit.t !== t || hit.also !== s.claims) {
+    const ours = claimTest(s, t);
+    const out = new Array<boolean>(n * n);
+    for (let ty = 0; ty < n; ty += 1) {
+      for (let tx = 0; tx < n; tx += 1) out[ty * n + tx] = ours(tx, ty);
+      if (ty % 64 === 63) yield 0.87 + (0.08 * ty) / n;
+    }
+    perTile.set(ground, { n, t, also: s.claims, value: out });
+  }
+  for (const list of [s.corridors, s.cables, s.rails]) {
+    kept(list, n, t, null, () => Array.from(linkGrid(list, n), (r) => r === 1));
+    yield 0.96;
+  }
+  kept(ground.heightM, n, t, null, () => ground.heightM.map((h) => h / t.TILE_METRES));
+  kept(ground.cornersM, n, t, null, () => ground.cornersM.map((h) => h / t.TILE_METRES));
+  yield 1;
+}
 
 export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityView {
   const step = settlementStep(s, env, t, t.SUBSTEP_YEARS);

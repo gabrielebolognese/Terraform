@@ -19,7 +19,7 @@ import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import type { Layer, LinkLayer } from "../sim/index.js";
-import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, buildYears, cityView, layerOf, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
+import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, buildYears, cityView, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
 import type { CardKind } from "./city-cards.js";
@@ -92,6 +92,10 @@ const PANEL_HZ = 4;
 const DRAG_THRESHOLD_PX = 4;
 /** How often the city view is re-derived from the settlement, ms. */
 const VIEW_MS = 200;
+/** Milliseconds a frame for making a new city's ground, while it is made. */
+const PREPARE_MS = 12;
+/** A city wider than this is prepared over frames; a smaller one is made in the first frame, as ever (a 352-tile metropolis took under a second). */
+const PREPARE_ABOVE_TILES = 400;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -218,6 +222,12 @@ export class CityScreen {
   private chunkCtx: CanvasRenderingContext2D | null = null;
 
   private settlementId: string | null = null;
+  /**
+   * The city's ground being made, a little each frame, when it is opened for
+   * the first time: a metropolis's is seven million heights, and made in one
+   * go it froze the browser for seconds (measured).
+   */
+  private preparing: Generator<number, void> | null = null;
   private camera: CityCamera | null = null;
   private placing: BuildingType | null = null;
   /** The corridor or cable tool, when one is armed. */
@@ -347,6 +357,7 @@ export class CityScreen {
 
   open(settlementId: string): void {
     this.settlementId = settlementId;
+    this.preparing = null;
     this.camera = null;
     this.chunks?.clear();
     this.placing = null;
@@ -497,6 +508,19 @@ export class CityScreen {
     this.sinceYears = sinceYears;
     this.settlement = settlement;
     this.env = env;
+    if (this.view === null && frameOf(settlement, this.tuning).n > PREPARE_ABOVE_TILES) {
+      // Made once, a frame's worth at a time; on a city already made, this is done at the first step.
+      this.preparing ??= prepareCity(settlement, this.tuning);
+      // As much as fits in a frame, then show how far it is.
+      const until = performance.now() + PREPARE_MS;
+      let step = this.preparing.next();
+      while (step.done !== true && performance.now() < until) step = this.preparing.next();
+      if (step.done !== true) {
+        this.drawPreparing(step.value);
+        return;
+      }
+      this.preparing = null;
+    }
     // The view is re-derived a few times a second, not every frame: for a
     // metropolis it costs ~15 ms. A change of buildings, corridors, cables,
     // rocks or jobs - anything a click does - refreshes it at once, so the
@@ -532,6 +556,37 @@ export class CityScreen {
   }
 
   // ---- drawing ---------------------------------------------------------------
+
+  /** While the ground is made: the city's name, and how far along. */
+  private drawPreparing(fraction: number): void {
+    const ctx = this.canvas.getContext("2d");
+    const size = this.viewSize();
+    this.status.textContent = `Surveying the ground: ${Math.round(fraction * 100)}%`;
+    this.status.dataset["state"] = "ok";
+    if (ctx === null) return;
+    const dpr = Math.min(2, globalThis.devicePixelRatio || 1);
+    const pw = Math.round(size.w * dpr);
+    const ph = Math.round(size.h * dpr);
+    if (this.canvas.width !== pw || this.canvas.height !== ph) {
+      this.canvas.width = pw;
+      this.canvas.height = ph;
+    }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const bg = CITY_BACKGROUND;
+    ctx.fillStyle = `rgb(${Math.round(bg.r * 255)}, ${Math.round(bg.g * 255)}, ${Math.round(bg.b * 255)})`;
+    ctx.fillRect(0, 0, size.w, size.h);
+    const w = Math.min(360, size.w * 0.6);
+    const x = (size.w - w) / 2;
+    const y = size.h / 2;
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillRect(x, y, w, 6);
+    ctx.fillStyle = "rgb(130,180,255)";
+    ctx.fillRect(x, y, w * fraction, 6);
+    ctx.fillStyle = "rgb(236,236,238)";
+    ctx.font = "15px Lexend, Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(`Surveying the ground - ${Math.round(fraction * 100)}%`, size.w / 2, y - 14);
+  }
 
   private viewSize(): { w: number; h: number } {
     const rect = this.canvas.getBoundingClientRect();

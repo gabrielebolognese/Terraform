@@ -424,6 +424,14 @@ type Place = FrameSource & { readonly lat: number; readonly lon: number };
 /** Recently built grounds and worlds: every placement check, view and connect asks again for the same site. */
 const kept = new Map<string, Ground | World>();
 const KEEP = 24;
+/**
+ * And at most this many heights among them all: a metropolis's ground and
+ * world are 7 million (some 80 MB), and 24 of those by count alone was more
+ * than a browser tab holds (measured, three metropolises opened).
+ */
+const KEEP_HEIGHTS = 12_000_000;
+let keptHeights = 0;
+const heightsOf = (v: Ground | World): number => ("fineM" in v ? v.fineM.length + v.cornersM.length : v.cornersM.length + v.heightM.length);
 
 function remember<T extends Ground | World>(key: string, make: () => T): T {
   const hit = kept.get(key);
@@ -434,7 +442,13 @@ function remember<T extends Ground | World>(key: string, make: () => T): T {
   }
   const made = make();
   kept.set(key, made);
-  if (kept.size > KEEP) kept.delete(kept.keys().next().value as string);
+  keptHeights += heightsOf(made);
+  // The least recently asked go first, past the count or the heights - never the one just made.
+  while (kept.size > 1 && (kept.size > KEEP || keptHeights > KEEP_HEIGHTS)) {
+    const oldest = kept.keys().next().value as string;
+    keptHeights -= heightsOf(kept.get(oldest)!);
+    kept.delete(oldest);
+  }
   return made;
 }
 
@@ -463,12 +477,32 @@ function terrainKey(kind: string, place: Place, t: Tuning): string {
 
 /** The ground of a settlement's buildable grid. */
 export function groundOf(place: Place, t: Tuning): Ground {
-  return remember(terrainKey("ground", place, t), () => {
+  return remember(terrainKey("ground", place, t), () => finish(groundSteps(place, t)));
+}
+
+/** Run steps to the end at once: what they make. */
+function finish<T>(steps: Generator<number, T>): T {
+  for (;;) {
+    const r = steps.next();
+    if (r.done === true) return r.value;
+  }
+}
+
+/**
+ * The ground made a row at a time, saying after each how many heights it has
+ * sampled - so a city screen can make a metropolis's million over many
+ * frames instead of in one frozen second (see `prepareTerrain`).
+ */
+function* groundSteps(place: Place, t: Tuning): Generator<number, Ground> {
+  {
     const { base, x0, y0, n: tiles } = frameOf(place, t);
     const seed = placeSeed(place.lat, place.lon);
     const m = tiles + 1;
     const cornersM = new Array<number>(m * m);
-    for (let y = 0; y < m; y += 1) for (let x = 0; x < m; x += 1) cornersM[y * m + x] = clean(terrainHeight(seed, base, x + x0, y + y0, t));
+    for (let y = 0; y < m; y += 1) {
+      for (let x = 0; x < m; x += 1) cornersM[y * m + x] = clean(terrainHeight(seed, base, x + x0, y + y0, t));
+      yield m;
+    }
     const heightM = new Array<number>(tiles * tiles);
     const slope = new Array<number>(tiles * tiles);
     const steep = new Array<boolean>(tiles * tiles);
@@ -484,9 +518,10 @@ export function groundOf(place: Place, t: Tuning): Ground {
         slope[i] = rise / t.TILE_METRES;
         steep[i] = slope[i]! > t.TERRAIN_MAX_SLOPE;
       }
+      if (ty % 64 === 63) yield 0;
     }
     return { tiles, heightM, cornersM, slope, steep };
-  });
+  }
 }
 
 /** Exactly 0, not -0 (a negative hill times a zero weight gives -0, and saves compare it). */
@@ -496,7 +531,12 @@ function clean(v: number): number {
 
 /** The world round a settlement: its grid and `TERRAIN_WORLD_MARGIN` tiles beyond, for the picture. */
 export function worldOf(place: Place, t: Tuning): World {
-  return remember(terrainKey("world", place, t), () => {
+  return remember(terrainKey("world", place, t), () => finish(worldSteps(place, t)));
+}
+
+/** The world made a row at a time (see `groundSteps`). */
+function* worldSteps(place: Place, t: Tuning): Generator<number, World> {
+  {
     // The world round the frame: claim land, and it reaches further that way.
     const { base, x0, y0, n: tiles } = frameOf(place, t);
     const margin = Math.max(0, Math.round(t.TERRAIN_WORLD_MARGIN));
@@ -517,6 +557,7 @@ export function worldOf(place: Place, t: Tuning): World {
         const gy = y - margin;
         cornersM[y * m + x] = gx >= 0 && gy >= 0 && gx < gm && gy < gm ? inner[gy * gm + gx]! : clean(terrainHeight(seed, base, sx(x), sy(y), t));
       }
+      yield y >= margin && y - margin < gm ? m - gm : m;
     }
     const f = 2 * size + 1;
     const fineM = new Array<number>(f * f);
@@ -524,6 +565,7 @@ export function worldOf(place: Place, t: Tuning): World {
       for (let x = 0; x < f; x += 1) {
         fineM[y * f + x] = x % 2 === 0 && y % 2 === 0 ? cornersM[(y / 2) * m + x / 2]! : clean(terrainHeight(seed, base, sx(x / 2), sy(y / 2), t));
       }
+      yield y % 2 === 0 ? (f - 1) / 2 : f;
     }
     // Caves: at most one per 16-tile cell, in its steepest face, if that face
     // is steep enough. Cells in site coordinates, so a claim never moves a cave.
@@ -550,6 +592,7 @@ export function worldOf(place: Place, t: Tuning): World {
         // A cave needs a real rock face: 6 m of rise across a 10 m tile.
         if (at !== null && best / t.TILE_METRES > 0.6) caves.push(at);
       }
+      yield 0;
     }
     // Rocks beyond the grid: nature's, as the grid's own were before anyone built.
     const rocks: { x: number; y: number; kind: "loose" | "crag" }[] = [];
@@ -566,9 +609,49 @@ export function worldOf(place: Place, t: Tuning): World {
         const kind = natureRock(seed, base, gx + x0, gy + y0, steep, t);
         if (kind !== "none") rocks.push({ x: gx, y: gy, kind });
       }
+      if (y % 32 === 31) yield 0;
     }
     return { margin, size, cornersM, fineM, caves, rocks };
-  });
+  }
+}
+
+/** How many heights a place's ground and world sample: what `prepareTerrain` counts its progress against. */
+function heightsToSample(place: Place, t: Tuning): number {
+  const tiles = frameOf(place, t).n;
+  const size = tiles + 2 * Math.max(0, Math.round(t.TERRAIN_WORLD_MARGIN));
+  const f = 2 * size + 1;
+  return (tiles + 1) ** 2 + ((size + 1) ** 2 - (tiles + 1) ** 2) + (f * f - (size + 1) ** 2);
+}
+
+/**
+ * Make a place's ground and world a little at a time: each step a row of
+ * heights, yielding how far through it is, 0 to 1. What it makes is kept, as
+ * `groundOf` and `worldOf` would keep it, so they then return at once. (A
+ * metropolis's seven million heights made at once froze the browser for
+ * seconds as it opened, measured.)
+ */
+export function* prepareTerrain(place: Place, t: Tuning): Generator<number, void> {
+  const total = Math.max(1, heightsToSample(place, t));
+  let done = 0;
+  for (const [kind, steps] of [["ground", () => groundSteps(place, t)], ["world", () => worldSteps(place, t)]] as const) {
+    const key = terrainKey(kind, place, t);
+    if (kept.has(key)) continue;
+    const run: Generator<number, Ground | World> = steps();
+    for (;;) {
+      const r = run.next();
+      if (r.done === true) {
+        remember(key, () => r.value);
+        break;
+      }
+      done += r.value;
+      yield Math.min(1, done / total);
+    }
+  }
+}
+
+/** Whether a place's ground and world are made and kept. */
+export function terrainReady(place: Place, t: Tuning): boolean {
+  return kept.has(terrainKey("ground", place, t)) && kept.has(terrainKey("world", place, t));
 }
 
 export function isSteep(ground: Ground, tx: number, ty: number): boolean {

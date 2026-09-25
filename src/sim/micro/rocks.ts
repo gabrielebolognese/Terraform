@@ -17,7 +17,7 @@ import type { Grade, PlacedBuilding, Settlement } from "../types.js";
 import { BUILDING_DEFS, keySet, tilesUnder } from "./buildings.js";
 import { frameOf, keyTile, tileKey } from "./space.js";
 import type { Ground, Rock } from "./terrain.js";
-import { groundOf, natureRock, placeSeed } from "./terrain.js";
+import { groundOf, natureRock, placeSeed, prepareTerrain } from "./terrain.js";
 
 export type { Rock } from "./terrain.js";
 
@@ -119,6 +119,14 @@ const natural = new WeakMap<Ground, readonly Rock[]>();
 function naturalRocks(s: Settlement, ground: Ground, t: Tuning): readonly Rock[] {
   const kept = natural.get(ground);
   if (kept !== undefined) return kept;
+  // The steps below, run at once.
+  for (const rows of naturalRockSteps(s, ground, t)) void rows;
+  return natural.get(ground)!;
+}
+
+/** Nature's rocks a row of tiles at a time, yielding the rows done; kept when all are. */
+function* naturalRockSteps(s: Settlement, ground: Ground, t: Tuning): Generator<number, void> {
+  if (natural.has(ground)) return;
   const n = ground.tiles;
   const { base, x0, y0 } = frameOf(s, t);
   const seed = placeSeed(s.lat, s.lon);
@@ -129,9 +137,17 @@ function naturalRocks(s: Settlement, ground: Ground, t: Tuning): readonly Rock[]
       // Nature's rocks lie in site coordinates: a claim does not move them.
       out[i] = natureRock(seed, base, tx + x0, ty + y0, ground.steep[i] === true, t);
     }
+    yield ty + 1;
   }
   natural.set(ground, out);
-  return out;
+}
+
+/** A settlement's ground and world, then its rocks, a row at a time, yielding how far through, 0 to 1 (see `prepareCity`). */
+export function* prepareRocks(s: Settlement, t: Tuning): Generator<number, void> {
+  for (const f of prepareTerrain(s, t)) yield 0.85 * f;
+  const ground = groundOf(s, t);
+  for (const rows of naturalRockSteps(s, ground, t)) yield 0.85 + (0.15 * rows) / ground.tiles;
+  rocksOf(s, t);
 }
 
 /**
