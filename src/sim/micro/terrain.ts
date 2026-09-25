@@ -70,6 +70,27 @@ function valueNoise(seed: number, x: number, y: number, scale: number): number {
 }
 
 /**
+ * 256 gradient directions round the circle. A lattice point picks one by
+ * its hash: the same noise without two trig calls per corner, which made
+ * the height function 8.8 us a sample - 1.5 s to lay out a 96-tile city's
+ * world (measured).
+ */
+const GRADIENTS: readonly (readonly [number, number])[] = Array.from({ length: 256 }, (_, k) => [Math.cos((k / 256) * 2 * Math.PI), Math.sin((k / 256) * 2 * Math.PI)] as const);
+
+function quintic(u: number): number {
+  return u * u * u * (u * (u * 6 - 15) + 10);
+}
+
+/** The gradient at lattice point (ix, iy) dotted with the offset (dx, dy) from it. */
+function gradDot(seed: number, ix: number, iy: number, dx: number, dy: number): number {
+  const g = GRADIENTS[hash3(seed, ix, iy) & 255]!;
+  return g[0] * dx + g[1] * dy;
+}
+
+/** Each layer's turn, as its cosine and sine: the same few angles, asked for millions of times. */
+const turns = new Map<number, readonly [number, number]>();
+
+/**
  * Gradient noise in [0, 1), `scale` tiles per cell, on a plane turned by
  * `angle` radians. Value noise alone left straight creases and square-edged
  * mesas along its lattice lines once mountains stood 90 m high on it; a
@@ -77,23 +98,64 @@ function valueNoise(seed: number, x: number, y: number, scale: number): number {
  * layer's lattice away from the tile axes hides what is left of the grid.
  */
 function gradNoise(seed: number, x: number, y: number, scale: number, angle: number): number {
-  const c = Math.cos(angle);
-  const s = Math.sin(angle);
-  const fx = (c * x - s * y) / scale;
-  const fy = (s * x + c * y) / scale;
+  let turn = turns.get(angle);
+  if (turn === undefined) {
+    turn = [Math.cos(angle), Math.sin(angle)];
+    turns.set(angle, turn);
+  }
+  const fx = (turn[0] * x - turn[1] * y) / scale;
+  const fy = (turn[1] * x + turn[0] * y) / scale;
   const x0 = Math.floor(fx);
   const y0 = Math.floor(fy);
-  const dot = (ix: number, iy: number): number => {
-    const a = lattice(seed, ix, iy) * 2 * Math.PI;
-    return Math.cos(a) * (fx - ix) + Math.sin(a) * (fy - iy);
-  };
-  const quintic = (u: number): number => u * u * u * (u * (u * 6 - 15) + 10);
-  const u = quintic(fx - x0);
-  const v = quintic(fy - y0);
-  const top = dot(x0, y0) + (dot(x0 + 1, y0) - dot(x0, y0)) * u;
-  const bottom = dot(x0, y0 + 1) + (dot(x0 + 1, y0 + 1) - dot(x0, y0 + 1)) * u;
+  const dx = fx - x0;
+  const dy = fy - y0;
+  const u = quintic(dx);
+  const v = quintic(dy);
+  const a = gradDot(seed, x0, y0, dx, dy);
+  const b = gradDot(seed, x0 + 1, y0, dx - 1, dy);
+  const c = gradDot(seed, x0, y0 + 1, dx, dy - 1);
+  const d = gradDot(seed, x0 + 1, y0 + 1, dx - 1, dy - 1);
+  const top = a + (b - a) * u;
+  const bottom = c + (d - c) * u;
   // A 2D gradient noise stays within about +-0.7; map it to 0..1.
   return Math.min(1, Math.max(0, 0.5 + (top + (bottom - top) * v) * 0.72));
+}
+
+/** A cell's crater, if it has one: centre, radius, and depth as a share of the full depth. */
+interface Pit {
+  readonly px: number;
+  readonly py: number;
+  readonly radius: number;
+  readonly depth: number;
+}
+
+/** Kept craters, per seed; within a seed, by cell. */
+const pitCells = new Map<number, Map<number, Pit | null>>();
+
+/** The crater in one cell of the pit lattice, kept: every sample near it asks again. */
+function pitIn(seed: number, cx: number, cy: number, cell: number): Pit | null {
+  let pits = pitCells.get(seed);
+  if (pits === undefined) {
+    if (pitCells.size > 64) pitCells.clear();
+    pits = new Map();
+    pitCells.set(seed, pits);
+  }
+  // A number, not a string built per sample: exact for any cell within 32,768 of the origin.
+  const key = (cell * 65536 + cx + 32768) * 65536 + cy + 32768;
+  const kept = pits.get(key);
+  if (kept !== undefined) return kept;
+  const made: Pit | null =
+    lattice(seed ^ 0x6b2d, cx, cy) > 0.13
+      ? null
+      : {
+          px: (cx + 0.2 + 0.6 * lattice(seed ^ 0x11f1, cx, cy)) * cell,
+          py: (cy + 0.2 + 0.6 * lattice(seed ^ 0x22e2, cx, cy)) * cell,
+          radius: 2 + 10 * lattice(seed ^ 0x33d3, cx, cy) ** 2,
+          depth: 0.5 + 0.5 * lattice(seed ^ 0x44c4, cx, cy),
+        };
+  pits.set(key, made);
+  if (pits.size > 20000) pits.clear();
+  return made;
 }
 
 /** The seed for a place: its coordinate to a few millimetres on the planet (1e-9 rad). */
@@ -164,13 +226,13 @@ export function terrainHeight(seed: number, tiles: number, x: number, y: number,
   const cy0 = Math.floor(y / cell);
   for (let cy = cy0 - 1; cy <= cy0 + 1; cy += 1) {
     for (let cx = cx0 - 1; cx <= cx0 + 1; cx += 1) {
-      if (lattice(seed ^ 0x6b2d, cx, cy) > 0.13) continue;
-      const px = (cx + 0.2 + 0.6 * lattice(seed ^ 0x11f1, cx, cy)) * cell;
-      const py = (cy + 0.2 + 0.6 * lattice(seed ^ 0x22e2, cx, cy)) * cell;
-      const radius = 2 + 10 * lattice(seed ^ 0x33d3, cx, cy) ** 2;
-      const depth = t.TERRAIN_PIT_SCALE * relief * (0.5 + 0.5 * lattice(seed ^ 0x44c4, cx, cy));
-      const r = Math.hypot(x - px, y - py) / radius;
+      const pit = pitIn(seed, cx, cy, cell);
+      if (pit === null) continue;
+      const dx = x - pit.px;
+      const dy = y - pit.py;
+      const r = Math.sqrt(dx * dx + dy * dy) / pit.radius;
       if (r > 1.8) continue;
+      const depth = t.TERRAIN_PIT_SCALE * relief * pit.depth;
       const bowl = r < 1 ? -depth * (1 - r * r) : 0;
       const rim = 0.22 * depth * Math.exp(-(((r - 1) / 0.28) ** 2));
       pits += bowl + rim;

@@ -57,7 +57,7 @@ describe("the local heightmap", () => {
   });
 
   it("has steep ground to refuse, at the browser's relief - and room to build", () => {
-    // Measured: 21 of 1,024 tiles here; 3.4% on average over 100 sites, 11.8%
+    // Measured: 21 of 1,024 tiles here; 2.9% on average over 100 sites, 11.2%
     // on a 96-tile grid (Batch 22's hills: 16.1%). One landscape everywhere,
     // mostly rolling ground: a first open world walled the city in with 42-60%.
     const n = steepCount(groundOf(HERE, HILLS));
@@ -85,8 +85,8 @@ describe("the open world round it", () => {
   });
 
   it("has mountains, and canyons and pits, far beyond the buildable ground's relief", () => {
-    // Measured here: from -48.7 m to +102.1 m; the grid itself -20.3 to +11.2.
-    // Over 100 sites the world spans -56 to +98 m on average.
+    // Measured here: from -47.4 m to +90.2 m; the grid itself -8.9 to +11.2.
+    // Over 100 sites the world spans -45 to +72 m on average.
     expect(Math.max(...w.cornersM)).toBeGreaterThan(5 * HILLS.TERRAIN_RELIEF_M);
     expect(Math.min(...w.cornersM)).toBeLessThan(-2.5 * HILLS.TERRAIN_RELIEF_M);
     const g = groundOf(HERE, HILLS);
@@ -96,7 +96,7 @@ describe("the open world round it", () => {
   it("is ordinary ground past the boundary - mostly buildable, with some mountains and canyons, not a wall", () => {
     // The user: "after the boundaries there have not to be mountains and
     // undoable terrain, but still other normal terrain". Measured over 40
-    // sites: 13.5% of the world beyond the grid too steep (a first open world
+    // sites: 12.1% of the world beyond the grid too steep (a first open world
     // raised its features toward the boundary and walled the city in).
     let steep = 0;
     let all = 0;
@@ -122,7 +122,7 @@ describe("the open world round it", () => {
 
   it("holds a few clusters of hard rock, each 7 to 23 connected tiles (the user: \"4-5 max\")", () => {
     // Measured over 12 worlds of a 96-tile city at the browser's chance: 2 to 6
-    // clusters, 3.9 on average; every whole cluster 7 to 23 tiles.
+    // clusters, 4.2 on average; every whole cluster 7 to 23 tiles.
     const BIG = makeTuning({ TERRAIN_RELIEF_M: 12, ROCK_CLUSTER_CHANCE: 0.65, CITY_GRID_TILES: 96 });
     const counts: number[] = [];
     for (let k = 0; k < 12; k += 1) {
@@ -169,7 +169,7 @@ describe("the open world round it", () => {
   });
 
   it("has caves, each in a real rock face", () => {
-    // Measured: 3 here, 6.3 on average over 100 sites (the calmer landscape has fewer faces).
+    // Measured: 5 here, 5.9 on average over 100 sites (the calmer landscape has fewer faces).
     expect(w.caves.length).toBeGreaterThan(0);
     for (const c of w.caves) {
       // The face it opens in: the corner at the cave against the next corner along its facing.

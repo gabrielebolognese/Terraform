@@ -129,3 +129,22 @@ At the user's request:
   widening the buildable area itself would shift existing saves' coordinates.
 - Rovers can break crags on the grid only; the open world is to look at.
 - Green is a colour, not plants: no trees or shrubs yet.
+
+## The height function was nine times too slow (found before tripling the grid)
+
+Tripling the boundaries means a 96-tile city and a 288-tile metropolis. Measured first: the height
+function cost **8.7 µs a sample**, so a 96-tile city's world (148,225 half-tile samples plus rocks)
+took **1.46 s** to lay out and a metropolis **6.2 s** - a freeze on every visit.
+
+- The obvious suspects were wrong. A 256-direction gradient table (no trig per corner) and a crater
+  cache (string keys) gained **nothing** (8.69 µs).
+- A CPU profile showed why: **33% in `__name`** - the dev transform's wrapper for every inner arrow
+  function, re-created on every call (`dot` and `quintic` inside `gradNoise`, four corners each, for
+  every layer of every sample). The string keys of the crater cache were another 7%.
+- Hoisted to top-level functions, with numeric crater keys (exact, per seed) and each layer's
+  turn cached: **0.97 µs a sample; 96-tile world 0.31 s; metropolis 0.82 s**.
+- Cost: the gradient table picks one of 256 directions instead of any angle, so the landscape
+  shifted slightly. The terrain golden moved (2.75e-5 > its 1e-5 tolerance) and was regenerated
+  after review; every measured number quoted in `terrain.test.ts` was measured again (steep ground
+  2.9% of a 32 grid on average, was 3.4%; beyond the boundary 12.1%, was 13.5%; clusters 4.2 a
+  city's world, was 3.9) - all inside the thresholds, none of which moved.
