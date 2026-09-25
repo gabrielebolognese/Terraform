@@ -799,12 +799,13 @@ export const BASE_TUNING = Object.freeze({
    * the chance that one lies in each ROCK_CLUSTER_CELL-tile square of the
    * lattice. Clusters block building until a rover breaks them. 0 by
    * default: they change where anything can be built, and every layout the
-   * tests were written for. The browser uses 0.65: about four in a city's
-   * world once its grid is 96 tiles (measured over 20 sites: 3 to 8, 4.4 on
-   * average; a cell loses its cluster to a cliff or the founding site).
+   * tests were written for. The browser uses 0.65: with 32-tile cells, 10 to
+   * 22 in a 96-tile city's world, 17.7 on average - four times the 64-tile
+   * cells' 4.2, at the user's request (a cell loses its cluster to a cliff
+   * or the founding site).
    */
   ROCK_CLUSTER_CHANCE: 0,
-  ROCK_CLUSTER_CELL: 64,
+  ROCK_CLUSTER_CELL: 32,
   /** A supply rocket's round trip: one real minute at 1x (60 x 0.03). */
   ROCKET_TRIP_YEARS: 1.8,
   /** Materials a rocket brings back, or as many as the stores have room for. */
@@ -858,6 +859,13 @@ export const BASE_TUNING = Object.freeze({
   COST_REGOLITH_MINE: 25,
   COST_STORAGE_DEPOT: 10,
   COST_SPACEPORT: 80,
+  /**
+   * The Rover Post (at the user's request: "a structure called rover post,
+   * that allows you to have an additional rover, costs 300 materials,
+   * occupies a 5x5, max 1 per 100 people").
+   */
+  COST_ROVER_POST: 300,
+  ROVER_POST_PEOPLE: 100,
 
   /** Habitat Dome: people housed, and life support drawn per year. */
   DOME_HOUSING: 40,
@@ -999,10 +1007,11 @@ export function validateTuning(t: Tuning): void {
   if (!(t.COST_CORRIDOR >= 0)) fail("COST_CORRIDOR must be >= 0");
   if (!(t.COST_CABLE >= 0)) fail("COST_CABLE must be >= 0");
   if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");
+  if (!(t.ROVER_POST_PEOPLE > 0)) fail("ROVER_POST_PEOPLE must be > 0");
   if (!(t.ROCKET_TRIP_YEARS > 0)) fail("ROCKET_TRIP_YEARS must be > 0");
   if (!(t.ROCK_LOOSE_SHARE >= 0 && t.ROCK_LOOSE_SHARE <= 1)) fail("ROCK_LOOSE_SHARE must be in [0, 1]");
   if (!(t.ROCK_CLUSTER_CHANCE >= 0 && t.ROCK_CLUSTER_CHANCE <= 1)) fail("ROCK_CLUSTER_CHANCE must be in [0, 1]");
-  if (!(t.ROCK_CLUSTER_CELL >= 46)) fail("ROCK_CLUSTER_CELL must be >= 46 (twice the largest cluster)");
+  if (!(t.ROCK_CLUSTER_CELL >= 24)) fail("ROCK_CLUSTER_CELL must be >= 24 (a cluster reaches at most 22 tiles from its seed)");
   if (!(Number.isInteger(t.CLAIM_CHUNK_TILES) && t.CLAIM_CHUNK_TILES >= 8)) fail("CLAIM_CHUNK_TILES must be a whole number >= 8");
   if (!(t.CLAIM_FIRST_POPULATION >= 0)) fail("CLAIM_FIRST_POPULATION must be >= 0");
   if (!(t.CLAIM_STEP_POPULATION > 0)) fail("CLAIM_STEP_POPULATION must be > 0");

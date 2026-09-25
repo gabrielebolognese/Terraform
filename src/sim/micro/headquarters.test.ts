@@ -212,10 +212,16 @@ describe("hard rock, in rare clusters (the user: \"big clusters from 7 to 23 til
     expect(seen, "clusters at these sites, or this test tests nothing").toBeGreaterThan(5);
   });
 
-  it("is rare: a handful on a city's grid, and none at all with the chance at its default of 0", () => {
-    // Measured over these 12 sites: 0 to 4 clusters on a 96-tile grid, 0.8 on average (a city's
-    // world round it holds 3 to 8, 4.4 on average over 20 sites).
-    for (const s of sites) expect(clusters(s).length).toBeLessThanOrEqual(6);
+  it("is uncommon: a few on a city's grid, and none at all with the chance at its default of 0", () => {
+    // Measured over these 12 sites: 2 to 5 clusters on a 96-tile grid, 3.3 on
+    // average. It was 0 to 4, 0.8, until the user asked for four times as many
+    // ("right now there are very little"): the lattice's cell went from 64
+    // tiles to 32, four cells where there was one.
+    const counts = sites.map((s) => clusters(s).length);
+    const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
+    expect(mean).toBeGreaterThan(2);
+    expect(mean).toBeLessThan(5);
+    for (const n of counts) expect(n).toBeLessThanOrEqual(8);
     const plain = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, CITY_GRID_TILES: 96 });
     const s = foundSettlement(marsStart(undefined, plain), "city", 0.31, -1.2, plain).state.settlements[0]!;
     const ground = siteGround(s, plain);

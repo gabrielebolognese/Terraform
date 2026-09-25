@@ -433,6 +433,7 @@ const TOPS: Readonly<Record<string, number>> = {
   regolith_mine: 1.0,
   storage_depot: 0.8,
   spaceport: 1.6,
+  rover_post: 1.5,
   headquarters: 1.7,
 };
 
@@ -1000,6 +1001,74 @@ function assemble(b: CityBuildingView, time: number, rocket: RocketState = null)
       live(() => part(box(x0 + 4.07, y0 + 0.97, 1.7, x0 + 4.13, y0 + 1.03, 1.76), on && Math.floor(time * 1.2) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
       return k;
     }
+    case "rover_post": {
+      // A 5 x 5 yard: a vaulted hangar with its door to the front, a rover
+      // parked on the apron, a crew hut, a charging pad, and a radio mast.
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 4.9, y0 + 4.9, 0.08), CONCRETE));
+      add(() => [
+        part(box(x0 + 0.3, y0 + 4.64, 0.08, x0 + 4.7, y0 + 4.7, 0.1), HAZARD),
+        part(box(x0 + 4.64, y0 + 0.3, 0.08, x0 + 4.7, y0 + 4.7, 0.1), HAZARD),
+      ]);
+      // The hangar: a plinth and a half-round roof along x, door at the near end.
+      add(() => part(box(x0 + 0.4, y0 + 0.5, 0.08, x0 + 3.3, y0 + 2.5, 0.25), PAINT_WHITE));
+      add(() => part(vault(x0 + 0.4, x0 + 3.3, y0 + 1.5, 1.0, 0.25, 14), METAL));
+      add(() => {
+        const out: Part[] = [];
+        for (const rx of [0.9, 1.6, 2.3]) out.push(part(vault(x0 + rx, x0 + rx + 0.06, y0 + 1.5, 1.02, 0.25, 14), DARK_METAL));
+        return out;
+      });
+      add(() => [
+        part(box(x0 + 3.3, y0 + 0.95, 0.1, x0 + 3.33, y0 + 2.05, 0.95), RUBBER),
+        part(box(x0 + 3.33, y0 + 0.95, 0.9, x0 + 3.34, y0 + 2.05, 0.98), HAZARD),
+      ]);
+      live(() => part(box(x0 + 3.33, y0 + 1.45, 1.02, x0 + 3.37, y0 + 1.55, 1.07), on && Math.floor(time * 2) % 2 === 0 ? WARM_LIGHT : UNLIT, { emissive: true }));
+      // The rover on the apron: a body, a glass cab, three wheels a side.
+      add(() => {
+        const out: Part[] = [
+          part(box(x0 + 3.75, y0 + 1.15, 0.2, x0 + 4.55, y0 + 1.85, 0.42), PAINT_WHITE),
+          part(box(x0 + 4.25, y0 + 1.25, 0.42, x0 + 4.52, y0 + 1.75, 0.58), GLASS),
+          part(box(x0 + 3.8, y0 + 1.2, 0.42, x0 + 4.2, y0 + 1.8, 0.46), ACCENT),
+          part(tube([x0 + 3.9, y0 + 1.3, 0.46], [x0 + 3.9, y0 + 1.3, 0.8], 0.012, 5), METAL),
+        ];
+        for (const wx of [3.8, 4.07, 4.34]) {
+          out.push(part(box(x0 + wx, y0 + 1.08, 0.08, x0 + wx + 0.17, y0 + 1.15, 0.3), RUBBER));
+          out.push(part(box(x0 + wx, y0 + 1.85, 0.08, x0 + wx + 0.17, y0 + 1.92, 0.3), RUBBER));
+        }
+        return out;
+      });
+      // The crew hut, with lit windows.
+      add(() => part(box(x0 + 0.5, y0 + 3.1, 0.08, x0 + 1.8, y0 + 4.4, 0.75), PAINT_WHITE));
+      add(() => part(box(x0 + 0.48, y0 + 3.08, 0.5, x0 + 1.82, y0 + 4.42, 0.56), ACCENT));
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 3; i += 1) {
+          out.push(part(box(x0 + 0.62 + i * 0.4, y0 + 4.4, 0.6, x0 + 0.86 + i * 0.4, y0 + 4.42, 0.7), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+          out.push(part(box(x0 + 1.8, y0 + 3.22 + i * 0.4, 0.6, x0 + 1.82, y0 + 3.46 + i * 0.4, 0.7), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+        }
+        return out;
+      });
+      add(() => vent(x0 + 0.7, y0 + 3.3, 0.75, 0.2, 0.1));
+      // The charging pad: a ring, and lights chasing round it.
+      add(() => [
+        part(frustum(x0 + 3.55, y0 + 3.65, 0.72, 0.72, 0.08, 0.1, 24), HAZARD),
+        part(frustum(x0 + 3.55, y0 + 3.65, 0.6, 0.6, 0.1, 0.105, 24), CONCRETE),
+      ]);
+      live(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 8; i += 1) {
+          const a = (i / 8) * 2 * Math.PI;
+          const lit = on && (Math.floor(time * 3) + i) % 4 === 0;
+          const lx = x0 + 3.55 + 0.66 * Math.cos(a);
+          const ly = y0 + 3.65 + 0.66 * Math.sin(a);
+          out.push(part(box(lx - 0.03, ly - 0.03, 0.1, lx + 0.03, ly + 0.03, 0.13), lit ? COLD_LIGHT : UNLIT, { emissive: true }));
+        }
+        return out;
+      });
+      // The radio mast, back right, and its beacon.
+      add(() => lattice(x0 + 4.2, y0 + 0.6, 0.14, 0.05, 0.08, 1.4, 6, METAL));
+      live(() => part(box(x0 + 4.17, y0 + 0.57, 1.4, x0 + 4.23, y0 + 0.63, 1.46), on && Math.floor(time * 1.3) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
+      return k;
+    }
     case "spaceport": {
       const px = cx - 0.1;
       const py = cy - 0.1;
@@ -1197,6 +1266,7 @@ const FAR_COLOUR: Readonly<Record<string, Rgb>> = {
   regolith_mine: rgb(0.449, 0.384, 0.333),
   storage_depot: rgb(0.771, 0.752, 0.711),
   spaceport: rgb(0.56, 0.593, 0.57),
+  rover_post: rgb(0.607, 0.56, 0.496),
   headquarters: rgb(0.624, 0.548, 0.475),
 };
 
@@ -1278,6 +1348,18 @@ function assembleMedium(b: CityBuildingView): Kit {
       add(() => part(frustum(x0 + 1.9, y0 + 1.75, 0.75, 0.7, 0.95, 1.3, 10), GLASS));
       add(() => part(box(x0 + 0.6, y0 + 3.3, 0.08, x0 + 4.4, y0 + 4.4, 0.62), CONCRETE));
       add(() => part(box(x0 + 4.0, y0 + 0.9, 0.08, x0 + 4.2, y0 + 1.1, 1.7), METAL));
+      break;
+    case "rover_post":
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 4.9, y0 + 4.9, 0.08), CONCRETE));
+      add(() => part(box(x0 + 0.4, y0 + 0.5, 0.08, x0 + 3.3, y0 + 2.5, 0.25), PAINT_WHITE));
+      add(() => part(vault(x0 + 0.4, x0 + 3.3, y0 + 1.5, 1.0, 0.25, 6), METAL));
+      add(() => part(vault(x0 + 1.6, x0 + 1.7, y0 + 1.5, 1.02, 0.25, 6), DARK_METAL));
+      add(() => part(box(x0 + 3.3, y0 + 0.95, 0.1, x0 + 3.33, y0 + 2.05, 0.95), RUBBER));
+      add(() => part(box(x0 + 3.75, y0 + 1.15, 0.08, x0 + 4.55, y0 + 1.85, 0.5), PAINT_WHITE));
+      add(() => part(box(x0 + 0.5, y0 + 3.1, 0.08, x0 + 1.8, y0 + 4.4, 0.75), PAINT_WHITE));
+      add(() => part(box(x0 + 0.48, y0 + 3.08, 0.5, x0 + 1.82, y0 + 4.42, 0.56), ACCENT));
+      add(() => part(frustum(x0 + 3.55, y0 + 3.65, 0.72, 0.72, 0.08, 0.1, 12), HAZARD));
+      add(() => part(box(x0 + 4.12, y0 + 0.52, 0.08, x0 + 4.28, y0 + 0.68, 1.4), METAL));
       break;
     case "spaceport":
       add(() => part(frustum(cx - 0.1, cy - 0.1, 1.32, 1.3, 0, 0.1, 16), CONCRETE));

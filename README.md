@@ -45,6 +45,7 @@ that state.
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
 | [`docs/balance/detail-pass-colony.md`](docs/balance/detail-pass-colony.md) | Corridors and power cables, the headquarters, rock-breaking rovers and supply rockets. |
+| [`docs/balance/detail-pass-rover-post.md`](docs/balance/detail-pass-rover-post.md) | Four times the hard-rock clusters, the Rover Post (one more rover per 100 people), and the connective tools moved to the top right. |
 | [`docs/balance/detail-pass-claims.md`](docs/balance/detail-pass-claims.md) | Founding ground three times larger, and claiming land as a city grows: the frame, the save (v9), and the view kept fast at the new sizes. |
 | [`docs/balance/detail-pass-open-world.md`](docs/balance/detail-pass-open-world.md) | The open world round every city: mountains, canyons, craters and caves; smooth ground, foundations on slopes, and ground that greens with the biosphere. |
 | [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) | The whole visual arc, twelve frames at fixed progress values. |
@@ -81,7 +82,8 @@ detail as you zoom out (three levels, chosen by how much of the city is on scree
 smooth to move around. Every settlement is founded around a 5x5 **headquarters** (and a city with one spaceport). Buildings
 join up by **corridors** (water, oxygen, food, materials) and yellow **power cables**: a mine needs a
 cable to a power plant, a dome a corridor to a greenhouse. Click a rock or crag to send a **rover** to
-break it for materials; select a spaceport to launch a **supply rocket**. Each city stands in its own open world - smooth hills, mountain ranges, canyons,
+break it for materials (a **Rover Post** adds a rover, one post per 100 people); select a spaceport to launch a **supply rocket**. Corridors, cables,
+"connect all" and "claim land" sit in their own toolbar at the top right. Each city stands in its own open world - smooth hills, mountain ranges, canyons,
 craters and caves, 48 tiles of it beyond the dashed building boundary - and its ground greens as the
 planet's biosphere grows. A city is founded on 96 x 96 tiles (an outpost 48, a metropolis 288); at
 200 people it can **claim land** beside its own, 32 x 32 tiles at a time, and one more with every 100

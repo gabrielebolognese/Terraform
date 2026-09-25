@@ -441,6 +441,7 @@ export const BUILDING_TYPES = [
   "regolith_mine",
   "storage_depot",
   "spaceport",
+  "rover_post",
   "headquarters",
 ] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];

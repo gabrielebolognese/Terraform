@@ -120,9 +120,12 @@ describe("the open world round it", () => {
     expect(steep / all, "and it does have its mountains and canyons").toBeGreaterThan(0.03);
   });
 
-  it("holds a few clusters of hard rock, each 7 to 23 connected tiles (the user: \"4-5 max\")", () => {
-    // Measured over 12 worlds of a 96-tile city at the browser's chance: 2 to 6
-    // clusters, 4.2 on average; every whole cluster 7 to 23 tiles.
+  it("holds clusters of hard rock, each 7 to 23 connected tiles - four times as many as at first", () => {
+    // Measured over 12 worlds of a 96-tile city at the browser's chance: 10 to
+    // 22 clusters, 17.7 on average; every whole cluster 7 to 23 tiles, none
+    // grown into another. The user first asked for "4-5 max" (a 64-tile cell:
+    // 2 to 6, 4.2 on average), then "4x the generation of rock clusters,
+    // because right now there are very little": a 32-tile cell.
     const BIG = makeTuning({ TERRAIN_RELIEF_M: 12, ROCK_CLUSTER_CHANCE: 0.65, CITY_GRID_TILES: 96 });
     const counts: number[] = [];
     for (let k = 0; k < 12; k += 1) {
@@ -163,9 +166,9 @@ describe("the open world round it", () => {
       counts.push(n);
     }
     const mean = counts.reduce((a, b) => a + b, 0) / counts.length;
-    expect(mean).toBeGreaterThan(2);
-    expect(mean).toBeLessThan(6);
-    expect(Math.max(...counts)).toBeLessThanOrEqual(8);
+    expect(mean).toBeGreaterThan(12);
+    expect(mean).toBeLessThan(24);
+    expect(Math.max(...counts)).toBeLessThanOrEqual(30);
   });
 
   it("has caves, each in a real rock face", () => {

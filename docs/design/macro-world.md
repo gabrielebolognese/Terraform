@@ -603,7 +603,7 @@ HQ_OXYGEN = 5                HQ_WATER = 3                ROVERS_PER_HQ = 3
 ROVER_YEARS_PER_TILE = 0.015 ROVER_WORK_YEARS_LOOSE = 0.09  ROVER_WORK_YEARS_CRAG = 0.3
 ROCK_LOOSE_MATERIALS = 1     ROCK_CRAG_MATERIALS = 5     ROCK_LOOSE_SHARE = 0.08
 ROCK_CLUSTER_CHANCE = 0      # a hard-rock cluster (7-23 connected tiles) per lattice cell; the browser uses 0.65
-ROCK_CLUSTER_CELL = 64       # the cluster lattice's cell, tiles
+ROCK_CLUSTER_CELL = 32       # the cluster lattice's cell, tiles (4x the clusters of 64, at the user's request)
 ROCKET_TRIP_YEARS = 1.8      ROCKET_MATERIALS = 20
 
 # The settlement simulation (micro-world.md sections 5-7; Batch 18). Per sim-year.
@@ -616,6 +616,7 @@ COST_HABITAT_DOME = 60     COST_SOLAR_ARRAY = 20      COST_GEOTHERMAL_PLANT = 50
 COST_REACTOR = 150         COST_WATER_EXTRACTOR = 30  COST_ATMOSPHERE_PROCESSOR = 60
 COST_GREENHOUSE = 30       COST_REGOLITH_MINE = 25    COST_STORAGE_DEPOT = 10
 COST_SPACEPORT = 80
+COST_ROVER_POST = 300        ROVER_POST_PEOPLE = 100   # a Rover Post: one more rover; one post per 100 people
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75
 SOLAR_POWER = 6            GEOTHERMAL_POWER = 8       REACTOR_POWER = 24

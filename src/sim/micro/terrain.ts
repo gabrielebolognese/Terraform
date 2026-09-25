@@ -294,7 +294,7 @@ function clusterSite(seed: number, tiles: number, t: Tuning): Map<number, Readon
  * cliff. None near the founding site. Deterministic; kept per cell.
  */
 function clusterIn(site: Map<number, ReadonlySet<number>>, seed: number, tiles: number, cx: number, cy: number, t: Tuning): ReadonlySet<number> {
-  const cell = Math.max(CLUSTER_MAX * 2, Math.round(t.ROCK_CLUSTER_CELL));
+  const cell = Math.max(CLUSTER_MAX + 1, Math.round(t.ROCK_CLUSTER_CELL));
   const key = (cy + 32768) * 65536 + cx + 32768;
   const kept = site.get(key);
   if (kept !== undefined) return kept;
@@ -331,7 +331,7 @@ function clusterIn(site: Map<number, ReadonlySet<number>>, seed: number, tiles: 
 /** Whether tile (tx, ty) lies in a hard-rock cluster. */
 function inCluster(seed: number, tiles: number, tx: number, ty: number, t: Tuning): boolean {
   if (!(t.ROCK_CLUSTER_CHANCE > 0)) return false;
-  const cell = Math.max(CLUSTER_MAX * 2, Math.round(t.ROCK_CLUSTER_CELL));
+  const cell = Math.max(CLUSTER_MAX + 1, Math.round(t.ROCK_CLUSTER_CELL));
   const cx = Math.floor(tx / cell);
   const cy = Math.floor(ty / cell);
   const k = tileKey(tx, ty);

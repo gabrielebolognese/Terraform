@@ -109,6 +109,16 @@ export function garage(s: Settlement): { x: number; y: number } | null {
 }
 
 /**
+ * How many rovers the settlement keeps: `ROVERS_PER_HQ` at the headquarters,
+ * and one more for every Rover Post. None without a headquarters to send
+ * them out from.
+ */
+export function roverCount(s: Settlement, t: Tuning): number {
+  if (garage(s) === null) return 0;
+  return t.ROVERS_PER_HQ + s.buildings.filter((b) => b.type === "rover_post").length;
+}
+
+/**
  * How long a rover takes to break the rock on (tx, ty), in sim-years: out
  * from the headquarters, the work, and back. Straight-line distance - rovers
  * cross open ground.

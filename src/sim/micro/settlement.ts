@@ -21,7 +21,7 @@ import { BUILDING_DEFS } from "./buildings.js";
 import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
 import { isSteep, slopeAt } from "./terrain.js";
 import type { Rock } from "./rocks.js";
-import { garage, rockAt, rocksOf, roverYears, siteGround } from "./rocks.js";
+import { garage, rockAt, roverCount, rocksOf, roverYears, siteGround } from "./rocks.js";
 import type { FloodReading } from "./flood.js";
 import { applyFlood, floodReading, submerged } from "./flood.js";
 import type { Layer, NetworkIssue } from "./network.js";
@@ -139,6 +139,12 @@ export function placeBuilding(
   if (def === undefined) return refuse(`"${String(type)}" is not a building`);
   if (!def.buildable) return refuse(`the ${def.name} is founded with the settlement, never built`);
   if (!def.kinds.includes(s.kind)) return refuse(`${def.name} cannot be built in an ${s.kind}`);
+  if (type === "rover_post") {
+    // One post for every ROVER_POST_PEOPLE people.
+    const posts = s.buildings.filter((b) => b.type === "rover_post").length;
+    const allowed = Math.floor(s.population / t.ROVER_POST_PEOPLE);
+    if (posts >= allowed) return refuse(`a ${def.name} needs ${(posts + 1) * t.ROVER_POST_PEOPLE} people - one post for every ${t.ROVER_POST_PEOPLE}, and the city has ${Math.floor(s.population)}`);
+  }
   const f = { tx, ty, w: def.footprint, h: def.footprint };
   const ours = claimTest(s, t);
   if (!footprintTiles(f).every(([x, y]) => ours(x, y))) return refuse(`${def.name} does not fit there - it runs off the grid, the land the city holds (claim more as it grows)`);
@@ -252,7 +258,8 @@ export function sendRover(state: SimState, settlementId: string, tx: number, ty:
   const key = tileKey(tx, ty);
   if (s.jobs.some((j) => j.kind === "rover" && j.tile === key)) return refuse("a rover is already on its way there");
   const out = s.jobs.filter((j) => j.kind === "rover").length;
-  if (out >= t.ROVERS_PER_HQ) return refuse(`all ${t.ROVERS_PER_HQ} rovers are out`);
+  const rovers = roverCount(s, t);
+  if (out >= rovers) return refuse(`all ${rovers} rovers are out`);
   const years = roverYears(s, tx, ty, rock, t);
   const work = rock === "crag" ? t.ROVER_WORK_YEARS_CRAG : t.ROVER_WORK_YEARS_LOOSE;
   const job: SettlementJob = { kind: "rover", tile: key, materials: rock === "crag" ? t.ROCK_CRAG_MATERIALS : t.ROCK_LOOSE_MATERIALS, work, total: years, remaining: years };

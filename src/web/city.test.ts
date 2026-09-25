@@ -172,7 +172,7 @@ beforeEach(() => {
 describe("the city view", () => {
   it("offers only what this kind of settlement may build", () => {
     const city = mount("city");
-    expect(city.host.querySelectorAll(".city-card[data-type]").length).toBe(10);
+    expect(city.host.querySelectorAll(".city-card[data-type]").length).toBe(11);
     document.body.replaceChildren();
     const outpost = mount("outpost");
     const offered = [...outpost.host.querySelectorAll<HTMLElement>(".city-card[data-type]")].map((b) => b.dataset["type"]);
@@ -434,8 +434,8 @@ describe("the build bar (at the user's request: cards along the bottom, as in Cl
     const page = mount();
     const dock = page.q(".city-dock");
     const cards = [...dock.querySelectorAll<HTMLElement>(".city-card")];
-    // Ten buildings, the corridor, the power cable, "connect everything" and "claim land".
-    expect(cards.length).toBe(14);
+    // Eleven buildings (the Rover Post the eleventh); the connective tools are top right.
+    expect(cards.length).toBe(11);
     expect(page.q(".city-panel").querySelector(".city-card")).toBeNull();
     for (const c of cards) {
       expect(c.querySelector("canvas.city-card-preview"), c.dataset["card"]).not.toBeNull();
@@ -597,5 +597,35 @@ describe("claiming land (at the user's request: \"after a city reaches 200 habit
     page.q('.city-card[data-card="claim"]').click();
     page.clickAt(-16, 48, zAt(page, 16, 48));
     expect(page.calls).toContain("claim -1,1");
+  });
+});
+
+describe("the connective tools, top right (at the user's request: \"so connective things are on top and always available\")", () => {
+  it("puts corridors, cables, connect all and claim land at the top right, not in the build bar", () => {
+    const style = document.createElement("style");
+    style.textContent = readFileSync("src/web/style.css", "utf8");
+    document.head.append(style);
+    const page = mount();
+    const tools = page.q(".city-tools");
+    expect([...tools.querySelectorAll<HTMLElement>(".city-card")].map((c) => c.dataset["card"])).toEqual(["corridor", "cable", "connect", "claim"]);
+    expect(page.q(".city-dock").querySelector('[data-card="corridor"], [data-card="cable"], [data-card="connect"], [data-card="claim"]')).toBeNull();
+    const css = getComputedStyle(tools);
+    expect(css.position).toBe("fixed");
+    expect(css.top).toBe("16px");
+    expect(css.right).toBe("16px");
+    style.remove();
+  });
+
+  it("is always there: with no materials, and in an outpost", () => {
+    const poor = mount("city", { materials: 0 });
+    expect(poor.host.querySelectorAll(".city-tools .city-card")).toHaveLength(4);
+    document.body.replaceChildren();
+    const outpost = mount("outpost");
+    expect(outpost.host.querySelectorAll(".city-tools .city-card")).toHaveLength(4);
+    expect(outpost.q('.city-tools [data-card="claim"] .city-card-cost').textContent).toBe("cities only");
+    // The tools still work from there.
+    outpost.q('.city-tools [data-card="corridor"]').click();
+    outpost.frame();
+    expect(outpost.q(".city-hint").textContent).toMatch(/lay corridor/);
   });
 });

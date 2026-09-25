@@ -19,7 +19,7 @@ import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import type { Layer } from "../sim/index.js";
-import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, cityView, layerOf, roverYears, tileKey } from "../sim/index.js";
+import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, cityView, layerOf, roverCount, roverYears, tileKey } from "../sim/index.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
 import type { CardKind } from "./city-cards.js";
@@ -173,6 +173,12 @@ export class CityScreen {
   private readonly hint: HTMLElement;
   /** The build bar along the bottom (at the user's request, as in Clash of Clans). */
   private readonly dock: HTMLElement;
+  /**
+   * Corridors, cables, "connect all" and "claim land", top right (at the
+   * user's request: "not in the main bar, so connective things are on top
+   * and always available").
+   */
+  private readonly tools: HTMLElement;
   /** One tooltip for every card, outside the scrolling row so it is never clipped. */
   private readonly tip: HTMLElement;
   private tipFor: CardKind | null = null;
@@ -266,6 +272,9 @@ export class CityScreen {
     this.track.append(this.thumb);
     this.dock.append(this.hint, this.palette, this.track);
     this.bindScrollbar();
+    this.tools = el("div", "city-tools");
+    this.tools.setAttribute("role", "toolbar");
+    this.tools.setAttribute("aria-label", "Connect and claim");
     this.tip = el("div", "city-tip");
     this.tip.id = "city-tip";
     this.tip.setAttribute("role", "tooltip");
@@ -294,7 +303,7 @@ export class CityScreen {
     this.inspector.append(this.inspectorName, this.inspectorStatus, this.inspectorSummary, this.inspectorFlows, actions);
 
     panel.append(head, this.status, stores, this.inspector);
-    this.root.append(this.canvas, panel, this.dock, this.tip);
+    this.root.append(this.canvas, panel, this.tools, this.dock, this.tip);
     host.append(this.root);
     this.bindInput();
   }
@@ -606,7 +615,8 @@ export class CityScreen {
       this.inspectorStatus.textContent = "There is no headquarters to send a rover from.";
     } else {
       const out = s.jobs.filter((j) => j.kind === "rover").length;
-      this.inspectorStatus.textContent = `A rover would take ${seconds(roverYears(s, tile.tx, tile.ty, rock, this.tuning), this.tuning)} there and back. ${this.tuning.ROVERS_PER_HQ - out} of ${this.tuning.ROVERS_PER_HQ} rovers at the headquarters.`;
+      const rovers = roverCount(s, this.tuning);
+      this.inspectorStatus.textContent = `A rover would take ${seconds(roverYears(s, tile.tx, tile.ty, rock, this.tuning), this.tuning)} there and back. ${rovers - out} of ${rovers} rovers in.`;
     }
     this.inspectorSummary.textContent =
       rock === "crag"
@@ -647,19 +657,17 @@ export class CityScreen {
     cable.classList.add("city-cable");
     const connect = this.card("connect", "Connect all", `${Math.min(t.COST_CORRIDOR, t.COST_CABLE)}+ / tile`, false, null, () => this.connect());
     connect.classList.add("city-connect");
-    const all: HTMLButtonElement[] = [...cards, corridor, cable, connect];
-    if (view !== null && view.claims.nextAt !== null) {
-      const c = view.claims;
-      const price = c.allowed > c.held ? `${c.allowed - c.held} to claim` : `at ${c.nextAt} people`;
-      const claim = this.card("claim", "Claim land", price, false, this.claiming, () => this.armClaim(!this.claiming));
-      claim.classList.add("city-claim");
-      all.push(claim);
-    }
-    this.palette.replaceChildren(...all);
+    // Claim land: always on the bar, as the others are; an outpost's says it cannot.
+    const c = view?.claims;
+    const price = c === undefined || c.nextAt === null ? "cities only" : c.allowed > c.held ? `${c.allowed - c.held} to claim` : `at ${c.nextAt} people`;
+    const claim = this.card("claim", "Claim land", price, false, this.claiming, () => this.armClaim(!this.claiming));
+    claim.classList.add("city-claim");
+    this.palette.replaceChildren(...cards);
+    this.tools.replaceChildren(corridor, cable, connect, claim);
     this.placeThumb();
     // A card rebuilt under the pointer keeps its tooltip.
     if (this.tipFor !== null) {
-      const again = [...this.palette.children].find((c) => (c as HTMLElement).dataset["card"] === this.tipFor) as HTMLElement | undefined;
+      const again = [...this.palette.children, ...this.tools.children].find((c) => (c as HTMLElement).dataset["card"] === this.tipFor) as HTMLElement | undefined;
       if (again !== undefined) this.showTip(this.tipFor, again);
       else this.hideTip();
     }
@@ -752,12 +760,19 @@ export class CityScreen {
     this.tip.replaceChildren(el("strong", "city-tip-title", title), ...lines.map((line) => el("p", "city-tip-line", line)));
     this.tip.hidden = false;
     this.tipFor = kind;
-    // Above the card, centred on it, kept inside the window.
+    // Centred on the card, kept inside the window: above a card of the build
+    // bar, below one of the tools at the top.
     const r = card.getBoundingClientRect();
     const width = this.tip.offsetWidth || 280;
     const left = Math.max(8, Math.min(r.left + r.width / 2 - width / 2, (globalThis.innerWidth || 1024) - width - 8));
     this.tip.style.left = `${left}px`;
-    this.tip.style.bottom = `${(globalThis.innerHeight || 768) - r.top + 10}px`;
+    if (this.tools.contains(card)) {
+      this.tip.style.top = `${r.bottom + 10}px`;
+      this.tip.style.bottom = "";
+    } else {
+      this.tip.style.top = "";
+      this.tip.style.bottom = `${(globalThis.innerHeight || 768) - r.top + 10}px`;
+    }
   }
 
   private hideTip(): void {

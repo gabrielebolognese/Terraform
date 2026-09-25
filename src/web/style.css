@@ -1538,6 +1538,28 @@ button:hover {
   cursor: grabbing !important;
 }
 
+/* Connective tools, top right: always there, whatever the build bar shows. */
+.city-tools {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  max-width: calc(100vw - min(340px, calc(100vw - 32px)) - 60px);
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.city-tools .city-card {
+  width: 96px;
+}
+
 .city-card {
   position: relative;
   flex: 0 0 auto;
