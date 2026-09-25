@@ -162,6 +162,7 @@ export {
   tangentFrame,
   tileKey,
   chunkKey,
+  claimTest,
   frameOf,
   tileToWorld,
   vecToLatLon,
@@ -173,7 +174,7 @@ export type { Footprint, Vec3 } from "./micro/space.js";
 export { foundSettlement } from "./micro/registry.js";
 export type { FoundOutcome } from "./micro/registry.js";
 export { MARS_RADIUS_M } from "./planets/mars.js";
-export type { Settlement, SettlementKind } from "./types.js";
+export type { Settlement, SettlementJob, SettlementKind } from "./types.js";
 export { BUILDING_DEFS, buildYears, levelFactor, maxLevel } from "./micro/buildings.js";
 export type { BuildingDef } from "./micro/buildings.js";
 export {
@@ -198,7 +199,7 @@ export {
   sendRover,
   settlementStep,
 } from "./micro/settlement.js";
-export { LAYERS, layerOf, linksForRedundancy, linksToConnect, networkOf } from "./micro/network.js";
+export { LAYERS, layerOf, linksForRedundancy, linksToConnect, networkOf, withRails } from "./micro/network.js";
 export type { Layer, LinkLayer, Network, NetworkIssue } from "./micro/network.js";
 export { garage, levelFor, roverCount, rocksOf, roverYears, siteGround } from "./micro/rocks.js";
 export type { Rock } from "./micro/rocks.js";

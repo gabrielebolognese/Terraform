@@ -24,6 +24,7 @@ import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
 import type { CardKind } from "./city-cards.js";
 import { makePreviews } from "./city-cards.js";
+import { ChunkedCity } from "./city-chunks.js";
 import { formatMetres } from "./settlement-label.js";
 import { formatLatLon, settlementLabel } from "./settlement-label.js";
 
@@ -210,6 +211,9 @@ export class CityScreen {
   private readonly roverButton: HTMLButtonElement;
   private readonly launchButton: HTMLButtonElement;
   private readonly upgradeButton: HTMLButtonElement;
+  /** The city's still parts, kept as pictures chunk by chunk; made with the first frame that has a canvas. */
+  private chunks: ChunkedCity<HTMLCanvasElement> | null = null;
+  private chunkCtx: CanvasRenderingContext2D | null = null;
 
   private settlementId: string | null = null;
   private camera: CityCamera | null = null;
@@ -338,6 +342,7 @@ export class CityScreen {
   open(settlementId: string): void {
     this.settlementId = settlementId;
     this.camera = null;
+    this.chunks?.clear();
     this.placing = null;
     this.paving = null;
     this.claiming = false;
@@ -581,7 +586,28 @@ export class CityScreen {
     const halfW = size.w / 2 / cam.zoom;
     const halfH = size.h / 2 / cam.zoom;
     const viewport = { minX: cam.cx - halfW, maxX: cam.cx + halfW, minY: cam.cy - halfH, maxY: cam.cy + halfH };
-    fillShapes(ctx, cityScene(view, { ...this.sceneOptions(now), viewport, quality: qualityFor(cam, size.w, size.h, view.world.size) }));
+    // The still city as pictures, chunk by chunk; only what moves is filled every frame.
+    this.chunkCtx = ctx;
+    this.chunks ??= new ChunkedCity<HTMLCanvasElement>({
+      make: (w, h) => {
+        const c = document.createElement("canvas");
+        c.width = w;
+        c.height = h;
+        return c.getContext("2d") === null ? null : c;
+      },
+      paint: (picture, shapes, scale, ox, oy) => {
+        const pc = picture.getContext("2d");
+        if (pc === null) return;
+        pc.setTransform(scale, 0, 0, scale, ox, oy);
+        fillShapes(pc, shapes);
+      },
+      blit: (picture, x, y, w, h) => this.chunkCtx?.drawImage(picture, x, y, w, h),
+      fill: (shapes) => {
+        if (this.chunkCtx !== null) fillShapes(this.chunkCtx, shapes);
+      },
+      now: () => performance.now(),
+    });
+    this.chunks.draw(view, { ...this.sceneOptions(now), quality: qualityFor(cam, size.w, size.h, view.world.size) }, viewport, k);
   }
 
   // ---- panel -----------------------------------------------------------------

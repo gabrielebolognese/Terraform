@@ -14,7 +14,7 @@
 
 import type { Tuning } from "../tuning.js";
 import type { Grade, Settlement } from "../types.js";
-import { BUILDING_DEFS } from "./buildings.js";
+import { BUILDING_DEFS, keySet, tilesUnder } from "./buildings.js";
 import { frameOf, keyTile, tileKey } from "./space.js";
 import type { Ground, Rock } from "./terrain.js";
 import { groundOf, natureRock, placeSeed } from "./terrain.js";
@@ -165,12 +165,8 @@ export function rockAt(s: Settlement, tx: number, ty: number, t: Tuning): Rock {
   const n = ground.tiles;
   if (tx < 0 || ty < 0 || tx >= n || ty >= n) return "none";
   const key = tileKey(tx, ty);
-  if (s.cleared.includes(key) || s.corridors.includes(key) || s.cables.includes(key) || s.rails.includes(key)) return "none";
-  for (const b of s.buildings) {
-    const size = BUILDING_DEFS[b.type].footprint;
-    const depth = BUILDING_DEFS[b.type].depth;
-    if (tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + depth) return "none";
-  }
+  if (keySet(s.cleared).has(key) || keySet(s.corridors).has(key) || keySet(s.cables).has(key) || keySet(s.rails).has(key)) return "none";
+  if (tilesUnder(s.buildings).has(key)) return "none";
   const { base, x0, y0 } = frameOf(s, t);
   return natureRock(placeSeed(s.lat, s.lon), base, tx + x0, ty + y0, ground.steep[ty * n + tx] === true, t);
 }

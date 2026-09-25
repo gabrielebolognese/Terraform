@@ -83,6 +83,22 @@ export interface CitySceneOptions {
    * see-through, their footprints red on the ground.
    */
   readonly seeThrough?: boolean;
+  /**
+   * Chunked drawing (at the user's request: "in a huge metropolis there are
+   * still heavy performance issues - without lowering the quality"): only
+   * what is anchored in this square of tiles - the ground, world and
+   * buildings whose front corner lies in it - so a host can keep the still
+   * part of each square as a picture and redraw it only when it changes.
+   */
+  readonly chunk?: { readonly x0: number; readonly y0: number; readonly size: number };
+  /**
+   * Which part of the scene: "static" - what does not move (with `chunk`,
+   * that square's); "live" - what moves every frame (lights, rockets in
+   * flight, rovers; with `chunk`, that square's); "overlay" - what goes over
+   * everything (the boundary, badges, the selection, the ghost). Absent,
+   * the whole scene, as before.
+   */
+  readonly layer?: "static" | "live" | "overlay";
 }
 
 /** How opaque a building is drawn in building mode. */
@@ -1920,6 +1936,10 @@ function worldCorner(view: CityView, x: number, y: number): number {
  * (80,000 shapes, most of them its rocks), for a view that shows a corner of it.
  */
 interface WorldCell {
+  /** Its tile square: from (tx, ty), `s` tiles a side. */
+  readonly tx: number;
+  readonly ty: number;
+  readonly s: number;
   shapes: Shape[] | null;
   readonly make: () => Shape[];
   readonly minX: number;
@@ -2015,6 +2035,9 @@ function worldCells(view: CityView, quality: CityQuality): { back: WorldCell[]; 
     const top = Math.max(...zs) + 1;
     const bottom = Math.min(...zs, x + s >= hi || y + s >= hi ? floorZ : Infinity);
     const cell: WorldCell = {
+      tx: x,
+      ty: y,
+      s,
       shapes: null,
       make,
       minX: ((x - (y + s)) * TILE_W) / 2,
@@ -2047,7 +2070,17 @@ function caveMouth(view: CityView, cave: { x: number; y: number; dx: number; dy:
 }
 
 /** Lowest and highest ground in the view, in tiles. */
+const groundRanges = new WeakMap<CityView, { lo: number; hi: number }>();
+
 function groundRange(view: CityView): { lo: number; hi: number } {
+  const kept = groundRanges.get(view);
+  if (kept !== undefined) return kept;
+  const made = groundRangeOf(view);
+  groundRanges.set(view, made);
+  return made;
+}
+
+function groundRangeOf(view: CityView): { lo: number; hi: number } {
   let lo = Infinity;
   let hi = -Infinity;
   for (const z of view.groundZ) {
@@ -2109,10 +2142,34 @@ const asList = (made: Part | readonly Part[]): readonly Part[] => (Array.isArray
  * between its live parts; every frame after that builds only the live parts
  * and slots them back in, so painter's order is exactly the assembly's.
  */
-function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][]>, out: Shape[], variant = ""): void {
+/** The key a building's cached still parts are kept under. */
+function buildingKey(b: CityBuildingView, variant: string): string {
+  return `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}|${Math.round(b.activity * 20)}|${variant}`;
+}
+
+/**
+ * A building's static parts and its live ones, as `mode` asks: "all" in
+ * order (as ever), "static" the still parts alone, "live" the moving ones.
+ */
+function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][]>, out: Shape[], variant = "", mode: "all" | "static" | "live" = "all"): void {
+  if (mode !== "all") {
+    const key = buildingKey(b, variant);
+    let kept = cache.get(key);
+    if (kept === undefined) {
+      // Build the runs once, as "all" would, into a scratch list.
+      emitBuilding(kit, b, cache, [], variant, "all");
+      kept = cache.get(key)!;
+    }
+    if (mode === "static") {
+      for (const run of kept) for (const shape of run) out.push(shape);
+    } else {
+      for (const item of kit.items) if (item.live) emitParts(raise(asList(item.make()), b.baseZ), out);
+    }
+    return;
+  }
   // `cache` belongs to one level of detail's scene cache, so the level needs no place in the key.
   // `variant`: whatever else changes the static parts (a spaceport whose rocket is away).
-  const key = `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}|${Math.round(b.activity * 20)}|${variant}`;
+  const key = buildingKey(b, variant);
   const kept = cache.get(key);
   if (kept === undefined) {
     const runs: Shape[][] = [[]];
@@ -2134,6 +2191,168 @@ function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][
     for (const shape of kept[run] ?? []) out.push(shape);
   }
 }
+
+/** What else changes a building's still parts: a worksite's progress, a spaceport's rocket away or in flight. */
+function buildingVariant(b: CityBuildingView, quality: CityQuality, rocket: RocketState): string {
+  const site = b.construction ?? null;
+  if (site !== null) return `site${Math.round(site * 10)}`;
+  return quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") : "";
+}
+
+/** Whether tile (x, y) - an occupant's front corner - lies in the chunk. */
+function anchoredIn(x: number, y: number, chunk: { readonly x0: number; readonly y0: number; readonly size: number }): boolean {
+  return x >= chunk.x0 && y >= chunk.y0 && x < chunk.x0 + chunk.size && y < chunk.y0 + chunk.size;
+}
+
+const EMPTY_CELLS: readonly WorldCell[] = [];
+
+const worldIndexes = new WeakMap<object, Map<number, Map<string, { back: WorldCell[]; front: WorldCell[] }>>>();
+
+/** The world's cells by the chunk their front corner lies in - behind the grid and before it - kept with the world. */
+function worldChunks(world: { back: WorldCell[]; front: WorldCell[] }, size: number): Map<string, { back: WorldCell[]; front: WorldCell[] }> {
+  let bySize = worldIndexes.get(world);
+  if (bySize === undefined) {
+    bySize = new Map();
+    worldIndexes.set(world, bySize);
+  }
+  const kept = bySize.get(size);
+  if (kept !== undefined) return kept;
+  const made = new Map<string, { back: WorldCell[]; front: WorldCell[] }>();
+  for (const part of ["back", "front"] as const) {
+    for (const c of world[part]) {
+      const id = chunkId(Math.floor((c.tx + c.s - 1) / size), Math.floor((c.ty + c.s - 1) / size));
+      let entry = made.get(id);
+      if (entry === undefined) {
+        entry = { back: [], front: [] };
+        made.set(id, entry);
+      }
+      entry[part].push(c);
+    }
+  }
+  bySize.set(size, made);
+  return made;
+}
+
+/** A chunk's name, from its chunk coordinates. */
+export function chunkId(cx: number, cy: number): string {
+  return `${cx},${cy}`;
+}
+
+interface ChunkIndex {
+  /** Per chunk, its occupants in drawing order. */
+  readonly occupants: Map<string, number[]>;
+  /** Per chunk, its buildings (by index into the view's). */
+  readonly buildings: Map<string, number[]>;
+}
+
+const chunkIndexes = new WeakMap<object, Map<number, ChunkIndex>>();
+
+/** Which occupants and buildings anchor in each chunk of `size` tiles: kept with the scene cache. */
+function chunkIndex(cache: SceneCache, view: CityView, _quality: CityQuality, size: number): ChunkIndex {
+  let bySize = chunkIndexes.get(cache);
+  if (bySize === undefined) {
+    bySize = new Map();
+    chunkIndexes.set(cache, bySize);
+  }
+  const kept = bySize.get(size);
+  if (kept !== undefined) return kept;
+  const occupants = new Map<string, number[]>();
+  const buildings = new Map<string, number[]>();
+  for (const i of cache.order) {
+    const o = cache.occupants[i]!;
+    const id = chunkId(Math.floor((o.tx + o.w - 1) / size), Math.floor((o.ty + o.h - 1) / size));
+    const list = occupants.get(id);
+    if (list === undefined) occupants.set(id, [i]);
+    else list.push(i);
+    if (o.building >= 0) {
+      const bl = buildings.get(id);
+      if (bl === undefined) buildings.set(id, [o.building]);
+      else bl.push(o.building);
+    }
+  }
+  const made = { occupants, buildings };
+  bySize.set(size, made);
+  return made;
+}
+
+/**
+ * A chunk's still content, as a signature: when it changes, a picture kept
+ * of the chunk is stale. The scene's layout and ground (one key for all
+ * chunks), and each of the chunk's buildings as its cached still parts are
+ * keyed - so a dome filling up redraws its own chunk, not the city.
+ */
+export function cityChunkSignature(view: CityView, options: CitySceneOptions, size: number, cx: number, cy: number): string {
+  const quality: CityQuality = options.quality ?? "high";
+  const cache = occupantsInOrder(view, quality);
+  const index = chunkIndex(cache, view, quality, size);
+  const rockets = quality === "high" ? rocketsAt(view, options.sinceYears ?? 0) : null;
+  let layout = layoutIds.get(cache);
+  if (layout === undefined) {
+    layout = nextLayoutId++;
+    layoutIds.set(cache, layout);
+  }
+  const parts = [String(layout), quality, options.seeThrough === true ? "see" : ""];
+  for (const k of index.buildings.get(chunkId(cx, cy)) ?? []) {
+    const b = view.buildings[k]!;
+    const rocket: RocketState = b.type === "spaceport" && rockets !== null ? rockets.get(b.ty * view.tiles + b.tx) ?? null : null;
+    parts.push(buildingKey(b, buildingVariant(b, quality, rocket)), String(b.construction ?? ""));
+  }
+  return parts.join("#");
+}
+
+/** The chunks a view's world covers, `size` tiles a side: from the world's corner to its far one. */
+export function cityChunkRange(view: CityView, size: number): { cx0: number; cy0: number; cx1: number; cy1: number } {
+  const m = view.world.margin;
+  return { cx0: Math.floor(-m / size), cy0: Math.floor(-m / size), cx1: Math.floor((view.tiles + m - 1) / size), cy1: Math.floor((view.tiles + m - 1) / size) };
+}
+
+/**
+ * Where a chunk's content may lie on screen, in iso pixels: its squares'
+ * corners from below the lowest ground to above the tallest building - for
+ * culling before it is drawn (its picture's own box is measured from what
+ * it drew).
+ */
+export function cityChunkReach(view: CityView, size: number, cx: number, cy: number): { minX: number; maxX: number; minY: number; maxY: number } {
+  const x0 = cx * size - 6;
+  const y0 = cy * size - 6;
+  const x1 = (cx + 1) * size;
+  const y1 = (cy + 1) * size;
+  let r = reaches.get(view);
+  if (r === undefined) {
+    const range = groundRange(view);
+    let top = range.hi + 2;
+    for (const b of view.buildings) top = Math.max(top, b.baseZ + buildingTop(b.type) + 1);
+    r = { top, lo: range.lo };
+    reaches.set(view, r);
+  }
+  const { top } = r;
+  const range = { lo: r.lo };
+  return { minX: ((x0 - y1) * TILE_W) / 2, maxX: ((x1 - y0) * TILE_W) / 2, minY: ((x0 + y0) * TILE_H) / 2 - top * Z_PX, maxY: ((x1 + y1) * TILE_H) / 2 - (range.lo - 1.5) * Z_PX };
+}
+
+/** A short name for each scene layout: a new layout (anything built, laid or levelled) is a new cache. */
+const layoutIds = new WeakMap<object, number>();
+let nextLayoutId = 1;
+
+/**
+ * The chunks with anything that moves this frame: up close every chunk with a
+ * building (lights, rockets, steam); further out only where a rover is.
+ */
+export function cityLiveChunks(view: CityView, options: CitySceneOptions, size: number): Set<string> {
+  const quality: CityQuality = options.quality ?? "high";
+  const out = new Set<string>();
+  if (quality === "low") return out;
+  if (quality === "high") {
+    const index = chunkIndex(occupantsInOrder(view, quality), view, quality, size);
+    for (const id of index.buildings.keys()) out.add(id);
+  }
+  const rovers = roversAt(view, options.sinceYears ?? 0);
+  for (const tile of rovers.keys()) out.add(chunkId(Math.floor((tile % view.tiles) / size), Math.floor(Math.floor(tile / view.tiles) / size)));
+  return out;
+}
+
+/** Per view: the highest point anything reaches and the lowest ground, for `cityChunkReach`. */
+const reaches = new WeakMap<CityView, { top: number; lo: number }>();
 
 /** Forget the cached order and ground shapes: the next frame is built from scratch. */
 export function resetSceneCache(): void {
@@ -2179,7 +2398,27 @@ const LOW_PATCH = 4;
 /** A patch merges only if its corners lie within this many tiles of height of each other. */
 const PATCH_SPREAD = 0.15;
 
+/**
+ * The scene cache for a view, remembered per view: its key strings every
+ * corridor, cable and rock of the city together, and a view drawn in
+ * chunks asks for it once a chunk - on a metropolis that was 14 s a frame.
+ */
+const cachesByView = new WeakMap<CityView, Map<CityQuality, SceneCache>>();
+
 function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
+  const mine = cachesByView.get(view)?.get(quality);
+  if (mine !== undefined && sceneCaches.get(quality) === mine) return mine;
+  const made = occupantsInOrderFresh(view, quality);
+  let byQuality = cachesByView.get(view);
+  if (byQuality === undefined) {
+    byQuality = new Map();
+    cachesByView.set(view, byQuality);
+  }
+  byQuality.set(quality, made);
+  return made;
+}
+
+function occupantsInOrderFresh(view: CityView, quality: CityQuality): SceneCache {
   const n = view.tiles;
   const key = `${view.id}|${n}|${groundKey(view)}|${view.buildings.map((b) => `${b.tx},${b.ty},${b.size},${b.depth ?? b.size}`).join(";")}`;
   const cached = sceneCaches.get(quality);
@@ -2762,28 +3001,39 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
 
   const quality: CityQuality = options.quality ?? "high";
   const cache = occupantsInOrder(view, quality);
-  const { occupants, order, ground, buildings } = cache;
+  const { occupants, ground, buildings } = cache;
+  const layer = options.layer;
+  const chunk = options.chunk;
+  // With a chunk, only its occupants, from the index kept per chunk size.
+  const order = chunk === undefined ? cache.order : (chunkIndex(cache, view, quality, chunk.size).occupants.get(chunkId(chunk.x0 / chunk.size, chunk.y0 / chunk.size)) ?? []);
+  const drawStatic = layer === undefined || layer === "static";
+  const drawLive = layer === undefined || layer === "live";
+  const drawOverlay = layer === undefined || layer === "overlay";
   const badges: Shape[] = [];
   // Rovers and rockets move every frame, so they are never cached: a rover is
   // drawn with the tile it is on, a rocket with its spaceport.
   const since = options.sinceYears ?? 0;
-  const rovers = quality !== "low" ? roversAt(view, since) : null;
+  const rovers = quality !== "low" && drawLive ? roversAt(view, since) : null;
   const rockets = rocketsAt(view, since);
   const vp = options.viewport;
   cache.world ??= worldCells(view, quality);
   // Up close the ground is drawn through the half-tile samples; further away through tile corners.
   const gridZ = heightAt(view, quality === "high");
-  const drawWorld = (cells: readonly WorldCell[]): void => {
+  // With a chunk, only its world cells, from the index (every chunk scanning every cell was most of a first frame).
+  const worldIn = chunk === undefined ? null : worldChunks(cache.world, chunk.size).get(chunkId(chunk.x0 / chunk.size, chunk.y0 / chunk.size));
+  const drawWorld = (all: readonly WorldCell[], part: "back" | "front"): void => {
+    if (!drawStatic) return;
+    const cells = worldIn === null ? all : worldIn === undefined ? EMPTY_CELLS : worldIn[part];
     for (const c of cells) {
       if (vp !== undefined && (c.maxX < vp.minX || c.minX > vp.maxX || c.maxY < vp.minY || c.minY > vp.maxY)) continue;
       c.shapes ??= c.make();
       for (const shape of c.shapes) out.push(shape);
     }
   };
-  drawWorld(cache.world.back);
-  for (const i of order) {
+  drawWorld(cache.world.back, "back");
+  for (const i of layer === "overlay" ? [] : order) {
     const o = occupants[i]!;
-    if (vp !== undefined) {
+    if (vp !== undefined && chunk === undefined) {
       // The occupant's image: its columns across, and from the floor up to
       // the tallest thing it could carry (a building, a badge, a plume).
       const x0 = ((o.tx - o.ty - o.h) * TILE_W) / 2;
@@ -2794,6 +3044,11 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       if (x1 < vp.minX || x0 > vp.maxX || y1 < vp.minY || y0 > vp.maxY) continue;
     }
     if (o.building < 0) {
+      if (!drawStatic) {
+        // Live alone: the rovers on this ground.
+        if (rovers !== null) for (let y = o.ty; y < o.ty + o.h; y += 1) for (let x = o.tx; x < o.tx + o.w; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
+        continue;
+      }
       // Ground never animates: its shapes are built once per layout and kept
       // (Batch 22 - rebuilding ~1,000 columns cost most of a 9 ms frame).
       const kept = ground.get(i);
@@ -2838,7 +3093,9 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
     const bd = b.depth ?? b.size;
     for (let y = b.ty; y <= b.ty + bd; y += 1) for (let x = b.tx; x <= b.tx + b.size; x += 1) lowest = Math.min(lowest, corner(view, x, y));
     const drop = b.baseZ - lowest;
-    if (drop > 0.02) {
+    if (!drawStatic) {
+      // Live alone: nothing of the building's ground.
+    } else if (drop > 0.02) {
       const footing = box(b.tx, b.ty, lowest - 0.05, b.tx + b.size, b.ty + bd, b.baseZ);
       emitParts([part(footing.slice(1, 3), FOUNDATION)], out);
       out.push({ rings: [ringOf(footing[0]!.pts)], fill: { ...shade(FOUNDATION, 1.08), a: 1 } });
@@ -2848,20 +3105,27 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
     const rocket: RocketState = b.type === "spaceport" ? rockets.get(b.ty * n + b.tx) ?? null : null;
     const site = b.construction ?? null;
     const built = site !== null ? worksite(b, site, quality) : quality === "high" ? assemble(b, options.time, rocket) : quality === "medium" ? assembleMedium(b) : assembleLow(b);
-    emitBuilding(built, b, buildings, out, site !== null ? `site${Math.round(site * 10)}` : quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") : "");
+    emitBuilding(built, b, buildings, out, buildingVariant(b, quality, rocket), drawStatic && drawLive ? "all" : drawStatic ? "static" : "live");
     // A rover crossing the building's ground is drawn after it.
     if (rovers !== null) for (let y = b.ty; y < b.ty + bd; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
-    // Steam and other particles only up close.
-    if (quality === "high") out.push(...built.extras);
+    // Steam and other particles only up close: they move.
+    if (quality === "high" && drawLive) out.push(...built.extras);
     // Building mode: the building and its footing see-through, so what stands behind can be seen and built.
     if (options.seeThrough === true) {
       for (let k = shapesFrom; k < out.length; k += 1) out[k] = { ...out[k]!, fill: { ...out[k]!.fill, a: out[k]!.fill.a * SEE_THROUGH_ALPHA } };
     }
     // Not connected to what it needs reads differently from any other reason it is off; a worksite is neither.
-    if (!b.operable && site === null) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ + buildingTop(b.type) + 0.35));
+    if (!b.operable && site === null && layer === undefined) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ + buildingTop(b.type) + 0.35));
   }
 
-  drawWorld(cache.world.front);
+  drawWorld(cache.world.front, "front");
+  if (!drawOverlay) return out;
+  if (layer === "overlay") {
+    // The badges, drawn with the overlays when the scene is drawn in layers.
+    for (const b of view.buildings) {
+      if (!b.operable && (b.construction ?? null) === null) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + (b.depth ?? b.size) / 2, b.baseZ + buildingTop(b.type) + 0.35));
+    }
+  }
   // The building boundary: where the world stops being buildable.
   if (quality !== "low") out.push(...boundary(view));
 

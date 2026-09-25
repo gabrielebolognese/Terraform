@@ -17,7 +17,7 @@ import type { HabitatChannels } from "../habitat.js";
 import type { Tuning } from "../tuning.js";
 import type { BuildingType, MicroResource, PlacedBuilding, Settlement, SettlementJob, SettlementKind, SimState } from "../types.js";
 import { MICRO_RESOURCES, isCityKind } from "../types.js";
-import { BUILDING_DEFS, buildYears, levelFactor, maxLevel } from "./buildings.js";
+import { BUILDING_DEFS, buildYears, keySet, levelFactor, maxLevel, tilesUnder } from "./buildings.js";
 import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
 import { isSteep, slopeAt } from "./terrain.js";
 import type { Rock } from "./rocks.js";
@@ -146,16 +146,6 @@ export interface PlaceOutcome {
   readonly reason: string | null;
 }
 
-function occupied(s: Settlement): Set<string> {
-  const taken = new Set<string>();
-  for (const b of s.buildings) {
-    const size = BUILDING_DEFS[b.type].footprint;
-    const depth = BUILDING_DEFS[b.type].depth;
-    for (const [x, y] of footprintTiles({ tx: b.tx, ty: b.ty, w: size, h: depth })) taken.add(`${x},${y}`);
-  }
-  return taken;
-}
-
 function withSettlement(state: SimState, id: string, next: Settlement): SimState {
   return { ...state, settlements: state.settlements.map((s) => (s.id === id ? next : s)) };
 }
@@ -198,15 +188,15 @@ export function placeBuilding(
     const worst = Math.max(...tooSteep.map(([x, y]) => slopeAt(ground, x, y)));
     return refuse(`${def.name} would stand on ground too steep to build on (slope ${worst.toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE})`);
   }
-  const taken = occupied(s);
-  if (footprintTiles(f).some(([x, y]) => taken.has(`${x},${y}`))) return refuse(`${def.name} would overlap another building`);
+  const taken = tilesUnder(s.buildings);
+  if (footprintTiles(f).some(([x, y]) => taken.has(tileKey(x, y)))) return refuse(`${def.name} would overlap another building`);
   // Hard rock: boulders stand in the way until a rover breaks them.
   if (footprintTiles(f).some(([x, y]) => rockAt(s, x, y, t) === "crag")) return refuse(`${def.name} would stand on hard rock - send a rover to break it first`);
-  const corridors = new Set(s.corridors);
+  const corridors = keySet(s.corridors);
   if (footprintTiles(f).some(([x, y]) => corridors.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a corridor - remove it first`);
-  const cables = new Set(s.cables);
+  const cables = keySet(s.cables);
   if (footprintTiles(f).some(([x, y]) => cables.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a cable - remove it first`);
-  const rails = new Set(s.rails);
+  const rails = keySet(s.rails);
   if (footprintTiles(f).some(([x, y]) => rails.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a railway - remove it first`);
   const cost = def.cost(t);
   if (s.stores.materials < cost) {
@@ -245,10 +235,10 @@ export function placeLink(state: SimState, settlementId: string, layer: LinkLaye
   if (!claimTest(s, t)(tx, ty)) return refuse(`a ${words.one} must be on the grid - the land the city holds`);
   const ground = siteGround(s, t);
   if (isSteep(ground, tx, ty)) return refuse(`the ground is too steep for a ${words.one} (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE}) - send a rover to break the crag`);
-  if (occupied(s).has(`${tx},${ty}`)) return refuse("a building stands there");
+  if (tilesUnder(s.buildings).has(tileKey(tx, ty))) return refuse("a building stands there");
   if (rockAt(s, tx, ty, t) === "crag") return refuse(`hard rock is in the way of a ${words.one} - send a rover to break it first`);
   const key = tileKey(tx, ty);
-  if (s[layer].includes(key)) return refuse(`there is a ${words.one} there already`);
+  if (keySet(s[layer]).has(key)) return refuse(`there is a ${words.one} there already`);
   const cost = words.cost(t);
   if (s.stores.materials < cost) return refuse(`a ${words.one} needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
   const next: Settlement = { ...s, stores: { ...s.stores, materials: s.stores.materials - cost }, [layer]: [...s[layer], key].sort((a, b) => a - b) };
@@ -260,7 +250,7 @@ export function removeLink(state: SimState, settlementId: string, layer: LinkLay
   const s = state.settlements.find((x) => x.id === settlementId);
   if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
   const key = tileKey(tx, ty);
-  if (!s[layer].includes(key)) return { state, ok: false, reason: `there is no ${LAYER_WORDS[layer].one} there` };
+  if (!keySet(s[layer]).has(key)) return { state, ok: false, reason: `there is no ${LAYER_WORDS[layer].one} there` };
   return { state: withSettlement(state, settlementId, { ...s, [layer]: s[layer].filter((k) => k !== key) }), ok: true, reason: null };
 }
 
@@ -356,7 +346,7 @@ export function levelGround(state: SimState, settlementId: string, tx: number, t
   if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
   if (garage(s) === null) return refuse("there is no headquarters to send a rover from");
   if (!claimTest(s, t)(tx, ty)) return refuse("that is off the grid - the land the city holds");
-  if (occupied(s).has(`${tx},${ty}`)) return refuse("a building stands there");
+  if (tilesUnder(s.buildings).has(tileKey(tx, ty))) return refuse("a building stands there");
   const key = tileKey(tx, ty);
   if (s.jobs.some((j) => j.kind === "rover" && j.tile === key)) return refuse("a rover is already on its way there");
   const ground = siteGround(s, t);

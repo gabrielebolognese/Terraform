@@ -51,6 +51,44 @@ export interface BuildingDef {
   readonly efficiency: (env: HabitatChannels) => number;
 }
 
+/** Tile-key lists as sets, kept per list: the rules ask of the same lists many times (a placement preview, a replay). */
+const keySets = new WeakMap<readonly number[], ReadonlySet<number>>();
+
+export function keySet(list: readonly number[]): ReadonlySet<number> {
+  let set = keySets.get(list);
+  if (set === undefined) {
+    set = new Set(list);
+    keySets.set(list, set);
+  }
+  return set;
+}
+
+/** Every tile under a building, by tile key, kept per building list. */
+const underSets = new WeakMap<readonly PlacedBuildingLike[], ReadonlySet<number>>();
+
+interface PlacedBuildingLike {
+  readonly type: BuildingType;
+  readonly tx: number;
+  readonly ty: number;
+}
+
+export function tilesUnder(buildings: readonly PlacedBuildingLike[]): ReadonlySet<number> {
+  let set = underSets.get(buildings);
+  if (set === undefined) {
+    const made = new Set<number>();
+    for (const b of buildings) {
+      const def = BUILDING_DEFS[b.type];
+      for (let y = b.ty; y < b.ty + def.depth; y += 1) for (let x = b.tx; x < b.tx + def.footprint; x += 1) made.add(y * TILE_KEY_STRIDE + x);
+    }
+    set = made;
+    underSets.set(buildings, set);
+  }
+  return set;
+}
+
+/** Tile keys are `ty * 1024 + tx` (space.ts's TILE_STRIDE; not imported, to keep this module a leaf). */
+const TILE_KEY_STRIDE = 1024;
+
 /** What level `level` multiplies a building's output by: 1.1 per level above the first, compounding. */
 export function levelFactor(level: number, t: Tuning): number {
   return (1 + t.LEVEL_BONUS) ** Math.max(0, level - 1);
