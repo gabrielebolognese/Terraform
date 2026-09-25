@@ -21,7 +21,7 @@ import { BUILDING_DEFS } from "./buildings.js";
 import { footprintFits, footprintTiles, gridTiles, tileKey } from "./space.js";
 import { isSteep, slopeAt } from "./terrain.js";
 import type { Rock } from "./rocks.js";
-import { garage, rocksOf, roverYears, siteGround } from "./rocks.js";
+import { garage, rockAt, rocksOf, roverYears, siteGround } from "./rocks.js";
 import type { FloodReading } from "./flood.js";
 import { applyFlood, floodReading, submerged } from "./flood.js";
 import type { Layer, NetworkIssue } from "./network.js";
@@ -148,6 +148,8 @@ export function placeBuilding(
   }
   const taken = occupied(s);
   if (footprintTiles(f).some(([x, y]) => taken.has(`${x},${y}`))) return refuse(`${def.name} would overlap another building`);
+  // Hard rock: boulders stand in the way until a rover breaks them.
+  if (footprintTiles(f).some(([x, y]) => rockAt(s, x, y, t) === "crag")) return refuse(`${def.name} would stand on hard rock - send a rover to break it first`);
   const corridors = new Set(s.corridors);
   if (footprintTiles(f).some(([x, y]) => corridors.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a corridor - remove it first`);
   const cables = new Set(s.cables);
@@ -185,6 +187,7 @@ export function placeLink(state: SimState, settlementId: string, layer: Layer, t
   const ground = siteGround(s, t);
   if (isSteep(ground, tx, ty)) return refuse(`the ground is too steep for a ${words.one} (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE}) - send a rover to break the crag`);
   if (occupied(s).has(`${tx},${ty}`)) return refuse("a building stands there");
+  if (rockAt(s, tx, ty, t) === "crag") return refuse(`hard rock is in the way of a ${words.one} - send a rover to break it first`);
   const key = tileKey(tx, ty);
   if (s[layer].includes(key)) return refuse(`there is a ${words.one} there already`);
   const cost = words.cost(t);

@@ -1300,6 +1300,41 @@ function assembleLow(b: CityBuildingView): Kit {
   return k;
 }
 
+const HARD_ROCK = rgb(0.4, 0.29, 0.24);
+
+/**
+ * Whether hard rock on a tile is drawn as boulders. On open ground always, at
+ * every level: it is what stands in the way of building. On a cliff - every
+ * steep tile is hard rock too, and already drawn as bare rock - on one tile in
+ * four, and only up close: a boulder on every steep tile carpeted the
+ * mountains and took the metropolis's low detail from 35,000 shapes to 61,000
+ * (measured).
+ */
+function showBoulders(tx: number, ty: number, steep: boolean, quality: CityQuality): boolean {
+  if (!steep) return true;
+  return quality !== "low" && hash2(tx * 3 + 101, ty * 7 - 59) < 0.25;
+}
+
+/**
+ * Hard rock on a tile: a cluster of two or three boulders, each up to a third
+ * of a tile across and over half a tile tall - big enough to read from afar
+ * as what a rover must break before anything is built there. Placed by the
+ * tile, so they never move. Further away, one boulder: hard rock is still
+ * drawn furthest out (left out, the far view lost it - measured).
+ */
+function boulders(tx: number, ty: number, z: number, quality: CityQuality): Part[] {
+  const out: Part[] = [];
+  const count = quality === "high" ? 2 + Math.floor(hash2(tx + 5, ty + 17) * 2) : 1;
+  for (let i = 0; i < count; i += 1) {
+    const rx = tx + 0.3 + 0.4 * hash2(tx * 13 + i, ty * 29 - i);
+    const ry = ty + 0.3 + 0.4 * hash2(tx * 23 - i, ty * 11 + i);
+    const r = (quality === "high" ? 0.2 : 0.3) + 0.14 * hash2(tx + i * 3, ty - i * 5);
+    const h = 0.3 + 0.3 * hash2(tx - i * 11, ty + i * 7);
+    out.push(part(frustum(rx, ry, r, r * 0.5, z, z + h, quality === "high" ? 7 : 5), i === 0 ? HARD_ROCK : ROCK));
+  }
+  return out;
+}
+
 /**
  * Loose rocks on a tile the simulation says has them: two or three boulders,
  * big enough to see and click (a rover breaks exactly these). Where they lie
@@ -1459,9 +1494,15 @@ function worldCorner(view: CityView, x: number, y: number): number {
   return w.corners[i] ?? 0;
 }
 
-/** A piece of the world outside the grid: its shapes, and the box they fill on screen, for culling. */
+/**
+ * A piece of the world outside the grid: the box it fills on screen, for
+ * culling, and its shapes - built the first time the cell is on screen, then
+ * kept. Built all at once, a city's whole world at full detail took 1.6 s
+ * (80,000 shapes, most of them its rocks), for a view that shows a corner of it.
+ */
 interface WorldCell {
-  readonly shapes: Shape[];
+  shapes: Shape[] | null;
+  readonly make: () => Shape[];
   readonly minX: number;
   readonly maxX: number;
   readonly minY: number;
@@ -1475,6 +1516,13 @@ interface WorldCell {
  * against a gate of 45%); 2-tile cells, 41% (measured).
  */
 const WORLD_CELL: Readonly<Record<CityQuality, number>> = { high: 1, medium: 2, low: 2 };
+
+/**
+ * A tile rise, in tiles, past which the world's ground counts as steep for
+ * drawing - TERRAIN_MAX_SLOPE's 0.3 (the picture sees no tuning; the view
+ * marks the grid's steep tiles, and this matches it for the world's).
+ */
+const STEEP_RISE = 0.3;
 
 /**
  * The world round the grid, in cells, far to near, split in two: what lies
@@ -1502,24 +1550,50 @@ function worldCells(view: CityView, quality: CityQuality): { back: WorldCell[]; 
     const key = `${Math.floor(c.x / s) * s},${Math.floor(c.y / s) * s}`;
     caves.set(key, [...(caves.get(key) ?? []), c]);
   }
+  // The world's rocks, with their cells: hard rock at every level, loose rocks up close.
+  const rocks = new Map<string, (typeof w.rocks)[number][]>();
+  for (const r of w.rocks) {
+    if (r.kind === "loose" && quality !== "high") continue;
+    const key = `${Math.floor(r.x / s) * s},${Math.floor(r.y / s) * s}`;
+    const list = rocks.get(key);
+    if (list === undefined) rocks.set(key, [r]);
+    else list.push(r);
+  }
   for (const { x, y } of cells) {
-    const shapes: Shape[] = [];
     const z00 = worldCorner(view, x, y);
     const z10 = worldCorner(view, x + s, y);
     const z01 = worldCorner(view, x, y + s);
     const z11 = worldCorner(view, x + s, y + s);
-    // The world fades into haze over its last sixteen tiles, triangle by triangle.
-    const fade = (px: number, py: number): number => 1 - smoothstep(0, 16, Math.min(px - lo, py - lo, hi - px, hi - py));
-    groundQuad(x, y, s, z00, z10, z01, z11, view.greenery, fade, shapes);
-    // The world's near edges stand on a skirt of rock, down to a common floor.
-    if (x + s >= hi) emitParts([part([{ pts: [[x + s, y, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x + s, y, z10]], n: [1, 0, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
-    if (y + s >= hi) emitParts([part([{ pts: [[x, y + s, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x, y + s, z01]], n: [0, 1, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
-    if (quality !== "low") for (const cave of caves.get(`${x},${y}`) ?? []) caveMouth(view, cave, shapes);
+    const make = (): Shape[] => {
+      const shapes: Shape[] = [];
+      // The world fades into haze over its last sixteen tiles, triangle by triangle.
+      const fade = (px: number, py: number): number => 1 - smoothstep(0, 16, Math.min(px - lo, py - lo, hi - px, hi - py));
+      groundQuad(x, y, s, z00, z10, z01, z11, view.greenery, fade, shapes);
+      // The world's near edges stand on a skirt of rock, down to a common floor.
+      if (x + s >= hi) emitParts([part([{ pts: [[x + s, y, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x + s, y, z10]], n: [1, 0, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
+      if (y + s >= hi) emitParts([part([{ pts: [[x, y + s, floorZ], [x + s, y + s, floorZ], [x + s, y + s, z11], [x, y + s, z01]], n: [0, 1, 0] }], mix(CLIFF, HAZE, 0.5))], shapes);
+      if (quality !== "low") for (const cave of caves.get(`${x},${y}`) ?? []) caveMouth(view, cave, shapes);
+      // Its rocks, far to near, like the tiles they stand on.
+      const here = (rocks.get(`${x},${y}`) ?? []).slice().sort((a, b) => a.x + a.y - (b.x + b.y));
+      for (const r of here) {
+        const c = [worldCorner(view, r.x, r.y), worldCorner(view, r.x + 1, r.y), worldCorner(view, r.x, r.y + 1), worldCorner(view, r.x + 1, r.y + 1)];
+        const rz = (c[0]! + c[1]! + c[2]! + c[3]!) / 4;
+        if (r.kind === "loose") {
+          emitParts(scatter(r.x, r.y, rz), shapes);
+          continue;
+        }
+        // Steep as the rules judge it: the steepest rise along the tile's edges, in tiles per tile.
+        const rise = Math.max(Math.abs(c[0]! - c[1]!), Math.abs(c[2]! - c[3]!), Math.abs(c[0]! - c[2]!), Math.abs(c[1]! - c[3]!));
+        if (showBoulders(r.x, r.y, rise > STEEP_RISE, quality)) emitParts(boulders(r.x, r.y, rz, quality), shapes);
+      }
+      return shapes;
+    };
     const zs = [z00, z10, z01, z11];
     const top = Math.max(...zs) + 1;
     const bottom = Math.min(...zs, x + s >= hi || y + s >= hi ? floorZ : Infinity);
     const cell: WorldCell = {
-      shapes,
+      shapes: null,
+      make,
       minX: ((x - (y + s)) * TILE_W) / 2,
       maxX: ((x + s - y) * TILE_W) / 2,
       minY: ((x + y) * TILE_H) / 2 - top * Z_PX,
@@ -1707,7 +1781,7 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
             const i = y * n + x;
             const rock = view.rocks[i] ?? "none";
             // Cables block a patch only where they are drawn: not furthest out.
-            if (covered.has(i) || view.corridors[i] === true || (view.cables[i] === true && quality !== "low") || (rock === "crag" && quality !== "low") || (rock === "loose" && quality === "high")) open = false;
+            if (covered.has(i) || view.corridors[i] === true || (view.cables[i] === true && quality !== "low") || rock === "crag" || (rock === "loose" && quality === "high")) open = false;
           }
         }
         // Only a patch that is nearly level: drawn through its four corners, a
@@ -2093,6 +2167,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   const drawWorld = (cells: readonly WorldCell[]): void => {
     for (const c of cells) {
       if (vp !== undefined && (c.maxX < vp.minX || c.minX > vp.maxX || c.maxY < vp.minY || c.minY > vp.maxY)) continue;
+      c.shapes ??= c.make();
       for (const shape of c.shapes) out.push(shape);
     }
   };
@@ -2130,10 +2205,8 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       // Smooth ground: the tile through its four corners - no steps.
       groundQuad(o.tx, o.ty, 1, corner(view, o.tx, o.ty), corner(view, o.tx + 1, o.ty), corner(view, o.tx, o.ty + 1), corner(view, o.tx + 1, o.ty + 1), view.greenery, null, out);
       // The rocks the simulation knows (a rover can break exactly what is drawn).
-      if (rock === "crag" && quality !== "low") {
-        const h = 0.18 + 0.3 * hash2(o.tx, o.ty);
-        const r = 0.22 + 0.1 * hash2(o.ty + 91, o.tx);
-        emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, r, r * 0.45, z, z + h, quality === "high" ? 7 : 5), ROCK)], out);
+      if (rock === "crag") {
+        if (showBoulders(o.tx, o.ty, view.steep[o.ty * n + o.tx] === true, quality)) emitParts(boulders(o.tx, o.ty, z, quality), out);
       } else if (rock === "loose" && quality === "high") {
         emitParts(scatter(o.tx, o.ty, z), out);
       } else if (rock === "loose" && quality === "medium") {

@@ -599,6 +599,7 @@ HEADQUARTERS_ENABLED = 0     # found each settlement with a 5x5 headquarters, an
 HQ_OXYGEN = 5                HQ_WATER = 3                ROVERS_PER_HQ = 3
 ROVER_YEARS_PER_TILE = 0.015 ROVER_WORK_YEARS_LOOSE = 0.09  ROVER_WORK_YEARS_CRAG = 0.3
 ROCK_LOOSE_MATERIALS = 1     ROCK_CRAG_MATERIALS = 5     ROCK_LOOSE_SHARE = 0.08
+ROCK_BOULDER_SHARE = 0       # open ground under hard rock, blocking building until broken; the browser uses 0.03
 ROCKET_TRIP_YEARS = 1.8      ROCKET_MATERIALS = 20
 
 # The settlement simulation (micro-world.md sections 5-7; Batch 18). Per sim-year.

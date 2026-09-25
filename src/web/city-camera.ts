@@ -40,8 +40,10 @@ export function clampZoom(zoom: number): number {
  * 162,600 at high but 25,900 at medium; zoom 0.3 shows all 9,216, 226,400 at
  * high, 38,600 at medium, 14,300 at low.
  */
-export const QUALITY_HIGH_TILES = 1500;
-export const QUALITY_MEDIUM_TILES = 6000;
+// Doubled at the user's request ("the lower quality feature lowers the
+// quality too soon, keep the full quality double the time"), medium with it.
+export const QUALITY_HIGH_TILES = 3000;
+export const QUALITY_MEDIUM_TILES = 12000;
 
 export function qualityFor(cam: CityCamera, viewW: number, viewH: number, tiles: number): CityQuality {
   const onScreen = Math.min(tiles * tiles, (viewW / cam.zoom) * (viewH / cam.zoom) / ((TILE_W * TILE_H) / 2));

@@ -783,6 +783,12 @@ export const BASE_TUNING = Object.freeze({
   ROCK_CRAG_MATERIALS: 5,
   /** Share of open, buildable tiles with loose rocks on. */
   ROCK_LOOSE_SHARE: 0.08,
+  /**
+   * Share of open ground under hard rock - boulders that block building until
+   * a rover breaks them. 0 by default: they change where anything can be
+   * built, and every layout the tests were written for. The browser uses 0.03.
+   */
+  ROCK_BOULDER_SHARE: 0,
   /** A supply rocket's round trip: one real minute at 1x (60 x 0.03). */
   ROCKET_TRIP_YEARS: 1.8,
   /** Materials a rocket brings back, or as many as the stores have room for. */
@@ -979,6 +985,7 @@ export function validateTuning(t: Tuning): void {
   if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");
   if (!(t.ROCKET_TRIP_YEARS > 0)) fail("ROCKET_TRIP_YEARS must be > 0");
   if (!(t.ROCK_LOOSE_SHARE >= 0 && t.ROCK_LOOSE_SHARE <= 1)) fail("ROCK_LOOSE_SHARE must be in [0, 1]");
+  if (!(t.ROCK_BOULDER_SHARE >= 0 && t.ROCK_BOULDER_SHARE <= 1)) fail("ROCK_BOULDER_SHARE must be in [0, 1]");
   if (!(t.P_LIFE_OK > t.P_LIFE_MIN)) fail("P_LIFE_OK must exceed P_LIFE_MIN");
   if (!(t.T_CEIL_K > t.T_FLOOR_K)) fail("T_CEIL_K must exceed T_FLOOR_K");
   if (!(t.ALBEDO_MAX > t.ALBEDO_MIN)) fail("ALBEDO_MAX must exceed ALBEDO_MIN");

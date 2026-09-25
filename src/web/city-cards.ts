@@ -37,7 +37,7 @@ export function previewView(id: string, tiles: number, buildings: readonly CityB
     tiles,
     groundZ: new Array<number>(tiles * tiles).fill(0),
     corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0),
-    world: { margin: 0, size: tiles, corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0), caves: [] },
+    world: { margin: 0, size: tiles, corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0), caves: [], rocks: [] },
     greenery: 0,
     heightM: new Array<number>(tiles * tiles).fill(0),
     steep: new Array<boolean>(tiles * tiles).fill(false),

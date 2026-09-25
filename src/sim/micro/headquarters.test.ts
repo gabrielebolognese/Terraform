@@ -26,7 +26,7 @@ import type { SimState } from "../types.js";
 import { NEUTRAL_ENV } from "../types.js";
 import { foundSettlement } from "./registry.js";
 import { rocksOf, siteGround } from "./rocks.js";
-import { capacities, launchRocket, placeBuilding, removeBuilding, sendRover, settlementStep } from "./settlement.js";
+import { capacities, launchRocket, placeBuilding, placeLink, removeBuilding, sendRover, settlementStep } from "./settlement.js";
 import { gridTiles } from "./space.js";
 
 const HQ = makeTuning({ SETTLEMENTS_ENABLED: 1, NETWORK_ENABLED: 1, HEADQUARTERS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
@@ -152,6 +152,42 @@ describe("rovers", () => {
     expect(sendRover(s, id(s), 16, 16, HQ).reason).toMatch(/no rock there/);
     const noHq = foundSettlement(marsStart(), "city", 0.31, -1.2, makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12 })).state;
     expect(sendRover(noHq, id(noHq), tx, ty, HQ).reason).toMatch(/no headquarters/);
+  });
+});
+
+describe("hard rock (the user: \"the hard rocks disappeared entirely, please bring them back\")", () => {
+  const BOULDERS = makeTuning({ SETTLEMENTS_ENABLED: 1, NETWORK_ENABLED: 1, HEADQUARTERS_ENABLED: 1, TERRAIN_RELIEF_M: 12, ROCK_BOULDER_SHARE: 0.03 });
+  // Within the stores' capacity, so a rover's haul is not clamped away.
+  const site = (): SimState => withMaterials(foundSettlement(marsStart(undefined, BOULDERS), "city", 0.31, -1.2, BOULDERS).state, 100);
+  /** A boulder on open, buildable ground - hard rock that is not a cliff. */
+  const boulder = (s: SimState): [number, number] => {
+    const ground = siteGround(s.settlements[0]!, BOULDERS);
+    const k = rocksOf(s.settlements[0]!, BOULDERS).findIndex((r, i) => r === "crag" && !ground.steep[i]);
+    expect(k, "a boulder on open ground at this site").toBeGreaterThanOrEqual(0);
+    return [k % 32, Math.floor(k / 32)];
+  };
+
+  it("lies on open ground, not only on cliffs, at the browser's share", () => {
+    const s = site();
+    const ground = siteGround(s.settlements[0]!, BOULDERS);
+    const onOpen = rocksOf(s.settlements[0]!, BOULDERS).filter((r, i) => r === "crag" && !ground.steep[i]).length;
+    // About 3% of the open ground; none at all with the share at its default of 0.
+    expect(onOpen).toBeGreaterThan(10);
+    const none = rocksOf(city().settlements[0]!, HQ).filter((r, i) => r === "crag" && !siteGround(city().settlements[0]!, HQ).steep[i]).length;
+    expect(none).toBe(0);
+  });
+
+  it("stands in the way of building and of corridors, until a rover breaks it", () => {
+    const s = site();
+    const [tx, ty] = boulder(s);
+    expect(placeBuilding(s, id(s), "storage_depot", tx, ty, BOULDERS).reason).toMatch(/hard rock/);
+    expect(placeLink(s, id(s), "corridors", tx, ty, BOULDERS).reason).toMatch(/hard rock/);
+    const sent = sendRover(s, id(s), tx, ty, BOULDERS);
+    expect(sent.ok, sent.reason ?? "").toBe(true);
+    const done = advance(sent.state, Math.ceil(sent.state.settlements[0]!.jobs[0]!.total / BOULDERS.SUBSTEP_YEARS), { tuning: BOULDERS, env: NEUTRAL_ENV, forcing: null });
+    // Five materials home, and the ground free.
+    expect(materials(done) - materials(sent.state)).toBeCloseTo(BOULDERS.ROCK_CRAG_MATERIALS, 9);
+    expect(placeBuilding(done, id(done), "storage_depot", tx, ty, BOULDERS).ok).toBe(true);
   });
 });
 

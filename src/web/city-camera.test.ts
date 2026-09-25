@@ -15,6 +15,7 @@ import {
   footprintOrigin,
   isoToScreen,
   pan,
+  QUALITY_HIGH_TILES,
   qualityFor,
   screenToIso,
   tileAt,
@@ -102,10 +103,20 @@ describe("the city camera", () => {
   });
 
   describe("level of detail (a zoomed-out metropolis lagged)", () => {
+    it("keeps full detail twice as long as it first did (the user: it dropped too soon)", () => {
+      // 3,000 tiles on screen at full detail, where the first version stopped at 1,500.
+      expect(QUALITY_HIGH_TILES).toBe(3000);
+      const onScreen = (zoom: number): number => (1600 / zoom) * (900 / zoom) / ((64 * 32) / 2);
+      // Zoom 0.75 at 1600 x 900 shows ~2,500 tiles: once medium, full detail now.
+      expect(onScreen(0.75)).toBeGreaterThan(1500);
+      expect(qualityFor({ cx: 0, cy: 0, zoom: 0.75 }, 1600, 900, 192)).toBe("high");
+    });
+
     const at = (zoom: number): CityCamera => ({ cx: 0, cy: 0, zoom });
 
     it("drops as the player zooms out of a metropolis, and comes back as they zoom in", () => {
-      const levels = [3, 1.5, 1, 0.75, 0.5, 0.4, CITY_ZOOM_MIN].map((z) => qualityFor(at(z), 1600, 900, 96));
+      // A metropolis's world: its 96-tile grid and 48 tiles of open world each side.
+      const levels = [3, 1.5, 1, 0.75, 0.5, 0.4, CITY_ZOOM_MIN].map((z) => qualityFor(at(z), 1600, 900, 192));
       expect(levels[0]).toBe("high");
       expect(levels.at(-1)).toBe("low");
       expect(levels).toContain("medium");

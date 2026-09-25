@@ -91,6 +91,7 @@ const tuning = makeTuning({
   TERRAIN_RELIEF_M: 12,
   NETWORK_ENABLED: 1,
   HEADQUARTERS_ENABLED: 1,
+  ROCK_BOULDER_SHARE: 0.03,
 });
 validateTuning(tuning);
 

@@ -76,6 +76,8 @@ export interface CityView {
     readonly size: number;
     readonly corners: readonly number[];
     readonly caves: readonly { readonly x: number; readonly y: number; readonly dx: number; readonly dy: number }[];
+    /** Rocks on the world's tiles outside the grid, in grid tiles. */
+    readonly rocks: readonly { readonly x: number; readonly y: number; readonly kind: "loose" | "crag" }[];
   };
   /** 0..1: how green the planet's land is - the ground greens with it. */
   readonly greenery: number;
@@ -147,7 +149,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     tiles: n,
     groundZ,
     corners: ground.cornersM.map((h) => h / t.TILE_METRES),
-    world: { margin: world.margin, size: world.size, corners: world.cornersM.map((h) => h / t.TILE_METRES), caves: world.caves },
+    world: { margin: world.margin, size: world.size, corners: world.cornersM.map((h) => h / t.TILE_METRES), caves: world.caves, rocks: world.rocks },
     greenery: env.greenery,
     heightM: ground.heightM,
     steep: ground.steep,

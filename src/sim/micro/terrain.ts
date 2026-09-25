@@ -23,9 +23,9 @@
  *   - canyons winding along a noise contour, TERRAIN_CANYON_SCALE x relief deep (42 m);
  *   - rock pits: craters with raised rims, up to TERRAIN_PIT_SCALE x relief deep (30 m);
  *   - caves: mouths in the steepest faces (a feature list, not height).
- * The big features stand back from the buildable grid - they rise over its
- * last tiles and beyond - and none reaches the landing zone at the centre,
- * which stays flat at the base elevation.
+ * The big features are rare and the same everywhere - the ground beyond the
+ * building boundary is ground the city will claim - and none reaches the
+ * landing zone at the centre, which stays flat at the base elevation.
  */
 
 import type { Tuning } from "../tuning.js";
@@ -133,17 +133,19 @@ export function terrainHeight(seed: number, tiles: number, x: number, y: number,
   const out = outsideLandingZone(x, y, tiles, t);
   const ease = fade(Math.min(1, out / EASE_TILES));
   if (ease === 0) return 0;
-  // How far toward the wild the point is, by its distance from the centre -
-  // round, not square: a square measure (the largest of four distances)
-  // creased the world along straight lines. The big features come in over
-  // the grid's outer tiles and are at full strength beyond its corners.
-  const r = Math.hypot(x - tiles / 2, y - tiles / 2);
-  const wild = smoothstep(tiles * 0.4, tiles * 0.75 + 8, r);
-  // Inside the grid a tenth of their strength: hills and gullies, not walls.
-  const reach = 0.1 + 0.9 * wild;
+  // One landscape everywhere - inside the building boundary and beyond it
+  // alike (the user: "after the boundaries there have not to be mountains
+  // and undoable terrain, but still other normal terrain with just some
+  // mountains and canyons", because the city will claim that ground). A first
+  // version raised the features toward the boundary and walled the city in.
+  // Only round the founding site do they fade: a settlement is founded on
+  // ground it can build on (without this, a range landed on one city in
+  // four - 57% of one grid too steep, 19% on average over 100 sites).
+  const settled = smoothstep(10, 26, Math.hypot(x - tiles / 2, y - tiles / 2));
 
   // Mountains: ridged noise, where a broad mask says there is a range.
-  const range = smoothstep(0.52, 0.72, gradNoise(seed ^ 0x51a7, x, y, 48, 0.4));
+  // Ranges are rare: most of the land is rolling ground.
+  const range = smoothstep(0.7, 0.84, gradNoise(seed ^ 0x51a7, x, y, 72, 0.4));
   const ridge = 1 - Math.abs(2 * gradNoise(seed ^ 0x2c1b, x, y, 22, 1.1) - 1);
   const ridgeFine = 1 - Math.abs(2 * gradNoise(seed ^ 0x7f4a, x, y, 9, 2.3) - 1);
   const mountains = t.TERRAIN_MOUNTAIN_SCALE * relief * range * (ridge * ridge * 0.88 + ridgeFine * ridgeFine * 0.12);
@@ -152,7 +154,7 @@ export function terrainHeight(seed: number, tiles: number, x: number, y: number,
   // Its width wanders, and only some stretches of the contour are cut at all.
   const course = gradNoise(seed ^ 0x3ca9, x, y, 40, 0.8);
   const width = 0.025 + 0.05 * gradNoise(seed ^ 0x19e2, x, y, 18, 1.7);
-  const cut = smoothstep(0.35, 0.6, gradNoise(seed ^ 0x0ddc, x, y, 60, 2.9));
+  const cut = smoothstep(0.64, 0.78, gradNoise(seed ^ 0x0ddc, x, y, 80, 2.9));
   const canyon = t.TERRAIN_CANYON_SCALE * relief * cut * smoothstep(width * 2.5, width * 0.5, Math.abs(course - 0.5));
 
   // Rock pits: one crater at most per 26-tile cell, rim and bowl, of every size.
@@ -162,7 +164,7 @@ export function terrainHeight(seed: number, tiles: number, x: number, y: number,
   const cy0 = Math.floor(y / cell);
   for (let cy = cy0 - 1; cy <= cy0 + 1; cy += 1) {
     for (let cx = cx0 - 1; cx <= cx0 + 1; cx += 1) {
-      if (lattice(seed ^ 0x6b2d, cx, cy) > 0.28) continue;
+      if (lattice(seed ^ 0x6b2d, cx, cy) > 0.13) continue;
       const px = (cx + 0.2 + 0.6 * lattice(seed ^ 0x11f1, cx, cy)) * cell;
       const py = (cy + 0.2 + 0.6 * lattice(seed ^ 0x22e2, cx, cy)) * cell;
       const radius = 2 + 10 * lattice(seed ^ 0x33d3, cx, cy) ** 2;
@@ -175,7 +177,33 @@ export function terrainHeight(seed: number, tiles: number, x: number, y: number,
     }
   }
 
-  return ease * (rolling * relief + reach * (mountains - canyon + pits));
+  return ease * (rolling * relief + settled * (mountains - canyon + pits));
+}
+
+/** A deterministic hash of a tile at a site, 0..1. */
+function tileHash(seed: number, tx: number, ty: number): number {
+  let h = (seed ^ Math.imul(tx + 0x632b, 0x85ebca6b) ^ Math.imul(ty + 0x1f3d, 0xc2b2ae35)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+export type Rock = "none" | "loose" | "crag";
+
+/**
+ * The rock nature put on a tile, before anyone built or broke anything:
+ *   - a crag on ground too steep to build on (a mountain, a canyon wall);
+ *   - a crag - hard rock, a cluster of boulders - on a share
+ *     `ROCK_BOULDER_SHARE` of open ground (the user: "the hard rocks
+ *     disappeared entirely, please bring them back": on the calmer
+ *     landscape, steep ground alone left almost none);
+ *   - loose rocks on a share `ROCK_LOOSE_SHARE` of the rest.
+ */
+export function natureRock(seed: number, tx: number, ty: number, steep: boolean, t: Tuning): Rock {
+  if (steep) return "crag";
+  if (tileHash(seed ^ 0xb01d, tx, ty) < t.ROCK_BOULDER_SHARE) return "crag";
+  if (tileHash(seed, tx, ty) < t.ROCK_LOOSE_SHARE) return "loose";
+  return "none";
 }
 
 export interface Ground {
@@ -208,6 +236,8 @@ export interface World {
   readonly cornersM: readonly number[];
   /** Cave mouths, in grid tile coordinates (the world's corner is at -margin). */
   readonly caves: readonly Cave[];
+  /** Rocks on the world's tiles OUTSIDE the grid, in grid tile coordinates (the grid's own are the settlement's: `rocksOf`). */
+  readonly rocks: readonly { readonly x: number; readonly y: number; readonly kind: "loose" | "crag" }[];
 }
 
 type Place = { readonly kind: SettlementKind; readonly lat: number; readonly lon: number };
@@ -245,6 +275,8 @@ function terrainKey(kind: string, place: Place, t: Tuning): string {
     t.TERRAIN_CANYON_SCALE,
     t.TERRAIN_PIT_SCALE,
     t.TERRAIN_WORLD_MARGIN,
+    t.ROCK_BOULDER_SHARE,
+    t.ROCK_LOOSE_SHARE,
   ].join("|");
 }
 
@@ -316,7 +348,23 @@ export function worldOf(place: Place, t: Tuning): World {
         if (at !== null && best / t.TILE_METRES > 0.6) caves.push(at);
       }
     }
-    return { margin, size, cornersM, caves };
+    // Rocks beyond the grid: nature's, as the grid's own were before anyone built.
+    const rocks: { x: number; y: number; kind: "loose" | "crag" }[] = [];
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        const gx = x - margin;
+        const gy = y - margin;
+        if (gx >= 0 && gy >= 0 && gx < tiles && gy < tiles) continue;
+        const a = cornersM[y * m + x]!;
+        const b = cornersM[y * m + x + 1]!;
+        const c = cornersM[(y + 1) * m + x]!;
+        const d = cornersM[(y + 1) * m + x + 1]!;
+        const steep = Math.max(Math.abs(a - b), Math.abs(c - d), Math.abs(a - c), Math.abs(b - d)) / t.TILE_METRES > t.TERRAIN_MAX_SLOPE;
+        const kind = natureRock(seed, gx, gy, steep, t);
+        if (kind !== "none") rocks.push({ x: gx, y: gy, kind });
+      }
+    }
+    return { margin, size, cornersM, caves, rocks };
   });
 }
 

@@ -16,18 +16,10 @@ import type { Tuning } from "../tuning.js";
 import type { Settlement } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { keyTile, tileKey } from "./space.js";
-import type { Ground } from "./terrain.js";
-import { groundOf, placeSeed } from "./terrain.js";
+import type { Ground, Rock } from "./terrain.js";
+import { groundOf, natureRock, placeSeed } from "./terrain.js";
 
-export type Rock = "none" | "loose" | "crag";
-
-/** A deterministic hash of a tile at a site, 0..1. */
-function tileHash(seed: number, tx: number, ty: number): number {
-  let h = (seed ^ Math.imul(tx + 0x632b, 0x85ebca6b) ^ Math.imul(ty + 0x1f3d, 0xc2b2ae35)) >>> 0;
-  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
-  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
+export type { Rock } from "./terrain.js";
 
 /** The ground as the settlement's rovers have left it: a broken crag is no longer steep. */
 export function siteGround(s: Settlement, t: Tuning): Ground {
@@ -61,11 +53,27 @@ export function rocksOf(s: Settlement, t: Tuning): Rock[] {
     for (let tx = 0; tx < n; tx += 1) {
       if (covered.has(tileKey(tx, ty))) continue;
       const i = ty * n + tx;
-      if (ground.steep[i]) out[i] = "crag";
-      else if (tileHash(seed, tx, ty) < t.ROCK_LOOSE_SHARE) out[i] = "loose";
+      out[i] = natureRock(seed, tx, ty, ground.steep[i] === true, t);
     }
   }
   return out;
+}
+
+/**
+ * The rock on one tile, as `rocksOf` would say - for the placement rules,
+ * which ask about a handful of tiles many times a second (the preview).
+ */
+export function rockAt(s: Settlement, tx: number, ty: number, t: Tuning): Rock {
+  const ground = groundOf(s, t);
+  const n = ground.tiles;
+  if (tx < 0 || ty < 0 || tx >= n || ty >= n) return "none";
+  const key = tileKey(tx, ty);
+  if (s.cleared.includes(key) || s.corridors.includes(key) || s.cables.includes(key)) return "none";
+  for (const b of s.buildings) {
+    const size = BUILDING_DEFS[b.type].footprint;
+    if (tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + size) return "none";
+  }
+  return natureRock(placeSeed(s.lat, s.lon), tx, ty, ground.steep[ty * n + tx] === true, t);
 }
 
 /** Where the rovers set out from and come back to: the headquarters' middle, or null without one. */

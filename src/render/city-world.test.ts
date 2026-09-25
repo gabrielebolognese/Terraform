@@ -84,7 +84,7 @@ describe("the open world", () => {
   it("draws ground far beyond the buildable grid, on every side", () => {
     // Any shape of ground whose points lie outside the grid's diamond in tile space.
     const shapes = cityScene(site, at("low"));
-    expect(shapes.length).toBeGreaterThan(cityScene({ ...site, world: { margin: 0, size: site.tiles, corners: site.corners, caves: [] } }, at("low")).length * 2);
+    expect(shapes.length).toBeGreaterThan(cityScene({ ...site, world: { margin: 0, size: site.tiles, corners: site.corners, caves: [], rocks: [] } }, at("low")).length * 2);
   });
 
   it("marks the building boundary on the ground - up close and at medium, not furthest out", () => {

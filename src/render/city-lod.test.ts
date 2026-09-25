@@ -141,14 +141,15 @@ describe("levels of detail", () => {
     // 0.0012 (measured, 480 x 300).
     // The terrain alone: no buildings, and no corridors or cables (they have tests of their own).
     // The grid's ground alone: the open world round it is judged with the whole city, above.
-    const bare: CityView = { ...metropolis, buildings: [], corridors: metropolis.corridors.map(() => false), cables: metropolis.cables.map(() => false), world: { margin: 0, size: metropolis.tiles, corners: metropolis.corners, caves: [] } };
+    const bare: CityView = { ...metropolis, buildings: [], corridors: metropolis.corridors.map(() => false), cables: metropolis.cables.map(() => false), world: { margin: 0, size: metropolis.tiles, corners: metropolis.corners, caves: [], rocks: [] } };
     const high = renderCity(bare, at("high"), 480, 300, false);
     expect(frameDifference(renderCity(bare, at("low"), 480, 300, false), high)).toBeLessThan(0.004);
     // And the patches are really used, where they can be: on flat open
     // ground (the metropolis's hills merge little, and there the rocks low
     // leaves out swamp the count). Measured: 192 shapes at low, 1,088 at medium.
     const { view } = referenceCity();
-    const open: CityView = { ...flatten(view), id: "open", buildings: [] };
+    // No rocks: nothing that keeps a patch from forming.
+    const open: CityView = { ...flatten(view), id: "open", buildings: [], rocks: view.rocks.map(() => "none") };
     expect(cityScene(open, at("low")).length).toBeLessThan(0.25 * cityScene(open, at("medium")).length);
   });
 

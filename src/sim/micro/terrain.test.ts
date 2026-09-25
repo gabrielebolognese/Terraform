@@ -57,9 +57,11 @@ describe("the local heightmap", () => {
   });
 
   it("has steep ground to refuse, at the browser's relief - and room to build", () => {
-    // Measured: 88 of 1,024 tiles here; 5.2% on average over 100 sites (Batch 22's hills: 16.1%).
+    // Measured: 21 of 1,024 tiles here; 3.4% on average over 100 sites, 11.8%
+    // on a 96-tile grid (Batch 22's hills: 16.1%). One landscape everywhere,
+    // mostly rolling ground: a first open world walled the city in with 42-60%.
     const n = steepCount(groundOf(HERE, HILLS));
-    expect(n).toBeGreaterThan(40);
+    expect(n).toBeGreaterThan(10);
     expect(n).toBeLessThan(250);
   });
 });
@@ -91,9 +93,36 @@ describe("the open world round it", () => {
     expect(Math.max(...g.heightM.map(Math.abs))).toBeLessThan(3 * HILLS.TERRAIN_RELIEF_M);
   });
 
+  it("is ordinary ground past the boundary - mostly buildable, with some mountains and canyons, not a wall", () => {
+    // The user: "after the boundaries there have not to be mountains and
+    // undoable terrain, but still other normal terrain". Measured over 40
+    // sites: 13.5% of the world beyond the grid too steep (a first open world
+    // raised its features toward the boundary and walled the city in).
+    let steep = 0;
+    let all = 0;
+    for (let k = 0; k < 40; k += 1) {
+      const place = { kind: "city" as const, lat: -1.2 + 0.06 * k, lon: -3 + 0.15 * k };
+      const world = worldOf(place, HILLS);
+      const m = world.size + 1;
+      for (let y = 0; y < world.size; y += 1) {
+        for (let x = 0; x < world.size; x += 1) {
+          const gx = x - world.margin;
+          const gy = y - world.margin;
+          if (gx >= 0 && gy >= 0 && gx < 32 && gy < 32) continue;
+          const c = (i: number, j: number): number => world.cornersM[(y + j) * m + x + i]!;
+          const rise = Math.max(Math.abs(c(0, 0) - c(1, 0)), Math.abs(c(0, 1) - c(1, 1)), Math.abs(c(0, 0) - c(0, 1)), Math.abs(c(1, 0) - c(1, 1)));
+          if (rise / HILLS.TILE_METRES > HILLS.TERRAIN_MAX_SLOPE) steep += 1;
+          all += 1;
+        }
+      }
+    }
+    expect(steep / all).toBeLessThan(0.2);
+    expect(steep / all, "and it does have its mountains and canyons").toBeGreaterThan(0.03);
+  });
+
   it("has caves, each in a real rock face", () => {
-    // Measured: 13 here, 15.3 on average over 100 sites.
-    expect(w.caves.length).toBeGreaterThan(5);
+    // Measured: 3 here, 6.3 on average over 100 sites (the calmer landscape has fewer faces).
+    expect(w.caves.length).toBeGreaterThan(0);
     for (const c of w.caves) {
       // The face it opens in: the corner at the cave against the next corner along its facing.
       const x = Math.floor(c.x + w.margin);

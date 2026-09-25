@@ -116,7 +116,7 @@ export function flatten(view: CityView, bumps = 0, level: readonly [number, numb
     groundZ: view.groundZ.map(() => bumps / 2),
     corners,
     steep: view.steep.map(() => false),
-    world: { margin: 0, size: view.tiles, corners, caves: [] },
+    world: { margin: 0, size: view.tiles, corners, caves: [], rocks: [] },
   };
 }
 
@@ -168,7 +168,7 @@ export function buildingSheet(): { view: CityView; options: CitySceneOptions } {
     tiles,
     groundZ: new Array<number>(tiles * tiles).fill(0),
     corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0),
-    world: { margin: 0, size: tiles, corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0), caves: [] },
+    world: { margin: 0, size: tiles, corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0), caves: [], rocks: [] },
     greenery: 0,
     heightM: new Array<number>(tiles * tiles).fill(0),
     steep: new Array<boolean>(tiles * tiles).fill(false),
