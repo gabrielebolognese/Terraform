@@ -80,7 +80,9 @@ describe("a world with settlements round-trips through the save exactly", () => 
     // square as founded (a retune must not move the ground under a city) and
     // the land claimed; the frame they make is derived, and not stored. v10
     // has the ground rovers levelled: the heights they set, not the ground made of them.
-    expect(Object.keys(saved).sort()).toEqual(["base", "buildings", "cables", "claims", "cleared", "corridors", "grades", "id", "jobs", "kind", "lat", "lon", "lost_at_sea_level_m", "population", "rails", "stores"]);
+    // v12, the planner: a name, zones, the rovers' queue, the plan - what the player
+    // chose - and the record, which is history: it cannot be derived again.
+    expect(Object.keys(saved).sort()).toEqual(["base", "buildings", "cables", "claims", "cleared", "corridors", "grades", "history", "id", "jobs", "kind", "lat", "level_queue", "lon", "lost_at_sea_level_m", "name", "planned", "population", "rails", "stores", "zones"]);
   });
 });
 

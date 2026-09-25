@@ -12,7 +12,7 @@
 import type { Tuning } from "../tuning.js";
 import { DEFAULT_TUNING } from "../tuning.js";
 import type { Settlement, SettlementKind, SimState } from "../types.js";
-import { foundingBuildings, newSettlement } from "./settlement.js";
+import { NAME_MAX, foundingBuildings, newSettlement } from "./settlement.js";
 import { wrapLongitude } from "./space.js";
 
 export interface FoundOutcome {
@@ -43,6 +43,8 @@ export function foundSettlement(
   lat: number,
   lon: number,
   t: Tuning = DEFAULT_TUNING,
+  /** What the player calls it (at the user's request: "when creating a city, I can name it"); empty for its number. */
+  name = "",
 ): FoundOutcome {
   const refuse = (reason: string): FoundOutcome => ({ state, ok: false, settlement: null, reason });
   if (kind !== "city" && kind !== "outpost" && kind !== "metropolis") return refuse(`"${String(kind)}" is not a kind of settlement.`);
@@ -52,7 +54,7 @@ export function foundSettlement(
   // Founding builds nothing, but it does land the section 2.3 step 2 stock.
   // With the headquarters on, a settlement lands with it (and a city with one spaceport).
   const bare = newSettlement(nextId(state.settlements), kind, lat, wrapLongitude(lon), t);
-  const settlement: Settlement = { ...bare, buildings: foundingBuildings(kind, t) };
+  const settlement: Settlement = { ...bare, buildings: foundingBuildings(kind, t), name: name.trim().replace(/\s+/g, " ").slice(0, NAME_MAX) };
   return {
     state: { ...state, settlements: [...state.settlements, settlement] },
     ok: true,

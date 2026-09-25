@@ -174,13 +174,22 @@ export type { Footprint, Vec3 } from "./micro/space.js";
 export { foundSettlement } from "./micro/registry.js";
 export type { FoundOutcome } from "./micro/registry.js";
 export { MARS_RADIUS_M } from "./planets/mars.js";
-export type { Settlement, SettlementJob, SettlementKind } from "./types.js";
+export type { History, HistorySample, PlannedLink, Settlement, SettlementJob, SettlementKind, Zone } from "./types.js";
 export { BUILDING_DEFS, buildYears, levelFactor, maxLevel } from "./micro/buildings.js";
 export type { BuildingDef } from "./micro/buildings.js";
 export {
   capacities,
   claimLand,
   claimableChunks,
+  editZone,
+  deleteZone,
+  levelZone,
+  planLinks,
+  cancelPlans,
+  renameSettlement,
+  linkRefusal,
+  NAME_MAX,
+  ZONE_COLOURS,
   connectTwice,
   constructionOf,
   upgradeBuilding,

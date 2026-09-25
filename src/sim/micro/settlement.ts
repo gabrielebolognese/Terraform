@@ -15,7 +15,7 @@
 
 import type { HabitatChannels } from "../habitat.js";
 import type { Tuning } from "../tuning.js";
-import type { BuildingType, MicroResource, PlacedBuilding, Settlement, SettlementJob, SettlementKind, SimState } from "../types.js";
+import type { BuildingType, History, MicroResource, PlacedBuilding, PlannedLink, Settlement, SettlementJob, SettlementKind, SimState, Zone } from "../types.js";
 import { MICRO_RESOURCES, isCityKind } from "../types.js";
 import { BUILDING_DEFS, buildYears, keySet, levelFactor, maxLevel, tilesUnder } from "./buildings.js";
 import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
@@ -50,8 +50,16 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     claims: [],
     grades: [],
     rails: [],
+    name: "",
+    zones: [],
+    levelQueue: [],
+    planned: [],
+    history: EMPTY_HISTORY,
   };
 }
+
+/** A settlement's record before anything has happened. */
+export const EMPTY_HISTORY: History = Object.freeze({ acc: { substeps: 0, births: 0, deaths: 0, short: [0, 0, 0, 0, 0], net: [0, 0, 0, 0, 0] }, taken: 0, samples: [] });
 
 /**
  * Where the headquarters stands on an `n`-tile grid: its 5 x 5 footprint
@@ -226,6 +234,18 @@ const LAYER_WORDS: Readonly<Record<LinkLayer, { one: string; cost: (t: Tuning) =
  * nothing, off the grid, on ground too steep to build on, under a building,
  * where one already is, or without the materials. A tile may carry both.
  */
+/** Why a link cannot go on (tx, ty) - the ground, a building, rock, one already there - or null. Not the materials. */
+export function linkRefusal(s: Settlement, layer: LinkLayer, tx: number, ty: number, t: Tuning): string | null {
+  const words = LAYER_WORDS[layer];
+  if (!claimTest(s, t)(tx, ty)) return `a ${words.one} must be on the grid - the land the city holds`;
+  const ground = siteGround(s, t);
+  if (isSteep(ground, tx, ty)) return `the ground is too steep for a ${words.one} (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE}) - send a rover to break the crag`;
+  if (tilesUnder(s.buildings).has(tileKey(tx, ty))) return "a building stands there";
+  if (rockAt(s, tx, ty, t) === "crag") return `hard rock is in the way of a ${words.one} - send a rover to break it first`;
+  if (keySet(s[layer]).has(tileKey(tx, ty))) return `there is a ${words.one} there already`;
+  return null;
+}
+
 export function placeLink(state: SimState, settlementId: string, layer: LinkLayer, tx: number, ty: number, t: Tuning): PlaceOutcome {
   const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
   const words = LAYER_WORDS[layer];
@@ -522,6 +542,9 @@ export function shiftContent(s: Settlement, dx: number, dy: number): Settlement 
     cables: s.cables.map(move),
     cleared: s.cleared.map(move),
     rails: s.rails.map(move),
+    zones: s.zones.map((z) => ({ ...z, tiles: z.tiles.map(move) })),
+    levelQueue: s.levelQueue.map((q) => ({ ...q, tile: move(q.tile) })),
+    planned: s.planned.map((p) => ({ ...p, tile: move(p.tile) })),
     grades: s.grades.map((g) => ({ ...g, tile: move(g.tile) })),
     jobs: s.jobs.map((job) => ({ ...job, tile: move(job.tile) })),
   };
@@ -554,6 +577,236 @@ function commandCover(buildings: readonly PlacedBuilding[], t: Tuning): (readonl
   });
   covers.set(buildings, { t, cover });
   return cover;
+}
+
+// ---------------------------------------------------------------------------
+// The city planner (at the user's request: "I can see the planimetry of the
+// city in 2D, assign zones and colour zones, assign robots to flatten out an
+// entire zone, draw roads and power lines and they get built, see population
+// charts, blackouts, food shortages, population growth and deaths")
+// ---------------------------------------------------------------------------
+
+/** Name a settlement; an empty name gives it back its number ("City 3"). */
+export function renameSettlement(state: SimState, settlementId: string, name: string): PlaceOutcome {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
+  const clean = name.trim().replace(/\s+/g, " ");
+  if (clean.length > NAME_MAX) return { state, ok: false, reason: `a name is at most ${NAME_MAX} letters` };
+  return { state: withSettlement(state, settlementId, { ...s, name: clean }), ok: true, reason: null };
+}
+
+/** The longest name a settlement or zone may have. */
+export const NAME_MAX = 40;
+
+/**
+ * Draw a zone, or change one: its name and colour, tiles added and taken
+ * away. Without an id, a new zone. A tile belongs to one zone at most: added
+ * to this one, it leaves any other. Tiles off the frame are left out.
+ */
+export function editZone(
+  state: SimState,
+  settlementId: string,
+  edit: { readonly id?: number; readonly name?: string; readonly colour?: string; readonly add?: readonly number[]; readonly remove?: readonly number[] },
+  t: Tuning,
+): PlaceOutcome & { readonly zone: number | null } {
+  const refuse = (reason: string) => ({ state, ok: false, reason, zone: null });
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
+  if (edit.colour !== undefined && !/^#[0-9a-f]{6}$/i.test(edit.colour)) return refuse(`"${edit.colour}" is not a colour (#rrggbb)`);
+  const name = edit.name?.trim();
+  if (name !== undefined && (name.length === 0 || name.length > NAME_MAX)) return refuse(`a zone's name is 1 to ${NAME_MAX} letters`);
+  const existing = edit.id === undefined ? undefined : s.zones.find((z) => z.id === edit.id);
+  if (edit.id !== undefined && existing === undefined) return refuse(`there is no zone ${edit.id}`);
+  const n = frameOf(s, t).n;
+  const onFrame = (k: number): boolean => {
+    const { tx, ty } = keyTile(k);
+    return tx < n && ty < n;
+  };
+  const id = existing?.id ?? s.zones.reduce((m, z) => Math.max(m, z.id), 0) + 1;
+  const add = new Set((edit.add ?? []).filter(onFrame));
+  const remove = new Set(edit.remove ?? []);
+  const tiles = new Set(existing?.tiles ?? []);
+  for (const k of add) tiles.add(k);
+  for (const k of remove) tiles.delete(k);
+  const zone: Zone = {
+    id,
+    name: name ?? existing?.name ?? `Zone ${id}`,
+    colour: (edit.colour ?? existing?.colour ?? ZONE_COLOURS[(id - 1) % ZONE_COLOURS.length]!).toLowerCase(),
+    tiles: [...tiles].sort((a, b) => a - b),
+  };
+  const others = s.zones.filter((z) => z.id !== id).map((z) => (add.size === 0 ? z : { ...z, tiles: z.tiles.filter((k) => !add.has(k)) }));
+  const zones = [...others, zone].sort((a, b) => a.id - b.id);
+  return { state: withSettlement(state, settlementId, { ...s, zones }), ok: true, reason: null, zone: id };
+}
+
+/** The colours new zones take in turn. */
+export const ZONE_COLOURS: readonly string[] = ["#4f9dde", "#e0a33b", "#5fbf6a", "#c46ad6", "#e0605a", "#48c2b5", "#d6c24a", "#8a8fe8"];
+
+export function deleteZone(state: SimState, settlementId: string, zoneId: number): PlaceOutcome {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
+  if (!s.zones.some((z) => z.id === zoneId)) return { state, ok: false, reason: `there is no zone ${zoneId}` };
+  return { state: withSettlement(state, settlementId, { ...s, zones: s.zones.filter((z) => z.id !== zoneId) }), ok: true, reason: null };
+}
+
+/**
+ * Level a whole zone (the user: "assign robots to flatten out an entire zone
+ * without me manually clicking each"): every tile of it that is not level
+ * and has no building joins the rovers' queue; a rover goes out to the next
+ * whenever one is free. Returns how many tiles were queued.
+ */
+export function levelZone(state: SimState, settlementId: string, zoneId: number, t: Tuning): PlaceOutcome & { readonly queued: number } {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}`, queued: 0 };
+  const zone = s.zones.find((z) => z.id === zoneId);
+  if (zone === undefined) return { state, ok: false, reason: `there is no zone ${zoneId}`, queued: 0 };
+  // One plane for the whole zone: its tiles' mean height, to ten centimetres.
+  // (Tile by tile to the level beside each, three rovers out at once each took
+  // a different level, and the zone came out stepped - 1.7 m, measured.)
+  const ground = siteGround(s, t);
+  const n = ground.tiles;
+  const heights = zone.tiles.map((k) => ground.heightM[Math.floor(k / TILE_STRIDE) * n + (k % TILE_STRIDE)] ?? 0);
+  const mean = heights.reduce((a, b) => a + b, 0) / Math.max(1, heights.length);
+  const levelM = Math.round(mean * 10) / 10 || 0;
+  const queued = new Set(s.levelQueue.map((q) => q.tile));
+  const busy = new Set(s.jobs.filter((j) => j.kind === "rover").map((j) => j.tile));
+  const add = zone.tiles.filter((k) => {
+    if (queued.has(k) || busy.has(k)) return false;
+    const { tx, ty } = keyTile(k);
+    return levelJob(s, tx, ty, t, levelM).job !== null;
+  });
+  if (add.length === 0) return { state, ok: false, reason: "every tile of it is level, built on, or waiting already", queued: 0 };
+  return { state: withSettlement(state, settlementId, { ...s, levelQueue: [...s.levelQueue, ...add.map((tile) => ({ tile, levelM }))] }), ok: true, reason: null, queued: add.length };
+}
+
+/**
+ * Draw corridors, cables or rails in the planner (the user: "I can draw roads
+ * and power lines, and they get built"): the tiles join the plan, in the
+ * order drawn, and crews lay them as materials allow. Tiles that already
+ * carry the layer, or are planned for it, are left out.
+ */
+export function planLinks(state: SimState, settlementId: string, layer: PlannedLink["layer"], tiles: readonly number[], t: Tuning): PlaceOutcome & { readonly planned: number } {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}`, planned: 0 };
+  const has = keySet(s[layer]);
+  const already = new Set(s.planned.filter((p) => p.layer === layer).map((p) => p.tile));
+  const add: PlannedLink[] = [];
+  for (const k of tiles) {
+    if (has.has(k) || already.has(k)) continue;
+    const { tx, ty } = keyTile(k);
+    if (linkRefusal(s, layer, tx, ty, t) !== null) continue;
+    already.add(k);
+    add.push({ layer, tile: k });
+  }
+  if (add.length === 0) return { state, ok: false, reason: "nothing there can be laid", planned: 0 };
+  return { state: withSettlement(state, settlementId, { ...s, planned: [...s.planned, ...add] }), ok: true, reason: null, planned: add.length };
+}
+
+/** Take up the plan: what is not yet built is not built. */
+export function cancelPlans(state: SimState, settlementId: string): PlaceOutcome {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
+  return { state: withSettlement(state, settlementId, { ...s, planned: [], levelQueue: [] }), ok: true, reason: null };
+}
+
+/**
+ * The crews' substep: planned links laid in order, up to LINK_BUILD_PER_YEAR
+ * a year, while materials last. One that can no longer be laid (a building
+ * went up there) is dropped; one there are no materials for waits, and so do
+ * those after it.
+ */
+function buildPlanned(s: Settlement, t: Tuning, h: number): Settlement {
+  if (s.planned.length === 0) return s;
+  const crews = Math.floor(t.LINK_BUILD_PER_YEAR * h);
+  let materials = s.stores.materials;
+  const lists: Record<PlannedLink["layer"], Set<number>> = { corridors: new Set(s.corridors), cables: new Set(s.cables), rails: new Set(s.rails) };
+  let laid = 0;
+  let k = 0;
+  for (; k < s.planned.length && laid < crews; k += 1) {
+    const p = s.planned[k]!;
+    const { tx, ty } = keyTile(p.tile);
+    if (lists[p.layer].has(p.tile) || linkRefusal(s, p.layer, tx, ty, t) !== null) continue;
+    const cost = LAYER_WORDS[p.layer].cost(t);
+    if (materials < cost) break;
+    materials -= cost;
+    lists[p.layer].add(p.tile);
+    laid += 1;
+  }
+  const sorted = (set: Set<number>): number[] => [...set].sort((a, b) => a - b);
+  return {
+    ...s,
+    stores: { ...s.stores, materials },
+    corridors: lists.corridors.size === s.corridors.length ? s.corridors : sorted(lists.corridors),
+    cables: lists.cables.size === s.cables.length ? s.cables : sorted(lists.cables),
+    rails: lists.rails.size === s.rails.length ? s.rails : sorted(lists.rails),
+    planned: s.planned.slice(k),
+  };
+}
+
+/** The rover a queued tile would take: the job, or why none. */
+function levelJob(s: Settlement, tx: number, ty: number, t: Tuning, to?: number): { job: SettlementJob | null; reason: string | null } {
+  if (garage(s) === null) return { job: null, reason: "there is no headquarters to send a rover from" };
+  if (!claimTest(s, t)(tx, ty)) return { job: null, reason: "that is off the grid - the land the city holds" };
+  if (tilesUnder(s.buildings).has(tileKey(tx, ty))) return { job: null, reason: "a building stands there" };
+  const key = tileKey(tx, ty);
+  if (s.jobs.some((j) => j.kind === "rover" && j.tile === key)) return { job: null, reason: "a rover is already on its way there" };
+  const ground = siteGround(s, t);
+  const n = ground.tiles;
+  const m = n + 1;
+  const level = to ?? levelFor(s, tx, ty, t);
+  const corners = [ground.cornersM[ty * m + tx]!, ground.cornersM[ty * m + tx + 1]!, ground.cornersM[(ty + 1) * m + tx]!, ground.cornersM[(ty + 1) * m + tx + 1]!];
+  if (corners.every((c) => Math.abs(c - level) < 0.01)) return { job: null, reason: "the ground is already level there" };
+  const rock: Rock = rocksOf(s, t)[ty * n + tx] ?? "none";
+  const breaking = rock === "none" ? 0 : rock === "crag" ? t.ROVER_WORK_YEARS_CRAG : t.ROVER_WORK_YEARS_LOOSE;
+  const work = t.ROVER_WORK_YEARS_LEVEL + breaking;
+  const years = roverYears(s, tx, ty, "none", t) - t.ROVER_WORK_YEARS_LOOSE + work;
+  const materials = rock === "crag" ? t.ROCK_CRAG_MATERIALS : rock === "loose" ? t.ROCK_LOOSE_MATERIALS : 0;
+  return { job: { kind: "rover", tile: key, materials, work, total: years, remaining: years, levelM: level }, reason: null };
+}
+
+/** The level queue's substep: a rover out to the next tile whenever one is free. */
+function sendLevellers(s: Settlement, t: Tuning): Settlement {
+  if (s.levelQueue.length === 0) return s;
+  let out = s;
+  let k = 0;
+  // A few tries a substep: a tile levelled meanwhile, or built on, is passed over.
+  for (let tries = 0; k < s.levelQueue.length && tries < 64 && roversOut(out) < roverCount(out, t); tries += 1) {
+    const q = s.levelQueue[k]!;
+    const { tx, ty } = keyTile(q.tile);
+    k += 1;
+    const { job } = levelJob(out, tx, ty, t, q.levelM);
+    if (job !== null) out = { ...out, jobs: [...out.jobs, job] };
+  }
+  return k === 0 ? s : { ...out, levelQueue: s.levelQueue.slice(k) };
+}
+
+/** A substep's worth of record: gathered, and every HISTORY_EVERY substeps a sample taken. */
+function record(
+  h: History,
+  now: { births: number; deaths: number; short: readonly number[]; net: readonly number[]; stores: readonly number[]; population: number; housing: number },
+  t: Tuning,
+): History {
+  const acc = {
+    substeps: h.acc.substeps + 1,
+    births: h.acc.births + now.births,
+    deaths: h.acc.deaths + now.deaths,
+    short: h.acc.short.map((v, i) => v + (now.short[i] ?? 0)),
+    net: h.acc.net.map((v, i) => v + (now.net[i] ?? 0)),
+  };
+  if (acc.substeps < t.HISTORY_EVERY) return { ...h, acc };
+  const k = acc.substeps;
+  const sample = {
+    index: h.taken,
+    population: now.population,
+    housing: now.housing,
+    births: acc.births / k,
+    deaths: acc.deaths / k,
+    short: acc.short.map((v) => v / k),
+    stores: [...now.stores],
+    net: acc.net.map((v) => v / k),
+  };
+  const samples = [...h.samples, sample];
+  return { acc: EMPTY_HISTORY.acc, taken: h.taken + 1, samples: samples.length > t.HISTORY_SAMPLES ? samples.slice(samples.length - t.HISTORY_SAMPLES) : samples };
 }
 
 // ---------------------------------------------------------------------------
@@ -720,6 +973,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   const supported = shortLife.size === 0 && LIFE_SUPPORT.every((r) => stores[r] > 0);
 
   let population = s.population;
+  let birthsNow = 0;
+  let deathsNow = 0;
   if (isCityKind(s.kind)) {
     const home = housing(s, t);
     // The first settlers arrive once there is somewhere to live and every need is met.
@@ -737,6 +992,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
       if (operable[i] && def.type === "medical_center") shelter += t.MEDICAL_SHELTER * levels[i]!;
     });
     const decline = t.MICRO_DECLINE_RATE * Math.max(0, population - shelter) * (supported ? 0 : 1);
+    birthsNow = growth;
+    deathsNow = decline;
     population = Math.min(home, Math.max(0, population + (growth - decline) * h));
   }
 
@@ -747,5 +1004,10 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     if (operable[i]) research += def.research(t) * levels[i]! * commandBoost(i);
   });
 
-  return { next: { ...s, stores, population, jobs, cleared, grades, buildings: built }, research, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
+  // The planner's work: drawn links built, zones levelled - and the record kept.
+  let next: Settlement = { ...s, stores, population, jobs, cleared, grades, buildings: built };
+  next = buildPlanned(next, t, h);
+  next = sendLevellers(next, t);
+  next = { ...next, history: record(s.history, { births: birthsNow, deaths: deathsNow, short: MICRO_RESOURCES.map((r) => (shortAny.has(r) ? 1 : 0)), net: MICRO_RESOURCES.map((r) => prod[r] - cons[r]), stores: MICRO_RESOURCES.map((r) => next.stores[r]), population: next.population, housing: isCityKind(s.kind) ? housing(next, t) : 0 }, t) };
+  return { next, research, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
 }

@@ -688,6 +688,16 @@ export const BASE_TUNING = Object.freeze({
    * here changes a settlement that does not ask.
    */
   CLAIM_CHUNK_TILES: 32,
+  /**
+   * The city planner (at the user's request): corridors, cables and rails
+   * drawn in it are built by crews at up to this many tiles a sim-year, as
+   * materials allow; a sample of the city's life every HISTORY_EVERY
+   * substeps, the latest HISTORY_SAMPLES kept. None of it changes what a city
+   * does: it only builds what the player drew, and records.
+   */
+  LINK_BUILD_PER_YEAR: 240,
+  HISTORY_EVERY: 4,
+  HISTORY_SAMPLES: 150,
   CLAIM_FIRST_POPULATION: 200,
   CLAIM_STEP_POPULATION: 100,
   /**
@@ -1111,6 +1121,9 @@ export function validateTuning(t: Tuning): void {
   if (!(Number.isInteger(t.CLAIM_CHUNK_TILES) && t.CLAIM_CHUNK_TILES >= 8)) fail("CLAIM_CHUNK_TILES must be a whole number >= 8");
   if (!(t.CLAIM_FIRST_POPULATION >= 0)) fail("CLAIM_FIRST_POPULATION must be >= 0");
   if (!(t.CLAIM_STEP_POPULATION > 0)) fail("CLAIM_STEP_POPULATION must be > 0");
+  if (!(t.LINK_BUILD_PER_YEAR >= 0)) fail("LINK_BUILD_PER_YEAR must be >= 0");
+  if (!(Number.isInteger(t.HISTORY_EVERY) && t.HISTORY_EVERY >= 1)) fail("HISTORY_EVERY must be a whole number >= 1");
+  if (!(Number.isInteger(t.HISTORY_SAMPLES) && t.HISTORY_SAMPLES >= 2)) fail("HISTORY_SAMPLES must be a whole number >= 2");
   if (!(t.P_LIFE_OK > t.P_LIFE_MIN)) fail("P_LIFE_OK must exceed P_LIFE_MIN");
   if (!(t.T_CEIL_K > t.T_FLOOR_K)) fail("T_CEIL_K must exceed T_FLOOR_K");
   if (!(t.ALBEDO_MAX > t.ALBEDO_MIN)) fail("ALBEDO_MAX must exceed ALBEDO_MIN");

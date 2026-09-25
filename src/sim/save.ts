@@ -26,7 +26,7 @@
 
 import { clamp01 } from "./math.js";
 import { wrapLongitude } from "./micro/space.js";
-import { capacities, housing, newSettlement, shiftContent } from "./micro/settlement.js";
+import { EMPTY_HISTORY, NAME_MAX, capacities, housing, newSettlement, shiftContent } from "./micro/settlement.js";
 import { LAYERS, linksToConnect } from "./micro/network.js";
 import type { Layer } from "./micro/network.js";
 import { headquartersOrigin } from "./micro/settlement.js";
@@ -64,7 +64,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 11;
+export const SAVE_SCHEMA_VERSION = 12;
 
 export interface SavedFacility {
   readonly type: string;
@@ -150,6 +150,12 @@ export interface SavedSettlement {
   readonly grades?: readonly { readonly tile: number; readonly height_m: number }[];
   /** Added in v11 (stations, at the user's request): railway tiles, as sorted keys. */
   readonly rails?: readonly number[];
+  /** Added in v12 (the city planner, at the user's request): its name, zones, the rovers' queue, the plan, and its record. */
+  readonly name?: string;
+  readonly zones?: readonly { readonly id: number; readonly name: string; readonly colour: string; readonly tiles: readonly number[] }[];
+  readonly level_queue?: readonly { readonly tile: number; readonly level_m: number }[];
+  readonly planned?: readonly { readonly layer: string; readonly tile: number }[];
+  readonly history?: Record<string, unknown>;
 }
 
 /**
@@ -234,6 +240,11 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       claims: [...s.claims],
       grades: s.grades.map((g) => ({ tile: g.tile, height_m: g.heightM })),
       rails: [...s.rails],
+      name: s.name,
+      zones: s.zones.map((z) => ({ id: z.id, name: z.name, colour: z.colour, tiles: [...z.tiles] })),
+      level_queue: s.levelQueue.map((q) => ({ tile: q.tile, level_m: q.levelM })),
+      planned: s.planned.map((p) => ({ layer: p.layer, tile: p.tile })),
+      history: { acc: { ...s.history.acc, short: [...s.history.acc.short], net: [...s.history.acc.net] }, taken: s.history.taken, samples: s.history.samples.map((x) => ({ ...x, short: [...x.short], stores: [...x.stores], net: [...x.net] })) },
     })),
   };
 }
@@ -316,7 +327,18 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 9) current = migrateV8toV9(current);
   if (version < 10) current = migrateV9toV10(current);
   if (version < 11) current = migrateV10toV11(current);
+  if (version < 12) current = migrateV11toV12(current);
   return current;
+}
+
+/** v11 -> v12: the city planner. No names, zones, queue or plan yet, and no record kept. */
+function migrateV11toV12(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  if (!Array.isArray(list)) return { ...save, schema_version: 12 };
+  const settlements = list.map((raw) =>
+    typeof raw !== "object" || raw === null ? raw : { ...(raw as Record<string, unknown>), name: "", zones: [], level_queue: [], planned: [], history: null },
+  );
+  return { ...save, schema_version: 12, settlements };
 }
 
 /** v10 -> v11: railways. There were no stations to lay them for. */
@@ -683,7 +705,7 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     const cleared = readKeys(s, "cleared", where, "rock", new Set());
     const jobs = readJobs(s, where);
     const under = underBuildings(buildings);
-    let settled: Settlement = { ...standing, cleared, jobs, rails: readKeys(s, "rails", where, "railway", under) };
+    let settled: Settlement = { ...standing, cleared, jobs, rails: readKeys(s, "rails", where, "railway", under), ...readPlanner(s, where) };
     // v8: corridors and cables; null only for a settlement carried forward from v6.
     for (const layer of LAYERS) {
       settled = { ...settled, [layer]: s[layer] === null ? [] : readKeys(s, layer, where, LINK_WORDS[layer], under) };
@@ -717,6 +739,77 @@ function readGrades(s: Record<string, unknown>, where: string): readonly Grade[]
     if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
     return { tile, heightM: numberAt(g, "height_m", `${at}.height_m`) };
   });
+}
+
+/**
+ * v12: the planner's part of a settlement. A name of any length is cut to
+ * the longest allowed (a retune could shorten it); a zone's colour must be
+ * one; the record's numbers must be finite. A record missing (from v11) is
+ * an empty one.
+ */
+function readPlanner(s: Record<string, unknown>, where: string): Pick<Settlement, "name" | "zones" | "levelQueue" | "planned" | "history"> {
+  const nameRaw = s["name"];
+  if (typeof nameRaw !== "string") throw new SaveError(`${where}.name must be a string, got ${describe(nameRaw)}`);
+  const zones = asArray(s["zones"], `${where}.zones`).map((raw, j) => {
+    const at = `${where}.zones[${j}]`;
+    const z = asRecord(raw, at);
+    const id = numberAt(z, "id", `${at}.id`);
+    if (!Number.isInteger(id) || id < 1) throw new SaveError(`${at}.id must be a whole number from 1, got ${id}`);
+    const zname = z["name"];
+    if (typeof zname !== "string" || zname.length === 0) throw new SaveError(`${at}.name must be a name`);
+    const colour = z["colour"];
+    if (typeof colour !== "string" || !/^#[0-9a-f]{6}$/i.test(colour)) throw new SaveError(`${at}.colour must be #rrggbb, got ${describe(colour)}`);
+    return { id, name: zname.slice(0, NAME_MAX), colour: colour.toLowerCase(), tiles: readKeys(z, "tiles", at, "zone tile", new Set()) };
+  });
+  if (new Set(zones.map((z) => z.id)).size !== zones.length) throw new SaveError(`${where}.zones repeat an id`);
+  const levelQueue = asArray(s["level_queue"], `${where}.level_queue`).map((raw, j) => {
+    const at = `${where}.level_queue[${j}]`;
+    const q = asRecord(raw, at);
+    const tile = numberAt(q, "tile", `${at}.tile`);
+    if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
+    return { tile, levelM: numberAt(q, "level_m", `${at}.level_m`) };
+  });
+  const planned = asArray(s["planned"], `${where}.planned`).map((raw, j) => {
+    const at = `${where}.planned[${j}]`;
+    const p = asRecord(raw, at);
+    const layer = p["layer"];
+    if (layer !== "corridors" && layer !== "cables" && layer !== "rails") throw new SaveError(`${at}.layer must be "corridors", "cables" or "rails", got ${describe(layer)}`);
+    const tile = numberAt(p, "tile", `${at}.tile`);
+    if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
+    return { layer, tile } as const;
+  });
+  const historyRaw = s["history"];
+  let history = EMPTY_HISTORY;
+  if (historyRaw !== null && historyRaw !== undefined) {
+    const h = asRecord(historyRaw, `${where}.history`);
+    const five = (v: unknown, at: string): number[] => {
+      const list = asArray(v, at);
+      if (list.length !== 5 || !list.every((x) => typeof x === "number" && Number.isFinite(x))) throw new SaveError(`${at} must be five numbers`);
+      return list as number[];
+    };
+    const acc = asRecord(h["acc"], `${where}.history.acc`);
+    const taken = numberAt(h, "taken", `${where}.history.taken`);
+    const samples = asArray(h["samples"], `${where}.history.samples`).map((raw, j) => {
+      const at = `${where}.history.samples[${j}]`;
+      const x = asRecord(raw, at);
+      return {
+        index: numberAt(x, "index", `${at}.index`),
+        population: numberAt(x, "population", `${at}.population`),
+        housing: numberAt(x, "housing", `${at}.housing`),
+        births: numberAt(x, "births", `${at}.births`),
+        deaths: numberAt(x, "deaths", `${at}.deaths`),
+        short: five(x["short"], `${at}.short`),
+        stores: five(x["stores"], `${at}.stores`),
+        net: five(x["net"], `${at}.net`),
+      };
+    });
+    history = {
+      acc: { substeps: numberAt(acc, "substeps", `${where}.history.acc.substeps`), births: numberAt(acc, "births", `${where}.history.acc.births`), deaths: numberAt(acc, "deaths", `${where}.history.acc.deaths`), short: five(acc["short"], `${where}.history.acc.short`), net: five(acc["net"], `${where}.history.acc.net`) },
+      taken,
+      samples,
+    };
+  }
+  return { name: nameRaw.slice(0, NAME_MAX), zones, levelQueue, planned, history };
 }
 
 /** Claimed chunks: whole, distinct chunk keys. Whether they touch is not the save's to judge - a retune of the chunk size would break it. */

@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 11;
+  readonly schemaVersion: 12;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -420,6 +420,62 @@ export interface Settlement {
   readonly grades: readonly Grade[];
   /** Railway tiles (at the user's request), sorted keys: rails joining stations join their districts' networks. */
   readonly rails: readonly number[];
+  /** The city planner (at the user's request). Its name, given at founding; empty for "City 3" and the like. */
+  readonly name: string;
+  /** Zones the player has drawn: a name, a colour, and tiles. */
+  readonly zones: readonly Zone[];
+  /** Tiles waiting for a rover to level them, in order: one goes out whenever a rover is free. */
+  readonly levelQueue: readonly QueuedLevel[];
+  /** Corridors, cables and rails drawn in the planner, built in order as materials and crews allow. */
+  readonly planned: readonly PlannedLink[];
+  /** The city's record, for the planner's charts: what has happened, a sample a year. */
+  readonly history: History;
+}
+
+export interface Zone {
+  readonly id: number;
+  readonly name: string;
+  /** "#rrggbb". */
+  readonly colour: string;
+  /** Sorted tile keys. */
+  readonly tiles: readonly number[];
+}
+
+/** A tile waiting for a rover, and the level it is to be brought to, metres (a zone is one plane). */
+export interface QueuedLevel {
+  readonly tile: number;
+  readonly levelM: number;
+}
+
+export interface PlannedLink {
+  readonly layer: "corridors" | "cables" | "rails";
+  readonly tile: number;
+}
+
+/** One sample of a settlement's life, over the substeps since the last. Per-year rates are averages. */
+export interface HistorySample {
+  /** Which sample this is since founding: sample k covers years k to k+1 at the default rate. */
+  readonly index: number;
+  readonly population: number;
+  readonly housing: number;
+  /** People born, and people lost, per year. */
+  readonly births: number;
+  readonly deaths: number;
+  /** For each resource (MICRO_RESOURCES order), the share of substeps it ran short: 1 is short throughout. */
+  readonly short: readonly number[];
+  /** The stores at the sample's end. */
+  readonly stores: readonly number[];
+  /** Made less drawn, per year, averaged. */
+  readonly net: readonly number[];
+}
+
+export interface History {
+  /** What is gathering toward the next sample. */
+  readonly acc: { readonly substeps: number; readonly births: number; readonly deaths: number; readonly short: readonly number[]; readonly net: readonly number[] };
+  /** Samples taken ever: the next sample's index. */
+  readonly taken: number;
+  /** The latest samples, oldest first, at most HISTORY_SAMPLES. */
+  readonly samples: readonly HistorySample[];
 }
 
 export interface Grade {
