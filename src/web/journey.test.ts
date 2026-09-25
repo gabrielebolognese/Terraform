@@ -91,6 +91,8 @@ function trip(frames: number, plan: ReadonlyMap<number, (j: Journey, now: number
       onLaunch: () => ({ ok: false, reason: "not in this test" }),
       onConnect: () => ({ ok: false, reason: "not in this test", laid: 0 }),
       onClaim: () => ({ ok: false, reason: "not in this test" }),
+      onLevel: () => ({ ok: false, reason: "not in this test" }),
+      canLevel: () => ({ ok: false, reason: "not in this test" }),
       onBack: () => undefined,
     },
     tuning,

@@ -26,7 +26,7 @@ import { siteElevation } from "../hypsometry.js";
 import type { Tuning } from "../tuning.js";
 import type { PlacedBuilding, Settlement } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
-import { groundOf } from "./terrain.js";
+import { siteGround } from "./rocks.js";
 
 export type FloodState = "dry" | "warning" | "partial" | "flooded";
 
@@ -58,7 +58,8 @@ export function floodReading(s: Settlement, env: HabitatChannels, t: Tuning): Fl
     depthM >= t.FLOOD_THRESHOLD_M ? "flooded" : depthM >= 0 ? "partial" : depthM >= -t.FLOOD_WARN_MARGIN_M ? "warning" : "dry";
   // Tiles can only be wet if the sea is above the lowest ground the relief allows.
   if (depthM <= -Math.max(0, t.TERRAIN_RELIEF_M)) return { state, baseM, seaM, depthM, wet: null };
-  const ground = groundOf(s, t);
+  // The ground as the rovers have left it: a levelled tile floods at its level.
+  const ground = siteGround(s, t);
   return { state, baseM, seaM, depthM, wet: ground.heightM.map((h) => seaM > baseM + h) };
 }
 
@@ -100,7 +101,7 @@ export function applyFlood(s: Settlement, reading: FloodReading, t: Tuning): Set
     };
   }
   if (reading.wet === null) return s;
-  const ground = groundOf(s, t);
+  const ground = siteGround(s, t);
   const sea = reading.seaM;
   const kept = s.buildings.filter((b) => {
     const under = footprintIndices(b, ground.tiles);

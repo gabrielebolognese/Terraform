@@ -12,7 +12,7 @@
 
 import type { HabitatChannels } from "../habitat.js";
 import type { Tuning } from "../tuning.js";
-import type { BuildingType, MicroResource, Settlement, SettlementKind } from "../types.js";
+import type { BuildingType, Grade, MicroResource, Settlement, SettlementKind } from "../types.js";
 import { MICRO_RESOURCES } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { capacities, claimableChunks, claimsAllowed, housing, nextClaimAt, settlementStep } from "./settlement.js";
@@ -164,6 +164,36 @@ const POWER_PLANTS: ReadonlySet<BuildingType> = new Set<BuildingType>(["solar_ar
  */
 const worldsInTiles = new WeakMap<World, CityView["world"]>();
 
+/**
+ * The world with the settlement's levelled tiles set to their level: its
+ * corners, and the half-tile samples the ground is drawn through up close
+ * (the grid's own corners come from `siteGround`). Kept per world and grade
+ * list.
+ */
+const gradedWorlds = new WeakMap<CityView["world"], { grades: readonly Grade[]; out: CityView["world"] }>();
+
+function withGrades(w: CityView["world"], grades: readonly Grade[], t: Tuning): CityView["world"] {
+  if (grades.length === 0) return w;
+  const kept = gradedWorlds.get(w);
+  if (kept !== undefined && kept.grades === grades) return kept.out;
+  const corners = [...w.corners];
+  const fine = w.fine === undefined ? undefined : [...w.fine];
+  const m = w.size + 1;
+  const f = 2 * w.size + 1;
+  for (const g of grades) {
+    const { tx, ty } = keyTile(g.tile);
+    const x = tx + w.margin;
+    const y = ty + w.margin;
+    if (x >= w.size || y >= w.size) continue;
+    const h = g.heightM / t.TILE_METRES;
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) corners[(y + dy) * m + x + dx] = h;
+    if (fine !== undefined) for (let j = 0; j <= 2; j += 1) for (let i = 0; i <= 2; i += 1) fine[(2 * y + j) * f + 2 * x + i] = h;
+  }
+  const out = { ...w, corners, ...(fine === undefined ? {} : { fine }) };
+  gradedWorlds.set(w, { grades, out });
+  return out;
+}
+
 function worldInTiles(world: World, t: Tuning): CityView["world"] {
   const kept = worldsInTiles.get(world);
   if (kept !== undefined && kept.corners.length === world.cornersM.length) return kept;
@@ -204,7 +234,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     },
     groundZ,
     corners: ground.cornersM.map((h) => h / t.TILE_METRES),
-    world: worldInTiles(world, t),
+    world: withGrades(worldInTiles(world, t), s.grades, t),
     greenery: env.greenery,
     heightM: ground.heightM,
     steep: ground.steep,

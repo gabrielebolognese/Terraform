@@ -78,8 +78,9 @@ describe("a world with settlements round-trips through the save exactly", () => 
     // v8 has corridors and cables (laid by the player), the rocks rovers have
     // broken, and the jobs under way: all true state. v9 has the founding
     // square as founded (a retune must not move the ground under a city) and
-    // the land claimed; the frame they make is derived, and not stored.
-    expect(Object.keys(saved).sort()).toEqual(["base", "buildings", "cables", "claims", "cleared", "corridors", "id", "jobs", "kind", "lat", "lon", "lost_at_sea_level_m", "population", "stores"]);
+    // the land claimed; the frame they make is derived, and not stored. v10
+    // has the ground rovers levelled: the heights they set, not the ground made of them.
+    expect(Object.keys(saved).sort()).toEqual(["base", "buildings", "cables", "claims", "cleared", "corridors", "grades", "id", "jobs", "kind", "lat", "lon", "lost_at_sea_level_m", "population", "stores"]);
   });
 });
 

@@ -41,6 +41,7 @@ import {
   connectAll,
   claimLand,
   launchRocket,
+  levelGround,
   placeBuilding,
   placeLink,
   removeBuilding,
@@ -328,6 +329,12 @@ const city = new CityScreen(
       state = outcome.state;
       return outcome;
     },
+    onLevel: (id, tx, ty) => {
+      const outcome = levelGround(state, id, tx, ty, tuning);
+      state = outcome.state;
+      return outcome;
+    },
+    canLevel: (id, tx, ty) => levelGround(state, id, tx, ty, tuning),
     onClaim: (id, i, j) => {
       const outcome = claimLand(state, id, i, j, tuning);
       state = outcome.state;

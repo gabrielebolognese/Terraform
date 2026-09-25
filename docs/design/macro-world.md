@@ -617,6 +617,7 @@ COST_REACTOR = 150         COST_WATER_EXTRACTOR = 30  COST_ATMOSPHERE_PROCESSOR 
 COST_GREENHOUSE = 30       COST_REGOLITH_MINE = 25    COST_STORAGE_DEPOT = 10
 COST_SPACEPORT = 80
 COST_ROVER_POST = 300        ROVER_POST_PEOPLE = 100   # a Rover Post: one more rover; one post per 100 people
+ROVER_WORK_YEARS_LEVEL = 0.2 # a rover levelling a tile of ground to the level beside it, sim-years at the tile
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75
 SOLAR_POWER = 6            GEOTHERMAL_POWER = 8       REACTOR_POWER = 24

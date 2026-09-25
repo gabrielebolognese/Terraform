@@ -186,6 +186,7 @@ export {
   headquartersOrigin,
   housing,
   launchRocket,
+  levelGround,
   newSettlement,
   placeBuilding,
   placeLink,
@@ -196,7 +197,7 @@ export {
 } from "./micro/settlement.js";
 export { LAYERS, layerOf, linksToConnect, networkOf } from "./micro/network.js";
 export type { Layer, Network, NetworkIssue } from "./micro/network.js";
-export { garage, roverCount, rocksOf, roverYears, siteGround } from "./micro/rocks.js";
+export { garage, levelFor, roverCount, rocksOf, roverYears, siteGround } from "./micro/rocks.js";
 export type { Rock } from "./micro/rocks.js";
 export type { PlaceOutcome, SettlementStep } from "./micro/settlement.js";
 export { microStep } from "./micro/coupling.js";

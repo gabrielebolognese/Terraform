@@ -16,6 +16,7 @@ import type { BuildingType, SimState, Tuning } from "../sim/index.js";
 import {
   NEUTRAL_ENV,
   claimLand,
+  levelGround,
   connectAll,
   derive,
   foundSettlement,
@@ -90,6 +91,13 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
         state = o.state;
         return o;
       },
+      onLevel: (id, tx, ty) => {
+        calls.push(`level@${tx},${ty}`);
+        const o = levelGround(state, id, tx, ty, t);
+        state = o.state;
+        return o;
+      },
+      canLevel: (id, tx, ty) => levelGround(state, id, tx, ty, t),
       onClaim: (id, i, j) => {
         calls.push(`claim ${i},${j}`);
         const o = claimLand(state, id, i, j, t);
@@ -607,7 +615,7 @@ describe("the connective tools, top right (at the user's request: \"so connectiv
     document.head.append(style);
     const page = mount();
     const tools = page.q(".city-tools");
-    expect([...tools.querySelectorAll<HTMLElement>(".city-card")].map((c) => c.dataset["card"])).toEqual(["corridor", "cable", "connect", "claim"]);
+    expect([...tools.querySelectorAll<HTMLElement>(".city-card")].map((c) => c.dataset["card"])).toEqual(["corridor", "cable", "connect", "claim", "level"]);
     expect(page.q(".city-dock").querySelector('[data-card="corridor"], [data-card="cable"], [data-card="connect"], [data-card="claim"]')).toBeNull();
     const css = getComputedStyle(tools);
     expect(css.position).toBe("fixed");
@@ -618,14 +626,39 @@ describe("the connective tools, top right (at the user's request: \"so connectiv
 
   it("is always there: with no materials, and in an outpost", () => {
     const poor = mount("city", { materials: 0 });
-    expect(poor.host.querySelectorAll(".city-tools .city-card")).toHaveLength(4);
+    expect(poor.host.querySelectorAll(".city-tools .city-card")).toHaveLength(5);
     document.body.replaceChildren();
     const outpost = mount("outpost");
-    expect(outpost.host.querySelectorAll(".city-tools .city-card")).toHaveLength(4);
+    expect(outpost.host.querySelectorAll(".city-tools .city-card")).toHaveLength(5);
     expect(outpost.q('.city-tools [data-card="claim"] .city-card-cost').textContent).toBe("cities only");
     // The tools still work from there.
     outpost.q('.city-tools [data-card="corridor"]').click();
     outpost.frame();
     expect(outpost.q(".city-hint").textContent).toMatch(/lay corridor/);
+  });
+});
+
+describe("levelling ground (at the user's request: \"send a rover and flat out the terrain to the nearby level\")", () => {
+  const HQT = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, HEADQUARTERS_ENABLED: 1 });
+
+  it("sends a rover to level the tile clicked, from the tool at the top right, and Esc puts the tool down", () => {
+    const page = mount("city", {}, HQT);
+    // A sloping, open tile of the 32-tile grid.
+    const g = groundOf(page.state().settlements[0]!, HQT);
+    let tile = -1;
+    for (let i = 0; i < g.slope.length; i += 1) if (g.slope[i]! > 0.05 && !g.steep[i] && Math.hypot((i % 32) - 16, Math.floor(i / 32) - 16) < 9) tile = i;
+    expect(tile, "vacuity: a sloping tile in view").toBeGreaterThanOrEqual(0);
+    const tx = tile % 32;
+    const ty = Math.floor(tile / 32);
+    page.q('.city-tools [data-card="level"]').click();
+    page.frame();
+    expect(page.q(".city-hint").textContent).toMatch(/level it to the level beside it/);
+    page.clickAt(tx + 0.5, ty + 0.5, g.heightM[tile]! / HQT.TILE_METRES);
+    expect(page.calls).toContain(`level@${tx},${ty}`);
+    expect(page.state().settlements[0]!.jobs.some((j) => j.kind === "rover" && j.levelM !== undefined)).toBe(true);
+    expect(page.q(".city-hint").textContent).toMatch(/rover is on its way to level/);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    page.frame();
+    expect(page.q('.city-tools [data-card="level"]').getAttribute("aria-pressed")).toBe("false");
   });
 });

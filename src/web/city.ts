@@ -49,6 +49,10 @@ export interface CityHooks {
   readonly onLaunch: (settlementId: string, tx: number, ty: number) => ActionOutcome;
   /** Lay (and pay for) the corridors and cables that join every building into one network of each. */
   readonly onConnect: (settlementId: string) => ActionOutcome & { readonly laid: number };
+  /** Send a rover to level a tile of ground to the level beside it; the sim decides. */
+  readonly onLevel: (settlementId: string, tx: number, ty: number) => ActionOutcome;
+  /** The same call as a dry run, for the preview. Must not change the world. */
+  readonly canLevel: (settlementId: string, tx: number, ty: number) => ActionOutcome;
   /** Claim chunk (i, j) of land - chunk coordinates from the founding square; the sim decides. */
   readonly onClaim: (settlementId: string, i: number, j: number) => ActionOutcome;
   readonly onBack: () => void;
@@ -199,6 +203,8 @@ export class CityScreen {
   private paving: Layer | null = null;
   /** Claim mode: the land on offer is drawn, and a click claims the chunk under the pointer. */
   private claiming = false;
+  /** The levelling tool: a click sends a rover to level the tile. */
+  private levelling = false;
   private claimHover: { i: number; j: number } | null = null;
   /** The view's origin the camera was last placed against: a claim west or north moves every tile. */
   private origin: { x: number; y: number } | null = null;
@@ -318,6 +324,7 @@ export class CityScreen {
     this.placing = null;
     this.paving = null;
     this.claiming = false;
+    this.levelling = false;
     this.claimHover = null;
     this.origin = null;
     this.selectedTile = null;
@@ -342,6 +349,7 @@ export class CityScreen {
     if (type !== null) {
       this.paving = null;
       this.claiming = false;
+      this.levelling = false;
     }
     this.notice = null;
     if (type !== null) this.select(null);
@@ -355,6 +363,7 @@ export class CityScreen {
     if (layer !== null) {
       this.placing = null;
       this.claiming = false;
+      this.levelling = false;
       this.select(null);
     }
     this.notice = null;
@@ -369,6 +378,22 @@ export class CityScreen {
     if (on) {
       this.placing = null;
       this.paving = null;
+      this.levelling = false;
+      this.select(null);
+      this.selectedTile = null;
+    }
+    this.notice = null;
+    this.renderPalette(true);
+    this.lastPanel = -Infinity;
+  }
+
+  /** The levelling tool on or off. */
+  armLevel(on: boolean): void {
+    this.levelling = on;
+    if (on) {
+      this.placing = null;
+      this.paving = null;
+      this.claiming = false;
       this.select(null);
       this.selectedTile = null;
     }
@@ -478,6 +503,9 @@ export class CityScreen {
   }
 
   private ghost(): CitySceneOptions["ghost"] {
+    if (this.levelling && this.hover !== null && this.settlementId !== null) {
+      return { tx: this.hover.tx, ty: this.hover.ty, size: 1, valid: this.hooks.canLevel(this.settlementId, this.hover.tx, this.hover.ty).ok };
+    }
     if (this.paving !== null && this.hover !== null && this.settlementId !== null && this.view !== null) {
       // On a tile of it the tool takes it up, which is always allowed; elsewhere, ask the sim.
       const onLink = this.view[this.paving][this.hover.ty * this.view.tiles + this.hover.tx] === true;
@@ -547,7 +575,9 @@ export class CityScreen {
     this.placeThumb();
     const here = this.placing !== null && this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) : "";
     this.hint.textContent =
-      this.claiming
+      this.levelling
+        ? this.notice ?? `Click a tile of ground to send a rover to level it to the level beside it - for looks, and so a building needs no foundation there. It breaks any rock there too. Esc finishes.${this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) : ""}`
+        : this.claiming
         ? this.notice ?? this.claimHint(view)
         : this.paving === "corridors"
         ? this.notice ?? `Click or drag to lay corridor (${this.tuning.COST_CORRIDOR} material a tile): it carries water, oxygen, food and materials. Start on a corridor to take it up. Esc finishes.`
@@ -641,7 +671,7 @@ export class CityScreen {
     if (s === null) return;
     const view = this.view;
     const land = view === null ? "" : `${view.claims.held}/${view.claims.allowed}`;
-    const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}|${this.claiming}|${land}`;
+    const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}|${this.claiming}|${this.levelling}|${land}`;
     if (!force && key === this.paletteKind) return;
     this.paletteKind = key;
     const cards = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].buildable && BUILDING_DEFS[type].kinds.includes(s.kind)).map((type) => {
@@ -662,8 +692,10 @@ export class CityScreen {
     const price = c === undefined || c.nextAt === null ? "cities only" : c.allowed > c.held ? `${c.allowed - c.held} to claim` : `at ${c.nextAt} people`;
     const claim = this.card("claim", "Claim land", price, false, this.claiming, () => this.armClaim(!this.claiming));
     claim.classList.add("city-claim");
+    const level = this.card("level", "Level ground", "a rover", false, this.levelling, () => this.armLevel(!this.levelling));
+    level.classList.add("city-level");
     this.palette.replaceChildren(...cards);
-    this.tools.replaceChildren(corridor, cable, connect, claim);
+    this.tools.replaceChildren(corridor, cable, connect, claim, level);
     this.placeThumb();
     // A card rebuilt under the pointer keeps its tooltip.
     if (this.tipFor !== null) {
@@ -724,6 +756,16 @@ export class CityScreen {
           "Carries power, and only power: a mine needs a cable to a power plant.",
           "Buildings that share a wall are joined without one.",
           `Costs ${t.COST_CABLE} material a tile. Click or drag to lay it; start a drag on a cable to take it up.`,
+        ],
+      };
+    }
+    if (kind === "level") {
+      return {
+        title: "Level ground",
+        lines: [
+          "Send a rover to level a tile to the level beside it: the nearest level ground within a few tiles, or the tile's own height.",
+          "Level ground looks tidier, and a building on it needs no concrete foundation.",
+          `Free; the rover takes a while, and any rock there is broken and brought back. One tile per rover (${this.tuning.ROVERS_PER_HQ} at the headquarters, one more per Rover Post).`,
         ],
       };
     }
@@ -867,6 +909,7 @@ export class CityScreen {
         const before = this.hover;
         this.hover = tileUnder(this.view, this.camera, size.w, size.h, local.x, local.y);
         if (this.claiming) this.claimHover = this.chunkAt(local.x, local.y);
+        if (this.levelling && (before?.tx !== this.hover?.tx || before?.ty !== this.hover?.ty)) this.lastPanel = -Infinity;
         // The hint names the ground under the pointer, so rewrite it when that changes.
         if (this.placing !== null && (before?.tx !== this.hover?.tx || before?.ty !== this.hover?.ty)) this.lastPanel = -Infinity;
       }
@@ -906,6 +949,7 @@ export class CityScreen {
     globalThis.addEventListener?.("keydown", (e: KeyboardEvent) => {
       if (this.settlementId === null || e.key !== "Escape") return;
       if (this.claiming) this.armClaim(false);
+      else if (this.levelling) this.armLevel(false);
       else if (this.paving !== null) this.armLink(null);
       else if (this.placing !== null) this.arm(null);
       else this.select(null);
@@ -926,6 +970,14 @@ export class CityScreen {
     const size = this.viewSize();
     if (this.claiming) {
       this.claimAt(at);
+      return;
+    }
+    if (this.levelling) {
+      const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
+      if (tile === null) return;
+      const outcome = this.hooks.onLevel(id, tile.tx, tile.ty);
+      this.notice = outcome.ok ? "A rover is on its way to level the ground." : `Cannot level: ${outcome.reason ?? "refused"}.`;
+      this.lastPanel = -Infinity;
       return;
     }
     if (this.placing !== null) {

@@ -13,7 +13,7 @@
  */
 
 import type { Tuning } from "../tuning.js";
-import type { Settlement } from "../types.js";
+import type { Grade, Settlement } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { frameOf, keyTile, tileKey } from "./space.js";
 import type { Ground, Rock } from "./terrain.js";
@@ -21,18 +21,91 @@ import { groundOf, natureRock, placeSeed } from "./terrain.js";
 
 export type { Rock } from "./terrain.js";
 
-/** The ground as the settlement's rovers have left it: a broken crag is no longer steep. */
+/** The last worked ground, kept: the placement preview asks for it many times a second. */
+let worked: { ground: Ground; cleared: readonly number[]; grades: readonly Grade[]; out: Ground } | null = null;
+
+/**
+ * The ground as the settlement's rovers have left it: levelled tiles set to
+ * their level (and the tiles round them re-judged, as their shared corners
+ * moved), and a broken crag no longer steep.
+ */
 export function siteGround(s: Settlement, t: Tuning): Ground {
   const ground = groundOf(s, t);
-  if (s.cleared.length === 0) return ground;
+  if (s.cleared.length === 0 && s.grades.length === 0) return ground;
+  if (worked !== null && worked.ground === ground && worked.cleared === s.cleared && worked.grades === s.grades) return worked.out;
   const n = ground.tiles;
+  const m = n + 1;
+  let { cornersM, heightM, slope } = ground;
   const steep = [...ground.steep];
+  if (s.grades.length > 0) {
+    const corners = [...cornersM];
+    const touched = new Set<number>();
+    for (const g of s.grades) {
+      const { tx, ty } = keyTile(g.tile);
+      if (tx >= n || ty >= n) continue;
+      for (const [cx, cy] of [[tx, ty], [tx + 1, ty], [tx, ty + 1], [tx + 1, ty + 1]] as const) corners[cy * m + cx] = g.heightM;
+      for (let y = ty - 1; y <= ty + 1; y += 1) for (let x = tx - 1; x <= tx + 1; x += 1) if (x >= 0 && y >= 0 && x < n && y < n) touched.add(y * n + x);
+    }
+    const heights = [...heightM];
+    const slopes = [...slope];
+    for (const i of touched) {
+      const x = i % n;
+      const y = (i - x) / n;
+      const a = corners[y * m + x]!;
+      const b = corners[y * m + x + 1]!;
+      const c = corners[(y + 1) * m + x]!;
+      const d = corners[(y + 1) * m + x + 1]!;
+      heights[i] = (a + b + c + d) / 4 === 0 ? 0 : (a + b + c + d) / 4;
+      slopes[i] = Math.max(Math.abs(a - b), Math.abs(c - d), Math.abs(a - c), Math.abs(b - d)) / t.TILE_METRES;
+      steep[i] = slopes[i]! > t.TERRAIN_MAX_SLOPE;
+    }
+    cornersM = corners;
+    heightM = heights;
+    slope = slopes;
+  }
   for (const key of s.cleared) {
     const { tx, ty } = keyTile(key);
     if (tx < n && ty < n) steep[ty * n + tx] = false;
   }
-  return { ...ground, steep };
+  const out = { ...ground, cornersM, heightM, slope, steep };
+  worked = { ground, cleared: s.cleared, grades: s.grades, out };
+  return out;
 }
+
+/**
+ * The level a rover levels tile (tx, ty) to: "the nearby level" - the height
+ * of the nearest level ground within LEVEL_REACH tiles (a tile whose corners
+ * lie within LEVEL_FLAT_M of each other: the landing zone, a levelled tile),
+ * nearest first, then by the tile's order; with none near, the tile's own
+ * height, to the nearest ten centimetres, so the next tile levels to it.
+ */
+export function levelFor(s: Settlement, tx: number, ty: number, t: Tuning): number {
+  const ground = siteGround(s, t);
+  const n = ground.tiles;
+  const m = n + 1;
+  const spread = (x: number, y: number): number => {
+    const c = [ground.cornersM[y * m + x]!, ground.cornersM[y * m + x + 1]!, ground.cornersM[(y + 1) * m + x]!, ground.cornersM[(y + 1) * m + x + 1]!];
+    return Math.max(...c) - Math.min(...c);
+  };
+  let best: { d: number; h: number } | null = null;
+  for (let y = ty - LEVEL_REACH; y <= ty + LEVEL_REACH; y += 1) {
+    for (let x = tx - LEVEL_REACH; x <= tx + LEVEL_REACH; x += 1) {
+      if ((x === tx && y === ty) || x < 0 || y < 0 || x >= n || y >= n || spread(x, y) > LEVEL_FLAT_M) continue;
+      const d = Math.hypot(x - tx, y - ty);
+      // Row by row, so the first found wins a tie: deterministic.
+      if (best === null || d < best.d) best = { d, h: ground.heightM[y * n + x]! };
+    }
+  }
+  if (best !== null) return best.h;
+  const own = Math.round((ground.heightM[ty * n + tx] ?? 0) * 10) / 10;
+  // Exactly 0, never -0: a save compares it.
+  return own === 0 ? 0 : own;
+}
+
+/** How far a rover looks for level ground to level a tile to, tiles. */
+const LEVEL_REACH = 4;
+/** Corners within this of each other make a tile level ground, metres. */
+const LEVEL_FLAT_M = 0.25;
 
 /**
  * Nature's rocks on each tile of a ground, before anyone built or broke

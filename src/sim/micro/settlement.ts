@@ -21,7 +21,7 @@ import { BUILDING_DEFS } from "./buildings.js";
 import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
 import { isSteep, slopeAt } from "./terrain.js";
 import type { Rock } from "./rocks.js";
-import { garage, rockAt, roverCount, rocksOf, roverYears, siteGround } from "./rocks.js";
+import { garage, levelFor, rockAt, roverCount, rocksOf, roverYears, siteGround } from "./rocks.js";
 import type { FloodReading } from "./flood.js";
 import { applyFlood, floodReading, submerged } from "./flood.js";
 import type { Layer, NetworkIssue } from "./network.js";
@@ -48,6 +48,7 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     jobs: [],
     base: gridTiles(kind, t),
     claims: [],
+    grades: [],
   };
 }
 
@@ -267,6 +268,42 @@ export function sendRover(state: SimState, settlementId: string, tx: number, ty:
 }
 
 /**
+ * Send a rover to level the ground of tile (tx, ty) to the level beside it
+ * (at the user's request: "there has to be the possibility to send a rover
+ * and flat out the terrain to the nearby level" - for looks, and so a
+ * building can stand without a foundation). Open ground the city holds, not
+ * under a building; what rock is there is broken too, and brought back.
+ * The level is fixed when the rover sets out.
+ */
+export function levelGround(state: SimState, settlementId: string, tx: number, ty: number, t: Tuning): PlaceOutcome {
+  const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
+  if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
+  if (garage(s) === null) return refuse("there is no headquarters to send a rover from");
+  if (!claimTest(s, t)(tx, ty)) return refuse("that is off the grid - the land the city holds");
+  if (occupied(s).has(`${tx},${ty}`)) return refuse("a building stands there");
+  const key = tileKey(tx, ty);
+  if (s.jobs.some((j) => j.kind === "rover" && j.tile === key)) return refuse("a rover is already on its way there");
+  const ground = siteGround(s, t);
+  const n = ground.tiles;
+  const m = n + 1;
+  const level = levelFor(s, tx, ty, t);
+  const corners = [ground.cornersM[ty * m + tx]!, ground.cornersM[ty * m + tx + 1]!, ground.cornersM[(ty + 1) * m + tx]!, ground.cornersM[(ty + 1) * m + tx + 1]!];
+  if (corners.every((c) => Math.abs(c - level) < 0.01)) return refuse("the ground is already level there");
+  const out = s.jobs.filter((j) => j.kind === "rover").length;
+  const rovers = roverCount(s, t);
+  if (out >= rovers) return refuse(`all ${rovers} rovers are out`);
+  const rock: Rock = rocksOf(s, t)[ty * n + tx] ?? "none";
+  const breaking = rock === "none" ? 0 : rock === "crag" ? t.ROVER_WORK_YEARS_CRAG : t.ROVER_WORK_YEARS_LOOSE;
+  const work = t.ROVER_WORK_YEARS_LEVEL + breaking;
+  const years = roverYears(s, tx, ty, "none", t) - t.ROVER_WORK_YEARS_LOOSE + work;
+  const materials = rock === "crag" ? t.ROCK_CRAG_MATERIALS : rock === "loose" ? t.ROCK_LOOSE_MATERIALS : 0;
+  const job: SettlementJob = { kind: "rover", tile: key, materials, work, total: years, remaining: years, levelM: level };
+  return { state: withSettlement(state, settlementId, { ...s, jobs: [...s.jobs, job] }), ok: true, reason: null };
+}
+
+/**
  * Launch a rocket from the spaceport covering (tx, ty) (at the user's
  * request): it flies off and comes back `ROCKET_TRIP_YEARS` later - one real
  * minute at 1x - with `ROCKET_MATERIALS`, or what the stores have room for.
@@ -379,6 +416,7 @@ export function shiftContent(s: Settlement, dx: number, dy: number): Settlement 
     corridors: s.corridors.map(move),
     cables: s.cables.map(move),
     cleared: s.cleared.map(move),
+    grades: s.grades.map((g) => ({ ...g, tile: move(g.tile) })),
     jobs: s.jobs.map((job) => ({ ...job, tile: move(job.tile) })),
   };
 }
@@ -494,6 +532,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   // there are just 10 to get").
   const jobs: SettlementJob[] = [];
   let cleared = s.cleared;
+  let grades = s.grades;
   for (const job of s.jobs) {
     const remaining = job.remaining - h;
     if (remaining > 1e-9) {
@@ -502,7 +541,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     }
     const brought = job.kind === "rover" ? job.materials : t.ROCKET_MATERIALS;
     stores.materials = Math.min(cap.materials, stores.materials + brought);
-    if (job.kind === "rover") cleared = [...cleared, job.tile].sort((a, b) => a - b);
+    if (job.kind === "rover" && !cleared.includes(job.tile)) cleared = [...cleared, job.tile].sort((a, b) => a - b);
+    if (job.kind === "rover" && job.levelM !== undefined) grades = [...grades, { tile: job.tile, heightM: job.levelM }];
   }
 
   /**
@@ -533,5 +573,5 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env);
   });
 
-  return { next: { ...s, stores, population, jobs, cleared }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
+  return { next: { ...s, stores, population, jobs, cleared, grades }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
 }

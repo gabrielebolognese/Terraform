@@ -39,6 +39,7 @@ import { startingEconomy } from "./economy.js";
 import type { Tuning } from "./tuning.js";
 import type {
   EconomyState,
+  Grade,
   Facility,
   FacilityType,
   Ledger,
@@ -63,7 +64,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 9;
+export const SAVE_SCHEMA_VERSION = 10;
 
 export interface SavedFacility {
   readonly type: string;
@@ -145,6 +146,8 @@ export interface SavedSettlement {
   readonly base?: number;
   /** Added in v9: the chunks claimed beyond it, as sorted chunk keys. */
   readonly claims?: readonly number[];
+  /** Added in v10 (levelling, at the user's request): levelled tiles, in the order they were, each `{ tile, height_m }`. */
+  readonly grades?: readonly { readonly tile: number; readonly height_m: number }[];
 }
 
 /**
@@ -227,6 +230,7 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       jobs: s.jobs.map((j) => ({ ...j })),
       base: s.base,
       claims: [...s.claims],
+      grades: s.grades.map((g) => ({ tile: g.tile, height_m: g.heightM })),
     })),
   };
 }
@@ -307,7 +311,16 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 7) current = migrateV6toV7(current);
   if (version < 8) current = migrateV7toV8(current);
   if (version < 9) current = migrateV8toV9(current);
+  if (version < 10) current = migrateV9toV10(current);
   return current;
+}
+
+/** v9 -> v10: levelled ground. Nothing had been levelled. */
+function migrateV9toV10(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  if (!Array.isArray(list)) return { ...save, schema_version: 10 };
+  const settlements = list.map((raw) => (typeof raw !== "object" || raw === null ? raw : { ...(raw as Record<string, unknown>), grades: [] }));
+  return { ...save, schema_version: 10, settlements };
 }
 
 /**
@@ -630,7 +643,8 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     const founded = numberAt(s, "base", `${where}.base`);
     if (!Number.isInteger(founded) || founded < 1) throw new SaveError(`${where}.base must be a whole number of tiles from 1, got ${founded}`);
     const claims = readClaims(s, where);
-    const draft: Settlement = { ...base, buildings, base: founded, claims };
+    const grades = readGrades(s, where);
+    const draft: Settlement = { ...base, buildings, base: founded, claims, grades };
     const cap = capacities(draft, t);
     const storesRaw = asRecord(s["stores"], `${where}.stores`);
     const stores = { ...base.stores };
@@ -681,6 +695,17 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
 }
 
 const LINK_WORDS: Readonly<Record<Layer, string>> = { corridors: "corridor", cables: "cable" };
+
+/** Levelled tiles: a whole tile key and a finite height each. Order kept: a later grade wins a shared corner. */
+function readGrades(s: Record<string, unknown>, where: string): readonly Grade[] {
+  return asArray(s["grades"], `${where}.grades`).map((raw, j) => {
+    const at = `${where}.grades[${j}]`;
+    const g = asRecord(raw, at);
+    const tile = numberAt(g, "tile", `${at}.tile`);
+    if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
+    return { tile, heightM: numberAt(g, "height_m", `${at}.height_m`) };
+  });
+}
 
 /** Claimed chunks: whole, distinct chunk keys. Whether they touch is not the save's to judge - a retune of the chunk size would break it. */
 function readClaims(s: Record<string, unknown>, where: string): readonly number[] {
@@ -741,6 +766,8 @@ function readJobs(s: Record<string, unknown>, where: string): readonly Settlemen
       const work = numberAt(job, "work", `${at}.work`);
       if (materials < 0) throw new SaveError(`${at}.materials is negative (${materials})`);
       if (work < 0 || work > total) throw new SaveError(`${at}.work ${work} is outside its ${total}-year trip`);
+      // v10: a rover levelling its tile carries the level.
+      if (job["levelM"] !== undefined) return { kind, tile, total, remaining, materials, work, levelM: numberAt(job, "levelM", `${at}.levelM`) };
       return { kind, tile, total, remaining, materials, work };
     }
     throw new SaveError(`${at}.kind must be "rover" or "rocket", got ${describe(kind)}`);

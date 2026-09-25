@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 9;
+  readonly schemaVersion: 10;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -411,6 +411,18 @@ export interface Settlement {
   readonly base: number;
   /** Land claimed beyond the founding square: sorted chunk keys (`chunkKey`, site coordinates). */
   readonly claims: readonly number[];
+  /**
+   * Ground rovers have levelled (at the user's request: "send a rover and
+   * flat out the terrain to the nearby level"), in the order they were: each
+   * sets the four corners of its tile to `heightM`, metres against the base.
+   * A later grade wins a corner two share.
+   */
+  readonly grades: readonly Grade[];
+}
+
+export interface Grade {
+  readonly tile: number;
+  readonly heightM: number;
 }
 
 /**
@@ -421,7 +433,8 @@ export interface Settlement {
 export type SettlementJob =
   /** A rover out from the headquarters to break the rock on `tile`, bringing back `materials`. */
   /** `work` is the part of `total` spent breaking the rock; the rest is the drive out and back. */
-  | { readonly kind: "rover"; readonly tile: number; readonly materials: number; readonly work: number; readonly total: number; readonly remaining: number }
+  /** With `levelM`, it levels the tile to that height, metres, as well (and breaks what rock is there). */
+  | { readonly kind: "rover"; readonly tile: number; readonly materials: number; readonly work: number; readonly total: number; readonly remaining: number; readonly levelM?: number }
   /** A rocket off the spaceport whose corner is `tile`, to come back with materials. */
   | { readonly kind: "rocket"; readonly tile: number; readonly total: number; readonly remaining: number };
 

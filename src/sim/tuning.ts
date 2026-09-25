@@ -789,6 +789,8 @@ export const BASE_TUNING = Object.freeze({
   /** Breaking loose rocks, and a crag: 3 and 10 real seconds at 1x. */
   ROVER_WORK_YEARS_LOOSE: 0.09,
   ROVER_WORK_YEARS_CRAG: 0.3,
+  /** Levelling a tile of ground to the level beside it (at the user's request), sim-years at the tile. */
+  ROVER_WORK_YEARS_LEVEL: 0.2,
   /** Materials a rover brings back from loose rocks, and from a crag. */
   ROCK_LOOSE_MATERIALS: 1,
   ROCK_CRAG_MATERIALS: 5,
@@ -1008,6 +1010,7 @@ export function validateTuning(t: Tuning): void {
   if (!(t.COST_CABLE >= 0)) fail("COST_CABLE must be >= 0");
   if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");
   if (!(t.ROVER_POST_PEOPLE > 0)) fail("ROVER_POST_PEOPLE must be > 0");
+  if (!(t.ROVER_WORK_YEARS_LEVEL > 0)) fail("ROVER_WORK_YEARS_LEVEL must be > 0");
   if (!(t.ROCKET_TRIP_YEARS > 0)) fail("ROCKET_TRIP_YEARS must be > 0");
   if (!(t.ROCK_LOOSE_SHARE >= 0 && t.ROCK_LOOSE_SHARE <= 1)) fail("ROCK_LOOSE_SHARE must be in [0, 1]");
   if (!(t.ROCK_CLUSTER_CHANCE >= 0 && t.ROCK_CLUSTER_CHANCE <= 1)) fail("ROCK_CLUSTER_CHANCE must be in [0, 1]");
