@@ -40,6 +40,8 @@ import {
   foundSettlement,
   connectAll,
   claimLand,
+  connectTwice,
+  upgradeBuilding,
   launchRocket,
   levelGround,
   placeBuilding,
@@ -96,6 +98,8 @@ const tuning = makeTuning({
   ROCK_CLUSTER_CHANCE: 0.65,
   // Three times the founding ground (the user: "make the initial boundaries at
   // least 3x bigger"); a city claims more as it grows.
+  // Buildings take a rover and time to build (at the user's request).
+  BUILD_TIME_ENABLED: 1,
   CITY_GRID_TILES: 96,
   OUTPOST_GRID_TILES: 48,
   METROPOLIS_GRID_TILES: 288,
@@ -326,6 +330,16 @@ const city = new CityScreen(
     },
     onLaunch: (id, tx, ty) => {
       const outcome = launchRocket(state, id, tx, ty, tuning);
+      state = outcome.state;
+      return outcome;
+    },
+    onUpgrade: (id, tx, ty) => {
+      const outcome = upgradeBuilding(state, id, tx, ty, tuning);
+      state = outcome.state;
+      return outcome;
+    },
+    onConnectTwice: (id) => {
+      const outcome = connectTwice(state, id, tuning);
       state = outcome.state;
       return outcome;
     },

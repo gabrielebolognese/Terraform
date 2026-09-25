@@ -15,7 +15,7 @@ import type { Tuning } from "../tuning.js";
 import type { BuildingType, Grade, MicroResource, Settlement, SettlementKind } from "../types.js";
 import { MICRO_RESOURCES } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
-import { capacities, claimableChunks, claimsAllowed, housing, nextClaimAt, settlementStep } from "./settlement.js";
+import { capacities, claimableChunks, claimsAllowed, constructionOf, housing, nextClaimAt, settlementStep } from "./settlement.js";
 import { siteElevation } from "../hypsometry.js";
 import type { FloodState } from "./flood.js";
 import { submerged } from "./flood.js";
@@ -23,7 +23,7 @@ import type { NetworkIssue } from "./network.js";
 import { linkGrid } from "./network.js";
 import type { Rock } from "./rocks.js";
 import { garage, rocksOf, siteGround } from "./rocks.js";
-import { claimTest, frameOf, keyTile } from "./space.js";
+import { claimTest, frameOf, keyTile, tileKey } from "./space.js";
 import type { World } from "./terrain.js";
 import { worldOf } from "./terrain.js";
 
@@ -43,6 +43,10 @@ export interface CityBuildingView {
   readonly submerged: boolean;
   /** Why the network keeps it from running (not connected to what it needs), or null. */
   readonly network: NetworkIssue | null;
+  /** Its level, 1 up (at the user's request). */
+  readonly level?: number;
+  /** Still going up: how far its rover's work is, 0..1; absent or null once built. */
+  readonly construction?: number | null;
   /**
    * How hard it is working, 0..1, for the aliveness layer. A power plant's is
    * the share of the settlement's power being drawn ("reactor core brightness
@@ -219,6 +223,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
   const claimed = new Array<boolean>(n * n);
   for (let ty = 0; ty < n; ty += 1) for (let tx = 0; tx < n; tx += 1) claimed[ty * n + tx] = ours(tx, ty);
   const chunk = t.CLAIM_CHUNK_TILES;
+  const building = constructionOf(s);
   return {
     id: s.id,
     kind: s.kind,
@@ -260,7 +265,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
         }
       }
       const drowned = step.flood !== null && submerged(b, step.flood);
-      return { index, type: b.type, tx: b.tx, ty: b.ty, size, operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null };
+      return { index, type: b.type, tx: b.tx, ty: b.ty, size, operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null };
     }),
     population: s.population,
     housing: home,
@@ -277,6 +282,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     cables: Array.from(linkGrid(s.cables, n), (r) => r === 1),
     rocks: rocksOf(s, t),
     garage: garage(s),
-    jobs: s.jobs.map((j) => ({ kind: j.kind, ...keyTile(j.tile), total: j.total, remaining: j.remaining, work: j.kind === "rover" ? j.work : 0 })),
+    // A rover building is drawn as any rover at work: out, at the site, and back.
+    jobs: s.jobs.map((j) => ({ kind: j.kind === "rocket" ? ("rocket" as const) : ("rover" as const), ...keyTile(j.tile), total: j.total, remaining: j.remaining, work: j.kind === "rocket" ? 0 : j.work })),
   };
 }

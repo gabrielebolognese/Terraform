@@ -17,15 +17,15 @@ import type { HabitatChannels } from "../habitat.js";
 import type { Tuning } from "../tuning.js";
 import type { BuildingType, MicroResource, PlacedBuilding, Settlement, SettlementJob, SettlementKind, SimState } from "../types.js";
 import { MICRO_RESOURCES, isCityKind } from "../types.js";
-import { BUILDING_DEFS } from "./buildings.js";
+import { BUILDING_DEFS, buildYears, levelFactor, maxLevel } from "./buildings.js";
 import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
 import { isSteep, slopeAt } from "./terrain.js";
 import type { Rock } from "./rocks.js";
-import { garage, levelFor, rockAt, roverCount, rocksOf, roverYears, siteGround } from "./rocks.js";
+import { garage, levelFor, rockAt, roverCount, roversOut, rocksOf, roverYears, siteGround } from "./rocks.js";
 import type { FloodReading } from "./flood.js";
 import { applyFlood, floodReading, submerged } from "./flood.js";
 import type { Layer, NetworkIssue } from "./network.js";
-import { LAYERS, applyNetwork, linksToConnect, networkOf } from "./network.js";
+import { LAYERS, applyNetwork, linksForRedundancy, linksToConnect, networkOf } from "./network.js";
 
 /** Section 7.2: the resources whose shortage is a life-support emergency. */
 const LIFE_SUPPORT: readonly MicroResource[] = ["power", "water", "oxygen", "food"];
@@ -84,17 +84,54 @@ export function capacities(s: Settlement, t: Tuning): Readonly<Record<MicroResou
     food: t.MICRO_CAP_FOOD,
     materials: t.MICRO_CAP_MATERIALS,
   };
+  const building = constructing(s);
   for (const b of s.buildings) {
+    if (building.has(tileKey(b.tx, b.ty))) continue;
     const extra = BUILDING_DEFS[b.type].capacity(t);
-    for (const r of MICRO_RESOURCES) cap[r] += extra[r] ?? 0;
+    const k = levelFactor(b.level, t);
+    for (const r of MICRO_RESOURCES) cap[r] += (extra[r] ?? 0) * k;
   }
   return cap;
 }
 
 export function housing(s: Settlement, t: Tuning): number {
   let total = 0;
-  for (const b of s.buildings) total += BUILDING_DEFS[b.type].housing(t);
+  const building = constructing(s);
+  for (const b of s.buildings) if (!building.has(tileKey(b.tx, b.ty))) total += BUILDING_DEFS[b.type].housing(t) * levelFactor(b.level, t);
   return total;
+}
+
+/**
+ * The buildings still going up, by their corner's tile key, and how far the
+ * work is, 0..1. A building is up once its rover has done the work and set
+ * off home: the rest of the job is the drive back. Derived from the jobs.
+ */
+export function constructionOf(s: Settlement): Map<number, number> {
+  const out = new Map<number, number>();
+  for (const j of s.jobs) {
+    if (j.kind !== "build" || j.upgrade) continue;
+    const drive = (j.total - j.work) / 2;
+    if (!(j.remaining > drive)) continue;
+    const at = j.total - j.remaining - drive;
+    out.set(j.tile, Math.min(1, Math.max(0, at / Math.max(1e-9, j.work))));
+  }
+  return out;
+}
+
+function constructing(s: Settlement): ReadonlySet<number> {
+  return s.jobs.some((j) => j.kind === "build") ? new Set(constructionOf(s).keys()) : EMPTY;
+}
+
+const EMPTY: ReadonlySet<number> = new Set();
+
+/** A rover to build (or upgrade) the building at (tx, ty): out from the headquarters, the work, and back. */
+function buildJob(s: Settlement, type: BuildingType, tx: number, ty: number, upgrade: boolean, t: Tuning): SettlementJob {
+  const size = BUILDING_DEFS[type].footprint;
+  const from = garage(s)!;
+  const distance = Math.hypot(tx + size / 2 - from.x, ty + size / 2 - from.y);
+  const work = buildYears(type, t);
+  const total = 2 * distance * t.ROVER_YEARS_PER_TILE + work;
+  return { kind: "build", tile: tileKey(tx, ty), work, total, remaining: total, upgrade };
 }
 
 // ---------------------------------------------------------------------------
@@ -168,11 +205,15 @@ export function placeBuilding(
   if (s.stores.materials < cost) {
     return refuse(`${def.name} needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
   }
+  // With build times, a rover goes out to build it.
+  const byRover = t.BUILD_TIME_ENABLED > 0 && garage(s) !== null;
+  if (byRover && roversOut(s) >= roverCount(s, t)) return refuse(`all ${roverCount(s, t)} rovers are out - a ${def.name} needs one to build it`);
   const building: PlacedBuilding = { type, tx, ty, level: 1 };
   const next: Settlement = {
     ...s,
     stores: { ...s.stores, materials: s.stores.materials - cost },
     buildings: [...s.buildings, building],
+    jobs: byRover ? [...s.jobs, buildJob(s, type, tx, ty, false, t)] : s.jobs,
   };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
@@ -240,6 +281,31 @@ export function connectAll(state: SimState, settlementId: string, t: Tuning): Pl
 }
 
 /**
+ * "Connect twice" (at the user's request): lay, and pay for, the corridors
+ * and cables that give every building its own route to its two nearest other
+ * buildings - two different ones where it can reach two - so one broken
+ * link leaves nothing cut off. All or nothing.
+ */
+export function connectTwice(state: SimState, settlementId: string, t: Tuning): PlaceOutcome & { readonly laid: number } {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}`, laid: 0 };
+  if (s.lostAtSeaLevelM !== null) return { state, ok: false, reason: `${settlementId} was lost to the sea`, laid: 0 };
+  const corridors = linksForRedundancy(s, "corridors", t);
+  const cables = linksForRedundancy(s, "cables", t);
+  const laid = corridors.length + cables.length;
+  if (laid === 0) return { state, ok: false, reason: "every building already has its two routes", laid: 0 };
+  const cost = corridors.length * t.COST_CORRIDOR + cables.length * t.COST_CABLE;
+  if (s.stores.materials < cost) return { state, ok: false, reason: `${laid} tiles of corridor and cable need ${cost} materials, ${Math.floor(s.stores.materials)} available`, laid: 0 };
+  const next: Settlement = {
+    ...s,
+    stores: { ...s.stores, materials: s.stores.materials - cost },
+    corridors: [...s.corridors, ...corridors].sort((a, b) => a - b),
+    cables: [...s.cables, ...cables].sort((a, b) => a - b),
+  };
+  return { state: withSettlement(state, settlementId, next), ok: true, reason: null, laid };
+}
+
+/**
  * Send a rover from the headquarters to break the rock on (tx, ty) (at the
  * user's request). It takes longer the further the rock is; it brings back
  * `ROCK_LOOSE_MATERIALS` for loose rocks, `ROCK_CRAG_MATERIALS` for a crag,
@@ -258,7 +324,7 @@ export function sendRover(state: SimState, settlementId: string, tx: number, ty:
   if (rock === "none") return refuse("there is no rock there to break");
   const key = tileKey(tx, ty);
   if (s.jobs.some((j) => j.kind === "rover" && j.tile === key)) return refuse("a rover is already on its way there");
-  const out = s.jobs.filter((j) => j.kind === "rover").length;
+  const out = roversOut(s);
   const rovers = roverCount(s, t);
   if (out >= rovers) return refuse(`all ${rovers} rovers are out`);
   const years = roverYears(s, tx, ty, rock, t);
@@ -291,7 +357,7 @@ export function levelGround(state: SimState, settlementId: string, tx: number, t
   const level = levelFor(s, tx, ty, t);
   const corners = [ground.cornersM[ty * m + tx]!, ground.cornersM[ty * m + tx + 1]!, ground.cornersM[(ty + 1) * m + tx]!, ground.cornersM[(ty + 1) * m + tx + 1]!];
   if (corners.every((c) => Math.abs(c - level) < 0.01)) return refuse("the ground is already level there");
-  const out = s.jobs.filter((j) => j.kind === "rover").length;
+  const out = roversOut(s);
   const rovers = roverCount(s, t);
   if (out >= rovers) return refuse(`all ${rovers} rovers are out`);
   const rock: Rock = rocksOf(s, t)[ty * n + tx] ?? "none";
@@ -324,6 +390,43 @@ export function launchRocket(state: SimState, settlementId: string, tx: number, 
   return { state: withSettlement(state, settlementId, { ...s, jobs: [...s.jobs, job] }), ok: true, reason: null };
 }
 
+/**
+ * Raise the building whose footprint covers (tx, ty) a level (at the user's
+ * request): each level multiplies what it makes, houses and stores by
+ * 1 + LEVEL_BONUS. It costs the building's price again; with build times, a
+ * rover does the work and the level comes when the rover is home. The
+ * building keeps running meanwhile.
+ */
+export function upgradeBuilding(state: SimState, settlementId: string, tx: number, ty: number, t: Tuning): PlaceOutcome {
+  const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
+  if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
+  const index = s.buildings.findIndex((b) => {
+    const size = BUILDING_DEFS[b.type].footprint;
+    return tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + size;
+  });
+  if (index < 0) return refuse("there is no building there");
+  const b = s.buildings[index]!;
+  const def = BUILDING_DEFS[b.type];
+  if (!def.buildable) return refuse(`the ${def.name} cannot be upgraded`);
+  const top = maxLevel(b.type, t);
+  if (b.level >= top) return refuse(`the ${def.name} is at its highest level (${top})`);
+  const corner = tileKey(b.tx, b.ty);
+  if (s.jobs.some((j) => j.kind === "build" && j.tile === corner)) return refuse(`the ${def.name} is ${constructionOf(s).has(corner) ? "still being built" : "already being upgraded"}`);
+  const cost = def.cost(t);
+  if (s.stores.materials < cost) return refuse(`an upgrade needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
+  const byRover = t.BUILD_TIME_ENABLED > 0 && garage(s) !== null;
+  if (byRover && roversOut(s) >= roverCount(s, t)) return refuse(`all ${roverCount(s, t)} rovers are out - an upgrade needs one`);
+  const next: Settlement = {
+    ...s,
+    stores: { ...s.stores, materials: s.stores.materials - cost },
+    buildings: byRover ? s.buildings : s.buildings.map((x, i) => (i === index ? { ...x, level: x.level + 1 } : x)),
+    jobs: byRover ? [...s.jobs, buildJob(s, b.type, b.tx, b.ty, true, t)] : s.jobs,
+  };
+  return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
+}
+
 /** Remove the building whose footprint covers (tx, ty). Frees its tiles; no refund (none is specified). */
 export function removeBuilding(state: SimState, settlementId: string, tx: number, ty: number): PlaceOutcome {
   const s = state.settlements.find((x) => x.id === settlementId);
@@ -334,7 +437,9 @@ export function removeBuilding(state: SimState, settlementId: string, tx: number
   });
   if (index < 0) return { state, ok: false, reason: "there is no building there" };
   if (!BUILDING_DEFS[s.buildings[index]!.type].buildable) return { state, ok: false, reason: `the ${BUILDING_DEFS[s.buildings[index]!.type].name} cannot be removed` };
-  const next: Settlement = { ...s, buildings: s.buildings.filter((_, i) => i !== index) };
+  // A building still going up, or being upgraded, calls its rover home: the job goes with it.
+  const corner = tileKey(s.buildings[index]!.tx, s.buildings[index]!.ty);
+  const next: Settlement = { ...s, buildings: s.buildings.filter((_, i) => i !== index), jobs: s.jobs.filter((j) => !(j.kind === "build" && j.tile === corner)) };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
 
@@ -466,8 +571,10 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     return { next: s, operable: [], supported: false, planetaryCo2: 0, production: none, consumption: none, shortages: [], flood, network: [] };
   }
   const defs = s.buildings.map((b) => BUILDING_DEFS[b.type]);
-  // A building with water over any tile of its footprint is offline (detail §4.3).
-  const operable = defs.map((def, i) => def.canOperate(env, t) && !(flood !== null && submerged(s.buildings[i]!, flood)));
+  const levels = s.buildings.map((b) => levelFactor(b.level, t));
+  const building = constructing(s);
+  // A building with water over any tile of its footprint is offline (detail §4.3); one still going up is not running yet.
+  const operable = defs.map((def, i) => def.canOperate(env, t) && !(flood !== null && submerged(s.buildings[i]!, flood)) && !building.has(tileKey(s.buildings[i]!.tx, s.buildings[i]!.ty)));
   // Section 6's networks: with them off, every building on the grid is on them.
   const n = frameOf(s, t).n;
   const network = t.NETWORK_ENABLED ? { corridors: networkOf(s.buildings, s.corridors, n), cables: networkOf(s.buildings, s.cables, n) } : null;
@@ -483,7 +590,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     const cons = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
     defs.forEach((def, i) => {
       if (!operable[i]) return;
-      const eff = def.efficiency(env);
+      const eff = def.efficiency(env) * levels[i]!;
       const p = def.produces(t);
       const c = def.consumes(t, env);
       for (const r of MICRO_RESOURCES) {
@@ -533,10 +640,16 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   const jobs: SettlementJob[] = [];
   let cleared = s.cleared;
   let grades = s.grades;
+  let built = s.buildings;
   for (const job of s.jobs) {
     const remaining = job.remaining - h;
     if (remaining > 1e-9) {
       jobs.push({ ...job, remaining });
+      continue;
+    }
+    if (job.kind === "build") {
+      // Home: a new building has stood since the work was done; an upgrade takes its level now.
+      if (job.upgrade) built = built.map((b) => (tileKey(b.tx, b.ty) === job.tile ? { ...b, level: Math.min(maxLevel(b.type, t), b.level + 1) } : b));
       continue;
     }
     const brought = job.kind === "rover" ? job.materials : t.ROCKET_MATERIALS;
@@ -570,8 +683,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
 
   let planetaryCo2 = 0;
   defs.forEach((def, i) => {
-    if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env);
+    if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env) * levels[i]!;
   });
 
-  return { next: { ...s, stores, population, jobs, cleared, grades }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
+  return { next: { ...s, stores, population, jobs, cleared, grades, buildings: built }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
 }

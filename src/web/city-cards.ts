@@ -21,7 +21,7 @@ export const PREVIEW_W = 112;
 export const PREVIEW_H = 80;
 
 /** What a card can show: a building, a corridor, a power cable, or "connect everything". */
-export type CardKind = BuildingType | "corridor" | "cable" | "connect" | "claim" | "level";
+export type CardKind = BuildingType | "corridor" | "cable" | "connect" | "redundant" | "claim" | "level";
 
 /** A tiny flat scene: `tiles` square, with these buildings and road tiles. */
 export function previewView(id: string, tiles: number, buildings: readonly CityBuildingView[], corridorTiles: readonly (readonly [number, number])[], cableTiles: readonly (readonly [number, number])[] = []): CityView {
@@ -95,6 +95,13 @@ export function previewScene(kind: CardKind): Shape[] {
     // A power cable from a solar array to a mine.
     return cityScene(previewView("cable", 6, cableBuildings(), [], [[2, 1], [3, 1], [4, 1], [4, 2], [4, 3]]), at);
   }
+  if (kind === "redundant") {
+    // Three buildings in a ring of corridor: each with two routes.
+    return cityScene(
+      previewView("redundant", 7, [building("solar_array", 0, 0, 0), building("regolith_mine", 5, 0, 1), building("storage_depot", 3, 5, 2)], [[2, 0], [3, 0], [4, 0], [1, 2], [1, 3], [1, 4], [1, 5], [2, 5], [5, 2], [5, 3], [5, 4], [5, 5], [4, 5]]),
+      at,
+    );
+  }
   if (kind === "level") {
     // A rover at work on a tile of ground.
     const v = previewView("level", 4, [], []);
@@ -151,7 +158,7 @@ export function drawPreview(canvas: HTMLCanvasElement, shapes: readonly Shape[])
 /** Every card's picture, drawn once. In a page with no 2D canvas (tests) they stay blank. */
 export function makePreviews(): Map<CardKind, HTMLCanvasElement> {
   const out = new Map<CardKind, HTMLCanvasElement>();
-  for (const kind of [...BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].buildable), "corridor", "cable", "connect", "claim", "level"] as CardKind[]) {
+  for (const kind of [...BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].buildable), "corridor", "cable", "connect", "redundant", "claim", "level"] as CardKind[]) {
     const canvas = document.createElement("canvas");
     canvas.width = PREVIEW_W * 2;
     canvas.height = PREVIEW_H * 2;

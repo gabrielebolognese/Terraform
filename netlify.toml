@@ -1,0 +1,29 @@
+# Netlify: build the browser game and publish it as a static site.
+# The game runs entirely in the browser (saves live in IndexedDB), so no
+# functions or server are needed.
+
+[build]
+  # Typecheck first, so a broken build never goes out; then Vite writes the site to dist-web/.
+  command = "npm run typecheck && npm run build:web"
+  publish = "dist-web"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Vite names every script and stylesheet by its content hash: cache them for good.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# The page itself is always checked, so a new deploy is seen on the next load.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"

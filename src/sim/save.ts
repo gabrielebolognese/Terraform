@@ -761,6 +761,13 @@ function readJobs(s: Record<string, unknown>, where: string): readonly Settlemen
     if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
     if (!(total > 0) || !(remaining > 0) || remaining > total) throw new SaveError(`${at} has ${remaining} of ${total} years left, which no job can`);
     if (kind === "rocket") return { kind, tile, total, remaining };
+    if (kind === "build") {
+      const work = numberAt(job, "work", `${at}.work`);
+      if (work < 0 || work > total) throw new SaveError(`${at}.work ${work} is outside its ${total}-year trip`);
+      const upgrade = job["upgrade"];
+      if (typeof upgrade !== "boolean") throw new SaveError(`${at}.upgrade must be true or false`);
+      return { kind, tile, total, remaining, work, upgrade };
+    }
     if (kind === "rover") {
       const materials = numberAt(job, "materials", `${at}.materials`);
       const work = numberAt(job, "work", `${at}.work`);
@@ -770,7 +777,7 @@ function readJobs(s: Record<string, unknown>, where: string): readonly Settlemen
       if (job["levelM"] !== undefined) return { kind, tile, total, remaining, materials, work, levelM: numberAt(job, "levelM", `${at}.levelM`) };
       return { kind, tile, total, remaining, materials, work };
     }
-    throw new SaveError(`${at}.kind must be "rover" or "rocket", got ${describe(kind)}`);
+    throw new SaveError(`${at}.kind must be "rover", "rocket" or "build", got ${describe(kind)}`);
   });
 }
 

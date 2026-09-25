@@ -28,7 +28,7 @@ import { foundSettlement } from "./registry.js";
 import { rocksOf, siteGround } from "./rocks.js";
 import { capacities, launchRocket, placeBuilding, placeLink, removeBuilding, sendRover, settlementStep } from "./settlement.js";
 import { gridTiles, keyTile } from "./space.js";
-import { linksToConnect } from "./network.js";
+import { linksForRedundancy, linksToConnect } from "./network.js";
 
 const HQ = makeTuning({ SETTLEMENTS_ENABLED: 1, NETWORK_ENABLED: 1, HEADQUARTERS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
 const cfg = { tuning: HQ, env: NEUTRAL_ENV, forcing: null };
@@ -245,7 +245,8 @@ describe("hard rock, in rare clusters (the user: \"big clusters from 7 to 23 til
       }
       const hard = new Set(clusters(placed).flat().map(([x, y]) => `${x},${y}`));
       for (const layer of ["corridors", "cables"] as const) {
-        for (const key of linksToConnect(placed.settlements[0]!, layer, BIG)) {
+        // "Connect all", and "connect twice" as well.
+        for (const key of [...linksToConnect(placed.settlements[0]!, layer, BIG), ...linksForRedundancy(placed.settlements[0]!, layer, BIG)]) {
           const { tx, ty } = keyTile(key);
           checked += 1;
           if (hard.has(`${tx},${ty}`)) crossed += 1;
@@ -365,7 +366,7 @@ describe("jobs in time and in the save", () => {
       settlements: (save["settlements"] as Record<string, unknown>[]).map((c) => ({ ...c, jobs: [{ ...(c["jobs"] as Record<string, unknown>[])[0], ...patch }] })),
     });
     expect(() => fromSave(withJob({ remaining: 0 }), HQ)).toThrow(/settlements\[0\]\.jobs\[0\] has 0 of/);
-    expect(() => fromSave(withJob({ kind: "drone" }), HQ)).toThrow(/jobs\[0\]\.kind must be "rover" or "rocket"/);
+    expect(() => fromSave(withJob({ kind: "drone" }), HQ)).toThrow(/jobs\[0\]\.kind must be "rover", "rocket" or "build"/);
     expect(() => fromSave(withJob({ materials: -1 }), HQ)).toThrow(/materials is negative/);
   });
 });

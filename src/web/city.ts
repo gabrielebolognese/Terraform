@@ -19,7 +19,7 @@ import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import type { Layer } from "../sim/index.js";
-import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, cityView, layerOf, roverCount, roverYears, tileKey } from "../sim/index.js";
+import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, buildYears, cityView, layerOf, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
 import type { CardKind } from "./city-cards.js";
@@ -53,6 +53,10 @@ export interface CityHooks {
   readonly onLevel: (settlementId: string, tx: number, ty: number) => ActionOutcome;
   /** The same call as a dry run, for the preview. Must not change the world. */
   readonly canLevel: (settlementId: string, tx: number, ty: number) => ActionOutcome;
+  /** Raise the building covering (tx, ty) a level; the sim decides. */
+  readonly onUpgrade: (settlementId: string, tx: number, ty: number) => ActionOutcome;
+  /** Lay the corridors and cables that give every building its own route to two others. */
+  readonly onConnectTwice: (settlementId: string) => ActionOutcome & { readonly laid: number };
   /** Claim chunk (i, j) of land - chunk coordinates from the founding square; the sim decides. */
   readonly onClaim: (settlementId: string, i: number, j: number) => ActionOutcome;
   readonly onBack: () => void;
@@ -117,6 +121,7 @@ function rateList(rates: Partial<Record<MicroResource, number>>): string {
 export function offlineReason(view: CityView, index: number, env: HabitatChannels, t: Tuning): string | null {
   const b = view.buildings[index];
   if (b === undefined || b.operable) return null;
+  if (b.construction !== undefined && b.construction !== null) return `Under construction: ${Math.round(b.construction * 100)}% built. A rover is at work on it.`;
   if (b.submerged) return "Offline: under water.";
   if (b.network !== null) {
     const lacks = b.network.resources;
@@ -140,9 +145,9 @@ export function offlineReason(view: CityView, index: number, env: HabitatChannel
  * the tile under the pointer was the flat ground beneath it; on a hill that is
  * the wrong tile.
  */
-export function pickAt(view: CityView, cam: CityCamera, viewW: number, viewH: number, px: number, py: number) {
+export function pickAt(view: CityView, cam: CityCamera, viewW: number, viewH: number, px: number, py: number, groundOnly = false) {
   const iso = screenToIso(cam, viewW, viewH, px, py);
-  return rayHit(view, iso.sx, iso.sy);
+  return rayHit(view, iso.sx, iso.sy, groundOnly);
 }
 
 /** The building under a screen point, or null. */
@@ -151,9 +156,13 @@ export function pickBuilding(view: CityView, cam: CityCamera, viewW: number, vie
   return hit !== null && hit.kind === "building" ? hit.index : null;
 }
 
-/** The tile under a screen point, whatever stands on it - where a placement would go. */
-export function tileUnder(view: CityView, cam: CityCamera, viewW: number, viewH: number, px: number, py: number): { tx: number; ty: number } | null {
-  const hit = pickAt(view, cam, viewW, viewH, px, py);
+/**
+ * The tile under a screen point, whatever stands on it - where a placement
+ * would go. `groundOnly` (building mode): buildings have no hitbox, so the
+ * tile is the ground's under the pointer even behind a building.
+ */
+export function tileUnder(view: CityView, cam: CityCamera, viewW: number, viewH: number, px: number, py: number, groundOnly = false): { tx: number; ty: number } | null {
+  const hit = pickAt(view, cam, viewW, viewH, px, py, groundOnly);
   return hit === null ? null : { tx: hit.tx, ty: hit.ty };
 }
 
@@ -195,6 +204,7 @@ export class CityScreen {
   private readonly removeButton: HTMLButtonElement;
   private readonly roverButton: HTMLButtonElement;
   private readonly launchButton: HTMLButtonElement;
+  private readonly upgradeButton: HTMLButtonElement;
 
   private settlementId: string | null = null;
   private camera: CityCamera | null = null;
@@ -296,8 +306,10 @@ export class CityScreen {
     const actions = el("div", "city-inspector-actions");
     this.removeButton = button("city-remove", "Remove", () => this.removeSelected());
     this.roverButton = button("city-send-rover", "Send rover", () => this.sendRover());
+    this.upgradeButton = button("city-upgrade", "Upgrade", () => this.upgradeSelected());
     this.launchButton = button("city-launch", "Launch rocket", () => this.launch());
     actions.append(
+      this.upgradeButton,
       this.roverButton,
       this.launchButton,
       this.removeButton,
@@ -425,6 +437,29 @@ export class CityScreen {
     this.renderPalette(true);
   }
 
+  /** Building mode: a tool that works on the ground is armed - buildings see-through, with no hitbox. */
+  private get building(): boolean {
+    return this.placing !== null || this.paving !== null || this.levelling;
+  }
+
+  /** "Connect twice": every building its own route to two others. */
+  connectTwice(): void {
+    const id = this.settlementId;
+    if (id === null) return;
+    const outcome = this.hooks.onConnectTwice(id);
+    this.notice = outcome.ok ? `Laid ${outcome.laid} tile${outcome.laid === 1 ? "" : "s"} of corridor and cable: every building has two routes where it can.` : `Cannot connect twice: ${outcome.reason ?? "refused"}.`;
+    this.lastPanel = -Infinity;
+  }
+
+  private upgradeSelected(): void {
+    const id = this.settlementId;
+    const b = this.selected === null ? undefined : this.view?.buildings[this.selected];
+    if (id === null || b === undefined) return;
+    const outcome = this.hooks.onUpgrade(id, b.tx, b.ty);
+    this.notice = outcome.ok ? (this.tuning.BUILD_TIME_ENABLED > 0 ? "A rover is on its way to upgrade it." : "Upgraded.") : `Cannot upgrade: ${outcome.reason ?? "refused"}.`;
+    this.lastPanel = -Infinity;
+  }
+
   /** "Connect everything": the sim finds and prices the corridors and cables; this says what happened. */
   connect(): void {
     const id = this.settlementId;
@@ -490,7 +525,7 @@ export class CityScreen {
 
   sceneOptions(now: number): CitySceneOptions {
     const claimable = this.claimable();
-    return { time: now / 1000, selected: this.selected, ghost: this.ghost(), selectedTile: this.selectedTile, sinceYears: this.sinceYears, ...(claimable === undefined ? {} : { claimable }) };
+    return { time: now / 1000, selected: this.selected, ghost: this.ghost(), selectedTile: this.selectedTile, sinceYears: this.sinceYears, seeThrough: this.building, ...(claimable === undefined ? {} : { claimable }) };
   }
 
   /** In claim mode, the land on offer: ready if the city has the people for another claim. */
@@ -591,6 +626,10 @@ export class CityScreen {
     const b = index === null ? undefined : view.buildings[index];
     this.inspector.hidden = b === undefined && this.selectedTile === null;
     this.removeButton.hidden = b === undefined || !BUILDING_DEFS[b.type].buildable;
+    const level = b?.level ?? 1;
+    const up = b !== undefined && BUILDING_DEFS[b.type].buildable && level < maxLevel(b.type, this.tuning) && (b.construction ?? null) === null;
+    this.upgradeButton.hidden = !up;
+    if (up && b !== undefined) this.upgradeButton.textContent = `Upgrade to level ${level + 1} (${BUILDING_DEFS[b.type].cost(this.tuning)})`;
     this.roverButton.hidden = !(b === undefined && this.selectedTile !== null);
     this.launchButton.hidden = b?.type !== "spaceport";
     if (b === undefined && this.selectedTile !== null) this.renderRock(view, s, this.selectedTile);
@@ -599,11 +638,15 @@ export class CityScreen {
       this.inspectorName.textContent = def.name;
       this.inspectorStatus.textContent = offlineReason(view, index, env, this.tuning) ?? "Running.";
       this.inspectorStatus.dataset["state"] = b.operable ? "ok" : "off";
-      this.inspectorSummary.textContent = def.summary;
+      this.inspectorSummary.textContent = def.buildable ? `Level ${level} of ${maxLevel(b.type, this.tuning)}. ${def.summary}` : def.summary;
       const extra: string[] = [];
-      if (def.housing(this.tuning) > 0) extra.push(`Houses ${def.housing(this.tuning)}.`);
+      if (def.housing(this.tuning) > 0) extra.push(`Houses ${fmt(def.housing(this.tuning) * levelFactor(level, this.tuning))}.`);
       if (def.planetaryCo2(this.tuning) > 0) extra.push(`Draws ${def.planetaryCo2(this.tuning)} mbar/yr of CO2 from the planet.`);
-      this.inspectorFlows.textContent = `Uses ${rateList(def.consumes(this.tuning, env))}. Makes ${rateList(def.produces(this.tuning))}. ${extra.join(" ")}`.trim();
+      // What it makes at its level (x1.1 a level); what it draws does not grow.
+      const k = levelFactor(level, this.tuning);
+      const made = Object.fromEntries(Object.entries(def.produces(this.tuning)).map(([r, v]) => [r, (v ?? 0) * k]));
+      if (level > 1) extra.push(`Level ${level}: x${k.toFixed(2)} output.`);
+      this.inspectorFlows.textContent = `Uses ${rateList(def.consumes(this.tuning, env))}. Makes ${rateList(made)}. ${extra.join(" ")}`.trim();
       if (b.type === "spaceport") {
         const job = s.jobs.find((j) => j.kind === "rocket" && j.tile === tileKey(b.tx, b.ty));
         this.inspectorSummary.textContent =
@@ -687,6 +730,8 @@ export class CityScreen {
     cable.classList.add("city-cable");
     const connect = this.card("connect", "Connect all", `${Math.min(t.COST_CORRIDOR, t.COST_CABLE)}+ / tile`, false, null, () => this.connect());
     connect.classList.add("city-connect");
+    const twice = this.card("redundant", "Connect twice", `${Math.min(t.COST_CORRIDOR, t.COST_CABLE)}+ / tile`, false, null, () => this.connectTwice());
+    twice.classList.add("city-connect-twice");
     // Claim land: always on the bar, as the others are; an outpost's says it cannot.
     const c = view?.claims;
     const price = c === undefined || c.nextAt === null ? "cities only" : c.allowed > c.held ? `${c.allowed - c.held} to claim` : `at ${c.nextAt} people`;
@@ -695,7 +740,7 @@ export class CityScreen {
     const level = this.card("level", "Level ground", "a rover", false, this.levelling, () => this.armLevel(!this.levelling));
     level.classList.add("city-level");
     this.palette.replaceChildren(...cards);
-    this.tools.replaceChildren(corridor, cable, connect, claim, level);
+    this.tools.replaceChildren(corridor, cable, connect, twice, claim, level);
     this.placeThumb();
     // A card rebuilt under the pointer keeps its tooltip.
     if (this.tipFor !== null) {
@@ -759,6 +804,16 @@ export class CityScreen {
         ],
       };
     }
+    if (kind === "redundant") {
+      return {
+        title: "Connect twice",
+        lines: [
+          "Gives every building its own route to its two nearest buildings - two different ones where it can reach two - by corridor and by cable.",
+          "So one broken link leaves nothing cut off.",
+          `Costs ${t.COST_CORRIDOR} material a tile of corridor, ${t.COST_CABLE} a tile of cable.`,
+        ],
+      };
+    }
     if (kind === "level") {
       return {
         title: "Level ground",
@@ -794,6 +849,8 @@ export class CityScreen {
     const cap = MICRO_RESOURCES.filter((r) => (def.capacity(t)[r] ?? 0) > 0);
     if (cap.length > 0) lines.push(`Stores more ${cap.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")}.`);
     lines.push(`${def.footprint} x ${def.footprint} tiles. Costs ${def.cost(t)} materials.`);
+    if (t.BUILD_TIME_ENABLED > 0) lines.push(`A rover builds it in ${Math.round(buildYears(kind, t) * 10)} month${Math.round(buildYears(kind, t) * 10) === 1 ? "" : "s"} at the site (${seconds(buildYears(kind, t), t)}), plus the drive.`);
+    lines.push(`Upgrades to level ${maxLevel(kind, t)}, each +${Math.round(t.LEVEL_BONUS * 100)}% on the last.`);
     return { title: def.name, lines };
   }
 
@@ -907,7 +964,7 @@ export class CityScreen {
       if (this.view !== null && this.camera !== null) {
         const size = this.viewSize();
         const before = this.hover;
-        this.hover = tileUnder(this.view, this.camera, size.w, size.h, local.x, local.y);
+        this.hover = tileUnder(this.view, this.camera, size.w, size.h, local.x, local.y, this.building);
         if (this.claiming) this.claimHover = this.chunkAt(local.x, local.y);
         if (this.levelling && (before?.tx !== this.hover?.tx || before?.ty !== this.hover?.ty)) this.lastPanel = -Infinity;
         // The hint names the ground under the pointer, so rewrite it when that changes.
@@ -973,7 +1030,7 @@ export class CityScreen {
       return;
     }
     if (this.levelling) {
-      const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
+      const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y, true);
       if (tile === null) return;
       const outcome = this.hooks.onLevel(id, tile.tx, tile.ty);
       this.notice = outcome.ok ? "A rover is on its way to level the ground." : `Cannot level: ${outcome.reason ?? "refused"}.`;
@@ -981,7 +1038,7 @@ export class CityScreen {
       return;
     }
     if (this.placing !== null) {
-      const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
+      const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y, true);
       if (tile === null) return;
       const origin = footprintOrigin(tile.tx, tile.ty, BUILDING_DEFS[this.placing].footprint);
       const outcome = this.hooks.onPlace(id, this.placing, origin.tx, origin.ty);
@@ -1026,7 +1083,7 @@ export class CityScreen {
     const cam = this.camera;
     if (view === null || cam === null) return;
     const size = this.viewSize();
-    const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
+    const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y, true);
     if (tile === null || this.paving === null) return;
     const mode = view[this.paving][tile.ty * view.tiles + tile.tx] === true ? "clear" : "lay";
     this.painting = { mode, last: -1 };
@@ -1042,7 +1099,7 @@ export class CityScreen {
     const layer = this.paving;
     if (view === null || cam === null || id === null || p === null || layer === null) return;
     const size = this.viewSize();
-    const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
+    const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y, true);
     if (tile === null) return;
     const key = tile.ty * view.tiles + tile.tx;
     if (key === p.last) return;

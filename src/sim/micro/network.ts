@@ -317,3 +317,100 @@ export function linksToConnect(s: Settlement, layer: Layer, t: Tuning): number[]
   }
   return added.sort((a, b) => a - b);
 }
+
+/**
+ * Redundancy (at the user's request: "a redundancy connection button next to
+ * connect all, where each structure is connected to two structures - two
+ * that are NOT the same, if possible"). For each building in turn: the two
+ * nearest other buildings it can reach - by the fewest new tiles, a link
+ * already laid costing none, never through a third building - and the tiles
+ * to lay so it has a route of its own to each. Buildings sharing a wall
+ * count as joined. Returns the tiles to ADD; deterministic.
+ */
+export function linksForRedundancy(s: Settlement, layer: Layer, t: Tuning): number[] {
+  const n = frameOf(s, t).n;
+  if (s.buildings.length < 2) return [];
+  const ours = claimTest(s, t);
+  const ground = siteGround(s, t);
+  const rocks = rocksOf(s, t);
+  const owner = ownerGrid(s.buildings, n);
+  const laid = new Set(s[layer]);
+  const road = linkGrid(s[layer], n);
+  const added: number[] = [];
+  const passable = (x: number, y: number): boolean => !isSteep(ground, x, y) && rocks[y * n + x] !== "crag" && ours(x, y);
+  const dist = new Int32Array(n * n);
+  const from = new Int32Array(n * n);
+  const STEPS = [
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+    [0, -1],
+  ] as const;
+  s.buildings.forEach((b, self) => {
+    dist.fill(-1);
+    from.fill(-2);
+    // 0-1 search: a tile of link already laid costs nothing, new ground one.
+    const deque: number[] = [];
+    let head = 0;
+    const size = BUILDING_DEFS[b.type].footprint;
+    for (let y = b.ty; y < b.ty + size; y += 1) {
+      for (let x = b.tx; x < b.tx + size; x += 1) {
+        if (x < 0 || y < 0 || x >= n || y >= n) continue;
+        dist[y * n + x] = 0;
+        from[y * n + x] = -1;
+        deque.push(y * n + x);
+      }
+    }
+    const reached: { building: number; via: number }[] = [];
+    const settled = new Uint8Array(n * n);
+    // The deque as two lists: `now` at the current distance, `later` one more.
+    let now = deque;
+    let later: number[] = [];
+    let d = 0;
+    while (reached.length < 2 && (head < now.length || later.length > 0)) {
+      if (head >= now.length) {
+        now = later;
+        later = [];
+        head = 0;
+        d += 1;
+        continue;
+      }
+      const tile = now[head++]!;
+      if (settled[tile] || dist[tile] !== d) continue;
+      settled[tile] = 1;
+      const x = tile % n;
+      const y = (tile - x) / n;
+      for (const [dx, dy] of STEPS) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+        const nt = ny * n + nx;
+        const o = owner[nt]!;
+        if (o >= 0) {
+          if (o !== self && reached.length < 2 && !reached.some((r) => r.building === o)) reached.push({ building: o, via: tile });
+          continue;
+        }
+        const step = road[nt] ? 0 : passable(nx, ny) ? 1 : -1;
+        if (step < 0) continue;
+        const nd = d + step;
+        if (dist[nt]! >= 0 && dist[nt]! <= nd) continue;
+        dist[nt] = nd;
+        from[nt] = tile;
+        if (step === 0) now.push(nt);
+        else later.push(nt);
+      }
+    }
+    for (const r of reached) {
+      for (let tile = r.via; tile >= 0 && from[tile] !== -1; tile = from[tile]!) {
+        const x = tile % n;
+        const key = tileKey(x, (tile - x) / n);
+        if (!laid.has(key)) {
+          laid.add(key);
+          road[tile] = 1;
+          added.push(key);
+        }
+      }
+    }
+  });
+  return added.sort((a, b) => a - b);
+}

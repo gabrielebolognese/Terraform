@@ -17,6 +17,8 @@ import {
   NEUTRAL_ENV,
   claimLand,
   levelGround,
+  upgradeBuilding,
+  connectTwice,
   connectAll,
   derive,
   foundSettlement,
@@ -88,6 +90,18 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
       onLaunch: (id, tx, ty) => {
         calls.push(`launch@${tx},${ty}`);
         const o = launchRocket(state, id, tx, ty, t);
+        state = o.state;
+        return o;
+      },
+      onUpgrade: (id, tx, ty) => {
+        calls.push(`upgrade@${tx},${ty}`);
+        const o = upgradeBuilding(state, id, tx, ty, t);
+        state = o.state;
+        return o;
+      },
+      onConnectTwice: (id) => {
+        calls.push("connect twice");
+        const o = connectTwice(state, id, t);
         state = o.state;
         return o;
       },
@@ -615,7 +629,7 @@ describe("the connective tools, top right (at the user's request: \"so connectiv
     document.head.append(style);
     const page = mount();
     const tools = page.q(".city-tools");
-    expect([...tools.querySelectorAll<HTMLElement>(".city-card")].map((c) => c.dataset["card"])).toEqual(["corridor", "cable", "connect", "claim", "level"]);
+    expect([...tools.querySelectorAll<HTMLElement>(".city-card")].map((c) => c.dataset["card"])).toEqual(["corridor", "cable", "connect", "redundant", "claim", "level"]);
     expect(page.q(".city-dock").querySelector('[data-card="corridor"], [data-card="cable"], [data-card="connect"], [data-card="claim"]')).toBeNull();
     const css = getComputedStyle(tools);
     expect(css.position).toBe("fixed");
@@ -626,10 +640,10 @@ describe("the connective tools, top right (at the user's request: \"so connectiv
 
   it("is always there: with no materials, and in an outpost", () => {
     const poor = mount("city", { materials: 0 });
-    expect(poor.host.querySelectorAll(".city-tools .city-card")).toHaveLength(5);
+    expect(poor.host.querySelectorAll(".city-tools .city-card")).toHaveLength(6);
     document.body.replaceChildren();
     const outpost = mount("outpost");
-    expect(outpost.host.querySelectorAll(".city-tools .city-card")).toHaveLength(5);
+    expect(outpost.host.querySelectorAll(".city-tools .city-card")).toHaveLength(6);
     expect(outpost.q('.city-tools [data-card="claim"] .city-card-cost').textContent).toBe("cities only");
     // The tools still work from there.
     outpost.q('.city-tools [data-card="corridor"]').click();
@@ -660,5 +674,33 @@ describe("levelling ground (at the user's request: \"send a rover and flat out t
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     page.frame();
     expect(page.q('.city-tools [data-card="level"]').getAttribute("aria-pressed")).toBe("false");
+  });
+});
+
+describe("building mode (at the user's request: \"when I'm building, put the opacity of the buildings at 30%, and delete their hitbox, only leave the 2D tiles red on the ground, so I can build behind a structure\")", () => {
+  const FLAT = makeTuning({ SETTLEMENTS_ENABLED: 1 });
+
+  it("places on the ground behind a dome, where the dome is drawn over it", () => {
+    const page = mount("city", {}, FLAT);
+    page.option("habitat_dome").click();
+    page.clickTile(12, 12);
+    const dome = page.state().settlements[0]!.buildings.find((b) => b.type === "habitat_dome")!;
+    expect(dome, "vacuity: the dome stands").toBeDefined();
+    // The screen point where the top of the dome is drawn: on flat ground its
+    // line of sight comes down 1.9 tiles further back - behind the dome.
+    page.option("storage_depot").click();
+    page.clickAt(dome.tx + 1.5, dome.ty + 1.5, 1.9);
+    expect(page.calls).toContain(`place:storage_depot@${dome.tx - 1},${dome.ty - 1}`);
+    expect(page.state().settlements[0]!.buildings.some((b) => b.type === "storage_depot" && b.tx === dome.tx - 1 && b.ty === dome.ty - 1)).toBe(true);
+  });
+
+  it("still selects the dome by its top when nothing is being built", () => {
+    const page = mount("city", {}, FLAT);
+    page.option("habitat_dome").click();
+    page.clickTile(12, 12);
+    const dome = page.state().settlements[0]!.buildings.find((b) => b.type === "habitat_dome")!;
+    page.option("habitat_dome").click(); // put the tool down
+    page.clickAt(dome.tx + 1.5, dome.ty + 1.5, 1.9);
+    expect(page.q(".city-inspector-name").textContent).toBe("Habitat Dome");
   });
 });

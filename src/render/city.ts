@@ -76,7 +76,17 @@ export interface CitySceneOptions {
    * under the pointer. Absent or empty outside claim mode.
    */
   readonly claimable?: readonly { readonly tx: number; readonly ty: number; readonly size: number; readonly ready: boolean; readonly hover: boolean }[];
+  /**
+   * Building mode (at the user's request: "when I'm building, put the
+   * opacity of the buildings at 30%, delete their hitbox, only leave the 2D
+   * tiles red on the ground, so I can build behind a structure"): buildings
+   * see-through, their footprints red on the ground.
+   */
+  readonly seeThrough?: boolean;
 }
+
+/** How opaque a building is drawn in building mode. */
+export const SEE_THROUGH_ALPHA = 0.3;
 
 // ---------------------------------------------------------------------------
 // Palette and light
@@ -2404,6 +2414,49 @@ export function groundPointAt(view: CityView, sx: number, sy: number): { x: numb
   return { x: g.x + lo, y: g.y + lo };
 }
 
+/**
+ * A building still going up (at the user's request: "there is just the
+ * foundation and some worksite equipment"): its slab, a frame rising as the
+ * work goes on, a crane, stacked materials and a hazard-taped edge.
+ */
+function worksite(b: CityBuildingView, done: number, quality: CityQuality): Kit {
+  const k = kit();
+  const add = k.s;
+  const x0 = b.tx;
+  const y0 = b.ty;
+  const s = b.size;
+  const top = Math.max(0.15, buildingTop(b.type) * (0.25 + 0.6 * done));
+  add(() => part(box(x0 + 0.08, y0 + 0.08, 0, x0 + s - 0.08, y0 + s - 0.08, 0.08), CONCRETE));
+  if (quality === "low") {
+    add(() => part(box(x0 + 0.25, y0 + 0.25, 0.08, x0 + s - 0.25, y0 + s - 0.25, top * 0.6), DARK_METAL));
+    return k;
+  }
+  // The frame: posts at the corners and along the edges, a ring at the top.
+  add(() => {
+    const out: Part[] = [];
+    const posts: [number, number][] = [];
+    for (let i = 0; i <= s; i += 1) posts.push([x0 + 0.2 + (i * (s - 0.4)) / s, y0 + 0.2], [x0 + 0.2 + (i * (s - 0.4)) / s, y0 + s - 0.2]);
+    for (let i = 1; i < s; i += 1) posts.push([x0 + 0.2, y0 + 0.2 + (i * (s - 0.4)) / s], [x0 + s - 0.2, y0 + 0.2 + (i * (s - 0.4)) / s]);
+    for (const [px, py] of posts) out.push(part(box(px - 0.03, py - 0.03, 0.08, px + 0.03, py + 0.03, top), DARK_METAL));
+    out.push(part(box(x0 + 0.17, y0 + 0.17, top - 0.04, x0 + s - 0.17, y0 + 0.23, top), HAZARD));
+    out.push(part(box(x0 + s - 0.23, y0 + 0.17, top - 0.04, x0 + s - 0.17, y0 + s - 0.17, top), HAZARD));
+    return out;
+  });
+  // Stacked materials at the front.
+  add(() => [
+    part(box(x0 + s - 0.7, y0 + s - 0.55, 0.08, x0 + s - 0.35, y0 + s - 0.25, 0.3), ACCENT),
+    part(box(x0 + s - 0.7, y0 + s - 0.55, 0.3, x0 + s - 0.45, y0 + s - 0.3, 0.45), PAINT_WHITE),
+  ]);
+  if (quality === "high") {
+    // A crane at the back corner, its jib over the site.
+    const mast = top + 0.9;
+    add(() => lattice(x0 + 0.35, y0 + 0.35, 0.09, 0.06, 0.08, mast, 5, HAZARD));
+    add(() => part(tube([x0 + 0.35, y0 + 0.35, mast], [x0 + s * 0.75, y0 + s * 0.75, mast], 0.03, 5), HAZARD));
+    add(() => part(tube([x0 + s * 0.6, y0 + s * 0.6, mast], [x0 + s * 0.6, y0 + s * 0.6, top + 0.15], 0.008, 4), DARK_METAL));
+  }
+  return k;
+}
+
 /** Lift a solid by `dz` tiles: a building assembled at ground zero, stood on its own ground. */
 function raise(parts: readonly Part[], dz: number): Part[] {
   if (dz === 0) return [...parts];
@@ -2487,6 +2540,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       continue;
     }
     const b = view.buildings[o.building]!;
+    const shapesFrom = out.length;
     // The building's ground, levelled at its highest corner; on a slope a
     // concrete foundation fills down to the lowest (the user: "building on a
     // slope terrain builds concrete foundations under it").
@@ -2501,14 +2555,19 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + b.size, b.baseZ)], fill: { ...groundColour(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ, 0, view.greenery), a: 1 } });
     }
     const rocket: RocketState = b.type === "spaceport" ? rockets.get(b.ty * n + b.tx) ?? null : null;
-    const built = quality === "high" ? assemble(b, options.time, rocket) : quality === "medium" ? assembleMedium(b) : assembleLow(b);
-    emitBuilding(built, b, buildings, out, quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") : "");
+    const site = b.construction ?? null;
+    const built = site !== null ? worksite(b, site, quality) : quality === "high" ? assemble(b, options.time, rocket) : quality === "medium" ? assembleMedium(b) : assembleLow(b);
+    emitBuilding(built, b, buildings, out, site !== null ? `site${Math.round(site * 10)}` : quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") : "");
     // A rover crossing the building's ground is drawn after it.
     if (rovers !== null) for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
     // Steam and other particles only up close.
     if (quality === "high") out.push(...built.extras);
-    // Not connected to what it needs reads differently from any other reason it is off.
-    if (!b.operable) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + buildingTop(b.type) + 0.35));
+    // Building mode: the building and its footing see-through, so what stands behind can be seen and built.
+    if (options.seeThrough === true) {
+      for (let k = shapesFrom; k < out.length; k += 1) out[k] = { ...out[k]!, fill: { ...out[k]!.fill, a: out[k]!.fill.a * SEE_THROUGH_ALPHA } };
+    }
+    // Not connected to what it needs reads differently from any other reason it is off; a worksite is neither.
+    if (!b.operable && site === null) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + buildingTop(b.type) + 0.35));
   }
 
   drawWorld(cache.world.front);
@@ -2516,6 +2575,10 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   if (quality !== "low") out.push(...boundary(view));
 
   // Overlays, on top of everything so they are never hidden - each on its own ground.
+  // Building mode: every footprint red on the ground, where nothing else can go.
+  if (options.seeThrough === true) {
+    for (const b of view.buildings) out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + b.size, b.baseZ + 0.02)], fill: { r: 0.95, g: 0.3, b: 0.28, a: 0.38 } });
+  }
   const tile = options.selectedTile ?? null;
   if (tile !== null && tile.tx >= 0 && tile.ty >= 0 && tile.tx < n && tile.ty < n) {
     out.push(footprintRing(tile.tx, tile.ty, 1, 0.08, { r: 1, g: 0.85, b: 0.4, a: 0.95 }, view.groundZ[tile.ty * n + tile.tx] ?? 0));
@@ -2568,14 +2631,15 @@ export type RayHit =
  * heights from the table the assemblies use, so what is clickable is what is
  * drawn.
  */
-export function rayHit(view: CityView, sx: number, sy: number): RayHit | null {
+export function rayHit(view: CityView, sx: number, sy: number, groundOnly = false): RayHit | null {
   const n = view.tiles;
   const g = isoToGround(sx, sy);
   const floor = groundRange(view).lo - 0.5;
   let best = -Infinity;
   let hit: RayHit | null = null;
   const covered = new Set<number>();
-  for (const b of view.buildings) {
+  // In building mode buildings have no hitbox: the ground under them is what a click finds.
+  for (const b of groundOnly ? [] : view.buildings) {
     for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
     const near = Math.min(b.tx + b.size - g.x, b.ty + b.size - g.y, b.baseZ + buildingTop(b.type));
     const far = Math.max(b.tx - g.x, b.ty - g.y, floor);

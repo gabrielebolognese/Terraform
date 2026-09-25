@@ -186,6 +186,11 @@ export function garage(s: Settlement): { x: number; y: number } | null {
  * and one more for every Rover Post. None without a headquarters to send
  * them out from.
  */
+/** Rovers out: breaking rock, levelling ground, or building. */
+export function roversOut(s: Settlement): number {
+  return s.jobs.filter((j) => j.kind === "rover" || j.kind === "build").length;
+}
+
 export function roverCount(s: Settlement, t: Tuning): number {
   if (garage(s) === null) return 0;
   return t.ROVERS_PER_HQ + s.buildings.filter((b) => b.type === "rover_post").length;

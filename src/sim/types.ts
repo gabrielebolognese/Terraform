@@ -436,7 +436,13 @@ export type SettlementJob =
   /** With `levelM`, it levels the tile to that height, metres, as well (and breaks what rock is there). */
   | { readonly kind: "rover"; readonly tile: number; readonly materials: number; readonly work: number; readonly total: number; readonly remaining: number; readonly levelM?: number }
   /** A rocket off the spaceport whose corner is `tile`, to come back with materials. */
-  | { readonly kind: "rocket"; readonly tile: number; readonly total: number; readonly remaining: number };
+  | { readonly kind: "rocket"; readonly tile: number; readonly total: number; readonly remaining: number }
+  /**
+   * A rover building (or, with `upgrade`, raising a level of) the building
+   * whose corner is `tile` (at the user's request: "building takes 1 rover").
+   * `work` is the part of `total` at the site; the rest is the drive out and back.
+   */
+  | { readonly kind: "build"; readonly tile: number; readonly work: number; readonly total: number; readonly remaining: number; readonly upgrade: boolean };
 
 /** Micro §6. Networked: power, water, oxygen. Stored: food, materials. Population is separate. */
 export const MICRO_RESOURCES = ["power", "water", "oxygen", "food", "materials"] as const;

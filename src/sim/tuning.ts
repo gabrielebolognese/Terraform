@@ -867,6 +867,37 @@ export const BASE_TUNING = Object.freeze({
    * occupies a 5x5, max 1 per 100 people").
    */
   COST_ROVER_POST: 300,
+  /**
+   * Build times (at the user's request: "each structure has a build time,
+   * smaller structures have smaller build times - mines 1m, hab domes 5m,
+   * where 10m is 1y"): sim-years, a tenth of a year to the user's month. A
+   * rover builds each, and nothing runs until it is done. OFF (0) by
+   * default: every balance test places buildings that run at once. The
+   * browser uses 1. A Rover Post, big as it is, goes up quickly.
+   */
+  BUILD_TIME_ENABLED: 0,
+  BUILD_YEARS_HABITAT_DOME: 0.5,
+  BUILD_YEARS_SOLAR_ARRAY: 0.1,
+  BUILD_YEARS_GEOTHERMAL_PLANT: 0.3,
+  BUILD_YEARS_REACTOR: 0.4,
+  BUILD_YEARS_WATER_EXTRACTOR: 0.2,
+  BUILD_YEARS_ATMOSPHERE_PROCESSOR: 0.3,
+  BUILD_YEARS_GREENHOUSE: 0.2,
+  BUILD_YEARS_REGOLITH_MINE: 0.1,
+  BUILD_YEARS_STORAGE_DEPOT: 0.1,
+  BUILD_YEARS_SPACEPORT: 0.6,
+  BUILD_YEARS_ROVER_POST: 0.1,
+  /**
+   * Levels (at the user's request: "hab dome goes up to level 5, mines to
+   * level 10, everything else to level 8; every level adds +10%,
+   * incremental"): each level multiplies what a building makes, houses and
+   * stores by 1 + LEVEL_BONUS. What it draws stays. An upgrade costs the
+   * building's price again and takes its build time.
+   */
+  LEVEL_BONUS: 0.1,
+  MAX_LEVEL_HABITAT_DOME: 5,
+  MAX_LEVEL_REGOLITH_MINE: 10,
+  MAX_LEVEL_OTHER: 8,
   ROVER_POST_PEOPLE: 100,
 
   /** Habitat Dome: people housed, and life support drawn per year. */
@@ -1011,6 +1042,11 @@ export function validateTuning(t: Tuning): void {
   if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");
   if (!(t.ROVER_POST_PEOPLE > 0)) fail("ROVER_POST_PEOPLE must be > 0");
   if (!(t.ROVER_WORK_YEARS_LEVEL > 0)) fail("ROVER_WORK_YEARS_LEVEL must be > 0");
+  for (const k of ["BUILD_YEARS_HABITAT_DOME", "BUILD_YEARS_SOLAR_ARRAY", "BUILD_YEARS_GEOTHERMAL_PLANT", "BUILD_YEARS_REACTOR", "BUILD_YEARS_WATER_EXTRACTOR", "BUILD_YEARS_ATMOSPHERE_PROCESSOR", "BUILD_YEARS_GREENHOUSE", "BUILD_YEARS_REGOLITH_MINE", "BUILD_YEARS_STORAGE_DEPOT", "BUILD_YEARS_SPACEPORT", "BUILD_YEARS_ROVER_POST"] as const) {
+    if (!(t[k] > 0)) fail(`${k} must be > 0`);
+  }
+  if (!(t.LEVEL_BONUS >= 0)) fail("LEVEL_BONUS must be >= 0");
+  for (const k of ["MAX_LEVEL_HABITAT_DOME", "MAX_LEVEL_REGOLITH_MINE", "MAX_LEVEL_OTHER"] as const) if (!(Number.isInteger(t[k]) && t[k] >= 1)) fail(`${k} must be a whole number >= 1`);
   if (!(t.ROCKET_TRIP_YEARS > 0)) fail("ROCKET_TRIP_YEARS must be > 0");
   if (!(t.ROCK_LOOSE_SHARE >= 0 && t.ROCK_LOOSE_SHARE <= 1)) fail("ROCK_LOOSE_SHARE must be in [0, 1]");
   if (!(t.ROCK_CLUSTER_CHANCE >= 0 && t.ROCK_CLUSTER_CHANCE <= 1)) fail("ROCK_CLUSTER_CHANCE must be in [0, 1]");

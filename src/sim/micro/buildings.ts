@@ -44,6 +44,35 @@ export interface BuildingDef {
   readonly efficiency: (env: HabitatChannels) => number;
 }
 
+/** What level `level` multiplies a building's output by: 1.1 per level above the first, compounding. */
+export function levelFactor(level: number, t: Tuning): number {
+  return (1 + t.LEVEL_BONUS) ** Math.max(0, level - 1);
+}
+
+/** The highest level a type goes to. */
+export function maxLevel(type: BuildingType, t: Tuning): number {
+  return type === "habitat_dome" ? t.MAX_LEVEL_HABITAT_DOME : type === "regolith_mine" ? t.MAX_LEVEL_REGOLITH_MINE : t.MAX_LEVEL_OTHER;
+}
+
+/** How long a rover takes to build (or raise a level of) a type at its site, sim-years. */
+export function buildYears(type: BuildingType, t: Tuning): number {
+  const years: Readonly<Record<BuildingType, number>> = {
+    habitat_dome: t.BUILD_YEARS_HABITAT_DOME,
+    solar_array: t.BUILD_YEARS_SOLAR_ARRAY,
+    geothermal_plant: t.BUILD_YEARS_GEOTHERMAL_PLANT,
+    reactor: t.BUILD_YEARS_REACTOR,
+    water_extractor: t.BUILD_YEARS_WATER_EXTRACTOR,
+    atmosphere_processor: t.BUILD_YEARS_ATMOSPHERE_PROCESSOR,
+    greenhouse: t.BUILD_YEARS_GREENHOUSE,
+    regolith_mine: t.BUILD_YEARS_REGOLITH_MINE,
+    storage_depot: t.BUILD_YEARS_STORAGE_DEPOT,
+    spaceport: t.BUILD_YEARS_SPACEPORT,
+    rover_post: t.BUILD_YEARS_ROVER_POST,
+    headquarters: t.BUILD_YEARS_SPACEPORT,
+  };
+  return years[type];
+}
+
 const NONE = (): ResourceRates => ({});
 const ZERO = (): number => 0;
 const ALWAYS = (): boolean => true;

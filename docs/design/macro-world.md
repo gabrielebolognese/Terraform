@@ -618,6 +618,13 @@ COST_GREENHOUSE = 30       COST_REGOLITH_MINE = 25    COST_STORAGE_DEPOT = 10
 COST_SPACEPORT = 80
 COST_ROVER_POST = 300        ROVER_POST_PEOPLE = 100   # a Rover Post: one more rover; one post per 100 people
 ROVER_WORK_YEARS_LEVEL = 0.2 # a rover levelling a tile of ground to the level beside it, sim-years at the tile
+BUILD_TIME_ENABLED = 0       # buildings take a rover and time to build; the browser uses 1
+BUILD_YEARS_HABITAT_DOME = 0.5          BUILD_YEARS_SOLAR_ARRAY = 0.1       BUILD_YEARS_GEOTHERMAL_PLANT = 0.3
+BUILD_YEARS_REACTOR = 0.4               BUILD_YEARS_WATER_EXTRACTOR = 0.2   BUILD_YEARS_ATMOSPHERE_PROCESSOR = 0.3
+BUILD_YEARS_GREENHOUSE = 0.2            BUILD_YEARS_REGOLITH_MINE = 0.1     BUILD_YEARS_STORAGE_DEPOT = 0.1
+BUILD_YEARS_SPACEPORT = 0.6             BUILD_YEARS_ROVER_POST = 0.1        # sim-years at the site
+LEVEL_BONUS = 0.1            # each level multiplies what a building makes, houses and stores by 1.1
+MAX_LEVEL_HABITAT_DOME = 5   MAX_LEVEL_REGOLITH_MINE = 10   MAX_LEVEL_OTHER = 8
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75
 SOLAR_POWER = 6            GEOTHERMAL_POWER = 8       REACTOR_POWER = 24

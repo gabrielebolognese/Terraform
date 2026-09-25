@@ -45,6 +45,7 @@ that state.
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
 | [`docs/balance/detail-pass-colony.md`](docs/balance/detail-pass-colony.md) | Corridors and power cables, the headquarters, rock-breaking rovers and supply rockets. |
+| [`docs/balance/detail-pass-build.md`](docs/balance/detail-pass-build.md) | Building mode (see-through buildings, no hitbox), build times with rovers and worksites, building levels, and "connect twice". |
 | [`docs/balance/detail-pass-levelling.md`](docs/balance/detail-pass-levelling.md) | Levelling ground with a rover, tile by tile, to the level beside it - for looks, and so buildings need no foundation. |
 | [`docs/balance/detail-pass-zones.md`](docs/balance/detail-pass-zones.md) | The example planet's cities in zones - homes, power, industry, a port of spaceports in a line, mixed districts - spread from centre to corners; "connect all" kept off hard rock; the level-of-detail gate split into the city and the ground round it. |
 | [`docs/balance/detail-pass-rover-post.md`](docs/balance/detail-pass-rover-post.md) | Four times the hard-rock clusters, the Rover Post (one more rover per 100 people), and the connective tools moved to the top right. |
@@ -150,6 +151,19 @@ Flags: `--years`, `--every`, `--csv`, `--channels`, `--null-only`.
 
 The reference run is a schedule of facility build orders (`src/harness/policy.ts`), so what the
 harness measures is what a player driving the same levers would get.
+
+## Publishing on Netlify
+
+The game is a static site: everything runs in the browser, and saves live in the browser's
+IndexedDB. `netlify.toml` tells Netlify to typecheck, build with `npm run build:web` on Node 22,
+and publish `dist-web/`.
+
+- **From GitHub (redeploys on every push):** in Netlify, *Add new site -> Import an existing
+  project -> GitHub*, pick this repository; the build settings come from `netlify.toml`. Deploy.
+- **From this machine:** `npx netlify-cli login`, then `npx netlify-cli deploy --build --prod`
+  (the first time it asks to create or link a site).
+- **By hand:** `npm run build:web`, then drag the `dist-web` folder onto
+  <https://app.netlify.com/drop>.
 
 ## Layout
 
