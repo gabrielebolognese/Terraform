@@ -24,8 +24,8 @@ import type { Rock } from "./rocks.js";
 import { garage, levelFor, rockAt, roverCount, roversOut, rocksOf, roverYears, siteGround } from "./rocks.js";
 import type { FloodReading } from "./flood.js";
 import { applyFlood, floodReading, submerged } from "./flood.js";
-import type { Layer, NetworkIssue } from "./network.js";
-import { LAYERS, applyNetwork, linksForRedundancy, linksToConnect, networkOf } from "./network.js";
+import type { Layer, LinkLayer, NetworkIssue } from "./network.js";
+import { LAYERS, applyNetwork, linksForRedundancy, linksToConnect, networkOf, withRails } from "./network.js";
 
 /** Section 7.2: the resources whose shortage is a life-support emergency. */
 const LIFE_SUPPORT: readonly MicroResource[] = ["power", "water", "oxygen", "food"];
@@ -49,6 +49,7 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     base: gridTiles(kind, t),
     claims: [],
     grades: [],
+    rails: [],
   };
 }
 
@@ -127,8 +128,9 @@ const EMPTY: ReadonlySet<number> = new Set();
 /** A rover to build (or upgrade) the building at (tx, ty): out from the headquarters, the work, and back. */
 function buildJob(s: Settlement, type: BuildingType, tx: number, ty: number, upgrade: boolean, t: Tuning): SettlementJob {
   const size = BUILDING_DEFS[type].footprint;
+  const depth = BUILDING_DEFS[type].depth;
   const from = garage(s)!;
-  const distance = Math.hypot(tx + size / 2 - from.x, ty + size / 2 - from.y);
+  const distance = Math.hypot(tx + size / 2 - from.x, ty + depth / 2 - from.y);
   const work = buildYears(type, t);
   const total = 2 * distance * t.ROVER_YEARS_PER_TILE + work;
   return { kind: "build", tile: tileKey(tx, ty), work, total, remaining: total, upgrade };
@@ -148,7 +150,8 @@ function occupied(s: Settlement): Set<string> {
   const taken = new Set<string>();
   for (const b of s.buildings) {
     const size = BUILDING_DEFS[b.type].footprint;
-    for (const [x, y] of footprintTiles({ tx: b.tx, ty: b.ty, w: size, h: size })) taken.add(`${x},${y}`);
+    const depth = BUILDING_DEFS[b.type].depth;
+    for (const [x, y] of footprintTiles({ tx: b.tx, ty: b.ty, w: size, h: depth })) taken.add(`${x},${y}`);
   }
   return taken;
 }
@@ -177,13 +180,15 @@ export function placeBuilding(
   if (def === undefined) return refuse(`"${String(type)}" is not a building`);
   if (!def.buildable) return refuse(`the ${def.name} is founded with the settlement, never built`);
   if (!def.kinds.includes(s.kind)) return refuse(`${def.name} cannot be built in an ${s.kind}`);
+  const needs = def.minPopulation(t);
+  if (needs > 0 && s.population < needs) return refuse(`a ${def.name} needs a city of ${needs} people - this one has ${Math.floor(s.population)}`);
   if (type === "rover_post") {
     // One post for every ROVER_POST_PEOPLE people.
     const posts = s.buildings.filter((b) => b.type === "rover_post").length;
     const allowed = Math.floor(s.population / t.ROVER_POST_PEOPLE);
     if (posts >= allowed) return refuse(`a ${def.name} needs ${(posts + 1) * t.ROVER_POST_PEOPLE} people - one post for every ${t.ROVER_POST_PEOPLE}, and the city has ${Math.floor(s.population)}`);
   }
-  const f = { tx, ty, w: def.footprint, h: def.footprint };
+  const f = { tx, ty, w: def.footprint, h: def.depth };
   const ours = claimTest(s, t);
   if (!footprintTiles(f).every(([x, y]) => ours(x, y))) return refuse(`${def.name} does not fit there - it runs off the grid, the land the city holds (claim more as it grows)`);
   const ground = siteGround(s, t);
@@ -201,6 +206,8 @@ export function placeBuilding(
   if (footprintTiles(f).some(([x, y]) => corridors.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a corridor - remove it first`);
   const cables = new Set(s.cables);
   if (footprintTiles(f).some(([x, y]) => cables.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a cable - remove it first`);
+  const rails = new Set(s.rails);
+  if (footprintTiles(f).some(([x, y]) => rails.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a railway - remove it first`);
   const cost = def.cost(t);
   if (s.stores.materials < cost) {
     return refuse(`${def.name} needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
@@ -218,7 +225,8 @@ export function placeBuilding(
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
 
-const LAYER_WORDS: Readonly<Record<Layer, { one: string; cost: (t: Tuning) => number }>> = {
+const LAYER_WORDS: Readonly<Record<LinkLayer, { one: string; cost: (t: Tuning) => number }>> = {
+  rails: { one: "railway", cost: (t) => t.COST_RAIL },
   corridors: { one: "corridor", cost: (t) => t.COST_CORRIDOR },
   cables: { one: "cable", cost: (t) => t.COST_CABLE },
 };
@@ -228,7 +236,7 @@ const LAYER_WORDS: Readonly<Record<Layer, { one: string; cost: (t: Tuning) => nu
  * nothing, off the grid, on ground too steep to build on, under a building,
  * where one already is, or without the materials. A tile may carry both.
  */
-export function placeLink(state: SimState, settlementId: string, layer: Layer, tx: number, ty: number, t: Tuning): PlaceOutcome {
+export function placeLink(state: SimState, settlementId: string, layer: LinkLayer, tx: number, ty: number, t: Tuning): PlaceOutcome {
   const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
   const words = LAYER_WORDS[layer];
   const s = state.settlements.find((x) => x.id === settlementId);
@@ -248,7 +256,7 @@ export function placeLink(state: SimState, settlementId: string, layer: Layer, t
 }
 
 /** Take up the corridor or cable on (tx, ty). No refund, as for buildings. */
-export function removeLink(state: SimState, settlementId: string, layer: Layer, tx: number, ty: number): PlaceOutcome {
+export function removeLink(state: SimState, settlementId: string, layer: LinkLayer, tx: number, ty: number): PlaceOutcome {
   const s = state.settlements.find((x) => x.id === settlementId);
   if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
   const key = tileKey(tx, ty);
@@ -404,7 +412,8 @@ export function upgradeBuilding(state: SimState, settlementId: string, tx: numbe
   if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
   const index = s.buildings.findIndex((b) => {
     const size = BUILDING_DEFS[b.type].footprint;
-    return tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + size;
+    const depth = BUILDING_DEFS[b.type].depth;
+    return tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + depth;
   });
   if (index < 0) return refuse("there is no building there");
   const b = s.buildings[index]!;
@@ -433,7 +442,8 @@ export function removeBuilding(state: SimState, settlementId: string, tx: number
   if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
   const index = s.buildings.findIndex((b) => {
     const size = BUILDING_DEFS[b.type].footprint;
-    return tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + size;
+    const depth = BUILDING_DEFS[b.type].depth;
+    return tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + depth;
   });
   if (index < 0) return { state, ok: false, reason: "there is no building there" };
   if (!BUILDING_DEFS[s.buildings[index]!.type].buildable) return { state, ok: false, reason: `the ${BUILDING_DEFS[s.buildings[index]!.type].name} cannot be removed` };
@@ -521,6 +531,7 @@ export function shiftContent(s: Settlement, dx: number, dy: number): Settlement 
     corridors: s.corridors.map(move),
     cables: s.cables.map(move),
     cleared: s.cleared.map(move),
+    rails: s.rails.map(move),
     grades: s.grades.map((g) => ({ ...g, tile: move(g.tile) })),
     jobs: s.jobs.map((job) => ({ ...job, tile: move(job.tile) })),
   };
@@ -536,6 +547,8 @@ export interface SettlementStep {
   readonly operable: readonly boolean[];
   /** Section 7.3 support: no life-support resource ran short this substep, and every life-support store holds something. */
   readonly supported: boolean;
+  /** Credits a year its laboratories, observatories and forums earn this substep. */
+  readonly research: number;
   /** Section 2.2: planetary CO2 this settlement asks to draw, mbar per year. */
   readonly planetaryCo2: number;
   /** What the operable buildings made and drew this substep, per year. Derived, never stored. */
@@ -568,7 +581,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   if (s.lostAtSeaLevelM !== null) {
     // A ruin: nothing runs, nothing grows, nothing reaches the planet.
     const none = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
-    return { next: s, operable: [], supported: false, planetaryCo2: 0, production: none, consumption: none, shortages: [], flood, network: [] };
+    return { next: s, operable: [], supported: false, planetaryCo2: 0, research: 0, production: none, consumption: none, shortages: [], flood, network: [] };
   }
   const defs = s.buildings.map((b) => BUILDING_DEFS[b.type]);
   const levels = s.buildings.map((b) => levelFactor(b.level, t));
@@ -577,7 +590,10 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   const operable = defs.map((def, i) => def.canOperate(env, t) && !(flood !== null && submerged(s.buildings[i]!, flood)) && !building.has(tileKey(s.buildings[i]!.tx, s.buildings[i]!.ty)));
   // Section 6's networks: with them off, every building on the grid is on them.
   const n = frameOf(s, t).n;
-  const network = t.NETWORK_ENABLED ? { corridors: networkOf(s.buildings, s.corridors, n), cables: networkOf(s.buildings, s.cables, n) } : null;
+  // Railways join the districts round the stations they link.
+  const network = t.NETWORK_ENABLED
+    ? { corridors: withRails(networkOf(s.buildings, s.corridors, n), s.buildings, s.rails, n), cables: withRails(networkOf(s.buildings, s.cables, n), s.buildings, s.rails, n) }
+    : null;
   const draws = defs.map((def) => def.consumes(t, env));
   const makes = defs.map((def) => def.produces(t));
   const issues: (NetworkIssue | null)[] = defs.map(() => null);
@@ -585,12 +601,28 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     if (network !== null) while (applyNetwork(network, draws, makes, operable, issues));
   };
 
+  // The Industrial Command Center: facilities in the square about a running one make COMMAND_BOOST more (not stacked).
+  const commands = s.buildings.map((b, i) => (b.type === "industrial_command" ? i : -1)).filter((i) => i >= 0);
+  const centre = (b: PlacedBuilding): [number, number] => [b.tx + BUILDING_DEFS[b.type].footprint / 2, b.ty + BUILDING_DEFS[b.type].depth / 2];
+  const commandBoost = (i: number): number => {
+    if (commands.length === 0 || s.buildings[i]!.type === "industrial_command") return 1;
+    const [x, y] = centre(s.buildings[i]!);
+    for (const c of commands) {
+      if (!operable[c]) continue;
+      const cb = s.buildings[c]!;
+      const [cx, cy] = centre(cb);
+      const half = (t.COMMAND_SQUARE_TILES + t.COMMAND_SQUARE_PER_LEVEL * (cb.level - 1)) / 2;
+      if (Math.abs(x - cx) <= half && Math.abs(y - cy) <= half) return 1 + t.COMMAND_BOOST;
+    }
+    return 1;
+  };
+
   const totals = (): { prod: Record<MicroResource, number>; cons: Record<MicroResource, number> } => {
     const prod = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
     const cons = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
     defs.forEach((def, i) => {
       if (!operable[i]) return;
-      const eff = def.efficiency(env) * levels[i]!;
+      const eff = def.efficiency(env) * levels[i]! * commandBoost(i);
       const p = def.produces(t);
       const c = def.consumes(t, env);
       for (const r of MICRO_RESOURCES) {
@@ -676,15 +708,28 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     const home = housing(s, t);
     // The first settlers arrive once there is somewhere to live and every need is met.
     if (supported && home > 0) population = Math.max(population, Math.min(home, t.MICRO_SEED_POPULATION));
-    const growth = home > 0 ? t.MICRO_GROWTH_RATE * population * (1 - population / home) * (supported ? 1 : 0) : 0;
-    const decline = t.MICRO_DECLINE_RATE * population * (supported ? 0 : 1);
+    // A running Research Forum: people are drawn to the city.
+    const forum = defs.some((def, i) => operable[i] && def.type === "research_forum") ? 1 + t.FORUM_GROWTH_BONUS : 1;
+    const growth = home > 0 ? t.MICRO_GROWTH_RATE * forum * population * (1 - population / home) * (supported ? 1 : 0) : 0;
+    // Medical Centers (at the user's request: "avoids that people die when
+    // there is a scarcity of oxygen or food, as people find shelter here"):
+    // while oxygen or food alone runs short, the people they shelter do not
+    // decline. Short of power or water, the centers cannot save anyone.
+    const onlyAir = shortLife.size > 0 && [...shortLife].every((r) => r === "oxygen" || r === "food");
+    let shelter = 0;
+    if (onlyAir) defs.forEach((def, i) => {
+      if (operable[i] && def.type === "medical_center") shelter += t.MEDICAL_SHELTER * levels[i]!;
+    });
+    const decline = t.MICRO_DECLINE_RATE * Math.max(0, population - shelter) * (supported ? 0 : 1);
     population = Math.min(home, Math.max(0, population + (growth - decline) * h));
   }
 
   let planetaryCo2 = 0;
+  let research = 0;
   defs.forEach((def, i) => {
     if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env) * levels[i]!;
+    if (operable[i]) research += def.research(t) * levels[i]! * commandBoost(i);
   });
 
-  return { next: { ...s, stores, population, jobs, cleared, grades, buildings: built }, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
+  return { next: { ...s, stores, population, jobs, cleared, grades, buildings: built }, research, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
 }

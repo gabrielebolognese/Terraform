@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 10;
+  readonly schemaVersion: 11;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -418,6 +418,8 @@ export interface Settlement {
    * A later grade wins a corner two share.
    */
   readonly grades: readonly Grade[];
+  /** Railway tiles (at the user's request), sorted keys: rails joining stations join their districts' networks. */
+  readonly rails: readonly number[];
 }
 
 export interface Grade {
@@ -461,6 +463,15 @@ export const BUILDING_TYPES = [
   "storage_depot",
   "spaceport",
   "rover_post",
+  // At the user's request, the city's later buildings.
+  "laboratory",
+  "algae_reactor",
+  "skyscraper",
+  "observatory",
+  "station",
+  "research_forum",
+  "medical_center",
+  "industrial_command",
   "headquarters",
 ] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];

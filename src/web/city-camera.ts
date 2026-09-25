@@ -103,9 +103,8 @@ export function tileAt(cam: CityCamera, viewW: number, viewH: number, px: number
 }
 
 /** Where a footprint of `size` starts when the pointer is over (tx, ty): centred on it. */
-export function footprintOrigin(tx: number, ty: number, size: number): { tx: number; ty: number } {
-  const back = Math.floor((size - 1) / 2);
-  return { tx: tx - back, ty: ty - back };
+export function footprintOrigin(tx: number, ty: number, size: number, depth = size): { tx: number; ty: number } {
+  return { tx: tx - Math.floor((size - 1) / 2), ty: ty - Math.floor((depth - 1) / 2) };
 }
 
 export { TILE_H, TILE_W };

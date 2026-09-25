@@ -21,7 +21,7 @@ export const PREVIEW_W = 112;
 export const PREVIEW_H = 80;
 
 /** What a card can show: a building, a corridor, a power cable, or "connect everything". */
-export type CardKind = BuildingType | "corridor" | "cable" | "connect" | "redundant" | "claim" | "level";
+export type CardKind = BuildingType | "corridor" | "cable" | "rail" | "connect" | "redundant" | "claim" | "level";
 
 /** A tiny flat scene: `tiles` square, with these buildings and road tiles. */
 export function previewView(id: string, tiles: number, buildings: readonly CityBuildingView[], corridorTiles: readonly (readonly [number, number])[], cableTiles: readonly (readonly [number, number])[] = []): CityView {
@@ -71,6 +71,7 @@ const building = (type: BuildingType, tx: number, ty: number, index = 0): CityBu
   tx,
   ty,
   size: BUILDING_DEFS[type].footprint,
+  ...(BUILDING_DEFS[type].depth === BUILDING_DEFS[type].footprint ? {} : { depth: BUILDING_DEFS[type].depth }),
   operable: true,
   activity: 1,
   baseZ: 0,
@@ -94,6 +95,13 @@ export function previewScene(kind: CardKind): Shape[] {
   if (kind === "cable") {
     // A power cable from a solar array to a mine.
     return cityScene(previewView("cable", 6, cableBuildings(), [], [[2, 1], [3, 1], [4, 1], [4, 2], [4, 3]]), at);
+  }
+  if (kind === "rail") {
+    // A curve of track.
+    const v = previewView("rail", 4, [], []);
+    const rails = new Array<boolean>(16).fill(false);
+    for (const [x, y] of [[0, 1], [1, 1], [2, 1], [2, 2], [2, 3]] as const) rails[y * 4 + x] = true;
+    return cityScene({ ...v, rails }, at);
   }
   if (kind === "redundant") {
     // Three buildings in a ring of corridor: each with two routes.
@@ -158,7 +166,7 @@ export function drawPreview(canvas: HTMLCanvasElement, shapes: readonly Shape[])
 /** Every card's picture, drawn once. In a page with no 2D canvas (tests) they stay blank. */
 export function makePreviews(): Map<CardKind, HTMLCanvasElement> {
   const out = new Map<CardKind, HTMLCanvasElement>();
-  for (const kind of [...BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].buildable), "corridor", "cable", "connect", "redundant", "claim", "level"] as CardKind[]) {
+  for (const kind of [...BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].buildable), "corridor", "cable", "rail", "connect", "redundant", "claim", "level"] as CardKind[]) {
     const canvas = document.createElement("canvas");
     canvas.width = PREVIEW_W * 2;
     canvas.height = PREVIEW_H * 2;

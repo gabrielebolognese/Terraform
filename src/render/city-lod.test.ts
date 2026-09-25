@@ -85,7 +85,9 @@ describe("levels of detail", () => {
     // now change half as much of the frame, so the same ground error was
     // twice the share. Split, each part measures one thing:
     //   - the city: the blocks the full-detail city changes, against its own
-    //     bare ground. Measured medium 18.3%, low 22.6% (the old dense layout:
+    //     bare ground. Measured medium 18.0%, low 22.9% - with the later buildings
+    //     in the metropolis, which took low to 23.8% until cabled corridors
+    //     were tinted toward the cable at low (22.6% before them; the old dense layout:
     //     17%, 18%). Without the cable terminals at medium, 23%; corridors
     //     as a flat trace at low, 24.8%;
     //   - everything else - ground and the world beyond - as an absolute
@@ -137,9 +139,10 @@ describe("levels of detail", () => {
       // measured (dipped, it stood on a foundation, and they moved by 4%; a
       // wider level area merged into patches without the building, 26%).
       const size = BUILDING_DEFS[type].footprint;
-      const flat: CityView = { ...flatten(reference, -0.2, [10, 10, 10 + size, 10 + size]), id: "one building" };
+      const depth = BUILDING_DEFS[type].depth;
+      const flat: CityView = { ...flatten(reference, -0.2, [10, 10, 10 + size, 10 + depth]), id: "one building" };
       const bare = renderCity({ ...flat, buildings: [] }, at(quality), W, H, false);
-      const b = { index: 0, type, tx: 10, ty: 10, size: BUILDING_DEFS[type].footprint, operable: true, activity: 1, baseZ: 0, submerged: false, network: null };
+      const b = { index: 0, type, tx: 10, ty: 10, size, ...(depth === size ? {} : { depth }), operable: true, activity: 1, baseZ: 0, submerged: false, network: null };
       const f = renderCity({ ...flat, buildings: [b] }, at(quality), W, H, false);
       const sum = [0, 0, 0];
       let pixels = 0;

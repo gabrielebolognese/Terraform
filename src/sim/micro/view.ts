@@ -33,8 +33,10 @@ export interface CityBuildingView {
   readonly type: BuildingType;
   readonly tx: number;
   readonly ty: number;
-  /** Footprint edge, tiles. */
+  /** Footprint along x, tiles. */
   readonly size: number;
+  /** Footprint along y, tiles, where it differs from `size` (a station is 4 x 6). */
+  readonly depth?: number;
   /** Running this substep (section 7.1 and 7.2). */
   readonly operable: boolean;
   /** Height the building stands at, in tiles: the highest ground under its footprint (Batch 22). */
@@ -127,6 +129,8 @@ export interface CityView {
   readonly corridors: readonly boolean[];
   /** Row-major: the tiles that carry a power cable. */
   readonly cables: readonly boolean[];
+  /** Row-major: the tiles that carry a railway. */
+  readonly rails?: readonly boolean[];
   /** Row-major: the rock on each tile that a rover could break. */
   readonly rocks: readonly Rock[];
   /** Where rovers set out from: the headquarters' middle, in tiles, or null without one. */
@@ -254,18 +258,19 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
             ? occupancy
             : 1;
       const size = BUILDING_DEFS[b.type].footprint;
+      const depth = BUILDING_DEFS[b.type].depth;
       // It stands at the highest corner under it; on a slope, a foundation
       // fills down to the ground (the user: "building on a slope builds
       // concrete foundations under it").
       let baseZ = -Infinity;
-      for (let y = b.ty; y <= b.ty + size; y += 1) {
+      for (let y = b.ty; y <= b.ty + depth; y += 1) {
         for (let x = b.tx; x <= b.tx + size; x += 1) {
           // A building kept from an old save may stand partly off a shrunk grid.
           if (x >= 0 && y >= 0 && x <= n && y <= n) baseZ = Math.max(baseZ, (ground.cornersM[y * (n + 1) + x] ?? 0) / t.TILE_METRES);
         }
       }
       const drowned = step.flood !== null && submerged(b, step.flood);
-      return { index, type: b.type, tx: b.tx, ty: b.ty, size, operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null };
+      return { index, type: b.type, tx: b.tx, ty: b.ty, size, ...(depth === size ? {} : { depth }), operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null };
     }),
     population: s.population,
     housing: home,
@@ -280,6 +285,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     lostAtSeaLevelM: s.lostAtSeaLevelM,
     corridors: Array.from(linkGrid(s.corridors, n), (r) => r === 1),
     cables: Array.from(linkGrid(s.cables, n), (r) => r === 1),
+    rails: Array.from(linkGrid(s.rails, n), (r) => r === 1),
     rocks: rocksOf(s, t),
     garage: garage(s),
     // A rover building is drawn as any rover at work: out, at the site, and back.

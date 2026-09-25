@@ -895,6 +895,63 @@ export const BASE_TUNING = Object.freeze({
    * building's price again and takes its build time.
    */
   LEVEL_BONUS: 0.1,
+  /**
+   * The city's later buildings (at the user's request). Costs in materials;
+   * draws and makes per sim-year; research in credits a year (they reach
+   * the planet's economy only with ECONOMY_ENABLED); the people a city needs
+   * before it may build one.
+   */
+  COST_LABORATORY: 120,
+  LAB_POWER: 3,
+  LAB_WATER: 1,
+  LAB_RESEARCH: 12,
+  COST_ALGAE_REACTOR: 40,
+  ALGAE_POWER: 2,
+  ALGAE_WATER: 1,
+  ALGAE_OXYGEN: 5,
+  COST_SKYSCRAPER: 300,
+  SKYSCRAPER_HOUSING: 160,
+  SKYSCRAPER_POWER: 10,
+  SKYSCRAPER_WATER: 7,
+  SKYSCRAPER_OXYGEN: 7,
+  SKYSCRAPER_FOOD: 7,
+  SKYSCRAPER_PEOPLE: 1000,
+  COST_OBSERVATORY: 400,
+  OBSERVATORY_POWER: 5,
+  OBSERVATORY_RESEARCH: 40,
+  OBSERVATORY_PEOPLE: 2000,
+  COST_STATION: 600,
+  STATION_POWER: 4,
+  STATION_PEOPLE: 5000,
+  /** A tile of railway, materials. */
+  COST_RAIL: 2,
+  COST_RESEARCH_FORUM: 500,
+  FORUM_POWER: 6,
+  FORUM_WATER: 3,
+  FORUM_FOOD: 2,
+  FORUM_RESEARCH: 30,
+  /** A running Research Forum raises the city's growth rate by this share (more than one adds nothing more). */
+  FORUM_GROWTH_BONUS: 0.25,
+  COST_MEDICAL_CENTER: 350,
+  MEDICAL_POWER: 4,
+  MEDICAL_WATER: 2,
+  /** People each running Medical Center shelters from dying while the city is short of oxygen or food. */
+  MEDICAL_SHELTER: 400,
+  MEDICAL_PEOPLE: 1000,
+  COST_INDUSTRIAL_COMMAND: 450,
+  COMMAND_POWER: 5,
+  /** What an Industrial Command Center adds to the facilities round it, and the side of its square at level 1 and per level after. */
+  COMMAND_BOOST: 0.1,
+  COMMAND_SQUARE_TILES: 15,
+  COMMAND_SQUARE_PER_LEVEL: 2,
+  BUILD_YEARS_LABORATORY: 0.3,
+  BUILD_YEARS_ALGAE_REACTOR: 0.2,
+  BUILD_YEARS_SKYSCRAPER: 1,
+  BUILD_YEARS_OBSERVATORY: 0.8,
+  BUILD_YEARS_STATION: 1,
+  BUILD_YEARS_RESEARCH_FORUM: 0.8,
+  BUILD_YEARS_MEDICAL_CENTER: 0.6,
+  BUILD_YEARS_INDUSTRIAL_COMMAND: 0.8,
   MAX_LEVEL_HABITAT_DOME: 5,
   MAX_LEVEL_REGOLITH_MINE: 10,
   MAX_LEVEL_OTHER: 8,

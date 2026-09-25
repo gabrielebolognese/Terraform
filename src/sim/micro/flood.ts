@@ -66,8 +66,9 @@ export function floodReading(s: Settlement, env: HabitatChannels, t: Tuning): Fl
 /** The tiles of a building's footprint that lie on the grid, as row-major indices. */
 function footprintIndices(b: PlacedBuilding, tiles: number): number[] {
   const size = BUILDING_DEFS[b.type].footprint;
+  const depth = BUILDING_DEFS[b.type].depth;
   const out: number[] = [];
-  for (let y = b.ty; y < b.ty + size; y += 1) {
+  for (let y = b.ty; y < b.ty + depth; y += 1) {
     for (let x = b.tx; x < b.tx + size; x += 1) {
       if (x >= 0 && y >= 0 && x < tiles && y < tiles) out.push(y * tiles + x);
     }

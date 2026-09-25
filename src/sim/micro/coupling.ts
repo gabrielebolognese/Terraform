@@ -26,6 +26,8 @@ export interface MicroContribution {
   readonly flows: readonly Flow[];
   /** Summed planetary CO2 demand before the planet's own limits, mbar/yr. For tests and the UI. */
   readonly co2Demand: number;
+  /** Credits a year the settlements' research earns (at the user's request): income, with the economy on. */
+  readonly research: number;
 }
 
 export function microStep(
@@ -37,12 +39,16 @@ export function microStep(
   h: number,
 ): MicroContribution {
   if (!t.SETTLEMENTS_ENABLED || settlements.length === 0) {
-    return { settlementsNext: settlements, flows: [], co2Demand: 0 };
+    return { settlementsNext: settlements, flows: [], co2Demand: 0, research: 0 };
   }
 
   const steps = settlements.map((s) => settlementStep(s, env, t, h));
   let co2Demand = 0;
-  for (const step of steps) co2Demand += step.planetaryCo2;
+  let research = 0;
+  for (const step of steps) {
+    co2Demand += step.planetaryCo2;
+    research += step.research;
+  }
 
   const flows: Flow[] = [];
   if (co2Demand > 0) {
@@ -66,5 +72,5 @@ export function microStep(
     }
   }
 
-  return { settlementsNext: steps.map((s) => s.next), flows, co2Demand };
+  return { settlementsNext: steps.map((s) => s.next), flows, co2Demand, research };
 }

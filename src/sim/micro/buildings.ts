@@ -22,7 +22,14 @@ export interface BuildingDef {
   readonly name: string;
   /** What it is, in the player's words. */
   readonly summary: string;
-  readonly footprint: 1 | 2 | 3 | 5;
+  /** Footprint along x, tiles. */
+  readonly footprint: number;
+  /** Footprint along y, tiles: the same as `footprint` but for the long buildings (a station is 4 x 6). */
+  readonly depth: number;
+  /** Credits a year it earns in research while it runs (behind ECONOMY_ENABLED: they go to the planet's economy). */
+  readonly research: (t: Tuning) => number;
+  /** People a city must have before it may build one; 0 for none. */
+  readonly minPopulation: (t: Tuning) => number;
   /** Whether a player may place it. The headquarters is founded, never built. */
   readonly buildable: boolean;
   /** Which kinds of settlement may build it. Outposts carry no population (section 4.2). */
@@ -68,6 +75,14 @@ export function buildYears(type: BuildingType, t: Tuning): number {
     storage_depot: t.BUILD_YEARS_STORAGE_DEPOT,
     spaceport: t.BUILD_YEARS_SPACEPORT,
     rover_post: t.BUILD_YEARS_ROVER_POST,
+    laboratory: t.BUILD_YEARS_LABORATORY,
+    algae_reactor: t.BUILD_YEARS_ALGAE_REACTOR,
+    skyscraper: t.BUILD_YEARS_SKYSCRAPER,
+    observatory: t.BUILD_YEARS_OBSERVATORY,
+    station: t.BUILD_YEARS_STATION,
+    research_forum: t.BUILD_YEARS_RESEARCH_FORUM,
+    medical_center: t.BUILD_YEARS_MEDICAL_CENTER,
+    industrial_command: t.BUILD_YEARS_INDUSTRIAL_COMMAND,
     headquarters: t.BUILD_YEARS_SPACEPORT,
   };
   return years[type];
@@ -80,7 +95,10 @@ const ONE = (): number => 1;
 const BOTH: readonly SettlementKind[] = ["city", "outpost", "metropolis"];
 const CITY: readonly SettlementKind[] = ["city", "metropolis"];
 
-export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object.freeze({
+/** A definition as written: square unless it says otherwise, no research, no population asked. */
+type DefIn = Omit<BuildingDef, "depth" | "research" | "minPopulation"> & Partial<Pick<BuildingDef, "depth" | "research" | "minPopulation">>;
+
+const RAW: Readonly<Record<BuildingType, DefIn>> = {
   habitat_dome: {
     type: "habitat_dome",
     name: "Habitat Dome",
@@ -272,6 +290,144 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     canOperate: ALWAYS,
     efficiency: ONE,
   },
+  laboratory: {
+    type: "laboratory",
+    name: "Laboratory",
+    summary: "Scientists at work on the planet: research that earns credits while it runs.",
+    footprint: 3,
+    buildable: true,
+    kinds: BOTH,
+    cost: (t) => t.COST_LABORATORY,
+    consumes: (t) => ({ power: t.LAB_POWER, water: t.LAB_WATER }),
+    produces: NONE,
+    research: (t) => t.LAB_RESEARCH,
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  algae_reactor: {
+    type: "algae_reactor",
+    name: "Algae Reactor",
+    summary: "Tanks of green algae under light: they breathe out oxygen for the city.",
+    footprint: 2,
+    buildable: true,
+    kinds: BOTH,
+    cost: (t) => t.COST_ALGAE_REACTOR,
+    consumes: (t) => ({ power: t.ALGAE_POWER, water: t.ALGAE_WATER }),
+    produces: (t) => ({ oxygen: t.ALGAE_OXYGEN }),
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  skyscraper: {
+    type: "skyscraper",
+    name: "Skyscraper",
+    summary: "A tower of homes on a small footprint - for a city of a thousand people or more.",
+    footprint: 2,
+    buildable: true,
+    kinds: CITY,
+    cost: (t) => t.COST_SKYSCRAPER,
+    consumes: (t) => ({ power: t.SKYSCRAPER_POWER, water: t.SKYSCRAPER_WATER, oxygen: t.SKYSCRAPER_OXYGEN, food: t.SKYSCRAPER_FOOD }),
+    produces: NONE,
+    housing: (t) => t.SKYSCRAPER_HOUSING,
+    minPopulation: (t) => t.SKYSCRAPER_PEOPLE,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  observatory: {
+    type: "observatory",
+    name: "Astronomy Observatory",
+    summary: "A great telescope under a dome in the thin air: research that earns credits. For a city of two thousand.",
+    footprint: 5,
+    buildable: true,
+    kinds: CITY,
+    cost: (t) => t.COST_OBSERVATORY,
+    consumes: (t) => ({ power: t.OBSERVATORY_POWER }),
+    produces: NONE,
+    research: (t) => t.OBSERVATORY_RESEARCH,
+    minPopulation: (t) => t.OBSERVATORY_PEOPLE,
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  station: {
+    type: "station",
+    name: "Station",
+    summary: "A railway station. Lay rails between stations: the districts round each share their corridors and cables. For a city of five thousand.",
+    footprint: 4,
+    depth: 6,
+    buildable: true,
+    kinds: CITY,
+    cost: (t) => t.COST_STATION,
+    consumes: (t) => ({ power: t.STATION_POWER }),
+    produces: NONE,
+    minPopulation: (t) => t.STATION_PEOPLE,
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  research_forum: {
+    type: "research_forum",
+    name: "Research Forum",
+    summary: "A great glass dome: part bar, part laboratory. Research that earns credits, and a city that grows faster for it.",
+    footprint: 4,
+    depth: 6,
+    buildable: true,
+    kinds: CITY,
+    cost: (t) => t.COST_RESEARCH_FORUM,
+    consumes: (t) => ({ power: t.FORUM_POWER, water: t.FORUM_WATER, food: t.FORUM_FOOD }),
+    produces: NONE,
+    research: (t) => t.FORUM_RESEARCH,
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  medical_center: {
+    type: "medical_center",
+    name: "Medical Center",
+    summary: "Shelter and care: while the city is short of oxygen or food, the people it shelters do not die. For a city of a thousand.",
+    footprint: 5,
+    buildable: true,
+    kinds: CITY,
+    cost: (t) => t.COST_MEDICAL_CENTER,
+    consumes: (t) => ({ power: t.MEDICAL_POWER, water: t.MEDICAL_WATER }),
+    produces: NONE,
+    minPopulation: (t) => t.MEDICAL_PEOPLE,
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  industrial_command: {
+    type: "industrial_command",
+    name: "Industrial Command Center",
+    summary: "Runs the works round it: every facility in the square about it (15 tiles a side at level 1, wider each level) makes 10% more.",
+    footprint: 6,
+    depth: 4,
+    buildable: true,
+    kinds: BOTH,
+    cost: (t) => t.COST_INDUSTRIAL_COMMAND,
+    consumes: (t) => ({ power: t.COMMAND_POWER }),
+    produces: NONE,
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
   headquarters: {
     type: "headquarters",
     name: "Headquarters",
@@ -288,4 +444,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object
     canOperate: ALWAYS,
     efficiency: ONE,
   },
-});
+};
+
+export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object.freeze(
+  Object.fromEntries(
+    (Object.entries(RAW) as [BuildingType, DefIn][]).map(([type, d]) => [type, { ...d, depth: d.depth ?? d.footprint, research: d.research ?? ZERO, minPopulation: d.minPopulation ?? ZERO }]),
+  ) as Record<BuildingType, BuildingDef>,
+);

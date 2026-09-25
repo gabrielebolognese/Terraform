@@ -147,7 +147,7 @@ describe("the example planet", () => {
     for (const s of state.settlements) {
       if (s.kind === "outpost" || s.buildings.length < 30) continue;
       cities += 1;
-      const mid = s.buildings.map((b) => ({ k: kindOf(b.type), x: b.tx + BUILDING_DEFS[b.type].footprint / 2, y: b.ty + BUILDING_DEFS[b.type].footprint / 2 }));
+      const mid = s.buildings.map((b) => ({ k: kindOf(b.type), x: b.tx + BUILDING_DEFS[b.type].footprint / 2, y: b.ty + BUILDING_DEFS[b.type].depth / 2 }));
       let same = 0;
       let all = 0;
       for (const a of mid) {
@@ -192,7 +192,8 @@ describe("the example planet", () => {
       const n = gridTiles(s.kind, game);
       const box = s.buildings.map((b) => {
         const z = BUILDING_DEFS[b.type].footprint;
-        return { x0: b.tx, y0: b.ty, x1: b.tx + z, y1: b.ty + z, cx: b.tx + z / 2, cy: b.ty + z / 2 };
+        const d = BUILDING_DEFS[b.type].depth;
+        return { x0: b.tx, y0: b.ty, x1: b.tx + z, y1: b.ty + d, cx: b.tx + z / 2, cy: b.ty + d / 2 };
       });
       const founded = foundingBuildings(s.kind, game).length;
       for (let i = founded; i < box.length; i += 1) {

@@ -194,13 +194,13 @@ beforeEach(() => {
 describe("the city view", () => {
   it("offers only what this kind of settlement may build", () => {
     const city = mount("city");
-    expect(city.host.querySelectorAll(".city-card[data-type]").length).toBe(11);
+    expect(city.host.querySelectorAll(".city-card[data-type]").length).toBe(19);
     document.body.replaceChildren();
     const outpost = mount("outpost");
     const offered = [...outpost.host.querySelectorAll<HTMLElement>(".city-card[data-type]")].map((b) => b.dataset["type"]);
     expect(offered).not.toContain("habitat_dome");
     expect(offered).not.toContain("greenhouse");
-    expect(offered.length).toBe(8);
+    expect(offered.length).toBe(11);
   });
 
   it("places the armed building where the player clicks, through the sim", () => {
@@ -456,8 +456,8 @@ describe("the build bar (at the user's request: cards along the bottom, as in Cl
     const page = mount();
     const dock = page.q(".city-dock");
     const cards = [...dock.querySelectorAll<HTMLElement>(".city-card")];
-    // Eleven buildings (the Rover Post the eleventh); the connective tools are top right.
-    expect(cards.length).toBe(11);
+    // Nineteen buildings (eight more at the user's request); the connective tools are top right.
+    expect(cards.length).toBe(19);
     expect(page.q(".city-panel").querySelector(".city-card")).toBeNull();
     for (const c of cards) {
       expect(c.querySelector("canvas.city-card-preview"), c.dataset["card"]).not.toBeNull();
@@ -629,7 +629,7 @@ describe("the connective tools, top right (at the user's request: \"so connectiv
     document.head.append(style);
     const page = mount();
     const tools = page.q(".city-tools");
-    expect([...tools.querySelectorAll<HTMLElement>(".city-card")].map((c) => c.dataset["card"])).toEqual(["corridor", "cable", "connect", "redundant", "claim", "level"]);
+    expect([...tools.querySelectorAll<HTMLElement>(".city-card")].map((c) => c.dataset["card"])).toEqual(["corridor", "cable", "rail", "connect", "redundant", "claim", "level"]);
     expect(page.q(".city-dock").querySelector('[data-card="corridor"], [data-card="cable"], [data-card="connect"], [data-card="claim"]')).toBeNull();
     const css = getComputedStyle(tools);
     expect(css.position).toBe("fixed");
@@ -640,10 +640,10 @@ describe("the connective tools, top right (at the user's request: \"so connectiv
 
   it("is always there: with no materials, and in an outpost", () => {
     const poor = mount("city", { materials: 0 });
-    expect(poor.host.querySelectorAll(".city-tools .city-card")).toHaveLength(6);
+    expect(poor.host.querySelectorAll(".city-tools .city-card")).toHaveLength(7);
     document.body.replaceChildren();
     const outpost = mount("outpost");
-    expect(outpost.host.querySelectorAll(".city-tools .city-card")).toHaveLength(6);
+    expect(outpost.host.querySelectorAll(".city-tools .city-card")).toHaveLength(7);
     expect(outpost.q('.city-tools [data-card="claim"] .city-card-cost').textContent).toBe("cities only");
     // The tools still work from there.
     outpost.q('.city-tools [data-card="corridor"]').click();
@@ -702,5 +702,22 @@ describe("building mode (at the user's request: \"when I'm building, put the opa
     page.option("habitat_dome").click(); // put the tool down
     page.clickAt(dome.tx + 1.5, dome.ty + 1.5, 1.9);
     expect(page.q(".city-inspector-name").textContent).toBe("Habitat Dome");
+  });
+});
+
+describe("the later buildings, in the city view", () => {
+  const FLAT = makeTuning({ SETTLEMENTS_ENABLED: 1 });
+
+  it("says on a card how many people it waits for, and places a 4 x 6 station centred on the tile clicked", () => {
+    const page = mount("city", { materials: 5000 }, FLAT);
+    expect(page.option("skyscraper").querySelector(".city-card-short")?.textContent).toBe("at 1,000 people");
+    page.set((s) => ({ ...s, settlements: s.settlements.map((c) => ({ ...c, population: 6000 })) }));
+    expect(page.option("skyscraper").querySelector(".city-card-short")).toBeNull();
+    page.option("station").click();
+    page.clickTile(22, 16);
+    // 4 across and 6 deep: the tile clicked is its middle, one back and two up.
+    expect(page.calls).toContain("place:station@21,14");
+    const station = page.state().settlements[0]!.buildings.find((b) => b.type === "station")!;
+    expect([station.tx, station.ty]).toEqual([21, 14]);
   });
 });

@@ -45,6 +45,7 @@ that state.
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
 | [`docs/balance/detail-pass-colony.md`](docs/balance/detail-pass-colony.md) | Corridors and power cables, the headquarters, rock-breaking rovers and supply rockets. |
+| [`docs/balance/detail-pass-later-buildings.md`](docs/balance/detail-pass-later-buildings.md) | Eight later buildings - laboratory, algae reactor, skyscraper, observatory, station and railways, research forum, medical center, industrial command center - and buildings that are not square. |
 | [`docs/balance/detail-pass-build.md`](docs/balance/detail-pass-build.md) | Building mode (see-through buildings, no hitbox), build times with rovers and worksites, building levels, and "connect twice". |
 | [`docs/balance/detail-pass-levelling.md`](docs/balance/detail-pass-levelling.md) | Levelling ground with a rover, tile by tile, to the level beside it - for looks, and so buildings need no foundation. |
 | [`docs/balance/detail-pass-zones.md`](docs/balance/detail-pass-zones.md) | The example planet's cities in zones - homes, power, industry, a port of spaceports in a line, mixed districts - spread from centre to corners; "connect all" kept off hard rock; the level-of-detail gate split into the city and the ground round it. |

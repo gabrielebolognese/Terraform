@@ -99,6 +99,14 @@ const ZONE_OF: Readonly<Record<BuildingType, Zone>> = {
   rover_post: "industry",
   atmosphere_processor: "industry",
   spaceport: "port",
+  laboratory: "mixed",
+  algae_reactor: "habitat",
+  skyscraper: "habitat",
+  observatory: "mixed",
+  station: "port",
+  research_forum: "mixed",
+  medical_center: "habitat",
+  industrial_command: "industry",
   headquarters: "mixed",
 };
 
@@ -154,10 +162,10 @@ function layOut(s: Settlement, wants: readonly BuildingType[], size: number, t: 
   const taken = new Uint8Array(n * n);
   // What the settlement was founded with (the headquarters, a spaceport) stays where it landed.
   const placed: PlacedBuilding[] = [...s.buildings];
-  const occupy = (x0: number, y0: number, sz: number): void => {
-    for (let y = y0; y < y0 + sz; y += 1) for (let x = x0; x < x0 + sz; x += 1) taken[y * n + x] = 1;
+  const occupy = (x0: number, y0: number, sz: number, sd = sz): void => {
+    for (let y = y0; y < y0 + sd; y += 1) for (let x = x0; x < x0 + sz; x += 1) taken[y * n + x] = 1;
   };
-  for (const b of s.buildings) occupy(b.tx, b.ty, BUILDING_DEFS[b.type].footprint);
+  for (const b of s.buildings) occupy(b.tx, b.ty, BUILDING_DEFS[b.type].footprint, BUILDING_DEFS[b.type].depth);
   // Only ground a corridor can reach from the centre, round hard rock too: a
   // pocket walled off is one no player could connect (the first version with
   // roads built 23 buildings in such a pocket, and its domes had no oxygen).
@@ -177,28 +185,28 @@ function layOut(s: Settlement, wants: readonly BuildingType[], size: number, t: 
     }
   }
   /** On reachable open ground, with a street clear of every building all round (and room for it at the grid's edge). */
-  const fits = (tx: number, ty: number, sz: number): boolean => {
-    if (tx < 1 || ty < 1 || tx + sz > n - 1 || ty + sz > n - 1) return false;
-    for (let y = ty; y < ty + sz; y += 1) for (let x = tx; x < tx + sz; x += 1) if (!reach[y * n + x]) return false;
-    for (let y = Math.max(0, ty - STREET); y < Math.min(n, ty + sz + STREET); y += 1) {
+  const fits = (tx: number, ty: number, sz: number, sd = sz): boolean => {
+    if (tx < 1 || ty < 1 || tx + sz > n - 1 || ty + sd > n - 1) return false;
+    for (let y = ty; y < ty + sd; y += 1) for (let x = tx; x < tx + sz; x += 1) if (!reach[y * n + x]) return false;
+    for (let y = Math.max(0, ty - STREET); y < Math.min(n, ty + sd + STREET); y += 1) {
       for (let x = Math.max(0, tx - STREET); x < Math.min(n, tx + sz + STREET); x += 1) if (taken[y * n + x]) return false;
     }
     return true;
   };
   const put = (type: BuildingType, tx: number, ty: number): void => {
-    occupy(tx, ty, BUILDING_DEFS[type].footprint);
+    occupy(tx, ty, BUILDING_DEFS[type].footprint, BUILDING_DEFS[type].depth);
     placed.push({ type, tx, ty, level: 1 });
   };
   /** The free spot nearest (ax, ay) for a footprint of `sz`, searched outwards in square rings. */
-  const nearest = (ax: number, ay: number, sz: number): [number, number] | null => {
+  const nearest = (ax: number, ay: number, sz: number, sd = sz): [number, number] | null => {
     const cx = Math.round(ax - sz / 2);
-    const cy = Math.round(ay - sz / 2);
+    const cy = Math.round(ay - sd / 2);
     for (let r = 0; r < n; r += 1) {
       let best: [number, number] | null = null;
       let bestD = Infinity;
       for (let y = cy - r; y <= cy + r; y += 1) {
         for (let x = cx - r; x <= cx + r; x += 1) {
-          if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) !== r || !fits(x, y, sz)) continue;
+          if (Math.max(Math.abs(x - cx), Math.abs(y - cy)) !== r || !fits(x, y, sz, sd)) continue;
           const d = Math.hypot(x - cx, y - cy);
           if (d < bestD) {
             bestD = d;
@@ -249,8 +257,7 @@ function layOut(s: Settlement, wants: readonly BuildingType[], size: number, t: 
     const j = turn.get(zone) ?? 0;
     turn.set(zone, j + 1);
     const [ax, ay] = at(zone, Math.floor(j / 6));
-    const sz = BUILDING_DEFS[type].footprint;
-    const spot = nearest(ax, ay, sz);
+    const spot = nearest(ax, ay, BUILDING_DEFS[type].footprint, BUILDING_DEFS[type].depth);
     if (spot !== null) put(type, spot[0], spot[1]);
   }
   return placed;
@@ -270,7 +277,8 @@ function streets(s: Settlement, t: Tuning): { corridors: number[]; cables: numbe
   const taken = new Uint8Array(n * n);
   for (const b of s.buildings) {
     const size = BUILDING_DEFS[b.type].footprint;
-    for (let y = b.ty; y < b.ty + size; y += 1) for (let x = b.tx; x < b.tx + size; x += 1) taken[y * n + x] = 1;
+    const depth = BUILDING_DEFS[b.type].depth;
+    for (let y = b.ty; y < b.ty + depth; y += 1) for (let x = b.tx; x < b.tx + size; x += 1) taken[y * n + x] = 1;
   }
   const roads: number[] = [];
   for (let y = 0; y < n; y += 1) {
@@ -309,6 +317,20 @@ function wishList(kind: SettlementKind, homes: number, founded: boolean, t: Tuni
   // Rover posts, one for every ROVER_POST_PEOPLE people the city will hold (nine homes in ten taken).
   const posts = Math.min(4, Math.floor((homes * t.DOME_HOUSING * 0.9) / t.ROVER_POST_PEOPLE));
   for (let i = 0; i < posts; i += 1) out.push("rover_post");
+  // The later buildings (at the user's request), each with the power, water,
+  // food and air to run it: a laboratory and algae in a mid-sized city, a
+  // command center over the works of a large one; skyscrapers, an
+  // observatory, a research forum and medical centers in a metropolis.
+  if (homes >= 6) out.push("laboratory", "algae_reactor", "algae_reactor", "geothermal_plant", "water_extractor");
+  if (homes >= 12) out.push("industrial_command", "geothermal_plant");
+  if (kind === "metropolis") {
+    for (let i = 0; i < 4; i += 1) out.push("skyscraper");
+    out.push("observatory", "research_forum", "medical_center", "medical_center", "laboratory");
+    for (let i = 0; i < 4; i += 1) out.push("reactor");
+    for (let i = 0; i < 12; i += 1) out.push("water_extractor");
+    for (let i = 0; i < 9; i += 1) out.push("greenhouse");
+    for (let i = 0; i < 7; i += 1) out.push("algae_reactor");
+  }
   for (let i = 0; i < homes; i += 1) {
     out.push("habitat_dome", "greenhouse", "geothermal_plant", "water_extractor", "solar_array");
     if (i % 2 === 1) out.push("reactor", "storage_depot");

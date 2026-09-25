@@ -18,7 +18,7 @@ import { CITY_BACKGROUND, CITY_TILE_PX, cityScene, groundPointAt, rayHit } from 
 import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
-import type { Layer } from "../sim/index.js";
+import type { Layer, LinkLayer } from "../sim/index.js";
 import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, buildYears, cityView, layerOf, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
@@ -39,10 +39,10 @@ export interface CityHooks {
   readonly canPlace: (settlementId: string, type: BuildingType, tx: number, ty: number) => ActionOutcome;
   readonly onRemove: (settlementId: string, tx: number, ty: number) => ActionOutcome;
   /** Lay a corridor or a cable on one tile; the sim decides. */
-  readonly onLink: (settlementId: string, layer: Layer, tx: number, ty: number) => ActionOutcome;
+  readonly onLink: (settlementId: string, layer: LinkLayer, tx: number, ty: number) => ActionOutcome;
   /** The same call as a dry run, for the preview. Must not change the world. */
-  readonly canLink: (settlementId: string, layer: Layer, tx: number, ty: number) => ActionOutcome;
-  readonly onUnlink: (settlementId: string, layer: Layer, tx: number, ty: number) => ActionOutcome;
+  readonly canLink: (settlementId: string, layer: LinkLayer, tx: number, ty: number) => ActionOutcome;
+  readonly onUnlink: (settlementId: string, layer: LinkLayer, tx: number, ty: number) => ActionOutcome;
   /** Send a rover from the headquarters to break the rock on a tile. */
   readonly onSendRover: (settlementId: string, tx: number, ty: number) => ActionOutcome;
   /** Launch the rocket of the spaceport covering a tile. */
@@ -60,6 +60,11 @@ export interface CityHooks {
   /** Claim chunk (i, j) of land - chunk coordinates from the founding square; the sim decides. */
   readonly onClaim: (settlementId: string, i: number, j: number) => ActionOutcome;
   readonly onBack: () => void;
+}
+
+/** Whether a tile of the view carries a link of this layer. */
+function linkAt(view: CityView, layer: LinkLayer, i: number): boolean {
+  return (layer === "rails" ? view.rails?.[i] : view[layer][i]) === true;
 }
 
 /** What makes each resource, for the words: where a corridor or cable should lead. */
@@ -210,7 +215,7 @@ export class CityScreen {
   private camera: CityCamera | null = null;
   private placing: BuildingType | null = null;
   /** The corridor or cable tool, when one is armed. */
-  private paving: Layer | null = null;
+  private paving: LinkLayer | null = null;
   /** Claim mode: the land on offer is drawn, and a click claims the chunk under the pointer. */
   private claiming = false;
   /** The levelling tool: a click sends a rover to level the tile. */
@@ -370,7 +375,7 @@ export class CityScreen {
   }
 
   /** Arm the corridor or cable tool, or put it down with null. */
-  armLink(layer: Layer | null): void {
+  armLink(layer: LinkLayer | null): void {
     this.paving = layer;
     if (layer !== null) {
       this.placing = null;
@@ -543,15 +548,16 @@ export class CityScreen {
     }
     if (this.paving !== null && this.hover !== null && this.settlementId !== null && this.view !== null) {
       // On a tile of it the tool takes it up, which is always allowed; elsewhere, ask the sim.
-      const onLink = this.view[this.paving][this.hover.ty * this.view.tiles + this.hover.tx] === true;
+      const onLink = linkAt(this.view, this.paving, this.hover.ty * this.view.tiles + this.hover.tx);
       const ok = onLink || this.hooks.canLink(this.settlementId, this.paving, this.hover.tx, this.hover.ty).ok;
       return { tx: this.hover.tx, ty: this.hover.ty, size: 1, valid: ok };
     }
     if (this.placing === null || this.hover === null || this.settlementId === null) return null;
     const size = BUILDING_DEFS[this.placing].footprint;
-    const at = footprintOrigin(this.hover.tx, this.hover.ty, size);
+    const depth = BUILDING_DEFS[this.placing].depth;
+    const at = footprintOrigin(this.hover.tx, this.hover.ty, size, depth);
     const dry = this.hooks.canPlace(this.settlementId, this.placing, at.tx, at.ty);
-    return { tx: at.tx, ty: at.ty, size, valid: dry.ok };
+    return { tx: at.tx, ty: at.ty, size, depth, valid: dry.ok };
   }
 
   private draw(view: CityView, now: number, size: { w: number; h: number }): void {
@@ -614,7 +620,9 @@ export class CityScreen {
         ? this.notice ?? `Click a tile of ground to send a rover to level it to the level beside it - for looks, and so a building needs no foundation there. It breaks any rock there too. Esc finishes.${this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) : ""}`
         : this.claiming
         ? this.notice ?? this.claimHint(view)
-        : this.paving === "corridors"
+        : this.paving === "rails"
+          ? this.notice ?? `Click or drag to lay railway (${this.tuning.COST_RAIL} materials a tile). A line of rail between two stations joins the corridors and cables round each. Start on a rail to take it up. Esc finishes.`
+          : this.paving === "corridors"
         ? this.notice ?? `Click or drag to lay corridor (${this.tuning.COST_CORRIDOR} material a tile): it carries water, oxygen, food and materials. Start on a corridor to take it up. Esc finishes.`
         : this.paving === "cables"
           ? this.notice ?? `Click or drag to lay power cable (${this.tuning.COST_CABLE} material a tile): it carries power. Start on a cable to take it up. Esc finishes.`
@@ -714,12 +722,19 @@ export class CityScreen {
     if (s === null) return;
     const view = this.view;
     const land = view === null ? "" : `${view.claims.held}/${view.claims.allowed}`;
-    const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}|${this.claiming}|${this.levelling}|${land}`;
+    const unlocked = BUILDING_TYPES.filter((type) => s.population >= BUILDING_DEFS[type].minPopulation(this.tuning)).length;
+    const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}|${this.claiming}|${this.levelling}|${land}|${unlocked}`;
     if (!force && key === this.paletteKind) return;
     this.paletteKind = key;
     const cards = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].buildable && BUILDING_DEFS[type].kinds.includes(s.kind)).map((type) => {
       const cost = BUILDING_DEFS[type].cost(this.tuning);
       const c = this.card(type, BUILDING_DEFS[type].name, `${cost}`, s.stores.materials < cost, this.placing === type, () => this.arm(this.placing === type ? null : type));
+      // A building the city is not yet big enough for says so on its card.
+      const needs = BUILDING_DEFS[type].minPopulation(this.tuning);
+      if (needs > 0 && s.population < needs) {
+        c.dataset["locked"] = "true";
+        c.append(el("span", "city-card-short", `at ${needs.toLocaleString("en")} people`));
+      }
       c.dataset["type"] = type;
       return c;
     });
@@ -737,10 +752,12 @@ export class CityScreen {
     const price = c === undefined || c.nextAt === null ? "cities only" : c.allowed > c.held ? `${c.allowed - c.held} to claim` : `at ${c.nextAt} people`;
     const claim = this.card("claim", "Claim land", price, false, this.claiming, () => this.armClaim(!this.claiming));
     claim.classList.add("city-claim");
+    const rail = this.card("rail", "Railway", `${t.COST_RAIL} / tile`, s.stores.materials < t.COST_RAIL, this.paving === "rails", () => this.armLink(this.paving === "rails" ? null : "rails"));
+    rail.classList.add("city-rail");
     const level = this.card("level", "Level ground", "a rover", false, this.levelling, () => this.armLevel(!this.levelling));
     level.classList.add("city-level");
     this.palette.replaceChildren(...cards);
-    this.tools.replaceChildren(corridor, cable, connect, twice, claim, level);
+    this.tools.replaceChildren(corridor, cable, rail, connect, twice, claim, level);
     this.placeThumb();
     // A card rebuilt under the pointer keeps its tooltip.
     if (this.tipFor !== null) {
@@ -804,6 +821,16 @@ export class CityScreen {
         ],
       };
     }
+    if (kind === "rail") {
+      return {
+        title: "Railway",
+        lines: [
+          "Track between stations: two stations on one line of rail join the corridors and cables round each - one city across its districts.",
+          "Only stations board a line.",
+          `Costs ${t.COST_RAIL} materials a tile. Click or drag to lay it; start a drag on a rail to take it up.`,
+        ],
+      };
+    }
     if (kind === "redundant") {
       return {
         title: "Connect twice",
@@ -848,7 +875,9 @@ export class CityScreen {
     if (def.housing(t) > 0) lines.push(`Houses ${def.housing(t)}.`);
     const cap = MICRO_RESOURCES.filter((r) => (def.capacity(t)[r] ?? 0) > 0);
     if (cap.length > 0) lines.push(`Stores more ${cap.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")}.`);
-    lines.push(`${def.footprint} x ${def.footprint} tiles. Costs ${def.cost(t)} materials.`);
+    if (def.research(t) > 0) lines.push(`Research: ${def.research(t)} credits a year while it runs.`);
+    if (def.minPopulation(t) > 0) lines.push(`Needs a city of ${def.minPopulation(t).toLocaleString("en")} people.`);
+    lines.push(`${def.footprint} x ${def.depth} tiles. Costs ${def.cost(t)} materials.`);
     if (t.BUILD_TIME_ENABLED > 0) lines.push(`A rover builds it in ${Math.round(buildYears(kind, t) * 10)} month${Math.round(buildYears(kind, t) * 10) === 1 ? "" : "s"} at the site (${seconds(buildYears(kind, t), t)}), plus the drive.`);
     lines.push(`Upgrades to level ${maxLevel(kind, t)}, each +${Math.round(t.LEVEL_BONUS * 100)}% on the last.`);
     return { title: def.name, lines };
@@ -1040,7 +1069,7 @@ export class CityScreen {
     if (this.placing !== null) {
       const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y, true);
       if (tile === null) return;
-      const origin = footprintOrigin(tile.tx, tile.ty, BUILDING_DEFS[this.placing].footprint);
+      const origin = footprintOrigin(tile.tx, tile.ty, BUILDING_DEFS[this.placing].footprint, BUILDING_DEFS[this.placing].depth);
       const outcome = this.hooks.onPlace(id, this.placing, origin.tx, origin.ty);
       // A refused placement must say so, in words, where the player is looking.
       this.notice = outcome.ok ? null : `Cannot build: ${outcome.reason ?? "refused"}.`;
@@ -1085,7 +1114,7 @@ export class CityScreen {
     const size = this.viewSize();
     const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y, true);
     if (tile === null || this.paving === null) return;
-    const mode = view[this.paving][tile.ty * view.tiles + tile.tx] === true ? "clear" : "lay";
+    const mode = linkAt(view, this.paving, tile.ty * view.tiles + tile.tx) ? "clear" : "lay";
     this.painting = { mode, last: -1 };
     this.paint(at);
   }

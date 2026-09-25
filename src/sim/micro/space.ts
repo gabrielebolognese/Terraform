@@ -130,8 +130,8 @@ export function onGrid(tx: number, ty: number, tiles: number): boolean {
 export interface Footprint {
   readonly tx: number;
   readonly ty: number;
-  readonly w: 1 | 2 | 3 | 5;
-  readonly h: 1 | 2 | 3 | 5;
+  readonly w: number;
+  readonly h: number;
 }
 
 /** Every tile a footprint covers, row by row. */

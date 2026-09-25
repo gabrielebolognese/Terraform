@@ -53,7 +53,7 @@ export interface CitySceneOptions {
   /** Index into `view.buildings`, or null. */
   readonly selected: number | null;
   /** A placement preview: its footprint and whether the sim would accept it. */
-  readonly ghost: { readonly tx: number; readonly ty: number; readonly size: number; readonly valid: boolean } | null;
+  readonly ghost: { readonly tx: number; readonly ty: number; readonly size: number; readonly depth?: number; readonly valid: boolean } | null;
   /**
    * The visible area, in iso pixels, or absent for everything. Anything whose
    * image lies wholly outside it is skipped - a metropolis has ~9,000 tiles
@@ -444,6 +444,14 @@ const TOPS: Readonly<Record<string, number>> = {
   storage_depot: 0.8,
   spaceport: 1.6,
   rover_post: 1.5,
+  laboratory: 1.35,
+  algae_reactor: 1.25,
+  skyscraper: 5.4,
+  observatory: 2.7,
+  station: 1.45,
+  research_forum: 2.2,
+  medical_center: 1.5,
+  industrial_command: 2.6,
   headquarters: 1.7,
 };
 
@@ -1011,6 +1019,166 @@ function assemble(b: CityBuildingView, time: number, rocket: RocketState = null)
       live(() => part(box(x0 + 4.07, y0 + 0.97, 1.7, x0 + 4.13, y0 + 1.03, 1.76), on && Math.floor(time * 1.2) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
       return k;
     }
+    case "laboratory": {
+      // A white block with a band of blue glass, fume stacks and a rooftop dish.
+      pad();
+      add(() => part(box(x0 + 0.3, y0 + 0.3, 0.06, x0 + 2.7, y0 + 2.7, 0.9), PAINT_WHITE));
+      add(() => part(box(x0 + 0.28, y0 + 0.28, 0.4, x0 + 2.72, y0 + 2.72, 0.62), GLASS));
+      add(() => part(box(x0 + 0.28, y0 + 0.28, 0.76, x0 + 2.72, y0 + 2.72, 0.82).slice(1, 3), ACCENT));
+      add(() => part(box(x0 + 0.3, y0 + 0.3, 0.9, x0 + 2.7, y0 + 2.7, 0.94), CONCRETE));
+      live(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 5; i += 1) out.push(part(box(x0 + 0.45 + i * 0.45, y0 + 2.72, 0.45, x0 + 0.7 + i * 0.45, y0 + 2.73, 0.58), on && (Math.floor(time * 0.7) + i) % 3 !== 0 ? COLD_LIGHT : UNLIT, { emissive: true }));
+        return out;
+      });
+      add(() => [part(frustum(x0 + 0.7, y0 + 0.7, 0.12, 0.1, 0.96, 1.3, 8), METAL), part(frustum(x0 + 1.1, y0 + 0.6, 0.1, 0.08, 0.96, 1.2, 8), METAL)]);
+      add(() => part(sheet([[x0 + 1.8, y0 + 1.6, 1.0], [x0 + 2.3, y0 + 1.4, 1.35], [x0 + 2.45, y0 + 1.85, 1.2], [x0 + 1.95, y0 + 2.05, 0.96]]), PAINT_WHITE, { twoSided: true }));
+      add(() => vent(x0 + 1.2, y0 + 1.8, 0.96, 0.25, 0.1));
+      return k;
+    }
+    case "algae_reactor": {
+      // Four tall tubes of green algae in glass, on a pad, with their pipework.
+      pad(0.1);
+      for (const [u, v] of [[0.55, 0.55], [1.45, 0.55], [0.55, 1.45], [1.45, 1.45]] as const) {
+        add(() => part(frustum(x0 + u, y0 + v, 0.3, 0.3, 0.1, 0.2, 12), METAL));
+        add(() => part(frustum(x0 + u, y0 + v, 0.24, 0.24, 0.2, 1.1, 12), on ? mix(LEAF, rgb(0.3, 0.8, 0.45), 0.4) : LEAF_OFF));
+        add(() => part(frustum(x0 + u, y0 + v, 0.27, 0.27, 0.2, 1.12, 12), GLASS, { alpha: 0.35 }));
+        add(() => part(frustum(x0 + u, y0 + v, 0.28, 0.2, 1.12, 1.22, 12), METAL));
+      }
+      add(() => part(tube([x0 + 0.55, y0 + 1.0, 0.3], [x0 + 1.45, y0 + 1.0, 0.3], 0.05, 6), METAL));
+      if (on) for (let i = 0; i < 4; i += 1) {
+        const c = (((time * 0.5 + i / 4) % 1) + 1) % 1;
+        k.extras.push(puff(x0 + (i % 2 === 0 ? 0.55 : 1.45), y0 + (i < 2 ? 0.55 : 1.45), 0.25 + c * 0.85, 2.5, rgb(0.8, 1, 0.85), 0.5 * (1 - c)));
+      }
+      return k;
+    }
+    case "skyscraper": {
+      // A tower of homes: a podium, the shaft with its grid of windows, a crown and a mast.
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 1.9, y0 + 1.9, 0.4), CONCRETE));
+      add(() => part(box(x0 + 0.3, y0 + 0.3, 0.4, x0 + 1.7, y0 + 1.7, 4.6), PAINT_WHITE));
+      add(() => {
+        const out: Part[] = [];
+        const lit = Math.round(act * 12);
+        for (let f = 0; f < 12; f += 1) {
+          const z = 0.6 + f * 0.33;
+          out.push(part(box(x0 + 0.29, y0 + 0.4, z, x0 + 0.3, y0 + 1.6, z + 0.18), GLASS));
+          out.push(part(box(x0 + 0.4, y0 + 1.7, z, x0 + 1.6, y0 + 1.71, z + 0.18), on && (f * 7) % 12 < lit ? WARM_LIGHT : GLASS, { emissive: on && (f * 7) % 12 < lit }));
+          out.push(part(box(x0 + 1.7, y0 + 0.4, z, x0 + 1.71, y0 + 1.6, z + 0.18), on && (f * 5 + 3) % 12 < lit ? WARM_LIGHT : GLASS, { emissive: on && (f * 5 + 3) % 12 < lit }));
+        }
+        return out;
+      });
+      add(() => part(box(x0 + 0.28, y0 + 0.28, 4.45, x0 + 1.72, y0 + 1.72, 4.52).slice(1, 3), ACCENT));
+      add(() => part(box(x0 + 0.3, y0 + 0.3, 4.6, x0 + 1.7, y0 + 1.7, 4.7), CONCRETE));
+      add(() => part(box(x0 + 0.6, y0 + 0.6, 4.7, x0 + 1.4, y0 + 1.4, 5.0), DARK_METAL));
+      add(() => part(tube([cx, cy, 5.0], [cx, cy, 5.35], 0.02, 5), METAL));
+      live(() => part(box(cx - 0.03, cy - 0.03, 5.35, cx + 0.03, cy + 0.03, 5.4), on && Math.floor(time * 1.1) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
+      return k;
+    }
+    case "observatory": {
+      // A 5 x 5 compound: a drum under a great white dome with its slit open,
+      // a smaller dome beside it, and the control wing.
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 4.9, y0 + 4.9, 0.08), CONCRETE));
+      add(() => part(frustum(x0 + 2.2, y0 + 2.2, 1.6, 1.55, 0.08, 1.1, 32), PAINT_WHITE));
+      add(() => part(dome(x0 + 2.2, y0 + 2.2, 1.1, 1.55, 32, 9), METAL));
+      add(() => part(sheet([[x0 + 2.05, y0 + 3.2, 1.9], [x0 + 2.35, y0 + 3.2, 1.9], [x0 + 2.35, y0 + 3.7, 1.35], [x0 + 2.05, y0 + 3.7, 1.35]]), DARK_METAL, { twoSided: true }));
+      add(() => part(tube([x0 + 2.2, y0 + 2.5, 1.7], [x0 + 2.2, y0 + 3.4, 2.3], 0.12, 10), PAINT_WHITE));
+      add(() => part(frustum(x0 + 4.0, y0 + 4.0, 0.55, 0.55, 0.08, 0.5, 18), PAINT_WHITE));
+      add(() => part(dome(x0 + 4.0, y0 + 4.0, 0.5, 0.55, 18, 5), METAL));
+      add(() => part(box(x0 + 0.4, y0 + 3.7, 0.08, x0 + 2.8, y0 + 4.6, 0.7), PAINT_WHITE));
+      live(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 5; i += 1) out.push(part(box(x0 + 0.55 + i * 0.45, y0 + 4.6, 0.35, x0 + 0.8 + i * 0.45, y0 + 4.61, 0.55), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+        return out;
+      });
+      return k;
+    }
+    case "station": {
+      // A 4 x 6 station, the line running its length: platforms either side of
+      // two tracks under a long canopy, and the hall at the far end.
+      const d = b.depth ?? s;
+      add(() => part(box(x0 + 0.05, y0 + 0.05, 0, x0 + s - 0.05, y0 + d - 0.05, 0.05), BALLAST));
+      add(() => [part(box(x0 + 0.1, y0 + 0.1, 0.05, x0 + 1.2, y0 + d - 0.1, 0.25), CONCRETE), part(box(x0 + s - 1.2, y0 + 0.1, 0.05, x0 + s - 0.1, y0 + d - 0.1, 0.25), CONCRETE)]);
+      add(() => {
+        const out: Part[] = [];
+        for (const off of [1.45, 1.75, 2.25, 2.55]) out.push(part(box(x0 + off - 0.03, y0 + 0.1, 0.05, x0 + off + 0.03, y0 + d - 0.1, 0.11), RAIL_STEEL));
+        for (let yy = 0.3; yy < d - 0.2; yy += 0.4) out.push(part(box(x0 + 1.3, y0 + yy, 0.05, x0 + s - 1.3, y0 + yy + 0.08, 0.07), SLEEPER));
+        return out;
+      });
+      // The canopy on its posts, over tracks and platforms.
+      add(() => {
+        const out: Part[] = [];
+        for (let yy = 0.6; yy < d - 1.2; yy += 1.2) for (const xx of [0.5, s - 0.5]) out.push(part(box(x0 + xx - 0.04, y0 + yy - 0.04, 0.25, x0 + xx + 0.04, y0 + yy + 0.04, 1.05), DARK_METAL));
+        out.push(part(sheet([[x0 + 0.2, y0 + 0.2, 1.05], [x0 + s / 2, y0 + 0.2, 1.3], [x0 + s / 2, y0 + d - 1.4, 1.3], [x0 + 0.2, y0 + d - 1.4, 1.05]]), GLASS, { twoSided: true, alpha: 0.6 }));
+        out.push(part(sheet([[x0 + s / 2, y0 + 0.2, 1.3], [x0 + s - 0.2, y0 + 0.2, 1.05], [x0 + s - 0.2, y0 + d - 1.4, 1.05], [x0 + s / 2, y0 + d - 1.4, 1.3]]), GLASS, { twoSided: true, alpha: 0.6 }));
+        return out;
+      });
+      add(() => part(box(x0 + 0.1, y0 + d - 1.3, 0.05, x0 + s - 0.1, y0 + d - 0.1, 1.2), PAINT_WHITE));
+      add(() => part(box(x0 + 0.08, y0 + d - 1.32, 0.8, x0 + s - 0.08, y0 + d - 0.08, 0.9).slice(1, 3), ACCENT));
+      live(() => part(box(x0 + s / 2 - 0.3, y0 + d - 0.09, 0.4, x0 + s / 2 + 0.3, y0 + d - 0.08, 0.7), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+      return k;
+    }
+    case "research_forum": {
+      // Like a very big habitat dome, drawn out: a great glass dome with two
+      // smaller at its ends, over the warm lights of a bar and the labs.
+      const d = b.depth ?? s;
+      const mx = x0 + s / 2;
+      add(() => part(box(x0 + 0.15, y0 + 0.15, 0, x0 + s - 0.15, y0 + d - 0.15, 0.12), CONCRETE));
+      add(() => part(box(x0 + 0.25, y0 + 0.25, 0.12, x0 + s - 0.25, y0 + d - 0.25, 0.25), PAINT_WHITE));
+      add(() => part(box(x0 + 0.6, y0 + 1.0, 0.25, x0 + s - 0.6, y0 + d - 1.0, 0.45), on ? mix(WARM_LIGHT, CONCRETE, 0.4) : CONCRETE, { emissive: on }));
+      for (const [yy, r] of [[y0 + 1.45, 1.25], [y0 + d - 1.45, 1.25], [y0 + d / 2, 1.8]] as const) {
+        add(() => part(dome(mx, yy, 0.25, r, 28, 8), GLASS, { alpha: 0.55 }));
+        add(() => part(domeRibs(mx, yy, 0.25, r, 12, [0.3 * r, 0.65 * r]), FRAME));
+      }
+      add(() => part(frustum(mx, y0 + d / 2, 0.16, 0.12, 2.0, 2.12, 12), METAL));
+      live(() => part(box(mx - 0.03, y0 + d / 2 - 0.03, 2.12, mx + 0.03, y0 + d / 2 + 0.03, 2.18), on && Math.floor(time * 1.5) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
+      return k;
+    }
+    case "medical_center": {
+      // A white hospital with a red cross on its roof, a helipad, and an
+      // ambulance rover at the door.
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 4.9, y0 + 4.9, 0.08), CONCRETE));
+      add(() => part(box(x0 + 0.4, y0 + 0.4, 0.08, x0 + 3.4, y0 + 3.6, 1.1), PAINT_WHITE));
+      add(() => part(box(x0 + 0.38, y0 + 0.38, 0.55, x0 + 3.42, y0 + 3.62, 0.62).slice(1, 3), RED_LIGHT));
+      add(() => [
+        part(box(x0 + 1.55, y0 + 1.1, 1.1, x0 + 2.25, y0 + 2.9, 1.13), RED_LIGHT),
+        part(box(x0 + 1.0, y0 + 1.65, 1.1, x0 + 2.8, y0 + 2.35, 1.13), RED_LIGHT),
+      ]);
+      live(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 6; i += 1) out.push(part(box(x0 + 0.55 + i * 0.45, y0 + 3.6, 0.7, x0 + 0.8 + i * 0.45, y0 + 3.61, 0.95), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+        return out;
+      });
+      add(() => [
+        part(frustum(x0 + 4.1, y0 + 1.3, 0.7, 0.7, 0.08, 0.12, 24), CONCRETE),
+        part(box(x0 + 3.9, y0 + 1.0, 0.12, x0 + 3.97, y0 + 1.6, 0.13), PAINT_WHITE),
+        part(box(x0 + 4.23, y0 + 1.0, 0.12, x0 + 4.3, y0 + 1.6, 0.13), PAINT_WHITE),
+        part(box(x0 + 3.97, y0 + 1.27, 0.12, x0 + 4.23, y0 + 1.33, 0.13), PAINT_WHITE),
+      ]);
+      add(() => [part(box(x0 + 3.7, y0 + 3.9, 0.12, x0 + 4.5, y0 + 4.5, 0.42), PAINT_WHITE), part(box(x0 + 3.7, y0 + 4.1, 0.42, x0 + 4.0, y0 + 4.3, 0.5), RED_LIGHT)]);
+      live(() => part(box(x0 + 4.2, y0 + 4.1, 0.42, x0 + 4.3, y0 + 4.3, 0.47), on && Math.floor(time * 3) % 2 === 0 ? COLD_LIGHT : RED_LIGHT, { emissive: true }));
+      return k;
+    }
+    case "industrial_command": {
+      // 6 x 4: an operations block with a glass-topped control tower,
+      // antennae, and the orange of the works it runs.
+      const d = b.depth ?? s;
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + s - 0.1, y0 + d - 0.1, 0.08), CONCRETE));
+      add(() => part(box(x0 + 0.4, y0 + 0.4, 0.08, x0 + 4.2, y0 + d - 0.4, 1.0), CONCRETE));
+      add(() => part(box(x0 + 0.38, y0 + 0.38, 0.78, x0 + 4.22, y0 + d - 0.38, 0.86).slice(1, 3), ACCENT));
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < 7; i += 1) out.push(part(box(x0 + 0.55 + i * 0.5, y0 + d - 0.4, 0.4, x0 + 0.85 + i * 0.5, y0 + d - 0.39, 0.7), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+        return out;
+      });
+      add(() => part(frustum(x0 + 5.0, y0 + 1.5, 0.45, 0.35, 0.08, 1.9, 12), PAINT_WHITE));
+      add(() => part(frustum(x0 + 5.0, y0 + 1.5, 0.6, 0.55, 1.9, 2.3, 12), GLASS));
+      add(() => part(frustum(x0 + 5.0, y0 + 1.5, 0.62, 0.3, 2.3, 2.42, 12), DARK_METAL));
+      live(() => part(frustum(x0 + 5.0, y0 + 1.5, 0.605, 0.605, 1.95, 2.05, 12), on ? COLD_LIGHT : UNLIT, { emissive: true }));
+      add(() => lattice(x0 + 1.0, y0 + 1.0, 0.1, 0.04, 1.0, 2.5, 5, METAL));
+      add(() => [part(tube([x0 + 2.5, y0 + 1.0, 1.0], [x0 + 2.5, y0 + 1.0, 1.6], 0.02, 5), METAL), part(tube([x0 + 3.2, y0 + 1.0, 1.0], [x0 + 3.2, y0 + 1.0, 1.45], 0.02, 5), METAL)]);
+      live(() => part(box(x0 + 0.97, y0 + 0.97, 2.5, x0 + 1.03, y0 + 1.03, 2.56), on && Math.floor(time * 1.4) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
+      return k;
+    }
     case "rover_post": {
       // A 5 x 5 yard: a vaulted hangar with its door to the front, a rover
       // parked on the apron, a crew hut, a charging pad, and a radio mast.
@@ -1223,9 +1391,9 @@ function unlinkedBadge(x: number, y: number, z: number): Shape[] {
 }
 
 /** A ring around a footprint, on the ground at height `z`. */
-function footprintRing(tx: number, ty: number, size: number, width: number, fill: Rgba, z = 0): Shape {
+function footprintRing(tx: number, ty: number, size: number, width: number, fill: Rgba, z = 0, depth = size): Shape {
   return {
-    rings: [diamond(tx - width, ty - width, tx + size + width, ty + size + width, z), diamond(tx, ty, tx + size, ty + size, z)],
+    rings: [diamond(tx - width, ty - width, tx + size + width, ty + depth + width, z), diamond(tx, ty, tx + size, ty + depth, z)],
     fill,
   };
 }
@@ -1277,6 +1445,14 @@ const FAR_COLOUR: Readonly<Record<string, Rgb>> = {
   storage_depot: rgb(0.771, 0.752, 0.711),
   spaceport: rgb(0.56, 0.593, 0.57),
   rover_post: rgb(0.607, 0.56, 0.496),
+  laboratory: rgb(0.679, 0.702, 0.698),
+  algae_reactor: rgb(0.56, 0.687, 0.648),
+  skyscraper: rgb(0.992, 0.892, 0.686),
+  observatory: rgb(0.745, 0.743, 0.733),
+  station: rgb(0.668, 0.69, 0.698),
+  research_forum: rgb(0.748, 0.781, 0.772),
+  medical_center: rgb(0.789, 0.7, 0.67),
+  industrial_command: rgb(0.685, 0.686, 0.643),
   headquarters: rgb(0.624, 0.548, 0.475),
 };
 
@@ -1359,6 +1535,65 @@ function assembleMedium(b: CityBuildingView): Kit {
       add(() => part(box(x0 + 0.6, y0 + 3.3, 0.08, x0 + 4.4, y0 + 4.4, 0.62), CONCRETE));
       add(() => part(box(x0 + 4.0, y0 + 0.9, 0.08, x0 + 4.2, y0 + 1.1, 1.7), METAL));
       break;
+    case "laboratory":
+      slab();
+      add(() => part(box(x0 + 0.3, y0 + 0.3, 0.06, x0 + 2.7, y0 + 2.7, 0.9), PAINT_WHITE));
+      add(() => part(box(x0 + 0.28, y0 + 0.28, 0.4, x0 + 2.72, y0 + 2.72, 0.62), GLASS));
+      add(() => part(box(x0 + 0.28, y0 + 0.28, 0.76, x0 + 2.72, y0 + 2.72, 0.82).slice(1, 3), ACCENT));
+      add(() => part(box(x0 + 0.3, y0 + 0.3, 0.9, x0 + 2.7, y0 + 2.7, 0.94), CONCRETE));
+      add(() => part(frustum(x0 + 0.7, y0 + 0.7, 0.12, 0.1, 0.94, 1.3, 6), METAL));
+      break;
+    case "algae_reactor":
+      slab(0.1);
+      for (const [u, v] of [[0.55, 0.55], [1.45, 0.55], [0.55, 1.45], [1.45, 1.45]] as const) {
+        add(() => part(frustum(x0 + u, y0 + v, 0.27, 0.27, 0.1, 1.12, 8), mix(on ? mix(LEAF, rgb(0.3, 0.8, 0.45), 0.4) : LEAF_OFF, GLASS, 0.35)));
+        add(() => part(frustum(x0 + u, y0 + v, 0.28, 0.2, 1.12, 1.22, 8), METAL));
+      }
+      break;
+    case "skyscraper":
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 1.9, y0 + 1.9, 0.4), CONCRETE));
+      add(() => part(box(x0 + 0.3, y0 + 0.3, 0.4, x0 + 1.7, y0 + 1.7, 4.6), on ? SKYSCRAPER_FAR_WALL : PAINT_WHITE, { emissive: on }));
+      add(() => part(box(x0 + 0.28, y0 + 0.28, 4.45, x0 + 1.72, y0 + 1.72, 4.52).slice(1, 3), ACCENT));
+      add(() => part(box(x0 + 0.3, y0 + 0.3, 4.6, x0 + 1.7, y0 + 1.7, 4.7), CONCRETE));
+      add(() => part(box(x0 + 0.6, y0 + 0.6, 4.7, x0 + 1.4, y0 + 1.4, 5.0), DARK_METAL));
+      break;
+    case "observatory":
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 4.9, y0 + 4.9, 0.08), CONCRETE));
+      add(() => part(frustum(x0 + 2.2, y0 + 2.2, 1.6, 1.55, 0.08, 1.1, 16), PAINT_WHITE));
+      add(() => part(dome(x0 + 2.2, y0 + 2.2, 1.1, 1.55, 16, 4), METAL));
+      add(() => part(box(x0 + 0.4, y0 + 3.7, 0.08, x0 + 2.8, y0 + 4.6, 0.7), PAINT_WHITE));
+      break;
+    case "station": {
+      const d = b.depth ?? s;
+      add(() => part(box(x0 + 0.05, y0 + 0.05, 0, x0 + s - 0.05, y0 + d - 0.05, 0.05), BALLAST));
+      add(() => [part(box(x0 + 0.1, y0 + 0.1, 0.05, x0 + 1.2, y0 + d - 0.1, 0.25), CONCRETE), part(box(x0 + s - 1.2, y0 + 0.1, 0.05, x0 + s - 0.1, y0 + d - 0.1, 0.25), CONCRETE)]);
+      add(() => part(sheet([[x0 + 0.2, y0 + 0.2, 1.15], [x0 + s - 0.2, y0 + 0.2, 1.15], [x0 + s - 0.2, y0 + d - 1.4, 1.15], [x0 + 0.2, y0 + d - 1.4, 1.15]]), GLASS, { twoSided: true, alpha: 0.45 }));
+      add(() => part(box(x0 + 0.1, y0 + d - 1.3, 0.05, x0 + s - 0.1, y0 + d - 0.1, 1.2), PAINT_WHITE));
+      break;
+    }
+    case "research_forum": {
+      const d = b.depth ?? s;
+      add(() => part(box(x0 + 0.15, y0 + 0.15, 0, x0 + s - 0.15, y0 + d - 0.15, 0.25), PAINT_WHITE));
+      for (const [yy, r] of [[y0 + 1.45, 1.25], [y0 + d - 1.45, 1.25], [y0 + d / 2, 1.8]] as const) add(() => part(dome(x0 + s / 2, yy, 0.25, r, 14, 4), GLASS));
+      break;
+    }
+    case "medical_center":
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 4.9, y0 + 4.9, 0.08), CONCRETE));
+      add(() => part(box(x0 + 0.4, y0 + 0.4, 0.08, x0 + 3.4, y0 + 3.6, 1.1), PAINT_WHITE));
+      add(() => part(box(x0 + 0.38, y0 + 0.38, 0.55, x0 + 3.42, y0 + 3.62, 0.62).slice(1, 3), RED_LIGHT));
+      add(() => [part(box(x0 + 1.55, y0 + 1.1, 1.1, x0 + 2.25, y0 + 2.9, 1.13), RED_LIGHT), part(box(x0 + 1.0, y0 + 1.65, 1.1, x0 + 2.8, y0 + 2.35, 1.13), RED_LIGHT)]);
+      add(() => part(frustum(x0 + 4.1, y0 + 1.3, 0.7, 0.7, 0.08, 0.12, 12), CONCRETE));
+      add(() => part(box(x0 + 3.7, y0 + 3.9, 0.12, x0 + 4.5, y0 + 4.5, 0.42), PAINT_WHITE));
+      break;
+    case "industrial_command": {
+      const d = b.depth ?? s;
+      add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + s - 0.1, y0 + d - 0.1, 0.08), CONCRETE));
+      add(() => part(box(x0 + 0.4, y0 + 0.4, 0.08, x0 + 4.2, y0 + d - 0.4, 1.0), CONCRETE));
+      add(() => part(box(x0 + 0.38, y0 + 0.38, 0.78, x0 + 4.22, y0 + d - 0.38, 0.86).slice(1, 3), ACCENT));
+      add(() => part(frustum(x0 + 5.0, y0 + 1.5, 0.45, 0.35, 0.08, 1.9, 8), PAINT_WHITE));
+      add(() => part(frustum(x0 + 5.0, y0 + 1.5, 0.6, 0.55, 1.9, 2.42, 8), GLASS));
+      break;
+    }
     case "rover_post":
       add(() => part(box(x0 + 0.1, y0 + 0.1, 0, x0 + 4.9, y0 + 4.9, 0.08), CONCRETE));
       add(() => part(box(x0 + 0.4, y0 + 0.5, 0.08, x0 + 3.3, y0 + 2.5, 0.25), PAINT_WHITE));
@@ -1385,6 +1620,8 @@ function assembleMedium(b: CityBuildingView): Kit {
 function assembleLow(b: CityBuildingView): Kit {
   const k = kit();
   const inset = b.size === 1 ? 0.12 : 0.2;
+  const d = b.depth ?? b.size;
+  // A block about as high as the building's mass: a tower is nearly all shaft.
   const h = buildingTop(b.type) * (b.type === "solar_array" ? 0.5 : 0.62);
   const colour = FAR_COLOUR[b.type] ?? CONCRETE;
   const fill = b.operable ? colour : shade(colour, 0.55);
@@ -1393,7 +1630,7 @@ function assembleLow(b: CityBuildingView): Kit {
     const r = b.type === "habitat_dome" ? 1.3 : 1.25;
     k.s(() => part(frustum(b.tx + b.size / 2, b.ty + b.size / 2, r, r * 0.55, 0, h, 8), fill));
   } else {
-    k.s(() => part(box(b.tx + inset, b.ty + inset, 0, b.tx + b.size - inset, b.ty + b.size - inset, h), fill));
+    k.s(() => part(box(b.tx + inset, b.ty + inset, 0, b.tx + b.size - inset, b.ty + d - inset, h), fill));
   }
   return k;
 }
@@ -1821,10 +2058,10 @@ function groundRange(view: CityView): { lo: number; hi: number } {
 }
 
 /** The highest ground under a footprint, in tiles - where a building (or a preview of one) stands. */
-function footprintTop(view: CityView, tx: number, ty: number, size: number): number {
+function footprintTop(view: CityView, tx: number, ty: number, size: number, depth = size): number {
   const n = view.tiles;
   let top = -Infinity;
-  for (let y = ty; y < ty + size; y += 1) {
+  for (let y = ty; y < ty + depth; y += 1) {
     for (let x = tx; x < tx + size; x += 1) {
       if (x >= 0 && y >= 0 && x < n && y < n) top = Math.max(top, view.groundZ[y * n + x] ?? 0);
     }
@@ -1934,7 +2171,7 @@ function groundKey(view: CityView): string {
   });
   // The green is drawn into the ground: a new shade of it redraws the ground,
   // in fiftieths so a slowly greening planet does not redraw every frame.
-  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}|${layer(view.corridors)}|${layer(view.cables)}|${rocks}|${Math.round(view.greenery * 50)}|${view.world.size}|${cornerSum}|${view.origin.x},${view.origin.y}`;
+  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}|${layer(view.corridors)}|${layer(view.cables)}|${layer(view.rails ?? [])}|${rocks}|${Math.round(view.greenery * 50)}|${view.world.size}|${cornerSum}|${view.origin.x},${view.origin.y}`;
 }
 
 /** At low detail, open ground is drawn in patches this many tiles across. */
@@ -1944,13 +2181,13 @@ const PATCH_SPREAD = 0.15;
 
 function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
   const n = view.tiles;
-  const key = `${view.id}|${n}|${groundKey(view)}|${view.buildings.map((b) => `${b.tx},${b.ty},${b.size}`).join(";")}`;
+  const key = `${view.id}|${n}|${groundKey(view)}|${view.buildings.map((b) => `${b.tx},${b.ty},${b.size},${b.depth ?? b.size}`).join(";")}`;
   const cached = sceneCaches.get(quality);
   if (cached !== undefined && cached.key === key) return cached;
   const covered = new Set<number>();
   const occupants: Occupant[] = view.buildings.map((b) => {
-    for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
-    return { tx: b.tx, ty: b.ty, w: b.size, h: b.size, building: b.index };
+    for (let y = b.ty; y < b.ty + (b.depth ?? b.size); y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
+    return { tx: b.tx, ty: b.ty, w: b.size, h: b.depth ?? b.size, building: b.index };
   });
   // Open ground: tile by tile up close, and further away in patches (2 x 2,
   // then 4 x 4) wherever nothing else is drawn on a patch's tiles - no
@@ -1999,18 +2236,22 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
   // a building touched, and a street read as a row of bollards).
   const connectors = { corridors: new Set<number>(), cables: new Set<number>() };
   for (const b of view.buildings) {
-    const mid = Math.floor(b.size / 2);
-    const offsets = Array.from({ length: b.size }, (_, k) => mid + (k % 2 === 0 ? k / 2 : -(k + 1) / 2)).filter((k) => k >= 0 && k < b.size);
-    // [road x, road y, side index] for each side, walked out from its middle.
-    const sides: ((k: number) => [number, number, number])[] = [
-      (k) => [b.tx - 1, b.ty + k, 0],
-      (k) => [b.tx + b.size, b.ty + k, 1],
-      (k) => [b.tx + k, b.ty - 1, 2],
-      (k) => [b.tx + k, b.ty + b.size, 3],
+    const d = b.depth ?? b.size;
+    // Along a side of `len` tiles, walked out from its middle.
+    const walk = (len: number): number[] => {
+      const mid = Math.floor(len / 2);
+      return Array.from({ length: len }, (_, k) => mid + (k % 2 === 0 ? k / 2 : -(k + 1) / 2)).filter((k) => k >= 0 && k < len);
+    };
+    // [road x, road y, side index] for each side, and how long the side is.
+    const sides: [(k: number) => [number, number, number], number][] = [
+      [(k) => [b.tx - 1, b.ty + k, 0], d],
+      [(k) => [b.tx + b.size, b.ty + k, 1], d],
+      [(k) => [b.tx + k, b.ty - 1, 2], b.size],
+      [(k) => [b.tx + k, b.ty + d, 3], b.size],
     ];
     for (const layer of ["corridors", "cables"] as const) {
-      for (const side of sides) {
-        for (const k of offsets) {
+      for (const [side, len] of sides) {
+        for (const k of walk(len)) {
           const [x, y, dir] = side(k);
           if (x < 0 || y < 0 || x >= n || y >= n || view[layer][y * n + x] !== true) continue;
           connectors[layer].add((y * n + x) * 4 + dir);
@@ -2031,6 +2272,8 @@ function occupantsInOrder(view: CityView, quality: CityQuality): SceneCache {
 
 const CORRIDOR = rgb(0.88, 0.88, 0.86);
 const CORRIDOR_FAR = rgb(0.665, 0.695, 0.701);
+/** How far a corridor carrying a cable is tinted toward the cable's yellow, at low detail. */
+const CABLE_ON_CORRIDOR_FAR = 0.1;
 const CABLE = rgb(0.98, 0.78, 0.12);
 const TERMINAL_LIGHT = rgb(1, 0.72, 0.25);
 /** Sides in the order connectors use: toward +x, -x, +y, -y. */
@@ -2098,7 +2341,11 @@ function corridorDetail(view: CityView, connectors: ReadonlySet<number>, tx: num
     // A roof at the tube's own height, a little wider for the walls it
     // stands in for: a flat trace on the ground covered 60% of the pixels
     // the tube does, and the far view lost a fifth of its likeness (measured).
-    for (const [x0, y0, x1, y1] of corridorBars(sides, tx, ty, 0.22)) out.push(part(sheet([[x0, y0, top], [x1, y0, top], [x1, y1, top], [x0, y1, top]]), CORRIDOR_FAR));
+    // A cable along it tints the roof toward its yellow, as the cable and its
+    // terminals do up close (worth a point of the far view's likeness where
+    // cables run along every street; a lone cable is too thin to draw).
+    const colour = view.cables[ty * view.tiles + tx] === true ? mix(CORRIDOR_FAR, CABLE, CABLE_ON_CORRIDOR_FAR) : CORRIDOR_FAR;
+    for (const [x0, y0, x1, y1] of corridorBars(sides, tx, ty, 0.22)) out.push(part(sheet([[x0, y0, top], [x1, y0, top], [x1, y1, top], [x0, y1, top]]), colour));
     return out;
   }
   if (quality === "medium") {
@@ -2168,6 +2415,47 @@ function cableDetail(view: CityView, connectors: ReadonlySet<number>, tx: number
     out.push(part(box(ex - 0.07, ey - 0.07, h + 0.02, ex + 0.07, ey + 0.07, h + 0.05), CABLE));
     out.push(part(box(ex - 0.025, ey - 0.025, h + 0.05, ex + 0.025, ey + 0.025, h + 0.08), TERMINAL_LIGHT, { emissive: true }));
   });
+  return out;
+}
+
+const BALLAST = rgb(0.36, 0.33, 0.31);
+/** A skyscraper's wall at medium detail: its white frame and its windows, as one colour. */
+const SKYSCRAPER_FAR_WALL = rgb(0.74, 0.657, 0.492);
+const RAIL_STEEL = rgb(0.58, 0.6, 0.63);
+const SLEEPER = rgb(0.3, 0.26, 0.22);
+
+/**
+ * A railway tile (at the user's request: stations "create railways"): a bed
+ * of ballast along each way the line runs - to the next rail, or into a
+ * station - with two steel rails on sleepers up close.
+ */
+function railDetail(view: CityView, tx: number, ty: number, z: number, quality: CityQuality): Part[] {
+  const n = view.tiles;
+  const stationAt = (x: number, y: number): boolean =>
+    view.buildings.some((b) => b.type === "station" && x >= b.tx && y >= b.ty && x < b.tx + b.size && y < b.ty + (b.depth ?? b.size));
+  const sides = SIDES.map(([dx, dy]) => {
+    const x = tx + dx;
+    const y = ty + dy;
+    if (x < 0 || y < 0 || x >= n || y >= n) return false;
+    return view.rails?.[y * n + x] === true || stationAt(x, y);
+  });
+  const out: Part[] = [];
+  const bars = corridorBars(sides, tx, ty, 0.28);
+  for (const [x0, y0, x1, y1] of bars) out.push(part(sheet([[x0, y0, z + 0.02], [x1, y0, z + 0.02], [x1, y1, z + 0.02], [x0, y1, z + 0.02]]), BALLAST));
+  if (quality === "low") return out;
+  const [east, west, south, north] = sides as [boolean, boolean, boolean, boolean];
+  const along = (horizontal: boolean, a0: number, a1: number): void => {
+    // Sleepers across, then the two rails along.
+    for (let k = 0; k < 3; k += 1) {
+      const a = a0 + ((k + 0.5) * (a1 - a0)) / 3;
+      if (quality === "high") out.push(part(horizontal ? box(a - 0.05, ty + 0.24, z + 0.02, a + 0.05, ty + 0.76, z + 0.05) : box(tx + 0.24, a - 0.05, z + 0.02, tx + 0.76, a + 0.05, z + 0.05), SLEEPER));
+    }
+    for (const off of [0.36, 0.64]) {
+      out.push(part(horizontal ? box(a0, ty + off - 0.02, z + 0.05, a1, ty + off + 0.02, z + 0.09) : box(tx + off - 0.02, a0, z + 0.05, tx + off + 0.02, a1, z + 0.09), RAIL_STEEL));
+    }
+  };
+  if (east || west) along(true, west ? tx : tx + 0.3, east ? tx + 1 : tx + 0.7);
+  if (north || south) along(false, north ? ty : ty + 0.3, south ? ty + 1 : ty + 0.7);
   return out;
 }
 
@@ -2425,34 +2713,35 @@ function worksite(b: CityBuildingView, done: number, quality: CityQuality): Kit 
   const x0 = b.tx;
   const y0 = b.ty;
   const s = b.size;
-  const top = Math.max(0.15, buildingTop(b.type) * (0.25 + 0.6 * done));
-  add(() => part(box(x0 + 0.08, y0 + 0.08, 0, x0 + s - 0.08, y0 + s - 0.08, 0.08), CONCRETE));
+  const sd = b.depth ?? b.size;
+  const top = Math.max(0.15, Math.min(1.6, buildingTop(b.type)) * (0.25 + 0.6 * done));
+  add(() => part(box(x0 + 0.08, y0 + 0.08, 0, x0 + s - 0.08, y0 + sd - 0.08, 0.08), CONCRETE));
   if (quality === "low") {
-    add(() => part(box(x0 + 0.25, y0 + 0.25, 0.08, x0 + s - 0.25, y0 + s - 0.25, top * 0.6), DARK_METAL));
+    add(() => part(box(x0 + 0.25, y0 + 0.25, 0.08, x0 + s - 0.25, y0 + sd - 0.25, top * 0.6), DARK_METAL));
     return k;
   }
   // The frame: posts at the corners and along the edges, a ring at the top.
   add(() => {
     const out: Part[] = [];
     const posts: [number, number][] = [];
-    for (let i = 0; i <= s; i += 1) posts.push([x0 + 0.2 + (i * (s - 0.4)) / s, y0 + 0.2], [x0 + 0.2 + (i * (s - 0.4)) / s, y0 + s - 0.2]);
-    for (let i = 1; i < s; i += 1) posts.push([x0 + 0.2, y0 + 0.2 + (i * (s - 0.4)) / s], [x0 + s - 0.2, y0 + 0.2 + (i * (s - 0.4)) / s]);
+    for (let i = 0; i <= s; i += 1) posts.push([x0 + 0.2 + (i * (s - 0.4)) / s, y0 + 0.2], [x0 + 0.2 + (i * (s - 0.4)) / s, y0 + sd - 0.2]);
+    for (let i = 1; i < sd; i += 1) posts.push([x0 + 0.2, y0 + 0.2 + (i * (sd - 0.4)) / sd], [x0 + s - 0.2, y0 + 0.2 + (i * (sd - 0.4)) / sd]);
     for (const [px, py] of posts) out.push(part(box(px - 0.03, py - 0.03, 0.08, px + 0.03, py + 0.03, top), DARK_METAL));
     out.push(part(box(x0 + 0.17, y0 + 0.17, top - 0.04, x0 + s - 0.17, y0 + 0.23, top), HAZARD));
-    out.push(part(box(x0 + s - 0.23, y0 + 0.17, top - 0.04, x0 + s - 0.17, y0 + s - 0.17, top), HAZARD));
+    out.push(part(box(x0 + s - 0.23, y0 + 0.17, top - 0.04, x0 + s - 0.17, y0 + sd - 0.17, top), HAZARD));
     return out;
   });
   // Stacked materials at the front.
   add(() => [
-    part(box(x0 + s - 0.7, y0 + s - 0.55, 0.08, x0 + s - 0.35, y0 + s - 0.25, 0.3), ACCENT),
-    part(box(x0 + s - 0.7, y0 + s - 0.55, 0.3, x0 + s - 0.45, y0 + s - 0.3, 0.45), PAINT_WHITE),
+    part(box(x0 + s - 0.7, y0 + sd - 0.55, 0.08, x0 + s - 0.35, y0 + sd - 0.25, 0.3), ACCENT),
+    part(box(x0 + s - 0.7, y0 + sd - 0.55, 0.3, x0 + s - 0.45, y0 + sd - 0.3, 0.45), PAINT_WHITE),
   ]);
   if (quality === "high") {
     // A crane at the back corner, its jib over the site.
     const mast = top + 0.9;
     add(() => lattice(x0 + 0.35, y0 + 0.35, 0.09, 0.06, 0.08, mast, 5, HAZARD));
-    add(() => part(tube([x0 + 0.35, y0 + 0.35, mast], [x0 + s * 0.75, y0 + s * 0.75, mast], 0.03, 5), HAZARD));
-    add(() => part(tube([x0 + s * 0.6, y0 + s * 0.6, mast], [x0 + s * 0.6, y0 + s * 0.6, top + 0.15], 0.008, 4), DARK_METAL));
+    add(() => part(tube([x0 + 0.35, y0 + 0.35, mast], [x0 + s * 0.75, y0 + sd * 0.75, mast], 0.03, 5), HAZARD));
+    add(() => part(tube([x0 + s * 0.6, y0 + sd * 0.6, mast], [x0 + s * 0.6, y0 + sd * 0.6, top + 0.15], 0.008, 4), DARK_METAL));
   }
   return k;
 }
@@ -2535,6 +2824,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       }
       if (view.corridors[o.ty * n + o.tx] === true) emitParts(corridorDetail(view, cache.connectors.corridors, o.tx, o.ty, z, quality), out);
       if (view.cables[o.ty * n + o.tx] === true) emitParts(cableDetail(view, cache.connectors.cables, o.tx, o.ty, z, quality), out);
+      if (view.rails?.[o.ty * n + o.tx] === true) emitParts(railDetail(view, o.tx, o.ty, z, quality), out);
       ground.set(i, out.slice(start));
       if (rovers !== null) drawRovers(rovers.get(o.ty * n + o.tx), options.time, out);
       continue;
@@ -2545,21 +2835,22 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
     // concrete foundation fills down to the lowest (the user: "building on a
     // slope terrain builds concrete foundations under it").
     let lowest = Infinity;
-    for (let y = b.ty; y <= b.ty + b.size; y += 1) for (let x = b.tx; x <= b.tx + b.size; x += 1) lowest = Math.min(lowest, corner(view, x, y));
+    const bd = b.depth ?? b.size;
+    for (let y = b.ty; y <= b.ty + bd; y += 1) for (let x = b.tx; x <= b.tx + b.size; x += 1) lowest = Math.min(lowest, corner(view, x, y));
     const drop = b.baseZ - lowest;
     if (drop > 0.02) {
-      const footing = box(b.tx, b.ty, lowest - 0.05, b.tx + b.size, b.ty + b.size, b.baseZ);
+      const footing = box(b.tx, b.ty, lowest - 0.05, b.tx + b.size, b.ty + bd, b.baseZ);
       emitParts([part(footing.slice(1, 3), FOUNDATION)], out);
       out.push({ rings: [ringOf(footing[0]!.pts)], fill: { ...shade(FOUNDATION, 1.08), a: 1 } });
     } else {
-      out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + b.size, b.baseZ)], fill: { ...groundColour(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ, 0, view.greenery), a: 1 } });
+      out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + bd, b.baseZ)], fill: { ...groundColour(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ, 0, view.greenery), a: 1 } });
     }
     const rocket: RocketState = b.type === "spaceport" ? rockets.get(b.ty * n + b.tx) ?? null : null;
     const site = b.construction ?? null;
     const built = site !== null ? worksite(b, site, quality) : quality === "high" ? assemble(b, options.time, rocket) : quality === "medium" ? assembleMedium(b) : assembleLow(b);
     emitBuilding(built, b, buildings, out, site !== null ? `site${Math.round(site * 10)}` : quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") : "");
     // A rover crossing the building's ground is drawn after it.
-    if (rovers !== null) for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
+    if (rovers !== null) for (let y = b.ty; y < b.ty + bd; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
     // Steam and other particles only up close.
     if (quality === "high") out.push(...built.extras);
     // Building mode: the building and its footing see-through, so what stands behind can be seen and built.
@@ -2567,7 +2858,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       for (let k = shapesFrom; k < out.length; k += 1) out[k] = { ...out[k]!, fill: { ...out[k]!.fill, a: out[k]!.fill.a * SEE_THROUGH_ALPHA } };
     }
     // Not connected to what it needs reads differently from any other reason it is off; a worksite is neither.
-    if (!b.operable && site === null) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + b.size / 2, b.baseZ + buildingTop(b.type) + 0.35));
+    if (!b.operable && site === null) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ + buildingTop(b.type) + 0.35));
   }
 
   drawWorld(cache.world.front);
@@ -2577,7 +2868,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   // Overlays, on top of everything so they are never hidden - each on its own ground.
   // Building mode: every footprint red on the ground, where nothing else can go.
   if (options.seeThrough === true) {
-    for (const b of view.buildings) out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + b.size, b.baseZ + 0.02)], fill: { r: 0.95, g: 0.3, b: 0.28, a: 0.38 } });
+    for (const b of view.buildings) out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + (b.depth ?? b.size), b.baseZ + 0.02)], fill: { r: 0.95, g: 0.3, b: 0.28, a: 0.38 } });
   }
   const tile = options.selectedTile ?? null;
   if (tile !== null && tile.tx >= 0 && tile.ty >= 0 && tile.tx < n && tile.ty < n) {
@@ -2585,24 +2876,25 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   }
   if (options.selected !== null) {
     const b = view.buildings[options.selected];
-    if (b !== undefined) out.push(footprintRing(b.tx, b.ty, b.size, 0.12, { r: 1, g: 1, b: 1, a: 0.9 }, b.baseZ));
+    if (b !== undefined) out.push(footprintRing(b.tx, b.ty, b.size, 0.12, { r: 1, g: 1, b: 1, a: 0.9 }, b.baseZ, b.depth ?? b.size));
   }
   const g = options.ghost;
   if (g !== null) {
-    const z = footprintTop(view, g.tx, g.ty, g.size);
+    const gd = g.depth ?? g.size;
+    const z = footprintTop(view, g.tx, g.ty, g.size, gd);
     out.push({
-      rings: [diamond(g.tx, g.ty, g.tx + g.size, g.ty + g.size, z)],
+      rings: [diamond(g.tx, g.ty, g.tx + g.size, g.ty + gd, z)],
       fill: g.valid ? { r: 1, g: 1, b: 1, a: 0.28 } : { r: 0.95, g: 0.35, b: 0.3, a: 0.35 },
     });
-    out.push(footprintRing(g.tx, g.ty, g.size, 0.06, { r: 1, g: 1, b: 1, a: 0.85 }, z));
+    out.push(footprintRing(g.tx, g.ty, g.size, 0.06, { r: 1, g: 1, b: 1, a: 0.85 }, z, gd));
     if (!g.valid) {
       // A cross, so "cannot build here" reads without colour.
       const cross: Rgba = { r: 1, g: 1, b: 1, a: 0.9 };
       // Through the edge midpoints, which project to the screen's diagonals.
       const mx = g.tx + g.size / 2;
-      const my = g.ty + g.size / 2;
+      const my = g.ty + gd / 2;
       out.push({ rings: [groundStrip(g.tx + 0.2, my, g.tx + g.size - 0.2, my, 0.05, z)], fill: cross });
-      out.push({ rings: [groundStrip(mx, g.ty + 0.2, mx, g.ty + g.size - 0.2, 0.05, z)], fill: cross });
+      out.push({ rings: [groundStrip(mx, g.ty + 0.2, mx, g.ty + gd - 0.2, 0.05, z)], fill: cross });
     }
   }
   if (options.claimable !== undefined && options.claimable.length > 0) out.push(...claimOverlay(view, options.claimable));
@@ -2640,12 +2932,13 @@ export function rayHit(view: CityView, sx: number, sy: number, groundOnly = fals
   const covered = new Set<number>();
   // In building mode buildings have no hitbox: the ground under them is what a click finds.
   for (const b of groundOnly ? [] : view.buildings) {
-    for (let y = b.ty; y < b.ty + b.size; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
-    const near = Math.min(b.tx + b.size - g.x, b.ty + b.size - g.y, b.baseZ + buildingTop(b.type));
+    const bd = b.depth ?? b.size;
+    for (let y = b.ty; y < b.ty + bd; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
+    const near = Math.min(b.tx + b.size - g.x, b.ty + bd - g.y, b.baseZ + buildingTop(b.type));
     const far = Math.max(b.tx - g.x, b.ty - g.y, floor);
     if (far < near && near > best) {
       best = near;
-      hit = { kind: "building", index: b.index, tx: Math.min(b.tx + b.size - 1, Math.max(b.tx, Math.floor(g.x + near))), ty: Math.min(b.ty + b.size - 1, Math.max(b.ty, Math.floor(g.y + near))) };
+      hit = { kind: "building", index: b.index, tx: Math.min(b.tx + b.size - 1, Math.max(b.tx, Math.floor(g.x + near))), ty: Math.min(b.ty + bd - 1, Math.max(b.ty, Math.floor(g.y + near))) };
     }
   }
   for (let ty = 0; ty < n; ty += 1) {

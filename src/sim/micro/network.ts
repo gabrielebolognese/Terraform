@@ -43,6 +43,8 @@ import { isSteep } from "./terrain.js";
 
 /** The two networks a settlement lays. */
 export type Layer = "corridors" | "cables";
+/** What a player lays tile by tile: the two networks, and railways. */
+export type LinkLayer = Layer | "rails";
 export const LAYERS: readonly Layer[] = ["corridors", "cables"];
 
 /** Which network carries each resource: power by cable, everything else by corridor. */
@@ -55,7 +57,8 @@ export function ownerGrid(buildings: readonly PlacedBuilding[], n: number): Int3
   const owner = new Int32Array(n * n).fill(-1);
   buildings.forEach((b, i) => {
     const size = BUILDING_DEFS[b.type].footprint;
-    for (let y = b.ty; y < b.ty + size; y += 1) {
+    const depth = BUILDING_DEFS[b.type].depth;
+    for (let y = b.ty; y < b.ty + depth; y += 1) {
       for (let x = b.tx; x < b.tx + size; x += 1) if (x >= 0 && y >= 0 && x < n && y < n) owner[y * n + x] = i;
     }
   });
@@ -158,6 +161,59 @@ export function networkOf(buildings: readonly PlacedBuilding[], links: readonly 
   const network: Network = { of, count: ids.size };
   byGrid.set(n, network);
   return network;
+}
+
+/**
+ * Railways (at the user's request: "a station ... creates railways, I can
+ * connect different zones of the city"): stations on one line of rails - a
+ * run of rail tiles, touching each station - join the networks round them,
+ * corridors and cables alike, as if one corridor and one cable ran along
+ * the line. Only stations board a line: a rail beside any other building is
+ * just track.
+ */
+export function withRails(network: Network, buildings: readonly PlacedBuilding[], rails: readonly number[], n: number): Network {
+  if (rails.length === 0) return network;
+  const stations = buildings.map((b, i) => (b.type === "station" ? i : -1)).filter((i) => i >= 0);
+  if (stations.length < 2) return network;
+  const owner = ownerGrid(buildings, n);
+  const rail = linkGrid(rails, n);
+  const B = buildings.length;
+  const parent = new Int32Array(B + n * n);
+  for (let i = 0; i < parent.length; i += 1) parent[i] = i;
+  const node = (tile: number): number => {
+    const o = owner[tile]!;
+    if (o >= 0) return buildings[o]!.type === "station" ? o : -1;
+    return rail[tile] ? B + tile : -1;
+  };
+  for (let y = 0; y < n; y += 1) {
+    for (let x = 0; x < n; x += 1) {
+      const here = node(y * n + x);
+      if (here < 0) continue;
+      if (x + 1 < n) {
+        const east = node(y * n + x + 1);
+        if (east >= 0) union(parent, here, east);
+      }
+      if (y + 1 < n) {
+        const south = node((y + 1) * n + x);
+        if (south >= 0) union(parent, here, south);
+      }
+    }
+  }
+  // Stations on one line: their networks become one.
+  const ids = new Int32Array(network.count);
+  for (let i = 0; i < ids.length; i += 1) ids[i] = i;
+  for (const a of stations) for (const b of stations) if (a < b && find(parent, a) === find(parent, b)) union(ids, network.of[a]!, network.of[b]!);
+  const renumber = new Map<number, number>();
+  const of = network.of.map((id) => {
+    const r = find(ids, id);
+    let k = renumber.get(r);
+    if (k === undefined) {
+      k = renumber.size;
+      renumber.set(r, k);
+    }
+    return k;
+  });
+  return { of, count: renumber.size };
 }
 
 /** Why the networks kept a building from running: it draws these, and no running building on the network that carries them makes them. */
@@ -353,7 +409,8 @@ export function linksForRedundancy(s: Settlement, layer: Layer, t: Tuning): numb
     const deque: number[] = [];
     let head = 0;
     const size = BUILDING_DEFS[b.type].footprint;
-    for (let y = b.ty; y < b.ty + size; y += 1) {
+    const depth = BUILDING_DEFS[b.type].depth;
+    for (let y = b.ty; y < b.ty + depth; y += 1) {
       for (let x = b.tx; x < b.tx + size; x += 1) {
         if (x < 0 || y < 0 || x >= n || y >= n) continue;
         dist[y * n + x] = 0;

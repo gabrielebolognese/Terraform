@@ -328,7 +328,9 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
      * Computed from the state BEFORE this substep's flows, so it uses the same
      * `d` the flows did rather than a half-updated world.
      */
-    const economy = t.ECONOMY_ENABLED ? accrue(working.economy, habitat(working.reservoirs, d, t, liquidWaterRate(contribution.flows)), working, h, t) : working.economy;
+    const accrued = t.ECONOMY_ENABLED ? accrue(working.economy, habitat(working.reservoirs, d, t, liquidWaterRate(contribution.flows)), working, h, t) : working.economy;
+    // The cities' research is income too (laboratories, observatories, forums).
+    const economy = t.ECONOMY_ENABLED && contribution.research > 0 ? { ...accrued, credits: accrued.credits + contribution.research * h, earned: accrued.earned + contribution.research * h } : accrued;
 
     /**
      * Phase latch and tech unlock, EVERY substep, on the `d` already computed.

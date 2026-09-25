@@ -142,10 +142,11 @@ function naturalRocks(s: Settlement, ground: Ground, t: Tuning): readonly Rock[]
 export function rocksOf(s: Settlement, t: Tuning): Rock[] {
   const ground = groundOf(s, t);
   const n = ground.tiles;
-  const covered = new Set<number>([...s.cleared, ...s.corridors, ...s.cables]);
+  const covered = new Set<number>([...s.cleared, ...s.corridors, ...s.cables, ...s.rails]);
   for (const b of s.buildings) {
     const size = BUILDING_DEFS[b.type].footprint;
-    for (let y = b.ty; y < b.ty + size; y += 1) for (let x = b.tx; x < b.tx + size; x += 1) covered.add(tileKey(x, y));
+    const depth = BUILDING_DEFS[b.type].depth;
+    for (let y = b.ty; y < b.ty + depth; y += 1) for (let x = b.tx; x < b.tx + size; x += 1) covered.add(tileKey(x, y));
   }
   const out = [...naturalRocks(s, ground, t)];
   for (const key of covered) {
@@ -164,10 +165,11 @@ export function rockAt(s: Settlement, tx: number, ty: number, t: Tuning): Rock {
   const n = ground.tiles;
   if (tx < 0 || ty < 0 || tx >= n || ty >= n) return "none";
   const key = tileKey(tx, ty);
-  if (s.cleared.includes(key) || s.corridors.includes(key) || s.cables.includes(key)) return "none";
+  if (s.cleared.includes(key) || s.corridors.includes(key) || s.cables.includes(key) || s.rails.includes(key)) return "none";
   for (const b of s.buildings) {
     const size = BUILDING_DEFS[b.type].footprint;
-    if (tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + size) return "none";
+    const depth = BUILDING_DEFS[b.type].depth;
+    if (tx >= b.tx && ty >= b.ty && tx < b.tx + size && ty < b.ty + depth) return "none";
   }
   const { base, x0, y0 } = frameOf(s, t);
   return natureRock(placeSeed(s.lat, s.lon), base, tx + x0, ty + y0, ground.steep[ty * n + tx] === true, t);

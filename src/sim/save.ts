@@ -64,7 +64,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 10;
+export const SAVE_SCHEMA_VERSION = 11;
 
 export interface SavedFacility {
   readonly type: string;
@@ -148,6 +148,8 @@ export interface SavedSettlement {
   readonly claims?: readonly number[];
   /** Added in v10 (levelling, at the user's request): levelled tiles, in the order they were, each `{ tile, height_m }`. */
   readonly grades?: readonly { readonly tile: number; readonly height_m: number }[];
+  /** Added in v11 (stations, at the user's request): railway tiles, as sorted keys. */
+  readonly rails?: readonly number[];
 }
 
 /**
@@ -231,6 +233,7 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       base: s.base,
       claims: [...s.claims],
       grades: s.grades.map((g) => ({ tile: g.tile, height_m: g.heightM })),
+      rails: [...s.rails],
     })),
   };
 }
@@ -312,7 +315,16 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 8) current = migrateV7toV8(current);
   if (version < 9) current = migrateV8toV9(current);
   if (version < 10) current = migrateV9toV10(current);
+  if (version < 11) current = migrateV10toV11(current);
   return current;
+}
+
+/** v10 -> v11: railways. There were no stations to lay them for. */
+function migrateV10toV11(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  if (!Array.isArray(list)) return { ...save, schema_version: 11 };
+  const settlements = list.map((raw) => (typeof raw !== "object" || raw === null ? raw : { ...(raw as Record<string, unknown>), rails: [] }));
+  return { ...save, schema_version: 11, settlements };
 }
 
 /** v9 -> v10: levelled ground. Nothing had been levelled. */
@@ -671,7 +683,7 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     const cleared = readKeys(s, "cleared", where, "rock", new Set());
     const jobs = readJobs(s, where);
     const under = underBuildings(buildings);
-    let settled: Settlement = { ...standing, cleared, jobs };
+    let settled: Settlement = { ...standing, cleared, jobs, rails: readKeys(s, "rails", where, "railway", under) };
     // v8: corridors and cables; null only for a settlement carried forward from v6.
     for (const layer of LAYERS) {
       settled = { ...settled, [layer]: s[layer] === null ? [] : readKeys(s, layer, where, LINK_WORDS[layer], under) };
@@ -725,7 +737,8 @@ function underBuildings(buildings: readonly PlacedBuilding[]): Set<number> {
   const under = new Set<number>();
   for (const b of buildings) {
     const size = BUILDING_DEFS[b.type].footprint;
-    for (const [x, y] of footprintTiles({ tx: b.tx, ty: b.ty, w: size, h: size })) under.add(tileKey(x, y));
+    const depth = BUILDING_DEFS[b.type].depth;
+    for (const [x, y] of footprintTiles({ tx: b.tx, ty: b.ty, w: size, h: depth })) under.add(tileKey(x, y));
   }
   return under;
 }
@@ -845,7 +858,8 @@ function readBuildings(s: Record<string, unknown>, where: string): readonly Plac
     if (!Number.isInteger(tx) || !Number.isInteger(ty)) throw new SaveError(`${at} is not on a whole tile (${tx}, ${ty})`);
     if (!Number.isInteger(level) || level < 1) throw new SaveError(`${at}.level must be a whole number from 1, got ${level}`);
     const size = BUILDING_DEFS[type as BuildingType].footprint;
-    for (const [x, y] of footprintTiles({ tx, ty, w: size, h: size })) {
+    const depth = BUILDING_DEFS[type as BuildingType].depth;
+    for (const [x, y] of footprintTiles({ tx, ty, w: size, h: depth })) {
       const key = `${x},${y}`;
       const other = taken.get(key);
       if (other !== undefined) throw new SaveError(`${at} overlaps ${where}.buildings[${other}] at tile ${key}`);

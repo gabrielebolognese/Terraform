@@ -36,6 +36,8 @@ export interface StepContribution {
   readonly suitability: Suitability;
   /** Batch 18: every settlement one substep on. The same array, untouched, while SETTLEMENTS_ENABLED is 0. */
   readonly settlementsNext: readonly Settlement[];
+  /** Credits a year the settlements' research earns; 0 with settlements off. */
+  readonly research: number;
 }
 
 export function computeStep(
@@ -69,6 +71,7 @@ export function computeStep(
   const forced = forcing ? forcing(r, d, t, h) : [];
 
   let settlementsNext = state.settlements;
+  let research = 0;
   if (t.SETTLEMENTS_ENABLED && state.settlements.length > 0) {
     // Batch 23: the sea level's rate, from every flow the settlements do not
     // themselves add (none of theirs touches water).
@@ -76,11 +79,12 @@ export function computeStep(
     const micro = microStep(state.settlements, habitat(r, d, t, water), r, d, t, h);
     flows.push(...micro.flows);
     settlementsNext = micro.settlementsNext;
+    research = micro.research;
   }
 
   flows.push(...forced);
 
-  return { flows, biomassNext: bio.next, suitability: bio.suitability, settlementsNext };
+  return { flows, biomassNext: bio.next, suitability: bio.suitability, settlementsNext, research };
 }
 
 /**

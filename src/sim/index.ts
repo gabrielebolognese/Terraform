@@ -199,7 +199,7 @@ export {
   settlementStep,
 } from "./micro/settlement.js";
 export { LAYERS, layerOf, linksForRedundancy, linksToConnect, networkOf } from "./micro/network.js";
-export type { Layer, Network, NetworkIssue } from "./micro/network.js";
+export type { Layer, LinkLayer, Network, NetworkIssue } from "./micro/network.js";
 export { garage, levelFor, roverCount, rocksOf, roverYears, siteGround } from "./micro/rocks.js";
 export type { Rock } from "./micro/rocks.js";
 export type { PlaceOutcome, SettlementStep } from "./micro/settlement.js";
