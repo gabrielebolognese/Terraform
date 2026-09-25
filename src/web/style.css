@@ -2123,3 +2123,115 @@ button:hover {
     padding: 10px 16px;
   }
 }
+
+/* ---- the world map (at the user's request): the middle game between orbit and a city ---- */
+.worldmap {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.worldmap[hidden] {
+  display: none;
+}
+
+.worldmap-canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  cursor: grab;
+  touch-action: none;
+}
+
+.worldmap-top {
+  position: fixed;
+  top: 14px;
+  left: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  pointer-events: none;
+}
+
+.worldmap-top > * {
+  pointer-events: auto;
+}
+
+.worldmap-title {
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.worldmap-scale {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.worldmap-panel {
+  position: fixed;
+  top: 60px;
+  right: 16px;
+  width: min(320px, calc(100vw - 32px));
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.worldmap-name {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.worldmap-line,
+.worldmap-note {
+  margin: 4px 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.worldmap-note {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.worldmap-routes {
+  margin: 4px 0 10px;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.worldmap-open,
+.worldmap-join {
+  margin: 4px 8px 4px 0;
+}
+
+.worldmap-hint {
+  position: fixed;
+  left: 16px;
+  bottom: 14px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+@media (max-width: 760px) {
+  .worldmap-panel {
+    top: auto;
+    bottom: 44px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+    max-height: 40vh;
+  }
+}

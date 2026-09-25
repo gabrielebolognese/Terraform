@@ -11,6 +11,7 @@ import { buildRows, orderDelta } from "./build.js";
 import { Globe } from "./globe.js";
 import { CityScreen } from "./city.js";
 import { PlannerScreen } from "./planner.js";
+import { WorldMapScreen } from "./world-map.js";
 import { WorldDriver } from "./driver.js";
 import { Journey } from "./journey.js";
 import { TravelPrompt } from "./travel-prompt.js";
@@ -55,6 +56,7 @@ import {
   nextSubstepFlows,
   seaLevel,
   renameSettlement,
+  connectSettlements,
   editZone,
   deleteZone,
   levelZone,
@@ -107,6 +109,7 @@ const tuning = makeTuning({
   // least 3x bigger"); a city claims more as it grows.
   // Buildings take a rover and time to build (at the user's request).
   BUILD_TIME_ENABLED: 1,
+  INTERCITY_ENABLED: 1,
   CITY_GRID_TILES: 96,
   OUTPOST_GRID_TILES: 48,
   METROPOLIS_GRID_TILES: 288,
@@ -295,6 +298,7 @@ const hud: Hud = new Hud(
     onCancelFound: () => cancelFounding(),
     // The HUD's button is itself the confirmation: straight into the journey.
     onOpenSettlement: (id: string) => journey.goTo(id, performance.now()),
+    onWorldMap: () => worldMap.open(),
   },
   tuning,
 );
@@ -373,6 +377,32 @@ const city = new CityScreen(
       planner.open(id);
       city.root.hidden = true;
     },
+    // Up to orbit, and the map over it.
+    onWorldMap: () => {
+      journey.goToOrbit(performance.now());
+      worldMap.open();
+    },
+  },
+  tuning,
+);
+
+/**
+ * The world map (at the user's request): the middle game between orbit and a
+ * city - every settlement at its place, and the railways between them.
+ */
+const worldMap = new WorldMapScreen(
+  root,
+  {
+    onOpen: (id) => {
+      worldMap.close();
+      journey.goTo(id, performance.now());
+    },
+    onConnect: (a, b) => {
+      const outcome = connectSettlements(state, a, b, tuning);
+      state = outcome.state;
+      return outcome;
+    },
+    onClose: () => worldMap.close(),
   },
   tuning,
 );
@@ -608,6 +638,7 @@ function render(timestamp: number): void {
     else if (planner.openId === resident) planner.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp);
     else city.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp, clock.pendingYears);
   }
+  if (worldMap.isOpen) worldMap.frame(state, habitat(state.reservoirs, d, tuning, liquidRate), timestamp);
 
   if (timestamp - lastSample >= 1000 / SPARK_HZ) {
     lastSample = timestamp;

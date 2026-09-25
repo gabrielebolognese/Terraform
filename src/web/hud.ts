@@ -73,6 +73,8 @@ export interface HudHooks {
   readonly onCancelFound: () => void;
   /** Go down to a settlement's city view (Batch 20; Batch 21 makes it a journey). */
   readonly onOpenSettlement: (id: string) => void;
+  /** The world map: every settlement at its place, and the railways between them (optional: absent, no button). */
+  readonly onWorldMap?: () => void;
   /** Bring the matching lever into view - the HUD's own build row since Batch 16. */
   readonly onFocusLever: (type: FacilityType) => void;
 }
@@ -479,6 +481,13 @@ export class Hud {
     foundOutpost.type = "button";
     foundOutpost.addEventListener("click", () => found("outpost"));
     foundRow.append(foundName, foundCity, foundOutpost);
+    const onWorldMap = hooks.onWorldMap;
+    if (onWorldMap !== undefined) {
+      const map = el("button", "hud-world-map", "World map");
+      map.type = "button";
+      map.addEventListener("click", () => onWorldMap());
+      foundRow.append(map);
+    }
     this.foundButtons = [foundCity, foundOutpost];
     this.foundPrompt = el("div", "hud-found-prompt");
     this.foundPrompt.setAttribute("role", "status");

@@ -30,6 +30,7 @@ function mount() {
       onFound: (kind, name) => calls.push(`found:${kind}${name === "" ? "" : `:${name}`}`),
       onCancelFound: () => calls.push("cancel"),
       onOpenSettlement: (id) => calls.push(`open:${id}`),
+      onWorldMap: () => calls.push("world map"),
     },
     t,
   );
@@ -73,6 +74,13 @@ beforeEach(() => {
 });
 
 describe("founding a settlement from the HUD", () => {
+  it("opens the world map from its button", () => {
+    const page = mount();
+    page.show(marsStart(), null);
+    page.q<HTMLButtonElement>(".hud-world-map").click();
+    expect(page.calls).toEqual(["world map"]);
+  });
+
   it("starts founding a city or an outpost from its button", () => {
     const page = mount();
     page.show(marsStart(), null);

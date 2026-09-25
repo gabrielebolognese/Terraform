@@ -63,6 +63,8 @@ export interface CityHooks {
   readonly onBack: () => void;
   /** The city planner, the second mode (at the user's request); absent, no button. */
   readonly onPlanner?: () => void;
+  /** The world map, every city at its place (at the user's request); absent, no button. */
+  readonly onWorldMap?: () => void;
 }
 
 /** Whether a tile of the view carries a link of this layer. */
@@ -276,6 +278,8 @@ export class CityScreen {
     modes.append(button("city-back", "Back to orbit", () => this.hooks.onBack()));
     const onPlanner = this.hooks.onPlanner;
     if (onPlanner !== undefined) modes.append(button("city-planner", "City planner", () => onPlanner()));
+    const onWorldMap = this.hooks.onWorldMap;
+    if (onWorldMap !== undefined) modes.append(button("city-world-map", "World map", () => onWorldMap()));
     head.append(modes, this.title, this.where);
 
     this.status = el("p", "city-status", "");

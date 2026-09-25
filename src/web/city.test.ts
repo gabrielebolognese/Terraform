@@ -126,6 +126,7 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
       },
       onBack: () => calls.push("back"),
       onPlanner: () => calls.push("planner"),
+      onWorldMap: () => calls.push("world map"),
     },
     t,
   );
@@ -335,6 +336,12 @@ describe("the city view", () => {
     const page = mount();
     (page.q(".city-back") as HTMLButtonElement).click();
     expect(page.calls).toEqual(["back"]);
+  });
+
+  it("goes to the world map (at the user's request)", () => {
+    const page = mount();
+    (page.q(".city-world-map") as HTMLButtonElement).click();
+    expect(page.calls).toEqual(["world map"]);
   });
 
   it("opens the city planner, the second mode (at the user's request)", () => {
