@@ -159,6 +159,15 @@ export class CityScreen {
   private readonly status: HTMLElement;
   private readonly storeRows = new Map<MicroResource, { value: HTMLElement; rate: HTMLElement; bar: HTMLElement }>();
   private readonly palette: HTMLElement;
+  /**
+   * The build bar's own scrollbar (at the user's request: "scrolling left and
+   * right has become very hard - 4x the height of the scrollbar, a grabbing
+   * hand"). A browser's scrollbar takes no cursor of ours, so this is drawn:
+   * a track under the cards, and a thumb to drag.
+   */
+  private readonly track: HTMLElement;
+  private readonly thumb: HTMLElement;
+  private dragThumb: { x: number; scroll: number } | null = null;
   private readonly hint: HTMLElement;
   /** The build bar along the bottom (at the user's request, as in Clash of Clans). */
   private readonly dock: HTMLElement;
@@ -242,7 +251,14 @@ export class CityScreen {
     this.palette.setAttribute("role", "toolbar");
     this.hint = el("p", "city-hint", "");
     this.hint.setAttribute("role", "status");
-    this.dock.append(this.hint, this.palette);
+    this.track = el("div", "city-cards-track");
+    this.thumb = el("div", "city-cards-thumb");
+    this.thumb.setAttribute("role", "scrollbar");
+    this.thumb.setAttribute("aria-orientation", "horizontal");
+    this.thumb.setAttribute("aria-label", "Scroll the build bar");
+    this.track.append(this.thumb);
+    this.dock.append(this.hint, this.palette, this.track);
+    this.bindScrollbar();
     this.tip = el("div", "city-tip");
     this.tip.id = "city-tip";
     this.tip.setAttribute("role", "tooltip");
@@ -447,6 +463,7 @@ export class CityScreen {
     }
 
     this.renderPalette(false);
+    this.placeThumb();
     const here = this.placing !== null && this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) : "";
     this.hint.textContent =
       this.paving === "corridors"
@@ -538,6 +555,7 @@ export class CityScreen {
     const connect = this.card("connect", "Connect all", `${Math.min(t.COST_CORRIDOR, t.COST_CABLE)}+ / tile`, false, null, () => this.connect());
     connect.classList.add("city-connect");
     this.palette.replaceChildren(...cards, corridor, cable, connect);
+    this.placeThumb();
     // A card rebuilt under the pointer keeps its tooltip.
     if (this.tipFor !== null) {
       const again = [...this.palette.children].find((c) => (c as HTMLElement).dataset["card"] === this.tipFor) as HTMLElement | undefined;
@@ -634,6 +652,72 @@ export class CityScreen {
   private hideTip(): void {
     this.tip.hidden = true;
     this.tipFor = null;
+  }
+
+  // ---- the build bar's scrollbar -------------------------------------------------
+
+  /** The thumb as wide as the share of the cards in view, and where the view is along them. */
+  placeThumb(): void {
+    const view = this.palette.clientWidth;
+    const all = this.palette.scrollWidth;
+    const trackW = this.track.clientWidth;
+    const overflow = all > view + 1;
+    this.track.hidden = !overflow;
+    if (!overflow || trackW <= 0) return;
+    const width = Math.max(48, (view / all) * trackW);
+    const range = all - view;
+    const left = range > 0 ? (this.palette.scrollLeft / range) * (trackW - width) : 0;
+    this.thumb.style.width = `${width}px`;
+    this.thumb.style.transform = `translateX(${left}px)`;
+  }
+
+  private bindScrollbar(): void {
+    this.palette.addEventListener("scroll", () => this.placeThumb());
+    globalThis.addEventListener?.("resize", () => this.placeThumb());
+    // The wheel scrolls the row sideways, as a row of cards should.
+    this.palette.addEventListener(
+      "wheel",
+      (e) => {
+        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+        e.preventDefault();
+        this.palette.scrollLeft += e.deltaY;
+      },
+      { passive: false },
+    );
+    this.thumb.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      this.thumb.setPointerCapture?.(e.pointerId);
+      this.dragThumb = { x: e.clientX, scroll: this.palette.scrollLeft };
+      // Grabbing: the closed hand everywhere while held, and the thumb goes white.
+      this.thumb.dataset["dragging"] = "true";
+      this.root.dataset["grabbing"] = "true";
+    });
+    this.thumb.addEventListener("pointermove", (e) => {
+      const d = this.dragThumb;
+      if (d === null) return;
+      const trackW = this.track.clientWidth;
+      const width = this.thumb.offsetWidth;
+      const range = this.palette.scrollWidth - this.palette.clientWidth;
+      if (trackW - width <= 0) return;
+      this.palette.scrollLeft = d.scroll + ((e.clientX - d.x) / (trackW - width)) * range;
+      this.placeThumb();
+    });
+    const release = (): void => {
+      this.dragThumb = null;
+      delete this.thumb.dataset["dragging"];
+      delete this.root.dataset["grabbing"];
+    };
+    this.thumb.addEventListener("pointerup", release);
+    this.thumb.addEventListener("pointercancel", release);
+    // A click on the track, off the thumb, jumps the view there.
+    this.track.addEventListener("pointerdown", (e) => {
+      if (e.target !== this.track) return;
+      const r = this.track.getBoundingClientRect();
+      const range = this.palette.scrollWidth - this.palette.clientWidth;
+      const at = (e.clientX - r.left - this.thumb.offsetWidth / 2) / Math.max(1, this.track.clientWidth - this.thumb.offsetWidth);
+      this.palette.scrollLeft = Math.min(1, Math.max(0, at)) * range;
+      this.placeThumb();
+    });
   }
 
   // ---- input -----------------------------------------------------------------

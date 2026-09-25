@@ -7,6 +7,8 @@
  * building is doing - in words, so it reads without colour.
  */
 
+import { readFileSync } from "node:fs";
+
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { isoProject } from "../render/iso.js";
@@ -463,5 +465,73 @@ describe("the build bar (at the user's request: cards along the bottom, as in Cl
     expect(page.option("reactor").dataset["short"]).toBe("true");
     expect(page.option("reactor").textContent).toContain("not enough materials");
     expect(page.option("storage_depot").dataset["short"]).toBeUndefined();
+  });
+});
+
+describe("the build bar's scrollbar (the user: \"4x the height ... a grabbing hand ... the bar becomes white\")", () => {
+  /** A bar whose cards overflow: 1,200 px of cards in a 400 px view, a 400 px track and a 133 px thumb. */
+  const overflowing = () => {
+    const page = mount();
+    const cards = page.q(".city-cards");
+    const track = page.q(".city-cards-track");
+    const thumb = page.q(".city-cards-thumb");
+    Object.defineProperty(cards, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(cards, "scrollWidth", { value: 1200, configurable: true });
+    Object.defineProperty(track, "clientWidth", { value: 400, configurable: true });
+    Object.defineProperty(thumb, "offsetWidth", { value: 133, configurable: true });
+    page.screen.placeThumb();
+    return { page, cards, track, thumb };
+  };
+
+  it("is a bar of our own under the cards, with the browser's hidden - and only when the cards overflow", () => {
+    const { track, thumb } = overflowing();
+    expect(track.hidden).toBe(false);
+    // As wide as the share of the cards in view: 400 of 1,200 of a 400 px track.
+    expect(parseFloat(thumb.style.width)).toBeCloseTo(133.33, 1);
+    const page = mount();
+    Object.defineProperty(page.q(".city-cards"), "clientWidth", { value: 1200, configurable: true });
+    Object.defineProperty(page.q(".city-cards"), "scrollWidth", { value: 1200, configurable: true });
+    page.screen.placeThumb();
+    expect(page.q(".city-cards-track").hidden).toBe(true);
+  });
+
+  it("scrolls the cards as the thumb is dragged, grabbing while held and letting go after", () => {
+    const { page, cards, thumb } = overflowing();
+    thumb.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, pointerId: 3 }));
+    expect(thumb.dataset["dragging"]).toBe("true");
+    expect(page.host.querySelector<HTMLElement>(".city")!.dataset["grabbing"]).toBe("true");
+    // Half the free track (267 px) to the right: half the hidden cards (800 px).
+    thumb.dispatchEvent(new PointerEvent("pointermove", { clientX: 100 + 133.5, pointerId: 3 }));
+    expect(cards.scrollLeft).toBeCloseTo(400, 0);
+    thumb.dispatchEvent(new PointerEvent("pointerup", { clientX: 233, pointerId: 3 }));
+    expect(thumb.dataset["dragging"]).toBeUndefined();
+    expect(page.host.querySelector<HTMLElement>(".city")!.dataset["grabbing"]).toBeUndefined();
+    // Moving after letting go scrolls nothing.
+    thumb.dispatchEvent(new PointerEvent("pointermove", { clientX: 400, pointerId: 3 }));
+    expect(cards.scrollLeft).toBeCloseTo(400, 0);
+  });
+
+  it("turns the mouse wheel into a sideways scroll over the cards", () => {
+    const { cards } = overflowing();
+    cards.dispatchEvent(new WheelEvent("wheel", { deltaY: 120, cancelable: true }));
+    expect(cards.scrollLeft).toBe(120);
+  });
+
+  it("shows a hand: grab over the thumb, grabbing and a white thumb while held, the bar four times the thin one", () => {
+    // The page's own stylesheet, loaded as the browser loads it; the engine computes the style.
+    const style = document.createElement("style");
+    style.textContent = readFileSync("src/web/style.css", "utf8");
+    document.head.append(style);
+    const { page, thumb, track } = overflowing();
+    expect(getComputedStyle(track).height).toBe("24px");
+    expect(getComputedStyle(thumb).cursor).toBe("grab");
+    thumb.dispatchEvent(new PointerEvent("pointerdown", { clientX: 100, pointerId: 4 }));
+    expect(getComputedStyle(thumb).cursor).toBe("grabbing");
+    expect(getComputedStyle(thumb).backgroundColor).toMatch(/^(#ffffff|#fff|rgb\(255, 255, 255\))$/);
+    // The closed hand over the rest of the city while held, too.
+    expect(getComputedStyle(page.q(".city-canvas")).cursor).toBe("grabbing");
+    thumb.dispatchEvent(new PointerEvent("pointerup", { clientX: 100, pointerId: 4 }));
+    expect(getComputedStyle(thumb).cursor).toBe("grab");
+    style.remove();
   });
 });

@@ -1485,9 +1485,57 @@ button:hover {
   border-radius: 14px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-strong) transparent;
+  /* The browser's own scrollbar is hidden: the bar below is ours. */
+  scrollbar-width: none;
   pointer-events: auto;
+}
+
+.city-cards::-webkit-scrollbar {
+  display: none;
+}
+
+/* The build bar's scrollbar: four times the thin one it replaces (6 px),
+   with a hand to grab it by. */
+.city-cards-track {
+  position: relative;
+  height: 24px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.city-cards-track[hidden] {
+  display: none;
+}
+
+.city-cards-thumb {
+  height: 100%;
+  min-width: 48px;
+  background: var(--line-strong);
+  border-radius: 8px;
+  cursor: grab;
+  transition: background 120ms ease-out;
+  touch-action: none;
+}
+
+.city-cards-thumb:hover {
+  background: #5a5e67;
+}
+
+.city-cards-thumb[data-dragging="true"] {
+  background: #ffffff;
+  cursor: grabbing;
+}
+
+/* While the thumb is held, the closed hand wherever the pointer goes. */
+.city[data-grabbing="true"],
+.city[data-grabbing="true"] * {
+  cursor: grabbing !important;
 }
 
 .city-card {
