@@ -20,7 +20,7 @@
  * Built by the same rules the game enforces; `example.test.ts` replays them.
  */
 
-import type { BuildingType, HabitatChannels, MicroResource, PlacedBuilding, Settlement, SettlementJob, SimState, Tuning } from "../sim/index.js";
+import type { BuildingType, HabitatChannels, MicroResource, PlacedBuilding, Settlement, SettlementJob, SimState, Tuning, Zone } from "../sim/index.js";
 import {
   BUILDING_DEFS,
   capacities,
@@ -36,6 +36,7 @@ import {
   garage,
   tileKey,
 } from "../sim/index.js";
+import { widenMetropolis } from "./metropolis-outer.js";
 
 type Quarter = "civic" | "habitat" | "mixed" | "industry" | "power" | "port" | "suburb";
 
@@ -294,7 +295,7 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
   const supply = (): Record<MicroResource, number> => {
     for (; counted < placed.length; counted += 1) {
       const def = BUILDING_DEFS[placed[counted]!.type];
-      const eff = def.efficiency(env);
+      const eff = def.efficiency(env, t);
       for (const [r, v] of Object.entries(def.produces(t)) as [MicroResource, number][]) net[r] += v * eff;
       for (const [r, v] of Object.entries(def.consumes(t, env)) as [MicroResource, number][]) net[r] -= v;
     }
@@ -469,5 +470,24 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
       if (b.type === "spaceport" && rnd() < 0.5) jobs.push({ kind: "rocket", tile: tileKey(b.tx, b.ty), total: t.ROCKET_TRIP_YEARS, remaining: t.ROCKET_TRIP_YEARS * (0.05 + 0.9 * rnd()) });
     }
   }
-  return withSettlement(state, { ...s, jobs });
+  // 10. Each quarter a zone of the planner, coloured by what it is (the user: "deep city planning zones with different colours, purposes").
+  const QUARTER_ZONES: Readonly<Record<Quarter, { name: string; colour: string }>> = {
+    civic: { name: "Civic heart", colour: "#c46ad6" },
+    habitat: { name: "Homes", colour: "#4f9dde" },
+    mixed: { name: "Mixed quarter", colour: "#d6c24a" },
+    industry: { name: "Industrial quarter", colour: "#e0803b" },
+    power: { name: "Power quarter", colour: "#f0b429" },
+    port: { name: "Port quarter", colour: "#48c2b5" },
+    suburb: { name: "Inner suburb", colour: "#7fb0e0" },
+  };
+  const seenKind = new Map<Quarter, number>();
+  const zones: Zone[] = quarters.map((q, k) => {
+    const count = (seenKind.get(q.kind) ?? 0) + 1;
+    seenKind.set(q.kind, count);
+    const tiles: number[] = [];
+    for (let y = q.r.y0; y < q.r.y1; y += 1) for (let x = q.r.x0; x < q.r.x1; x += 1) tiles.push(tileKey(x, y));
+    return { id: k + 1, name: `${QUARTER_ZONES[q.kind].name} ${count}`, colour: QUARTER_ZONES[q.kind].colour, tiles };
+  });
+  // 11. And beyond the quarters, the rest of the city (`metropolis-outer.ts`).
+  return widenMetropolis(withSettlement(state, { ...s, jobs, zones }), id, env, t, rnd);
 }

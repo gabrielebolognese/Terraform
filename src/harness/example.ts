@@ -16,12 +16,13 @@
  * build it too.
  */
 
-import type { BuildingType, HabitatChannels, PlacedBuilding, Settlement, SettlementKind, SimState, Tuning } from "../sim/index.js";
+import type { BuildingType, HabitatChannels, PlacedBuilding, Settlement, SettlementKind, SimState, Tuning, Zone as PlannerZone } from "../sim/index.js";
 import {
   BUILDING_DEFS,
   NEUTRAL_ENV,
   advance,
   capacities,
+  claimTest,
   derive,
   evaluatePhase,
   foundSettlement,
@@ -108,6 +109,14 @@ const ZONE_OF: Readonly<Record<BuildingType, Zone>> = {
   research_forum: "mixed",
   medical_center: "habitat",
   industrial_command: "industry",
+  wind_turbine: "power",
+  mega_mall: "mixed",
+  water_tank: "industry",
+  battery_bank: "power",
+  freezer: "habitat",
+  materials_depot: "industry",
+  park: "mixed",
+  biosphere: "habitat",
   headquarters: "mixed",
 };
 
@@ -280,6 +289,149 @@ function streets(s: Settlement, t: Tuning): { corridors: number[]; cables: numbe
   return { corridors, cables };
 }
 
+/** The districts' middles on an `n`-tile grid, with the zone each is for, in the order of `districts`. */
+function districtPoints(kind: SettlementKind, size: number, n: number): { zone: Zone; x: number; y: number }[] {
+  const plan = districts(kind, size);
+  const out: { zone: Zone; x: number; y: number }[] = [];
+  for (const zone of ["mixed", "habitat", "power", "industry", "port"] as const) for (const [fx, fy] of plan[zone]) out.push({ zone, x: fx * n, y: fy * n });
+  return out;
+}
+
+/**
+ * A railway round a city's districts: from each district's middle to the
+ * next, by angle round the city, back to the first - over open ground the
+ * rules allow a railway on, across corridors (it bridges them).
+ */
+function railLoop(s: Settlement, size: number, t: Tuning): number[] {
+  const ground = groundOf(s, t);
+  const rocks = rocksOf(s, t);
+  const n = ground.tiles;
+  const under = new Uint8Array(n * n);
+  for (const b of s.buildings) {
+    const d = BUILDING_DEFS[b.type];
+    for (let y = b.ty; y < b.ty + d.depth; y += 1) for (let x = b.tx; x < b.tx + d.footprint; x += 1) under[y * n + x] = 1;
+  }
+  const ours = claimTest(s, t);
+  const passable = (i: number): boolean => !under[i] && !ground.steep[i] && rocks[i] !== "crag" && ours(i % n, Math.floor(i / n));
+  const seen = new Set<string>();
+  const points = districtPoints(s.kind, size, n)
+    .filter((p) => {
+      const key = `${Math.round(p.x)},${Math.round(p.y)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => Math.atan2(a.y - n / 2, a.x - n / 2) - Math.atan2(b.y - n / 2, b.x - n / 2));
+  if (points.length < 3) return [];
+  /** The open tile nearest a point. */
+  const nearestOpen = (x: number, y: number): number => {
+    let best = -1;
+    let bestD = Infinity;
+    for (let i = 0; i < n * n; i += 1) {
+      if (!passable(i)) continue;
+      const d = Math.hypot((i % n) + 0.5 - x, Math.floor(i / n) + 0.5 - y);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
+  };
+  const stops = points.map((p) => nearestOpen(p.x, p.y)).filter((i) => i >= 0);
+  const rail = new Set<number>();
+  const near = (i: number, j: number): boolean => Math.abs((i % n) - (j % n)) + Math.abs(Math.floor(i / n) - Math.floor(j / n)) <= 2;
+  /** Beside the line already laid, and not where this leg starts or ends: a second track alongside, which it keeps off. */
+  const beside = (j: number, from: number, to: number): boolean => {
+    if (rail.has(j) || near(j, from) || near(j, to)) return false;
+    const x = j % n;
+    return (x > 0 && rail.has(j - 1)) || (x < n - 1 && rail.has(j + 1)) || rail.has(j - n) || rail.has(j + n);
+  };
+  for (let k = 0; k < stops.length; k += 1) {
+    const from = stops[k]!;
+    const to = stops[(k + 1) % stops.length]!;
+    // One line, a tile wide: each leg keeps off the ground beside the legs before it (laid over each
+    // other, the loop came out in doubled stretches trains ran round in fours, measured); if it cannot, as it may.
+    for (const strict of [true, false]) {
+      const prev = new Int32Array(n * n).fill(-2);
+      prev[from] = -1;
+      const queue = [from];
+      for (let head = 0; head < queue.length; head += 1) {
+        const i = queue[head]!;
+        if (i === to) break;
+        const x = i % n;
+        for (const j of [i + 1, i - 1, i + n, i - n]) {
+          if (j < 0 || j >= n * n || prev[j] !== -2 || Math.abs((j % n) - x) > 1 || !passable(j) || (strict && beside(j, from, to))) continue;
+          prev[j] = i;
+          queue.push(j);
+        }
+      }
+      if (prev[to] === -2) continue;
+      for (let i = to; i >= 0; i = prev[i]!) rail.add(i);
+      break;
+    }
+  }
+  return [...rail].map((i) => tileKey(i % n, Math.floor(i / n))).sort((a, b) => a - b);
+}
+
+/** What each kind of district is called on the planner, and its colour. */
+const ZONE_LOOK: Readonly<Record<Zone, { name: string; colour: string }>> = {
+  mixed: { name: "Centre", colour: "#c46ad6" },
+  habitat: { name: "Homes", colour: "#4f9dde" },
+  power: { name: "Power", colour: "#f0b429" },
+  industry: { name: "Industry", colour: "#e0803b" },
+  port: { name: "Port", colour: "#48c2b5" },
+};
+
+/**
+ * A city's districts as zones of the planner (the user: "deep city planning
+ * zones with different colours, purposes"): each building to the district
+ * middle nearest it, each district the ground round its buildings, the
+ * smaller districts drawn over the larger where they meet.
+ */
+function cityZones(s: Settlement, size: number, t: Tuning): PlannerZone[] {
+  const n = groundOf(s, t).tiles;
+  const ours = claimTest(s, t);
+  const points = districtPoints(s.kind, size, n);
+  const boxes = points.map(() => ({ x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity, count: 0 }));
+  for (const b of s.buildings) {
+    if (b.type === "headquarters") continue;
+    const d = BUILDING_DEFS[b.type];
+    const cx = b.tx + d.footprint / 2;
+    const cy = b.ty + d.depth / 2;
+    let best = 0;
+    points.forEach((p, k) => {
+      if (Math.hypot(p.x - cx, p.y - cy) < Math.hypot(points[best]!.x - cx, points[best]!.y - cy)) best = k;
+    });
+    const box = boxes[best]!;
+    box.x0 = Math.min(box.x0, b.tx - 2);
+    box.y0 = Math.min(box.y0, b.ty - 2);
+    box.x1 = Math.max(box.x1, b.tx + d.footprint + 2);
+    box.y1 = Math.max(box.y1, b.ty + d.depth + 2);
+    box.count += 1;
+  }
+  const order = points.map((p, k) => ({ p, box: boxes[k]! })).filter((e) => e.box.count > 0);
+  order.sort((a, b) => (a.box.x1 - a.box.x0) * (a.box.y1 - a.box.y0) - (b.box.x1 - b.box.x0) * (b.box.y1 - b.box.y0));
+  const taken = new Set<number>();
+  const counts = new Map<Zone, number>();
+  const made: PlannerZone[] = [];
+  for (const { p, box } of order) {
+    const tiles: number[] = [];
+    for (let y = Math.max(0, box.y0); y < Math.min(n, box.y1); y += 1) {
+      for (let x = Math.max(0, box.x0); x < Math.min(n, box.x1); x += 1) {
+        const k = tileKey(x, y);
+        if (taken.has(k) || !ours(x, y)) continue;
+        taken.add(k);
+        tiles.push(k);
+      }
+    }
+    if (tiles.length === 0) continue;
+    const count = (counts.get(p.zone) ?? 0) + 1;
+    counts.set(p.zone, count);
+    made.push({ id: made.length + 1, name: `${ZONE_LOOK[p.zone].name} ${count}`, colour: ZONE_LOOK[p.zone].colour, tiles: tiles.sort((a, b) => a - b) });
+  }
+  return made;
+}
+
 /** Everything a settlement of `homes` domes needs, in the order to place it. */
 function wishList(kind: SettlementKind, homes: number, founded: boolean, t: Tuning): BuildingType[] {
   if (kind === "outpost") {
@@ -314,8 +466,14 @@ function wishList(kind: SettlementKind, homes: number, founded: boolean, t: Tuni
     for (let i = 0; i < 9; i += 1) out.push("greenhouse");
     for (let i = 0; i < 7; i += 1) out.push("algae_reactor");
   }
+  // The later additions (at the user's request): stores of every kind, wind on a planet whose air turns
+  // it, parks on a terraformed world, and in a large city a biosphere - each with what it needs to run.
+  if (homes >= 4) out.push("water_tank", "battery_bank", "freezer", "park");
+  if (homes >= 8) out.push("materials_depot", "wind_turbine", "wind_turbine", "park", "water_extractor");
+  if (homes >= 12) out.push("biosphere", "geothermal_plant", "geothermal_plant", "water_extractor", "water_extractor", "water_extractor");
   for (let i = 0; i < homes; i += 1) {
-    out.push("habitat_dome", "greenhouse", "geothermal_plant", "water_extractor", "solar_array");
+    out.push("habitat_dome", "greenhouse", "geothermal_plant", "water_extractor", i % 2 === 0 ? "wind_turbine" : "solar_array");
+    if (i % 4 === 3) out.push("park");
     if (i % 2 === 1) out.push("reactor", "storage_depot");
     // No Atmosphere Processors: on a finished planet the air holds 0.24 mbar
     // of CO2, below the 1 mbar they need, and all 144 of them stood idle
@@ -379,7 +537,11 @@ export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
     }
     const buildings = layOut(founded, wishList(kind, size, founded.buildings.some((b) => b.type === "spaceport"), game), size, game);
     const laid: Settlement = { ...founded, buildings };
-    const built: Settlement = { ...laid, ...streets(laid, game) };
+    const streeted: Settlement = { ...laid, ...streets(laid, game) };
+    // A railway round the districts of any but the smallest city (the user: "the cities need more railways,
+    // and working trains"), and each district a zone of the planner in its colour.
+    const railed: Settlement = kind === "city" && size >= 4 ? { ...streeted, rails: railLoop(streeted, size, game) } : streeted;
+    const built: Settlement = kind === "city" ? { ...railed, zones: cityZones(railed, size, game) } : railed;
     // A thriving settlement: full stores, nine in ten homes taken.
     const cap = capacities(built, game);
     const settled: Settlement = { ...built, stores: { ...cap }, population: Math.floor(housing(built, game) * 0.9) };

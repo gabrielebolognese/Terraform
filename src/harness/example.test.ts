@@ -11,6 +11,7 @@ import {
   BUILDING_DEFS,
   DEFAULT_TUNING,
   NEUTRAL_ENV,
+  cityView,
   computeProgress,
   derive,
   deserialize,
@@ -28,6 +29,7 @@ import {
   siteElevation,
   worldEnv,
 } from "../sim/index.js";
+import { trainLinesOf } from "../render/city.js";
 import { examplePlanet } from "./example.js";
 
 /** The browser's tuning: the example is built for the game as it is played. */
@@ -85,6 +87,15 @@ describe("the example planet", () => {
       const step = settlementStep(s, env, game, game.SUBSTEP_YEARS);
       expect(step.supported, `${s.id} short of ${step.shortages.join(", ")}`).toBe(true);
       expect(s.population).toBeGreaterThan(0);
+    }
+  });
+
+  it("makes what it draws: no settlement lives off its full stores", () => {
+    // Full stores hide a deficit for decades - a metropolis whose water was not made good ran 5,000 a
+    // year short and every need was still met, measured. Measured now: the least net anywhere is 0.
+    for (const s of state.settlements) {
+      const step = settlementStep(s, env, game, game.SUBSTEP_YEARS);
+      for (const r of ["power", "water", "oxygen", "food"] as const) expect(step.production[r] - step.consumption[r], `${s.id}: ${r}`).toBeGreaterThanOrEqual(0);
     }
   });
 
@@ -158,7 +169,9 @@ describe("the example planet", () => {
     // neighbours, the share of its own kind: measured 0.74 to 0.85 over every
     // city of 30 buildings or more; a random mix of the same buildings would
     // give 0.30 (the sum of the squared shares of each kind).
-    const kindOf = (t: string): string => (["habitat_dome", "greenhouse"].includes(t) ? "home" : ["solar_array", "geothermal_plant", "reactor"].includes(t) ? "power" : t === "spaceport" ? "port" : t === "headquarters" ? "hq" : "industry");
+    // The later kinds by what they are: a freezer and a biosphere feed homes, wind and batteries are power, a park is anyone's.
+    const kindOf = (t: string): string =>
+      ["habitat_dome", "greenhouse", "freezer", "biosphere"].includes(t) ? "home" : ["solar_array", "geothermal_plant", "reactor", "wind_turbine", "battery_bank"].includes(t) ? "power" : t === "spaceport" ? "port" : t === "headquarters" ? "hq" : t === "park" ? "park" : "industry";
     let cities = 0;
     for (const s of state.settlements) {
       if (s.kind === "outpost" || s.buildings.length < 30) continue;
@@ -189,6 +202,32 @@ describe("the example planet", () => {
       expect(same / all, s.id).toBeGreaterThan(0.65);
     }
     expect(cities, "vacuity: cities big enough to zone").toBeGreaterThan(15);
+  });
+
+  it("runs a railway round every city of four homes or more, with trains on all of it, and plans every city in zones of colours", () => {
+    // The user: "the cities need more railways, and working trains ... the cities have a deep city planning,
+    // zones with different colours, purposes". Measured: 16 cities of four homes or more, 86 to 343 tiles of
+    // railway each, every tile of it on a train's loop; 4 to 9 zones a city, in 4 or 5 colours.
+    let railed = 0;
+    for (const s of state.settlements) {
+      if (s.kind !== "city") continue;
+      expect(s.zones.length, `${s.id}: zones`).toBeGreaterThanOrEqual(4);
+      expect(new Set(s.zones.map((z) => z.colour)).size, `${s.id}: colours`).toBeGreaterThanOrEqual(4);
+      // Its districts' buildings are in its zones.
+      const zoned = new Set(s.zones.flatMap((z) => z.tiles));
+      expect(s.buildings.filter((b) => b.type !== "headquarters" && !zoned.has(b.ty * 1024 + b.tx)), `${s.id}: unzoned`).toEqual([]);
+      if ((sizes[s.id] ?? 0) < 4) continue;
+      railed += 1;
+      expect(s.rails.length, `${s.id}: railway`).toBeGreaterThan(60);
+      const view = cityView(s, env, game);
+      const on = new Set(trainLinesOf(view).flatMap((l) => l.tiles));
+      expect(s.rails.filter((k) => !on.has((k >> 10) * view.tiles + (k & 1023))), `${s.id}: rails no train runs on`).toEqual([]);
+      // One line, not doubled: a 2 x 2 square of rail is a stretch laid twice side by side. Measured: at most 4
+      // a city, where legs meet at their stops (laid without keeping off the line before, up to 27).
+      const rails = new Set(s.rails);
+      expect(s.rails.filter((k) => rails.has(k + 1) && rails.has(k + 1024) && rails.has(k + 1025)).length, `${s.id}: doubled`).toBeLessThanOrEqual(5);
+    }
+    expect(railed, "vacuity: cities big enough for a railway").toBeGreaterThanOrEqual(15);
   });
 
   it("gives every city of four homes or more a port: four spaceports in a line, six in a metropolis", () => {
