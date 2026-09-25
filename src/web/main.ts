@@ -39,6 +39,7 @@ import {
   validateTuning,
   foundSettlement,
   connectAll,
+  claimLand,
   launchRocket,
   placeBuilding,
   placeLink,
@@ -92,6 +93,11 @@ const tuning = makeTuning({
   NETWORK_ENABLED: 1,
   HEADQUARTERS_ENABLED: 1,
   ROCK_CLUSTER_CHANCE: 0.65,
+  // Three times the founding ground (the user: "make the initial boundaries at
+  // least 3x bigger"); a city claims more as it grows.
+  CITY_GRID_TILES: 96,
+  OUTPOST_GRID_TILES: 48,
+  METROPOLIS_GRID_TILES: 288,
 });
 validateTuning(tuning);
 
@@ -319,6 +325,11 @@ const city = new CityScreen(
     },
     onLaunch: (id, tx, ty) => {
       const outcome = launchRocket(state, id, tx, ty, tuning);
+      state = outcome.state;
+      return outcome;
+    },
+    onClaim: (id, i, j) => {
+      const outcome = claimLand(state, id, i, j, tuning);
       state = outcome.state;
       return outcome;
     },

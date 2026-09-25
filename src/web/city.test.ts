@@ -15,6 +15,7 @@ import { isoProject } from "../render/iso.js";
 import type { BuildingType, SimState, Tuning } from "../sim/index.js";
 import {
   NEUTRAL_ENV,
+  claimLand,
   connectAll,
   derive,
   foundSettlement,
@@ -31,6 +32,8 @@ import {
   sendRover,
   tileKey,
   worldEnv,
+  worldOf,
+  chunkKey,
 } from "../sim/index.js";
 import { centreCamera, isoToScreen } from "./city-camera.js";
 import { CityScreen } from "./city.js";
@@ -84,6 +87,12 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
       onLaunch: (id, tx, ty) => {
         calls.push(`launch@${tx},${ty}`);
         const o = launchRocket(state, id, tx, ty, t);
+        state = o.state;
+        return o;
+      },
+      onClaim: (id, i, j) => {
+        calls.push(`claim ${i},${j}`);
+        const o = claimLand(state, id, i, j, t);
         state = o.state;
         return o;
       },
@@ -148,7 +157,12 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
     return e;
   };
   const option = (type: BuildingType): HTMLButtonElement => q(`.city-card[data-type="${type}"]`) as HTMLButtonElement;
-  return { host, screen, calls, frame, clickTile, clickAt, hoverAt, dragTiles, q, option, state: () => state };
+  /** Change the world between frames, as the simulation would. */
+  const set = (f: (s: SimState) => SimState): void => {
+    state = f(state);
+    frame();
+  };
+  return { host, screen, calls, frame, clickTile, clickAt, hoverAt, dragTiles, q, option, set, state: () => state };
 }
 
 beforeEach(() => {
@@ -420,8 +434,8 @@ describe("the build bar (at the user's request: cards along the bottom, as in Cl
     const page = mount();
     const dock = page.q(".city-dock");
     const cards = [...dock.querySelectorAll<HTMLElement>(".city-card")];
-    // Ten buildings, the corridor, the power cable and "connect everything".
-    expect(cards.length).toBe(13);
+    // Ten buildings, the corridor, the power cable, "connect everything" and "claim land".
+    expect(cards.length).toBe(14);
     expect(page.q(".city-panel").querySelector(".city-card")).toBeNull();
     for (const c of cards) {
       expect(c.querySelector("canvas.city-card-preview"), c.dataset["card"]).not.toBeNull();
@@ -533,5 +547,55 @@ describe("the build bar's scrollbar (the user: \"4x the height ... a grabbing ha
     thumb.dispatchEvent(new PointerEvent("pointerup", { clientX: 100, pointerId: 4 }));
     expect(getComputedStyle(thumb).cursor).toBe("grab");
     style.remove();
+  });
+});
+
+describe("claiming land (at the user's request: \"after a city reaches 200 habitats, I can claim new terrain\")", () => {
+  const people = (n: number) => (s: SimState): SimState => ({ ...s, settlements: s.settlements.map((c) => ({ ...c, population: n })) });
+  /** The ground's height at (x, y), in tiles, from the settlement's own world. */
+  const HQT = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, HEADQUARTERS_ENABLED: 1 });
+  const zAt = (page: ReturnType<typeof mount>, x: number, y: number): number => {
+    const w = worldOf(page.state().settlements[0]!, HQT);
+    return w.cornersM[(Math.round(y) + w.margin) * (w.size + 1) + Math.round(x) + w.margin]! / t.TILE_METRES;
+  };
+
+  it("offers the land card, says when more land opens, and claims the square clicked", () => {
+    const page = mount();
+    const card = (): HTMLElement => page.q('.city-card[data-card="claim"]');
+    expect(card().querySelector(".city-card-cost")?.textContent).toBe(`at ${t.CLAIM_FIRST_POPULATION} people`);
+    page.set(people(250));
+    expect(card().querySelector(".city-card-cost")?.textContent).toBe("1 to claim");
+    card().click();
+    page.frame();
+    expect(page.q(".city-hint").textContent).toMatch(/Click a green square/);
+    // Chunk (1, 0): east of the 32-tile square.
+    page.clickAt(48, 16, zAt(page, 48, 16));
+    expect(page.calls).toContain("claim 1,0");
+    expect(page.state().settlements[0]!.claims).toEqual([chunkKey(1, 0)]);
+    expect(page.q(".city-hint").textContent).toMatch(/Claimed/);
+  });
+
+  it("keeps the ground where it was on screen when a claim moves the grid's corner", () => {
+    const page = mount("city", {}, HQT);
+    page.set(people(350));
+    const hq = page.state().settlements[0]!.buildings[0]!;
+    expect(hq.type).toBe("headquarters");
+    const middle = { x: hq.tx + 2.5, y: hq.ty + 2.5 };
+    const z = zAt(page, middle.x, middle.y) + 1.2;
+    // West of the square: every tile index moves 32 east.
+    page.q('.city-card[data-card="claim"]').click();
+    page.clickAt(-16, 16, zAt(page, -16, 16));
+    expect(page.state().settlements[0]!.claims).toEqual([chunkKey(-1, 0)]);
+    expect(page.state().settlements[0]!.buildings[0]!.tx).toBe(hq.tx + 32);
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    page.frame();
+    // The same screen point still shows the headquarters: the camera moved with the ground.
+    page.clickAt(middle.x, middle.y, z);
+    expect(page.q(".city-inspector-name").textContent).toBe("Headquarters");
+    // And a claim now is of the chunk under the pointer, counted from the new corner:
+    // the square south of the first claim, where it is on screen (the tiles moved 32 east).
+    page.q('.city-card[data-card="claim"]').click();
+    page.clickAt(-16, 48, zAt(page, 16, 48));
+    expect(page.calls).toContain("claim -1,1");
   });
 });

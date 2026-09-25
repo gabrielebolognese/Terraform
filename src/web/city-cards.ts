@@ -21,7 +21,7 @@ export const PREVIEW_W = 112;
 export const PREVIEW_H = 80;
 
 /** What a card can show: a building, a corridor, a power cable, or "connect everything". */
-export type CardKind = BuildingType | "corridor" | "cable" | "connect";
+export type CardKind = BuildingType | "corridor" | "cable" | "connect" | "claim";
 
 /** A tiny flat scene: `tiles` square, with these buildings and road tiles. */
 export function previewView(id: string, tiles: number, buildings: readonly CityBuildingView[], corridorTiles: readonly (readonly [number, number])[], cableTiles: readonly (readonly [number, number])[] = []): CityView {
@@ -35,6 +35,9 @@ export function previewView(id: string, tiles: number, buildings: readonly CityB
     id: `preview:${id}`,
     kind: "city",
     tiles,
+    origin: { x: 0, y: 0 },
+    claimed: new Array<boolean>(tiles * tiles).fill(true),
+    claims: { chunk: 32, held: 0, allowed: 0, nextAt: null, open: [] },
     groundZ: new Array<number>(tiles * tiles).fill(0),
     corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0),
     world: { margin: 0, size: tiles, corners: new Array<number>((tiles + 1) * (tiles + 1)).fill(0), caves: [], rocks: [] },
@@ -92,6 +95,10 @@ export function previewScene(kind: CardKind): Shape[] {
     // A power cable from a solar array to a mine.
     return cityScene(previewView("cable", 6, cableBuildings(), [], [[2, 1], [3, 1], [4, 1], [4, 2], [4, 3]]), at);
   }
+  if (kind === "claim") {
+    // A chunk of ground on offer, outlined as claim mode shows it.
+    return cityScene(previewView("claim", 6, [], []), { ...at, claimable: [{ tx: 1, ty: 1, size: 4, ready: true, hover: true }] });
+  }
   if (kind === "connect") {
     // A dome and a greenhouse joined by a corridor, and the greenhouse's power cable.
     return cityScene(
@@ -139,7 +146,7 @@ export function drawPreview(canvas: HTMLCanvasElement, shapes: readonly Shape[])
 /** Every card's picture, drawn once. In a page with no 2D canvas (tests) they stay blank. */
 export function makePreviews(): Map<CardKind, HTMLCanvasElement> {
   const out = new Map<CardKind, HTMLCanvasElement>();
-  for (const kind of [...BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].buildable), "corridor", "cable", "connect"] as CardKind[]) {
+  for (const kind of [...BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].buildable), "corridor", "cable", "connect", "claim"] as CardKind[]) {
     const canvas = document.createElement("canvas");
     canvas.width = PREVIEW_W * 2;
     canvas.height = PREVIEW_H * 2;

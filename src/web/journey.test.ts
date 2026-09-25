@@ -90,6 +90,7 @@ function trip(frames: number, plan: ReadonlyMap<number, (j: Journey, now: number
       onSendRover: () => ({ ok: false, reason: "not in this test" }),
       onLaunch: () => ({ ok: false, reason: "not in this test" }),
       onConnect: () => ({ ok: false, reason: "not in this test", laid: 0 }),
+      onClaim: () => ({ ok: false, reason: "not in this test" }),
       onBack: () => undefined,
     },
     tuning,

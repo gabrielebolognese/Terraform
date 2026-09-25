@@ -14,7 +14,7 @@
  * placement is crossed out and the reason is written under the palette.
  */
 
-import { CITY_BACKGROUND, cityScene, rayHit } from "../render/city.js";
+import { CITY_BACKGROUND, CITY_TILE_PX, cityScene, groundPointAt, rayHit } from "../render/city.js";
 import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
@@ -49,6 +49,8 @@ export interface CityHooks {
   readonly onLaunch: (settlementId: string, tx: number, ty: number) => ActionOutcome;
   /** Lay (and pay for) the corridors and cables that join every building into one network of each. */
   readonly onConnect: (settlementId: string) => ActionOutcome & { readonly laid: number };
+  /** Claim chunk (i, j) of land - chunk coordinates from the founding square; the sim decides. */
+  readonly onClaim: (settlementId: string, i: number, j: number) => ActionOutcome;
   readonly onBack: () => void;
 }
 
@@ -189,6 +191,11 @@ export class CityScreen {
   private placing: BuildingType | null = null;
   /** The corridor or cable tool, when one is armed. */
   private paving: Layer | null = null;
+  /** Claim mode: the land on offer is drawn, and a click claims the chunk under the pointer. */
+  private claiming = false;
+  private claimHover: { i: number; j: number } | null = null;
+  /** The view's origin the camera was last placed against: a claim west or north moves every tile. */
+  private origin: { x: number; y: number } | null = null;
   /** A selected tile of ground: a rock a rover could break. */
   private selectedTile: { tx: number; ty: number } | null = null;
   /** Sim-years into the current substep, for smooth rovers and rockets. */
@@ -301,6 +308,9 @@ export class CityScreen {
     this.camera = null;
     this.placing = null;
     this.paving = null;
+    this.claiming = false;
+    this.claimHover = null;
+    this.origin = null;
     this.selectedTile = null;
     this.painting = null;
     this.selected = null;
@@ -320,7 +330,10 @@ export class CityScreen {
   /** Arm a building type for placement (or disarm with null). */
   arm(type: BuildingType | null): void {
     this.placing = type;
-    if (type !== null) this.paving = null;
+    if (type !== null) {
+      this.paving = null;
+      this.claiming = false;
+    }
     this.notice = null;
     if (type !== null) this.select(null);
     this.renderPalette(true);
@@ -332,11 +345,50 @@ export class CityScreen {
     this.paving = layer;
     if (layer !== null) {
       this.placing = null;
+      this.claiming = false;
       this.select(null);
     }
     this.notice = null;
     this.renderPalette(true);
     this.lastPanel = -Infinity;
+  }
+
+  /** Claim mode on or off: the land on offer is shown, and a click claims. */
+  armClaim(on: boolean): void {
+    this.claiming = on;
+    this.claimHover = null;
+    if (on) {
+      this.placing = null;
+      this.paving = null;
+      this.select(null);
+      this.selectedTile = null;
+    }
+    this.notice = null;
+    this.renderPalette(true);
+    this.lastPanel = -Infinity;
+  }
+
+  /** The chunk of land under a screen point, in chunk coordinates. */
+  chunkAt(px: number, py: number): { i: number; j: number } | null {
+    const view = this.view;
+    const cam = this.camera;
+    if (view === null || cam === null) return null;
+    const size = this.viewSize();
+    const iso = screenToIso(cam, size.w, size.h, px, py);
+    const p = groundPointAt(view, iso.sx, iso.sy);
+    const c = view.claims.chunk;
+    return { i: Math.floor((p.x + view.origin.x) / c), j: Math.floor((p.y + view.origin.y) / c) };
+  }
+
+  /** Claim the chunk under a screen point, and say what happened. */
+  private claimAt(at: { x: number; y: number }): void {
+    const id = this.settlementId;
+    const chunk = this.chunkAt(at.x, at.y);
+    if (id === null || chunk === null) return;
+    const outcome = this.hooks.onClaim(id, chunk.i, chunk.j);
+    this.notice = outcome.ok ? "Claimed. The city may build there now." : `Cannot claim: ${outcome.reason ?? "refused"}.`;
+    this.lastPanel = -Infinity;
+    this.renderPalette(true);
   }
 
   /** "Connect everything": the sim finds and prices the corridors and cables; this says what happened. */
@@ -365,7 +417,7 @@ export class CityScreen {
     // rocks or jobs - anything a click does - refreshes it at once, so the
     // player never waits for their click.
     let view = this.view;
-    const links = [settlement.corridors, settlement.cables, settlement.cleared, settlement.jobs.length];
+    const links = [settlement.corridors, settlement.cables, settlement.cleared, settlement.jobs.length, settlement.claims];
     const changed = settlement.buildings !== this.viewBuildings || links.some((l, i) => l !== this.viewLinks[i]);
     if (view === null || view.id !== settlement.id || changed || now - this.viewAt >= VIEW_MS) {
       view = cityView(settlement, env, this.tuning);
@@ -377,6 +429,16 @@ export class CityScreen {
     if (this.selected !== null && this.selected >= view.buildings.length) this.selected = null;
     const size = this.viewSize();
     if (this.camera === null) this.camera = centreCamera(view.tiles, size.w);
+    // A claim west or north moved the frame's corner, and every tile index with
+    // it: move the camera by as much, so the ground stays where it was on screen.
+    const o = this.origin;
+    if (o !== null && (o.x !== view.origin.x || o.y !== view.origin.y)) {
+      const dx = o.x - view.origin.x;
+      const dy = o.y - view.origin.y;
+      this.camera = { ...this.camera, cx: this.camera.cx + ((dx - dy) * CITY_TILE_PX.w) / 2, cy: this.camera.cy + ((dx + dy) * CITY_TILE_PX.h) / 2 };
+      this.hover = null;
+    }
+    this.origin = view.origin;
     this.draw(view, now, size);
     if (now - this.lastPanel >= 1000 / PANEL_HZ) {
       this.lastPanel = now;
@@ -393,7 +455,17 @@ export class CityScreen {
   }
 
   sceneOptions(now: number): CitySceneOptions {
-    return { time: now / 1000, selected: this.selected, ghost: this.ghost(), selectedTile: this.selectedTile, sinceYears: this.sinceYears };
+    const claimable = this.claimable();
+    return { time: now / 1000, selected: this.selected, ghost: this.ghost(), selectedTile: this.selectedTile, sinceYears: this.sinceYears, ...(claimable === undefined ? {} : { claimable }) };
+  }
+
+  /** In claim mode, the land on offer: ready if the city has the people for another claim. */
+  private claimable(): CitySceneOptions["claimable"] {
+    const view = this.view;
+    if (!this.claiming || view === null) return undefined;
+    const ready = view.claims.allowed > view.claims.held;
+    const h = this.claimHover;
+    return view.claims.open.map((c) => ({ tx: c.tx, ty: c.ty, size: view.claims.chunk, ready, hover: h !== null && h.i === c.i && h.j === c.j }));
   }
 
   private ghost(): CitySceneOptions["ghost"] {
@@ -442,7 +514,7 @@ export class CityScreen {
     this.where.textContent = `${s.kind === "city" ? "City" : s.kind === "metropolis" ? "Metropolis" : "Outpost"} - ${formatLatLon(s.lat, s.lon)} - ${formatMetres(view.baseElevationM)} on the planet`;
     const people =
       view.kind !== "outpost"
-        ? `${Math.floor(view.population)} of ${view.housing} people housed. `
+        ? `${Math.floor(view.population)} of ${view.housing} people housed. ${this.landWords(view)} `
         : "An outpost: no residents. ";
     const need =
       view.shortages.length === 0
@@ -466,7 +538,9 @@ export class CityScreen {
     this.placeThumb();
     const here = this.placing !== null && this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) : "";
     this.hint.textContent =
-      this.paving === "corridors"
+      this.claiming
+        ? this.notice ?? this.claimHint(view)
+        : this.paving === "corridors"
         ? this.notice ?? `Click or drag to lay corridor (${this.tuning.COST_CORRIDOR} material a tile): it carries water, oxygen, food and materials. Start on a corridor to take it up. Esc finishes.`
         : this.paving === "cables"
           ? this.notice ?? `Click or drag to lay power cable (${this.tuning.COST_CABLE} material a tile): it carries power. Start on a cable to take it up. Esc finishes.`
@@ -499,6 +573,23 @@ export class CityScreen {
             : `Its rocket is away: back in ${seconds(job.remaining, this.tuning)}.`;
       }
     }
+  }
+
+  /** The land the city holds, in words: its claims, and when the next opens. */
+  private landWords(view: CityView): string {
+    const c = view.claims;
+    if (c.nextAt === null) return "";
+    const held = c.held === 0 ? "Its founding land only" : `Its founding land and ${c.held} claim${c.held === 1 ? "" : "s"}`;
+    return c.allowed > c.held ? `${held} - it can claim more land now.` : `${held}; more land at ${c.nextAt} people.`;
+  }
+
+  private claimHint(view: CityView): string {
+    const c = view.claims;
+    if (c.nextAt === null) return "Only a city can claim land. Esc finishes.";
+    const now = c.allowed - c.held;
+    return now > 0
+      ? `Click a green square beside the city's land to claim it (${now} to claim now; each is ${c.chunk} x ${c.chunk} tiles). Esc finishes.`
+      : `The city needs ${c.nextAt} people to claim more land - it has ${Math.floor(view.population)}. Each claim is ${c.chunk} x ${c.chunk} tiles beside its own. Esc finishes.`;
   }
 
   /** The inspector for a rock: what it is, what breaking it brings, and how long a rover takes. */
@@ -538,7 +629,9 @@ export class CityScreen {
   private renderPalette(force: boolean): void {
     const s = this.settlement;
     if (s === null) return;
-    const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}`;
+    const view = this.view;
+    const land = view === null ? "" : `${view.claims.held}/${view.claims.allowed}`;
+    const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}|${this.claiming}|${land}`;
     if (!force && key === this.paletteKind) return;
     this.paletteKind = key;
     const cards = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].buildable && BUILDING_DEFS[type].kinds.includes(s.kind)).map((type) => {
@@ -554,7 +647,15 @@ export class CityScreen {
     cable.classList.add("city-cable");
     const connect = this.card("connect", "Connect all", `${Math.min(t.COST_CORRIDOR, t.COST_CABLE)}+ / tile`, false, null, () => this.connect());
     connect.classList.add("city-connect");
-    this.palette.replaceChildren(...cards, corridor, cable, connect);
+    const all: HTMLButtonElement[] = [...cards, corridor, cable, connect];
+    if (view !== null && view.claims.nextAt !== null) {
+      const c = view.claims;
+      const price = c.allowed > c.held ? `${c.allowed - c.held} to claim` : `at ${c.nextAt} people`;
+      const claim = this.card("claim", "Claim land", price, false, this.claiming, () => this.armClaim(!this.claiming));
+      claim.classList.add("city-claim");
+      all.push(claim);
+    }
+    this.palette.replaceChildren(...all);
     this.placeThumb();
     // A card rebuilt under the pointer keeps its tooltip.
     if (this.tipFor !== null) {
@@ -615,6 +716,16 @@ export class CityScreen {
           "Carries power, and only power: a mine needs a cable to a power plant.",
           "Buildings that share a wall are joined without one.",
           `Costs ${t.COST_CABLE} material a tile. Click or drag to lay it; start a drag on a cable to take it up.`,
+        ],
+      };
+    }
+    if (kind === "claim") {
+      return {
+        title: "Claim land",
+        lines: [
+          `A city claims land beside its own, ${t.CLAIM_CHUNK_TILES} x ${t.CLAIM_CHUNK_TILES} tiles at a time: the first at ${t.CLAIM_FIRST_POPULATION} people, and one more with every ${t.CLAIM_STEP_POPULATION} after.`,
+          "The world reaches further in every direction the city grows.",
+          "Free - land is earned by growing.",
         ],
       };
     }
@@ -740,6 +851,7 @@ export class CityScreen {
         const size = this.viewSize();
         const before = this.hover;
         this.hover = tileUnder(this.view, this.camera, size.w, size.h, local.x, local.y);
+        if (this.claiming) this.claimHover = this.chunkAt(local.x, local.y);
         // The hint names the ground under the pointer, so rewrite it when that changes.
         if (this.placing !== null && (before?.tx !== this.hover?.tx || before?.ty !== this.hover?.ty)) this.lastPanel = -Infinity;
       }
@@ -778,7 +890,8 @@ export class CityScreen {
     );
     globalThis.addEventListener?.("keydown", (e: KeyboardEvent) => {
       if (this.settlementId === null || e.key !== "Escape") return;
-      if (this.paving !== null) this.armLink(null);
+      if (this.claiming) this.armClaim(false);
+      else if (this.paving !== null) this.armLink(null);
       else if (this.placing !== null) this.arm(null);
       else this.select(null);
     });
@@ -796,6 +909,10 @@ export class CityScreen {
     const id = this.settlementId;
     if (view === null || cam === null || id === null) return;
     const size = this.viewSize();
+    if (this.claiming) {
+      this.claimAt(at);
+      return;
+    }
     if (this.placing !== null) {
       const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
       if (tile === null) return;

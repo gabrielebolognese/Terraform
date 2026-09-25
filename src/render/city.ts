@@ -70,6 +70,12 @@ export interface CitySceneOptions {
    * Presentation only; absent means 0.
    */
   readonly sinceYears?: number;
+  /**
+   * Claiming land: chunks on offer, each as its corner tile and edge, drawn
+   * over the ground - `ready` if the city has the people for it now, `hover`
+   * under the pointer. Absent or empty outside claim mode.
+   */
+  readonly claimable?: readonly { readonly tx: number; readonly ty: number; readonly size: number; readonly ready: boolean; readonly hover: boolean }[];
 }
 
 // ---------------------------------------------------------------------------
@@ -1836,7 +1842,7 @@ function groundKey(view: CityView): string {
   });
   // The green is drawn into the ground: a new shade of it redraws the ground,
   // in fiftieths so a slowly greening planet does not redraw every frame.
-  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}|${layer(view.corridors)}|${layer(view.cables)}|${rocks}|${Math.round(view.greenery * 50)}|${view.world.size}|${cornerSum}`;
+  return `${sum}|${weighted}|${view.steep.filter(Boolean).length}|${layer(view.corridors)}|${layer(view.cables)}|${rocks}|${Math.round(view.greenery * 50)}|${view.world.size}|${cornerSum}|${view.origin.x},${view.origin.y}`;
 }
 
 /** At low detail, open ground is drawn in patches this many tiles across. */
@@ -2204,18 +2210,23 @@ function drawRovers(list: readonly Rover[] | undefined, time: number, out: Shape
 }
 
 /**
- * The building boundary, drawn on the ground round the grid: short dashes,
- * following the ground's height, so it reads as a survey line rather than a
- * wall.
+ * The building boundary, drawn on the ground round the land the city holds:
+ * short dashes, following the ground's height, so it reads as a survey line
+ * rather than a wall. It runs wherever a held tile meets one that is not -
+ * round the founding square and every claim, as one outline.
  */
 function boundary(view: CityView): Shape[] {
   const n = view.tiles;
   const out: Shape[] = [];
   const colour: Rgba = { r: 1, g: 0.86, b: 0.55, a: 0.55 };
+  const held = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < n && y < n && view.claimed[y * n + x] === true;
   const edges: [number, number, number, number][] = [];
-  for (let k = 0; k < n; k += 1) {
-    if (k % 2 === 1) continue;
-    edges.push([k, 0, k + 1, 0], [k, n, k + 1, n], [0, k, 0, k + 1], [n, k, n, k + 1]);
+  for (let y = 0; y <= n; y += 1) {
+    for (let x = 0; x <= n; x += 1) {
+      // Dashes on every other tile along each axis, so the line is the same wherever it turns.
+      if (x < n && x % 2 === 0 && held(x, y) !== held(x, y - 1)) edges.push([x, y, x + 1, y]);
+      if (y < n && y % 2 === 0 && held(x, y) !== held(x - 1, y)) edges.push([x, y, x, y + 1]);
+    }
   }
   for (const [x0, y0, x1, y1] of edges) {
     const z0 = corner(view, x0, y0) + 0.02;
@@ -2225,6 +2236,80 @@ function boundary(view: CityView): Shape[] {
     out.push({ rings: [ringOf([[x0 - nx, y0 - ny, z0], [x1 - nx, y1 - ny, z1], [x1 + nx, y1 + ny, z1], [x0 + nx, y0 + ny, z0]])], fill: colour });
   }
   return out;
+}
+
+/**
+ * Land on offer in claim mode: each chunk a wash over its ground in 4-tile
+ * cells, following the hills, and an outline - green for a chunk the city
+ * can claim now, grey for one it must grow into; brighter under the pointer.
+ */
+function claimOverlay(view: CityView, chunks: NonNullable<CitySceneOptions["claimable"]>): Shape[] {
+  const out: Shape[] = [];
+  const z = heightAt(view, false);
+  for (const c of chunks) {
+    const base = c.ready ? rgb(0.45, 0.95, 0.55) : rgb(0.8, 0.8, 0.82);
+    const fill: Rgba = { ...base, a: c.hover ? 0.34 : 0.16 };
+    const step = 4;
+    for (let y = c.ty; y < c.ty + c.size; y += step) {
+      for (let x = c.tx; x < c.tx + c.size; x += step) {
+        const pts: [number, number][] = [[x, y], [x + step, y], [x + step, y + step], [x, y + step]];
+        out.push({ rings: [ringOf(pts.map(([px, py]) => [px, py, z(px, py) + 0.05] as V3))], fill });
+      }
+    }
+    const line: Rgba = { ...base, a: c.hover ? 0.95 : 0.6 };
+    for (let k = 0; k < c.size; k += 1) {
+      for (const [x0, y0, x1, y1] of [
+        [c.tx + k, c.ty, c.tx + k + 1, c.ty],
+        [c.tx + k, c.ty + c.size, c.tx + k + 1, c.ty + c.size],
+        [c.tx, c.ty + k, c.tx, c.ty + k + 1],
+        [c.tx + c.size, c.ty + k, c.tx + c.size, c.ty + k + 1],
+      ] as const) {
+        const nx = y0 === y1 ? 0 : 0.07;
+        const ny = y0 === y1 ? 0.07 : 0;
+        const z0 = z(x0, y0) + 0.06;
+        const z1 = z(x1, y1) + 0.06;
+        out.push({ rings: [ringOf([[x0 - nx, y0 - ny, z0], [x1 - nx, y1 - ny, z1], [x1 + nx, y1 + ny, z1], [x0 + nx, y0 + ny, z0]])], fill: line });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The point of the ground - the grid or the world beyond it - under an
+ * iso-pixel point, in grid tiles. Along the line of sight (the ground point
+ * plus s * (1, 1, 1), larger s nearer the viewer) the ground is where its
+ * height equals s, and what the viewer sees is the nearest such point: so
+ * march down from above the highest ground until the line is under it, then
+ * halve the step. (A first version iterated s = h(s) from 0, damped; on a
+ * slope near 1 it had not settled after 24 rounds - 0.19 tile out.) For
+ * claiming land, which may lie off the grid; `rayHit` is exact for the grid.
+ */
+export function groundPointAt(view: CityView, sx: number, sy: number): { x: number; y: number } {
+  const g = isoToGround(sx, sy);
+  const z = heightAt(view, false);
+  let top = -Infinity;
+  let bottom = Infinity;
+  for (const c of view.world.corners) {
+    if (c > top) top = c;
+    if (c < bottom) bottom = c;
+  }
+  if (!Number.isFinite(top)) return g;
+  const under = (s: number): boolean => z(g.x + s, g.y + s) >= s;
+  let hi = top + 0.01;
+  let lo = hi;
+  // Down in quarter tiles to the first point at or under the ground.
+  while (lo > bottom - 0.01 && !under(lo)) {
+    hi = lo;
+    lo -= 0.25;
+  }
+  if (!under(lo)) return { x: g.x + bottom, y: g.y + bottom };
+  for (let k = 0; k < 20; k += 1) {
+    const mid = (lo + hi) / 2;
+    if (under(mid)) lo = mid;
+    else hi = mid;
+  }
+  return { x: g.x + lo, y: g.y + lo };
 }
 
 /** Lift a solid by `dz` tiles: a building assembled at ground zero, stood on its own ground. */
@@ -2365,6 +2450,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       out.push({ rings: [groundStrip(mx, g.ty + 0.2, mx, g.ty + g.size - 0.2, 0.05, z)], fill: cross });
     }
   }
+  if (options.claimable !== undefined && options.claimable.length > 0) out.push(...claimOverlay(view, options.claimable));
   out.push(...badges);
   return out;
 }
