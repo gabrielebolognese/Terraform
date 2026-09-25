@@ -195,13 +195,28 @@ beforeEach(() => {
 describe("the city view", () => {
   it("offers only what this kind of settlement may build", () => {
     const city = mount("city");
-    expect(city.host.querySelectorAll(".city-card[data-type]").length).toBe(19);
+    expect(city.host.querySelectorAll(".city-card[data-type]").length).toBe(27);
     document.body.replaceChildren();
     const outpost = mount("outpost");
     const offered = [...outpost.host.querySelectorAll<HTMLElement>(".city-card[data-type]")].map((b) => b.dataset["type"]);
     expect(offered).not.toContain("habitat_dome");
     expect(offered).not.toContain("greenhouse");
-    expect(offered.length).toBe(11);
+    // With the five of the later ones an outpost may build: wind, the water tank, battery bank, freezer and materials depot.
+    expect(offered).not.toContain("park");
+    expect(offered).not.toContain("biosphere");
+    expect(offered.length).toBe(16);
+  });
+
+  it("shows wind turbines and parks locked until the planet is ready for them, and says when", () => {
+    const page = mount();
+    page.frame();
+    const card = (type: string) => page.host.querySelector<HTMLElement>(`.city-card[data-type="${type}"]`)!;
+    expect(card("wind_turbine").dataset["locked"]).toBe("true");
+    expect(card("wind_turbine").textContent).toContain("at 300 mbar");
+    expect(card("park").dataset["locked"]).toBe("true");
+    expect(card("park").textContent).toContain("when terraformed");
+    // Vacuity: a building the planet does not gate is not locked.
+    expect(card("water_tank").dataset["locked"]).toBeUndefined();
   });
 
   it("places the armed building where the player clicks, through the sim", () => {
@@ -464,7 +479,7 @@ describe("the build bar (at the user's request: cards along the bottom, as in Cl
     const dock = page.q(".city-dock");
     const cards = [...dock.querySelectorAll<HTMLElement>(".city-card")];
     // Nineteen buildings (eight more at the user's request); the connective tools are top right.
-    expect(cards.length).toBe(19);
+    expect(cards.length).toBe(27);
     expect(page.q(".city-panel").querySelector(".city-card")).toBeNull();
     for (const c of cards) {
       expect(c.querySelector("canvas.city-card-preview"), c.dataset["card"]).not.toBeNull();

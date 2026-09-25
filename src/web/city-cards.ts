@@ -126,6 +126,10 @@ export function previewScene(kind: CardKind): Shape[] {
       at,
     );
   }
+  if (kind === "wind_turbine") {
+    // Three in a row, as a wind farm stands: one alone is a mast and blades, mostly sky.
+    return cityScene(previewView(kind, 6, [building(kind, 0, 4, 0), building(kind, 2, 2, 1), building(kind, 4, 0, 2)], []), at);
+  }
   const size = BUILDING_DEFS[kind].footprint;
   return cityScene(previewView(kind, size, [building(kind, 0, 0)], []), at);
 }

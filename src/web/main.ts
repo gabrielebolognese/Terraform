@@ -17,7 +17,7 @@ import { TravelPrompt } from "./travel-prompt.js";
 import { ExampleMode } from "./example-mode.js";
 import { examplePlanet } from "../harness/example.js";
 import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.js";
-import type { FacilityType, SettlementKind, SimConfig, SimState } from "../sim/index.js";
+import type { FacilityType, HabitatChannels, SettlementKind, SimConfig, SimState } from "../sim/index.js";
 import {
   makeTuning,
   DEFAULT_TUNING,
@@ -308,12 +308,12 @@ const city = new CityScreen(
   root,
   {
     onPlace: (id: string, type: BuildingType, tx: number, ty: number) => {
-      const outcome = placeBuilding(state, id, type, tx, ty, tuning);
+      const outcome = placeBuilding(state, id, type, tx, ty, tuning, cityEnv ?? undefined);
       state = outcome.state;
       return outcome;
     },
     // A dry run of the same call: the returned state is dropped.
-    canPlace: (id: string, type: BuildingType, tx: number, ty: number) => placeBuilding(state, id, type, tx, ty, tuning),
+    canPlace: (id: string, type: BuildingType, tx: number, ty: number) => placeBuilding(state, id, type, tx, ty, tuning, cityEnv ?? undefined),
     onRemove: (id: string, tx: number, ty: number) => {
       const outcome = removeBuilding(state, id, tx, ty);
       state = outcome.state;
@@ -549,6 +549,8 @@ window.addEventListener("pagehide", () => {
 let lastReadout = 0;
 /** Net flow into liquid water at the last readout, m/yr: the sea level's rate reads it (Batch 23). */
 let liquidRate = 0;
+/** The planet as the cities see it this frame: what wind turbines and parks wait for (the same the city view shows). */
+let cityEnv: HabitatChannels | null = null;
 let lastSample = 0;
 
 /** Trailing window for the warming-rate readout, so it is not a per-frame jitter. */
@@ -590,6 +592,7 @@ function render(timestamp: number): void {
   const world = advanced.world;
   const env = world.env;
   const d = world.derived;
+  cityEnv = habitat(state.reservoirs, d, tuning, liquidRate);
   const throttled = scrubberThrottled(state, d, tuning);
   const progress = world.progress;
   const phase = world.phase;

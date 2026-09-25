@@ -141,6 +141,10 @@ const CELL_LIGHT = rgb(0.15, 0.25, 0.5);
 const RED_LIGHT = rgb(1, 0.28, 0.22);
 const GREEN_LIGHT = rgb(0.4, 1, 0.55);
 const GROW_LIGHT = rgb(0.95, 0.55, 0.85);
+/** A park's lawn, its paths, and its trees' bark. */
+const PARK_GRASS = rgb(0.4, 0.6, 0.3);
+const PATH = rgb(0.78, 0.72, 0.62);
+const BARK = rgb(0.4, 0.28, 0.2);
 
 /** Light from the far left and above: tops brightest, +y faces next, +x faces darkest. */
 const LIGHT: V3 = normalise([0.15, 0.45, 0.88]);
@@ -468,8 +472,24 @@ const TOPS: Readonly<Record<string, number>> = {
   research_forum: 2.2,
   medical_center: 1.5,
   industrial_command: 2.6,
+  wind_turbine: 4.6,
+  mega_mall: 1.95,
+  water_tank: 1.45,
+  battery_bank: 0.7,
+  freezer: 0.9,
+  materials_depot: 1.45,
+  park: 0.75,
+  biosphere: 2.1,
   headquarters: 1.7,
 };
+
+/** A park's and a biosphere's trees: where each stands in its footprint, and how wide its crown. */
+const PARK_TREES: readonly (readonly [number, number, number])[] = [
+  [0.5, 0.5, 0.26], [1.2, 0.8, 0.3], [0.7, 1.5, 0.22], [2.9, 0.5, 0.28], [3.5, 1.0, 0.24], [2.6, 2.7, 0.3], [3.4, 3.3, 0.26], [3.5, 2.4, 0.2], [1.9, 3.5, 0.24],
+];
+const BIOSPHERE_TREES: readonly (readonly [number, number, number])[] = [
+  [1.0, 1.0, 0.3], [1.6, 2.9, 0.34], [3.2, 1.0, 0.36], [3.9, 2.6, 0.3], [4.6, 1.3, 0.32], [5.2, 2.8, 0.28], [2.6, 1.6, 0.26],
+];
 
 export function buildingTop(type: string): number {
   return TOPS[type] ?? 1;
@@ -988,6 +1008,217 @@ function assemble(b: CityBuildingView, time: number, rocket: RocketState = null)
       ]);
       return k;
     }
+    case "wind_turbine": {
+      // A tall white tower on a round footing, the nacelle on top, three blades turning in the wind.
+      const hub = 3.3;
+      add(() => part(frustum(cx, cy, 0.62, 0.58, 0, 0.1, 20), CONCRETE));
+      add(() => part(frustum(cx, cy, 0.2, 0.1, 0.1, hub - 0.05, 16), PAINT_WHITE));
+      add(() => part(band(cx, cy, 0.15, 0.4, 0.08, 16), ACCENT));
+      add(() => part(box(cx - 0.3, cy - 0.1, hub - 0.1, cx + 0.14, cy + 0.1, hub + 0.1), PAINT_WHITE));
+      add(() => part(box(cx - 0.3, cy - 0.101, hub - 0.02, cx + 0.14, cy + 0.101, hub + 0.0), ACCENT));
+      add(() => part(box(x0 + 0.2, y0 + 1.3, 0.1, x0 + 0.55, y0 + 1.7, 0.36), METAL));
+      live(() => {
+        // The rotor faces +x; the blades turn in the y-z plane.
+        const a = on ? time * 2.2 * (0.6 + 0.4 * act) : 0.4;
+        const hx = cx + 0.2;
+        const out: Part[] = [];
+        for (let i = 0; i < 3; i += 1) {
+          const t0 = a + (i * 2 * Math.PI) / 3;
+          const tip = 1.25;
+          const w = 0.12;
+          const ux = Math.cos(t0);
+          const uz = Math.sin(t0);
+          out.push(
+            part(
+              sheet([
+                [hx, cy - w * uz, hub + w * ux],
+                [hx, cy + tip * ux - 0.05 * uz, hub + tip * uz + 0.05 * ux],
+                [hx, cy + tip * ux + 0.05 * uz, hub + tip * uz - 0.05 * ux],
+                [hx, cy + w * uz, hub - w * ux],
+              ]),
+              PAINT_WHITE,
+              { twoSided: true },
+            ),
+          );
+        }
+        out.push(part(dome(hx + 0.05, cy, hub - 0.08, 0.09, 10, 3), PAINT_WHITE));
+        return out;
+      });
+      live(() => part(box(cx - 0.28, cy - 0.03, hub + 0.1, cx - 0.22, cy + 0.03, hub + 0.15), on && Math.floor(time * 1.1) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
+      return k;
+    }
+    case "mega_mall": {
+      // 8 x 6: a great covered market - a long glass-roofed arcade down the
+      // middle, halls either side with their signs, a food court under three
+      // glass domes, and the entrance canopy at the front.
+      const d = b.depth ?? s;
+      add(() => part(box(x0 + 0.05, y0 + 0.05, 0, x0 + s - 0.05, y0 + d - 0.05, 0.08), CONCRETE));
+      add(() => [part(box(x0 + 0.3, y0 + 0.3, 0.08, x0 + s - 0.3, y0 + 2.4, 1.3), PAINT_WHITE), part(box(x0 + 0.3, y0 + d - 2.4, 0.08, x0 + s - 0.3, y0 + d - 0.3, 1.3), PAINT_WHITE)]);
+      add(() => [part(box(x0 + 0.28, y0 + 0.28, 1.1, x0 + s - 0.28, y0 + 2.42, 1.18).slice(1, 3), ACCENT), part(box(x0 + 0.28, y0 + d - 2.42, 1.1, x0 + s - 0.28, y0 + d - 0.28, 1.18).slice(1, 3), HAZARD)]);
+      add(() => part(box(x0 + 0.3, y0 + 2.4, 0.08, x0 + s - 0.3, y0 + d - 2.4, 0.9), CONCRETE));
+      add(() => part(vault(x0 + 0.3, x0 + s - 0.3, y0 + d / 2, 0.62, 0.9, 14), GLASS, { alpha: 0.5 }));
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 0; i <= 10; i += 1) out.push(part(vault(x0 + 0.3 + (i * (s - 0.6)) / 10, x0 + 0.33 + (i * (s - 0.6)) / 10, y0 + d / 2, 0.64, 0.9, 10), FRAME));
+        return out;
+      });
+      for (const u of [1.6, 4, 6.4]) {
+        add(() => part(dome(x0 + u, y0 + 1.35, 1.3, 0.62, 18, 5), GLASS, { alpha: 0.6 }));
+        add(() => part(domeRibs(x0 + u, y0 + 1.35, 1.3, 0.62, 8, [0.25, 0.5]), FRAME));
+      }
+      add(() => [...vent(x0 + 1.0, y0 + d - 1.9, 1.3, 0.3, 0.14), ...vent(x0 + 2.4, y0 + d - 1.9, 1.3, 0.3, 0.14), ...vent(x0 + 5.6, y0 + d - 1.9, 1.3, 0.3, 0.14)]);
+      live(() => {
+        const out: Part[] = [];
+        const lit = Math.round(act * 12);
+        for (let i = 0; i < 12; i += 1) {
+          const wx = x0 + 0.5 + i * 0.6;
+          out.push(part(box(wx, y0 + d - 0.3, 0.35, wx + 0.42, y0 + d - 0.29, 0.95), on && (i * 5) % 12 < lit ? WARM_LIGHT : GLASS, { emissive: on && (i * 5) % 12 < lit }));
+        }
+        for (let i = 0; i < 4; i += 1) out.push(part(box(x0 + s - 0.3, y0 + 0.6 + i * 0.45, 0.35, x0 + s - 0.29, y0 + 0.95 + i * 0.45, 0.95), on ? WARM_LIGHT : GLASS, { emissive: on }));
+        return out;
+      });
+      // The entrance canopy on its posts, and the sign over it.
+      add(() => [
+        part(box(x0 + s - 0.3, y0 + d / 2 - 0.9, 0.9, x0 + s + 0.0, y0 + d / 2 + 0.9, 0.96), DARK_METAL),
+        part(box(x0 + s - 0.06, y0 + d / 2 - 0.85, 0.08, x0 + s - 0.02, y0 + d / 2 - 0.8, 0.9), METAL),
+        part(box(x0 + s - 0.06, y0 + d / 2 + 0.8, 0.08, x0 + s - 0.02, y0 + d / 2 + 0.85, 0.9), METAL),
+      ]);
+      live(() => part(box(x0 + s - 0.02, y0 + d / 2 - 0.7, 1.0, x0 + s - 0.01, y0 + d / 2 + 0.7, 1.25), on ? mix(RED_LIGHT, WARM_LIGHT, 0.5 + 0.5 * Math.sin(time * 2)) : UNLIT, { emissive: true }));
+      return k;
+    }
+    case "water_tank": {
+      // A great round tank on a ring wall, banded, domed, with its ladder and pipe.
+      pad(0.06);
+      add(() => part(frustum(cx, cy, 0.84, 0.84, 0.06, 0.16, 24), CONCRETE));
+      add(() => part(frustum(cx, cy, 0.78, 0.78, 0.16, 1.15, 24), PAINT_WHITE));
+      add(() => [part(band(cx, cy, 0.785, 0.45, 0.07, 24), WATER), part(band(cx, cy, 0.785, 0.85, 0.07, 24), WATER)]);
+      add(() => part(dome(cx, cy, 1.15, 0.78, 24, 4).map((f) => ({ ...f, pts: f.pts.map(([x, y, z]) => [x, y, 1.15 + (z - 1.15) * 0.35] as V3) })), METAL));
+      add(() => [part(box(cx + 0.55, cy + 0.55, 0.16, cx + 0.6, cy + 0.6, 1.2), DARK_METAL), part(tube([cx - 0.7, cy + 0.5, 0.2], [x0 + 0.05, y0 + s - 0.2, 0.2], 0.05, 6), METAL)]);
+      return k;
+    }
+    case "battery_bank": {
+      // Two rows of battery cabinets, each with its status light, and the transformer at the end.
+      pad(0.05);
+      add(() => {
+        const out: Part[] = [];
+        for (const row of [0.3, 1.1]) for (let i = 0; i < 4; i += 1) out.push(part(box(x0 + 0.2 + i * 0.36, y0 + row, 0.05, x0 + 0.5 + i * 0.36, y0 + row + 0.55, 0.55), i % 2 === 0 ? PAINT_WHITE : METAL));
+        return out;
+      });
+      live(() => {
+        const out: Part[] = [];
+        for (const row of [0.3, 1.1]) for (let i = 0; i < 4; i += 1) out.push(part(box(x0 + 0.28 + i * 0.36, y0 + row + 0.55, 0.42, x0 + 0.42 + i * 0.36, y0 + row + 0.56, 0.48), on ? ((i + Math.floor(time)) % 4 < Math.max(1, Math.round(act * 4)) ? GREEN_LIGHT : COLD_LIGHT) : UNLIT, { emissive: true }));
+        return out;
+      });
+      add(() => [part(box(x0 + 1.7, y0 + 0.5, 0.05, x0 + 1.92, y0 + 1.5, 0.7), DARK_METAL), part(box(x0 + 1.92, y0 + 0.6, 0.3, x0 + 1.93, y0 + 1.4, 0.36), HAZARD)]);
+      return k;
+    }
+    case "freezer": {
+      // An insulated white cold store, its walls ribbed, fans spinning on the roof.
+      pad(0.05);
+      add(() => part(box(x0 + 0.15, y0 + 0.15, 0.05, x0 + 1.85, y0 + 1.85, 0.8), PAINT_WHITE));
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 1; i < 8; i += 1) {
+          out.push(part(box(x0 + 0.15 + i * 0.21, y0 + 1.85, 0.08, x0 + 0.17 + i * 0.21, y0 + 1.86, 0.78), FRAME));
+          out.push(part(box(x0 + 1.85, y0 + 0.15 + i * 0.21, 0.08, x0 + 1.86, y0 + 0.17 + i * 0.21, 0.78), FRAME));
+        }
+        return out;
+      });
+      add(() => part(box(x0 + 0.14, y0 + 0.14, 0.62, x0 + 1.86, y0 + 1.86, 0.68).slice(1, 3), COLD_LIGHT));
+      add(() => [part(box(x0 + 0.6, y0 + 1.86, 0.05, x0 + 1.2, y0 + 1.87, 0.55), METAL), part(box(x0 + 0.6, y0 + 1.87, 0.5, x0 + 1.2, y0 + 1.88, 0.53), HAZARD)]);
+      for (const [u, v] of [[0.6, 0.6], [1.4, 0.6], [0.6, 1.3], [1.4, 1.3]] as const) {
+        add(() => part(frustum(x0 + u, y0 + v, 0.22, 0.22, 0.8, 0.88, 12), METAL));
+        live(() => {
+          const a = on ? time * 7 + u + v : 0.2;
+          const out: Part[] = [];
+          for (let i = 0; i < 3; i += 1) {
+            const t0 = a + (i * 2 * Math.PI) / 3;
+            out.push(part(sheet([[x0 + u, y0 + v, 0.885], [x0 + u + 0.19 * Math.cos(t0), y0 + v + 0.19 * Math.sin(t0), 0.885], [x0 + u + 0.19 * Math.cos(t0 + 0.6), y0 + v + 0.19 * Math.sin(t0 + 0.6), 0.885]]), DARK_METAL, { twoSided: true }));
+          }
+          return out;
+        });
+      }
+      return k;
+    }
+    case "materials_depot": {
+      // A walled yard of stacked materials under a gantry crane.
+      pad(0.05, 0.05);
+      add(() => [
+        part(box(x0 + 0.05, y0 + 0.05, 0.05, x0 + s - 0.05, y0 + 0.15, 0.35), CONCRETE),
+        part(box(x0 + 0.05, y0 + 0.05, 0.05, x0 + 0.15, y0 + s - 0.05, 0.35), CONCRETE),
+      ]);
+      add(() => {
+        const out: Part[] = [];
+        for (let j = 0; j < 3; j += 1) {
+          for (let i = 0; i < 3; i += 1) {
+            const h = 0.2 + 0.18 * ((i * 7 + j * 3 + x0 + y0) % 4);
+            const px = x0 + 0.35 + i * 0.85;
+            const py = y0 + 0.35 + j * 0.85;
+            out.push(part(box(px, py, 0.05, px + 0.6, py + 0.6, 0.05 + h), (i + j) % 3 === 0 ? ACCENT : (i + j) % 3 === 1 ? CONCRETE : rgb(0.55, 0.42, 0.3)));
+          }
+        }
+        return out;
+      });
+      add(() => [
+        part(box(x0 + 0.2, y0 + 0.25, 0.05, x0 + 0.3, y0 + 0.35, 1.3), HAZARD),
+        part(box(x0 + 0.2, y0 + s - 0.35, 0.05, x0 + 0.3, y0 + s - 0.25, 1.3), HAZARD),
+        part(box(x0 + s - 0.3, y0 + 0.25, 0.05, x0 + s - 0.2, y0 + 0.35, 1.3), HAZARD),
+        part(box(x0 + s - 0.3, y0 + s - 0.35, 0.05, x0 + s - 0.2, y0 + s - 0.25, 1.3), HAZARD),
+        part(box(x0 + 0.2, y0 + 0.25, 1.3, x0 + s - 0.2, y0 + 0.35, 1.4), HAZARD),
+        part(box(x0 + 0.2, y0 + s - 0.35, 1.3, x0 + s - 0.2, y0 + s - 0.25, 1.4), HAZARD),
+      ]);
+      live(() => {
+        const u = on ? 0.5 + 0.5 * Math.sin(time * 0.6) : 0.5;
+        const bx = x0 + 0.4 + u * (s - 0.8);
+        return [part(box(bx - 0.08, y0 + 0.25, 1.28, bx + 0.08, y0 + s - 0.25, 1.42), DARK_METAL), part(tube([bx, cy, 1.28], [bx, cy, 0.9], 0.008, 4), DARK_METAL), part(box(bx - 0.12, cy - 0.12, 0.78, bx + 0.12, cy + 0.12, 0.9), ACCENT)];
+      });
+      return k;
+    }
+    case "park": {
+      // Open ground made green: grass, a pond, paths, trees and a bench.
+      add(() => part(box(x0 + 0.04, y0 + 0.04, 0, x0 + s - 0.04, y0 + s - 0.04, 0.04), on ? PARK_GRASS : LEAF_OFF));
+      add(() => [part(box(x0 + 0.04, cy - 0.12, 0.04, x0 + s - 0.04, cy + 0.12, 0.05), PATH), part(box(cx - 0.12, y0 + 0.04, 0.04, cx + 0.12, y0 + s - 0.04, 0.05), PATH)]);
+      add(() => part(frustum(x0 + 1.0, y0 + 2.95, 0.6, 0.6, 0.02, 0.055, 18), WATER));
+      for (const [u, v, r] of PARK_TREES) {
+        add(() => [
+          part(frustum(x0 + u, y0 + v, 0.05, 0.035, 0.04, 0.35, 6), BARK),
+          part(dome(x0 + u, y0 + v, 0.28, r, 10, 4).map((f) => ({ ...f, pts: f.pts.map(([x, y, z]) => [x, y, 0.28 + (z - 0.28) * 1.5] as V3) })), on ? LEAF : LEAF_OFF),
+        ]);
+      }
+      add(() => [part(box(x0 + 2.5, y0 + 1.45, 0.05, x0 + 2.9, y0 + 1.55, 0.14), BARK), part(box(x0 + 2.5, y0 + 1.53, 0.14, x0 + 2.9, y0 + 1.56, 0.24), BARK)]);
+      return k;
+    }
+    case "biosphere": {
+      // 6 x 4: a living world under glass - a great ribbed vault the length of
+      // it, forest and water inside, and the plant rooms at its ends.
+      const d = b.depth ?? s;
+      const my = y0 + d / 2;
+      add(() => part(box(x0 + 0.05, y0 + 0.05, 0, x0 + s - 0.05, y0 + d - 0.05, 0.1), CONCRETE));
+      add(() => part(box(x0 + 0.2, y0 + 0.2, 0.1, x0 + s - 0.2, y0 + d - 0.2, 0.22), PAINT_WHITE));
+      add(() => part(box(x0 + 0.5, y0 + 0.35, 0.22, x0 + s - 0.5, y0 + d - 0.35, 0.26), on ? PARK_GRASS : LEAF_OFF));
+      add(() => part(frustum(x0 + 2.2, my + 0.5, 0.55, 0.55, 0.22, 0.27, 16), WATER));
+      for (const [u, v, r] of BIOSPHERE_TREES) {
+        add(() => [
+          part(frustum(x0 + u, y0 + v, 0.05, 0.035, 0.26, 0.7, 6), BARK),
+          part(dome(x0 + u, y0 + v, 0.6, r, 10, 4).map((f) => ({ ...f, pts: f.pts.map(([x, y, z]) => [x, y, 0.6 + (z - 0.6) * 1.4] as V3) })), on ? LEAF : LEAF_OFF),
+        ]);
+      }
+      add(() => part(vault(x0 + 0.5, x0 + s - 0.5, my, d / 2 - 0.3, 0.22, 18), GLASS, { alpha: 0.4 }));
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 0; i <= 12; i += 1) out.push(part(vault(x0 + 0.5 + (i * (s - 1)) / 12, x0 + 0.53 + (i * (s - 1)) / 12, my, d / 2 - 0.28, 0.22, 12), FRAME));
+        out.push(part(tube([x0 + 0.5, my, 0.22 + d / 2 - 0.28], [x0 + s - 0.5, my, 0.22 + d / 2 - 0.28], 0.02, 6), FRAME));
+        return out;
+      });
+      add(() => [part(box(x0 + 0.1, my - 0.8, 0.1, x0 + 0.5, my + 0.8, 0.9), METAL), part(box(x0 + s - 0.5, my - 0.8, 0.1, x0 + s - 0.1, my + 0.8, 0.9), METAL)]);
+      add(() => part(box(x0 + s - 0.1, my - 0.3, 0.12, x0 + s - 0.09, my + 0.3, 0.6), RUBBER));
+      live(() => part(box(x0 + s - 0.09, my - 0.25, 0.65, x0 + s - 0.08, my + 0.25, 0.75), on ? GREEN_LIGHT : UNLIT, { emissive: true }));
+      if (on) for (let i = 0; i < 3; i += 1) {
+        const c = (((time * 0.3 + i / 3) % 1) + 1) % 1;
+        k.extras.push(puff(x0 + 0.3, my - 0.4 + i * 0.4, 0.9 + c * 0.8, 3, rgb(0.85, 1, 0.9), 0.4 * (1 - c)));
+      }
+      return k;
+    }
     case "headquarters": {
       // A 5 x 5 compound: the slab, the command block with its glass bridge,
       // the rover garage with three bays, a comms mast and dish.
@@ -1469,6 +1700,14 @@ const FAR_COLOUR: Readonly<Record<string, Rgb>> = {
   research_forum: rgb(0.748, 0.781, 0.772),
   medical_center: rgb(0.789, 0.7, 0.67),
   industrial_command: rgb(0.685, 0.686, 0.643),
+  wind_turbine: rgb(0.855, 0.867, 0.845),
+  mega_mall: rgb(0.744, 0.742, 0.699),
+  water_tank: rgb(0.613, 0.763, 0.833),
+  battery_bank: rgb(0.600, 0.664, 0.666),
+  freezer: rgb(0.750, 0.804, 0.813),
+  materials_depot: rgb(0.648, 0.539, 0.370),
+  park: rgb(0.433, 0.660, 0.400),
+  biosphere: rgb(0.521, 0.547, 0.555),
   headquarters: rgb(0.624, 0.548, 0.475),
 };
 
@@ -1622,6 +1861,59 @@ function assembleMedium(b: CityBuildingView): Kit {
       add(() => part(frustum(x0 + 3.55, y0 + 3.65, 0.72, 0.72, 0.08, 0.1, 12), HAZARD));
       add(() => part(box(x0 + 4.12, y0 + 0.52, 0.08, x0 + 4.28, y0 + 0.68, 1.4), METAL));
       break;
+    case "wind_turbine":
+      add(() => part(frustum(cx, cy, 0.62, 0.58, 0, 0.1, 10), CONCRETE));
+      add(() => part(frustum(cx, cy, 0.16, 0.08, 0.1, 3.25, 8), PAINT_WHITE));
+      add(() => part(box(cx - 0.3, cy - 0.1, 3.2, cx + 0.14, cy + 0.1, 3.4), PAINT_WHITE));
+      // The blades, still, as one pale disc edge-on.
+      add(() => part(sheet([[cx + 0.2, cy - 1.1, 3.0], [cx + 0.2, cy + 1.1, 3.6], [cx + 0.2, cy + 0.1, 4.4], [cx + 0.2, cy - 0.1, 2.2]]), PAINT_WHITE, { twoSided: true, alpha: 0.5 }));
+      break;
+    case "mega_mall": {
+      const d = b.depth ?? s;
+      add(() => part(box(x0 + 0.05, y0 + 0.05, 0, x0 + s - 0.05, y0 + d - 0.05, 0.08), CONCRETE));
+      add(() => [part(box(x0 + 0.3, y0 + 0.3, 0.08, x0 + s - 0.3, y0 + 2.4, 1.3), PAINT_WHITE), part(box(x0 + 0.3, y0 + d - 2.4, 0.08, x0 + s - 0.3, y0 + d - 0.3, 1.3), PAINT_WHITE)]);
+      add(() => [part(box(x0 + 0.28, y0 + 0.28, 1.1, x0 + s - 0.28, y0 + 2.42, 1.18).slice(1, 3), ACCENT), part(box(x0 + 0.28, y0 + d - 2.42, 1.1, x0 + s - 0.28, y0 + d - 0.28, 1.18).slice(1, 3), HAZARD)]);
+      add(() => part(vault(x0 + 0.3, x0 + s - 0.3, y0 + d / 2, 0.62, 0.9, 6), GLASS));
+      for (const u of [1.6, 4, 6.4]) add(() => part(dome(x0 + u, y0 + 1.35, 1.3, 0.62, 10, 3), GLASS));
+      break;
+    }
+    case "water_tank":
+      add(() => part(frustum(cx, cy, 0.84, 0.84, 0, 0.16, 12), CONCRETE));
+      add(() => part(frustum(cx, cy, 0.78, 0.78, 0.16, 1.15, 12), PAINT_WHITE));
+      add(() => part(band(cx, cy, 0.785, 0.45, 0.07, 12), WATER));
+      add(() => part(frustum(cx, cy, 0.78, 0.1, 1.15, 1.42, 12), METAL));
+      break;
+    case "battery_bank":
+      slab();
+      add(() => [part(box(x0 + 0.2, y0 + 0.3, 0.05, x0 + 1.6, y0 + 0.85, 0.55), PAINT_WHITE), part(box(x0 + 0.2, y0 + 1.1, 0.05, x0 + 1.6, y0 + 1.65, 0.55), METAL)]);
+      add(() => part(box(x0 + 1.7, y0 + 0.5, 0.05, x0 + 1.92, y0 + 1.5, 0.7), DARK_METAL));
+      break;
+    case "freezer":
+      slab();
+      add(() => part(box(x0 + 0.15, y0 + 0.15, 0.05, x0 + 1.85, y0 + 1.85, 0.8), PAINT_WHITE));
+      add(() => part(box(x0 + 0.14, y0 + 0.14, 0.62, x0 + 1.86, y0 + 1.86, 0.68).slice(1, 3), COLD_LIGHT));
+      add(() => part(frustum(x0 + 1.0, y0 + 1.0, 0.5, 0.5, 0.8, 0.88, 8), METAL));
+      break;
+    case "materials_depot":
+      slab();
+      add(() => [part(box(x0 + 0.35, y0 + 0.35, 0.05, x0 + 2.65, y0 + 2.65, 0.55), rgb(0.5, 0.4, 0.27))]);
+      add(() => [part(box(x0 + 0.2, y0 + 0.25, 0.05, x0 + 0.3, y0 + 0.35, 1.4), HAZARD), part(box(x0 + s - 0.3, y0 + s - 0.35, 0.05, x0 + s - 0.2, y0 + s - 0.25, 1.4), HAZARD), part(box(x0 + 0.2, y0 + s - 0.35, 1.3, x0 + s - 0.2, y0 + s - 0.25, 1.4), HAZARD)]);
+      break;
+    case "park":
+      add(() => part(box(x0 + 0.04, y0 + 0.04, 0, x0 + s - 0.04, y0 + s - 0.04, 0.04), on ? PARK_GRASS : LEAF_OFF));
+      add(() => part(frustum(x0 + 1.0, y0 + 2.95, 0.6, 0.6, 0.02, 0.055, 8), WATER));
+      for (const [u, v, r] of PARK_TREES) add(() => part(frustum(x0 + u, y0 + v, r, r * 0.3, 0.2, 0.2 + r * 2.4, 6), on ? LEAF : LEAF_OFF));
+      break;
+    case "biosphere": {
+      const d = b.depth ?? s;
+      add(() => part(box(x0 + 0.05, y0 + 0.05, 0, x0 + s - 0.05, y0 + d - 0.05, 0.22), PAINT_WHITE));
+      // Its forest seen through the ribbed glass, as one duller green (the glass and its shade darken it up close).
+      add(() => part(box(x0 + 0.5, y0 + 0.35, 0.22, x0 + s - 0.5, y0 + d - 0.35, 0.26), on ? mix(PARK_GRASS, DARK_METAL, 0.55) : LEAF_OFF));
+      for (const [u, v, r] of BIOSPHERE_TREES) add(() => part(frustum(x0 + u, y0 + v, r, r * 0.3, 0.5, 0.5 + r * 2.4, 6), on ? mix(LEAF, DARK_METAL, 0.55) : LEAF_OFF));
+      add(() => part(vault(x0 + 0.5, x0 + s - 0.5, y0 + d / 2, d / 2 - 0.3, 0.22, 8), GLASS, { alpha: 0.4 }));
+      add(() => [part(box(x0 + 0.1, y0 + d / 2 - 0.8, 0.1, x0 + 0.5, y0 + d / 2 + 0.8, 0.9), METAL), part(box(x0 + s - 0.5, y0 + d / 2 - 0.8, 0.1, x0 + s - 0.1, y0 + d / 2 + 0.8, 0.9), METAL)]);
+      break;
+    }
     case "spaceport":
       add(() => part(frustum(cx - 0.1, cy - 0.1, 1.32, 1.3, 0, 0.1, 16), CONCRETE));
       add(() => part(frustum(cx - 0.1, cy - 0.1, 0.2, 0.2, 0.1, 1.12, 8), PAINT_WHITE));
@@ -1641,10 +1933,13 @@ function assembleLow(b: CityBuildingView): Kit {
   const h = buildingTop(b.type) * (b.type === "solar_array" ? 0.5 : 0.62);
   const colour = FAR_COLOUR[b.type] ?? CONCRETE;
   const fill = b.operable ? colour : shade(colour, 0.55);
-  if (b.type === "habitat_dome" || b.type === "spaceport") {
+  if (b.type === "habitat_dome" || b.type === "spaceport" || b.type === "water_tank") {
     // Round buildings stay round: a square block covers their corners' ground.
-    const r = b.type === "habitat_dome" ? 1.3 : 1.25;
+    const r = b.type === "habitat_dome" ? 1.3 : b.type === "water_tank" ? 0.8 : 1.25;
     k.s(() => part(frustum(b.tx + b.size / 2, b.ty + b.size / 2, r, r * 0.55, 0, h, 8), fill));
+  } else if (b.type === "wind_turbine") {
+    // A turbine is a mast and its blades, not a block: a slim tapering column.
+    k.s(() => part(frustum(b.tx + 1, b.ty + 1, 0.42, 0.12, 0, buildingTop(b.type) * 0.8, 6), fill));
   } else {
     k.s(() => part(box(b.tx + inset, b.ty + inset, 0, b.tx + b.size - inset, b.ty + d - inset, h), fill));
   }
@@ -2348,6 +2643,7 @@ export function cityLiveChunks(view: CityView, options: CitySceneOptions, size: 
   }
   const rovers = roversAt(view, options.sinceYears ?? 0);
   for (const tile of rovers.keys()) out.add(chunkId(Math.floor((tile % view.tiles) / size), Math.floor(Math.floor(tile / view.tiles) / size)));
+  for (const tile of trainsAt(view, options.time).keys()) out.add(chunkId(Math.floor((tile % view.tiles) / size), Math.floor(Math.floor(tile / view.tiles) / size)));
   return out;
 }
 
@@ -2663,39 +2959,241 @@ const SKYSCRAPER_FAR_WALL = rgb(0.74, 0.657, 0.492);
 const RAIL_STEEL = rgb(0.58, 0.6, 0.63);
 const SLEEPER = rgb(0.3, 0.26, 0.22);
 
+/** How high a railway runs over a corridor it crosses, tiles above the ground: clear of the corridor's roof (0.2) and its lights. */
+export const BRIDGE_Z = 0.42;
+
+/**
+ * The height of the rail bed at a tile's middle above its ground (at the
+ * user's request: "bridges for passing rails over corridors"): up on the
+ * bridge where the line crosses a corridor, half-way up on the tiles either
+ * side of one - so the line climbs over the corridor and down again - and on
+ * the ground elsewhere.
+ */
+export function railDeck(view: CityView, tx: number, ty: number): number {
+  const n = view.tiles;
+  const crossing = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < n && y < n && view.rails?.[y * n + x] === true && view.corridors[y * n + x] === true;
+  if (crossing(tx, ty)) return BRIDGE_Z;
+  return SIDES.some(([dx, dy]) => crossing(tx + dx, ty + dy)) ? BRIDGE_Z / 2 : 0;
+}
+
+/** Where the rail bed is at a tile's middle, tiles: its ground and its deck. */
+function railZ(view: CityView, tx: number, ty: number): number {
+  return (view.groundZ[ty * view.tiles + tx] ?? 0) + railDeck(view, tx, ty);
+}
+
 /**
  * A railway tile (at the user's request: stations "create railways"): a bed
  * of ballast along each way the line runs - to the next rail, or into a
- * station - with two steel rails on sleepers up close.
+ * station - with two steel rails on sleepers up close. Each half runs from
+ * the tile's middle to its edge, sloping to meet the next tile half-way: over
+ * a corridor the line rides a deck on pillars.
  */
 function railDetail(view: CityView, tx: number, ty: number, z: number, quality: CityQuality): Part[] {
   const n = view.tiles;
   const stationAt = (x: number, y: number): boolean =>
     view.buildings.some((b) => b.type === "station" && x >= b.tx && y >= b.ty && x < b.tx + b.size && y < b.ty + (b.depth ?? b.size));
-  const sides = SIDES.map(([dx, dy]) => {
+  const deck = railDeck(view, tx, ty);
+  const zc = z + deck;
+  const out: Part[] = [];
+  const cx = tx + 0.5;
+  const cy = ty + 0.5;
+  let any = false;
+  SIDES.forEach(([dx, dy]) => {
     const x = tx + dx;
     const y = ty + dy;
-    if (x < 0 || y < 0 || x >= n || y >= n) return false;
-    return view.rails?.[y * n + x] === true || stationAt(x, y);
+    if (x < 0 || y < 0 || x >= n || y >= n) return;
+    const rail = view.rails?.[y * n + x] === true;
+    if (!rail && !stationAt(x, y)) return;
+    any = true;
+    // The edge half-way to the next tile's bed (a station's platform is level with this tile's).
+    const ze = rail ? (zc + railZ(view, x, y)) / 2 : zc;
+    const ex = cx + dx * 0.5;
+    const ey = cy + dy * 0.5;
+    /** A strip from the middle to the edge, `half` either side of the line at `off` across it, `lift` above the bed. */
+    const strip = (half: number, off: number, lift: number): V3[] => {
+      const ax = -dy;
+      const ay = dx;
+      return [
+        [cx + ax * (off - half), cy + ay * (off - half), zc + lift],
+        [ex + ax * (off - half), ey + ay * (off - half), ze + lift],
+        [ex + ax * (off + half), ey + ay * (off + half), ze + lift],
+        [cx + ax * (off + half), cy + ay * (off + half), zc + lift],
+      ];
+    };
+    if (deck > 0 || ze > z + 0.001) {
+      // The deck under the bed: its concrete side, down a little from the bed.
+      out.push(part(sheet(strip(0.3, 0, -0.06)), CONCRETE, { twoSided: true }));
+    }
+    out.push(part(sheet(strip(0.28, 0, 0.02)), BALLAST, { twoSided: true }));
+    if (quality === "low") return;
+    if (quality === "high") {
+      for (const f of [0.25, 0.75]) {
+        const sx = cx + (ex - cx) * f;
+        const sy = cy + (ey - cy) * f;
+        const sz = zc + (ze - zc) * f;
+        out.push(part(dx !== 0 ? box(sx - 0.05, ty + 0.24, sz + 0.02, sx + 0.05, ty + 0.76, sz + 0.05) : box(tx + 0.24, sy - 0.05, sz + 0.02, tx + 0.76, sy + 0.05, sz + 0.05), SLEEPER));
+      }
+    }
+    for (const off of [-0.14, 0.14]) out.push(part(sheet(strip(0.022, off, 0.08)), RAIL_STEEL, { twoSided: true }));
   });
-  const out: Part[] = [];
-  const bars = corridorBars(sides, tx, ty, 0.28);
-  for (const [x0, y0, x1, y1] of bars) out.push(part(sheet([[x0, y0, z + 0.02], [x1, y0, z + 0.02], [x1, y1, z + 0.02], [x0, y1, z + 0.02]]), BALLAST));
-  if (quality === "low") return out;
-  const [east, west, south, north] = sides as [boolean, boolean, boolean, boolean];
-  const along = (horizontal: boolean, a0: number, a1: number): void => {
-    // Sleepers across, then the two rails along.
-    for (let k = 0; k < 3; k += 1) {
-      const a = a0 + ((k + 0.5) * (a1 - a0)) / 3;
-      if (quality === "high") out.push(part(horizontal ? box(a - 0.05, ty + 0.24, z + 0.02, a + 0.05, ty + 0.76, z + 0.05) : box(tx + 0.24, a - 0.05, z + 0.02, tx + 0.76, a + 0.05, z + 0.05), SLEEPER));
+  if (!any) out.push(part(sheet([[tx + 0.22, ty + 0.22, zc + 0.02], [tx + 0.78, ty + 0.22, zc + 0.02], [tx + 0.78, ty + 0.78, zc + 0.02], [tx + 0.22, ty + 0.78, zc + 0.02]]), BALLAST));
+  if (deck >= BRIDGE_Z && quality !== "low") {
+    // The bridge's pillars, at the tile's corners - clear of the corridor, which runs down its middle.
+    for (const [px, py] of [[0.14, 0.14], [0.86, 0.14], [0.14, 0.86], [0.86, 0.86]] as const) {
+      out.push(part(box(tx + px - 0.04, ty + py - 0.04, z, tx + px + 0.04, ty + py + 0.04, zc - 0.05), CONCRETE));
     }
-    for (const off of [0.36, 0.64]) {
-      out.push(part(horizontal ? box(a0, ty + off - 0.02, z + 0.05, a1, ty + off + 0.02, z + 0.09) : box(tx + off - 0.02, a0, z + 0.05, tx + off + 0.02, a1, z + 0.09), RAIL_STEEL));
-    }
-  };
-  if (east || west) along(true, west ? tx : tx + 0.3, east ? tx + 1 : tx + 0.7);
-  if (north || south) along(false, north ? ty : ty + 0.3, south ? ty + 1 : ty + 0.7);
+  }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Trains (at the user's request: "working trains ... giant railways that
+// interconnect the extremes of the city, with trains passing ... maglev
+// trains on top"). Drawn, not simulated: each loop of line has trains spaced
+// along it, gliding round it with the render clock.
+// ---------------------------------------------------------------------------
+
+/** How far apart the trains on a line are, tiles; how fast they go, tiles a second; cars a train. */
+const TRAIN_SPACING = 56;
+const TRAIN_SPEED = 2.2;
+const TRAIN_CARS = 4;
+
+/** A loop a train runs round: the tiles in order, and each tile's rail height. */
+export interface TrainLine {
+  readonly tiles: readonly number[];
+}
+
+const trainLines = new WeakMap<readonly boolean[], TrainLine[]>();
+
+/**
+ * The lines trains run on, from the rails alone: a train goes straight on
+ * where two lines cross, keeps right where it meets a junction of three, follows
+ * the line round a bend, and turns back at a dead end (a station's platform,
+ * or the end of a spur). That rule sends exactly one way out for each way in,
+ * so every stretch of line, each way, lies on one loop, and a train comes
+ * round it back to where it began. (Straight on at every junction, the first
+ * version, never turned into a branch met side-on: 38% of a metropolis's
+ * railway saw no train, measured.) Loops shorter than a train's run are left
+ * empty.
+ */
+export function trainLinesOf(view: CityView): TrainLine[] {
+  const rails = view.rails;
+  if (rails === undefined) return [];
+  const kept = trainLines.get(rails);
+  if (kept !== undefined) return kept;
+  const n = view.tiles;
+  const at = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < n && y < n && rails[y * n + x] === true;
+  // Directions: 0 east, 1 south, 2 west, 3 north; turning right is one step on.
+  const DX = [1, 0, -1, 0];
+  const DY = [0, 1, 0, -1];
+  const next = (tile: number, dir: number): number => {
+    const x = tile % n;
+    const y = (tile - x) / n;
+    const open = (d: number): boolean => at(x + DX[d]!, y + DY[d]!);
+    const right = (dir + 1) % 4;
+    const left = (dir + 3) % 4;
+    const ways = [0, 1, 2, 3].filter(open).length;
+    if (ways === 4) return dir;
+    for (const d of ways === 3 ? [right, dir, left] : [dir, right, left]) if (open(d)) return d;
+    return (dir + 2) % 4;
+  };
+  const lines: TrainLine[] = [];
+  const done = new Uint8Array(n * n * 4);
+  for (let start = 0; start < n * n; start += 1) {
+    if (!rails[start]) continue;
+    const x = start % n;
+    const y = (start - x) / n;
+    for (let first = 0; first < 4; first += 1) {
+      if (!at(x + DX[first]!, y + DY[first]!) || done[start * 4 + first]) continue;
+      // Leave the tile that way: the loop is every (tile, heading-out) until it comes round again.
+      const path: number[] = [];
+      let tile = start;
+      let out = first;
+      while (!done[tile * 4 + out]) {
+        done[tile * 4 + out] = 1;
+        path.push(tile);
+        tile += DX[out]! + DY[out]! * n;
+        out = next(tile, out);
+      }
+      if (path.length >= TRAIN_CARS * 3) lines.push({ tiles: path });
+    }
+  }
+  trainLines.set(rails, lines);
+  return lines;
+}
+
+interface TrainCar {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+  /** Heading, radians. */
+  readonly angle: number;
+  /** The front car carries the nose. */
+  readonly lead: boolean;
+}
+
+/** The last frame's cars: a frame drawn chunk by chunk asks for them once a chunk. */
+let lastTrains: { view: CityView; time: number; cars: Map<number, TrainCar[]> } | null = null;
+
+/** Every train car at this moment, by the tile it is over. */
+export function trainsAt(view: CityView, time: number): Map<number, TrainCar[]> {
+  if (lastTrains !== null && lastTrains.view === view && lastTrains.time === time) return lastTrains.cars;
+  const out = new Map<number, TrainCar[]>();
+  lastTrains = { view, time, cars: out };
+  const n = view.tiles;
+  const centre = (tile: number): [number, number, number] => {
+    const x = tile % n;
+    const y = (tile - x) / n;
+    return [x + 0.5, y + 0.5, railZ(view, x, y)];
+  };
+  trainLinesOf(view).forEach((line, li) => {
+    const len = line.tiles.length;
+    const trains = Math.max(1, Math.floor(len / TRAIN_SPACING));
+    for (let k = 0; k < trains; k += 1) {
+      const head = time * TRAIN_SPEED + (k * len) / trains + li * 7.3;
+      for (let c = 0; c < TRAIN_CARS; c += 1) {
+        const s = (((head - c) % len) + len) % len;
+        const i0 = Math.floor(s);
+        const f = s - i0;
+        const a = centre(line.tiles[i0]!);
+        const b = centre(line.tiles[(i0 + 1) % len]!);
+        // A car on a dead end's turn stays on its tile.
+        const x = a[0] + (b[0] - a[0]) * f;
+        const y = a[1] + (b[1] - a[1]) * f;
+        const z = a[2] + (b[2] - a[2]) * f;
+        const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
+        const tile = Math.min(n - 1, Math.max(0, Math.floor(y))) * n + Math.min(n - 1, Math.max(0, Math.floor(x)));
+        const car: TrainCar = { x, y, z, angle: Number.isFinite(angle) ? angle : 0, lead: c === 0 };
+        const list = out.get(tile);
+        if (list === undefined) out.set(tile, [car]);
+        else list.push(car);
+      }
+    }
+  });
+  return out;
+}
+
+const MAGLEV_BODY = rgb(0.93, 0.94, 0.95);
+const MAGLEV_GLOW = rgb(0.35, 0.75, 1);
+
+/** A maglev car: floating a hand's breadth over the line on its blue glow, a white body, a band of windows, a nose on the front car. */
+function drawTrains(list: readonly TrainCar[] | undefined, time: number, out: Shape[]): void {
+  if (list === undefined) return;
+  for (const c of list) {
+    const parts: Part[] = [];
+    const base = c.z + 0.1;
+    parts.push(part(turnedBox(c.x, c.y, 0.42, 0.12, c.angle, base - 0.03, base), MAGLEV_GLOW, { emissive: true }));
+    parts.push(part(turnedBox(c.x, c.y, 0.44, 0.16, c.angle, base, base + 0.2), MAGLEV_BODY));
+    parts.push(part(turnedBox(c.x, c.y, 0.4, 0.162, c.angle, base + 0.1, base + 0.16), Math.floor(time * 0.5 + c.x) % 5 === 0 ? GLASS : WARM_LIGHT, { emissive: true }));
+    parts.push(part(turnedBox(c.x, c.y, 0.44, 0.1, c.angle, base + 0.2, base + 0.23), ACCENT));
+    if (c.lead) {
+      const nx = c.x + Math.cos(c.angle) * 0.44;
+      const ny = c.y + Math.sin(c.angle) * 0.44;
+      parts.push(part(turnedBox(nx + Math.cos(c.angle) * 0.06, ny + Math.sin(c.angle) * 0.06, 0.06, 0.13, c.angle, base, base + 0.12), MAGLEV_BODY));
+      parts.push(part(turnedBox(nx + Math.cos(c.angle) * 0.11, ny + Math.sin(c.angle) * 0.11, 0.015, 0.05, c.angle, base + 0.04, base + 0.08), rgb(1, 0.95, 0.75), { emissive: true }));
+    }
+    emitParts(parts, out);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -3014,6 +3512,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
   // drawn with the tile it is on, a rocket with its spaceport.
   const since = options.sinceYears ?? 0;
   const rovers = quality !== "low" && drawLive ? roversAt(view, since) : null;
+  const trains = quality !== "low" && drawLive ? trainsAt(view, options.time) : null;
   const rockets = rocketsAt(view, since);
   const vp = options.viewport;
   cache.world ??= worldCells(view, quality);
@@ -3047,6 +3546,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       if (!drawStatic) {
         // Live alone: the rovers on this ground.
         if (rovers !== null) for (let y = o.ty; y < o.ty + o.h; y += 1) for (let x = o.tx; x < o.tx + o.w; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
+        if (trains !== null) for (let y = o.ty; y < o.ty + o.h; y += 1) for (let x = o.tx; x < o.tx + o.w; x += 1) drawTrains(trains.get(y * n + x), options.time, out);
         continue;
       }
       // Ground never animates: its shapes are built once per layout and kept
@@ -3054,7 +3554,13 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       const kept = ground.get(i);
       if (kept !== undefined) {
         for (const shape of kept) out.push(shape);
-        if (rovers !== null && o.w === 1) drawRovers(rovers.get(o.ty * n + o.tx), options.time, out);
+        // Whatever moves over it: a patch of merged ground further away carries its rovers and trains too.
+        for (let y = o.ty; y < o.ty + o.h; y += 1) {
+          for (let x = o.tx; x < o.tx + o.w; x += 1) {
+            if (rovers !== null) drawRovers(rovers.get(y * n + x), options.time, out);
+            if (trains !== null) drawTrains(trains.get(y * n + x), options.time, out);
+          }
+        }
         continue;
       }
       const start = out.length;
@@ -3062,6 +3568,12 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
         // A patch of open ground further away, through its four corners.
         groundMesh(o.tx, o.ty, o.w, o.w, gridZ, view.greenery, null, out);
         ground.set(i, out.slice(start));
+        for (let y = o.ty; y < o.ty + o.h; y += 1) {
+          for (let x = o.tx; x < o.tx + o.w; x += 1) {
+            if (rovers !== null) drawRovers(rovers.get(y * n + x), options.time, out);
+            if (trains !== null) drawTrains(trains.get(y * n + x), options.time, out);
+          }
+        }
         continue;
       }
       const z = view.groundZ[o.ty * n + o.tx] ?? 0;
@@ -3082,6 +3594,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       if (view.rails?.[o.ty * n + o.tx] === true) emitParts(railDetail(view, o.tx, o.ty, z, quality), out);
       ground.set(i, out.slice(start));
       if (rovers !== null) drawRovers(rovers.get(o.ty * n + o.tx), options.time, out);
+      if (trains !== null) drawTrains(trains.get(o.ty * n + o.tx), options.time, out);
       continue;
     }
     const b = view.buildings[o.building]!;

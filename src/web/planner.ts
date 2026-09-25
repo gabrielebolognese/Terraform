@@ -34,8 +34,10 @@ export interface PlannerHooks {
 export type PlannerTool = "pan" | "zone" | "erase" | "corridors" | "cables" | "rails";
 
 /** What each building reads as on the map, by what it does. */
-export const MAP_COLOURS: Readonly<Record<"home" | "power" | "industry" | "civic" | "port" | "hq", readonly [number, number, number]>> = {
+export const MAP_COLOURS: Readonly<Record<"home" | "green" | "power" | "industry" | "civic" | "commerce" | "port" | "hq", readonly [number, number, number]>> = {
   home: [92, 156, 230],
+  green: [86, 186, 96],
+  commerce: [226, 96, 90],
   power: [236, 200, 64],
   industry: [214, 124, 60],
   civic: [176, 110, 214],
@@ -45,6 +47,9 @@ export const MAP_COLOURS: Readonly<Record<"home" | "power" | "industry" | "civic
 
 export function mapKind(type: BuildingType): keyof typeof MAP_COLOURS {
   if (type === "headquarters") return "hq";
+  if (type === "park" || type === "biosphere") return "green";
+  if (type === "mega_mall") return "commerce";
+  if (type === "wind_turbine" || type === "battery_bank") return "power";
   if (type === "habitat_dome" || type === "skyscraper" || type === "greenhouse" || type === "algae_reactor" || type === "medical_center") return "home";
   if (type === "solar_array" || type === "geothermal_plant" || type === "reactor") return "power";
   if (type === "spaceport" || type === "station") return "port";
@@ -290,7 +295,7 @@ export class PlannerScreen {
     side.append(tabRow, this.zoneList, this.chartBox, this.overview);
 
     const legend = el("div", "planner-legend");
-    for (const [label, c] of [["Homes and life support", MAP_COLOURS.home], ["Power", MAP_COLOURS.power], ["Industry", MAP_COLOURS.industry], ["Research", MAP_COLOURS.civic], ["Port and stations", MAP_COLOURS.port], ["Headquarters", MAP_COLOURS.hq]] as const) {
+    for (const [label, c] of [["Homes and life support", MAP_COLOURS.home], ["Parks and biospheres", MAP_COLOURS.green], ["Power", MAP_COLOURS.power], ["Industry and stores", MAP_COLOURS.industry], ["Research", MAP_COLOURS.civic], ["Commerce", MAP_COLOURS.commerce], ["Port and stations", MAP_COLOURS.port], ["Headquarters", MAP_COLOURS.hq]] as const) {
       const item = el("span", "planner-legend-item", label);
       const sw = el("span", "planner-swatch");
       sw.style.background = `rgb(${c.join(",")})`;

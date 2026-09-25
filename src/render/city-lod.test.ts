@@ -186,8 +186,12 @@ describe("levels of detail", () => {
     expect(cityScene(open, at("low")).length).toBeLessThan(0.25 * cityScene(open, at("medium")).length);
   });
 
-  it("animate only up close: steam and moving parts cost nothing far away", () => {
-    for (const quality of ["medium", "low"] as const) expect(firstDifference(cityScene(metropolis, at(quality, 1)), cityScene(metropolis, at(quality, 2.3))), `${quality}: first shape that moved`).toBe(-1);
+  it("animate only up close: steam and moving parts cost nothing far away - but the trains still run at middle distance", () => {
+    // The trains are what the user asked to see passing through the city: drawn from middle distance in.
+    const still: CityView = { ...metropolis, rails: metropolis.corridors.map(() => false) };
+    for (const quality of ["medium", "low"] as const) expect(firstDifference(cityScene(still, at(quality, 1)), cityScene(still, at(quality, 2.3))), `${quality}: first shape that moved`).toBe(-1);
+    expect(firstDifference(cityScene(metropolis, at("low", 1)), cityScene(metropolis, at("low", 2.3))), "low, with its trains").toBe(-1);
+    expect(firstDifference(cityScene(metropolis, at("medium", 1)), cityScene(metropolis, at("medium", 2.3))), "medium, with its trains").not.toBe(-1);
     // And there is something to leave out: the full city does move.
     expect(firstDifference(cityScene(metropolis, at("high", 1)), cityScene(metropolis, at("high", 2.3)))).not.toBe(-1);
   });

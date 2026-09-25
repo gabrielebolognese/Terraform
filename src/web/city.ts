@@ -754,7 +754,8 @@ export class CityScreen {
     if (s === null) return;
     const view = this.view;
     const land = view === null ? "" : `${view.claims.held}/${view.claims.allowed}`;
-    const unlocked = BUILDING_TYPES.filter((type) => s.population >= BUILDING_DEFS[type].minPopulation(this.tuning)).length;
+    const env = this.env;
+    const unlocked = BUILDING_TYPES.filter((type) => s.population >= BUILDING_DEFS[type].minPopulation(this.tuning) && (env === null || BUILDING_DEFS[type].locked(env, this.tuning) === null)).length;
     const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}|${this.claiming}|${this.levelling}|${land}|${unlocked}`;
     if (!force && key === this.paletteKind) return;
     this.paletteKind = key;
@@ -766,6 +767,10 @@ export class CityScreen {
       if (needs > 0 && s.population < needs) {
         c.dataset["locked"] = "true";
         c.append(el("span", "city-card-short", `at ${needs.toLocaleString("en")} people`));
+      } else if (env !== null && BUILDING_DEFS[type].locked(env, this.tuning) !== null) {
+        // One the planet is not ready for: the air too thin for wind, not yet open for a park.
+        c.dataset["locked"] = "true";
+        c.append(el("span", "city-card-short", type === "wind_turbine" ? `at ${this.tuning.WIND_MIN_PRESSURE} mbar` : "when terraformed"));
       }
       c.dataset["type"] = type;
       return c;
@@ -909,6 +914,8 @@ export class CityScreen {
     if (cap.length > 0) lines.push(`Stores more ${cap.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")}.`);
     if (def.research(t) > 0) lines.push(`Research: ${def.research(t)} credits a year while it runs.`);
     if (def.minPopulation(t) > 0) lines.push(`Needs a city of ${def.minPopulation(t).toLocaleString("en")} people.`);
+    const locked = this.env === null ? null : def.locked(this.env, t);
+    if (locked !== null) lines.push(`Not yet: ${locked}.`);
     lines.push(`${def.footprint} x ${def.depth} tiles. Costs ${def.cost(t)} materials.`);
     if (t.BUILD_TIME_ENABLED > 0) lines.push(`A rover builds it in ${Math.round(buildYears(kind, t) * 10)} month${Math.round(buildYears(kind, t) * 10) === 1 ? "" : "s"} at the site (${seconds(buildYears(kind, t), t)}), plus the drive.`);
     lines.push(`Upgrades to level ${maxLevel(kind, t)}, each +${Math.round(t.LEVEL_BONUS * 100)}% on the last.`);
