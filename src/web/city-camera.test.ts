@@ -16,6 +16,7 @@ import {
   isoToScreen,
   pan,
   QUALITY_HIGH_TILES,
+  TILE_W,
   qualityFor,
   screenToIso,
   tileAt,
@@ -39,6 +40,23 @@ describe("the city camera", () => {
     expect(cam.zoom).toBe(CITY_ZOOM_MAX);
     for (let i = 0; i < 100; i += 1) cam = zoomAt(cam, 1 / 1.5, W / 2, H / 2, W, H, TILES);
     expect(cam.zoom).toBe(CITY_ZOOM_MIN);
+  });
+
+  it("zooms a metropolis out until the whole of it, and the world round it, fits a screen - an ordinary city no further than ever", () => {
+    // The user: "allow to zoom out even more, so that I can look at all the city from above".
+    const METRO = 992;
+    const MARGIN = 48;
+    let cam = centreCamera(METRO, W);
+    for (let i = 0; i < 200; i += 1) cam = zoomAt(cam, 1 / 1.5, W / 2, H / 2, W, H, METRO, MARGIN);
+    // All the way out: the world's whole width on 1,440 pixels.
+    expect(cam.zoom * (METRO + 2 * MARGIN) * TILE_W).toBeCloseTo(1440, 6);
+    expect(cam.zoom).toBeLessThan(CITY_ZOOM_MIN / 5);
+    // Panning there keeps it there: the pan's clamp knows the world too.
+    expect(pan(cam, 30, 20, METRO, MARGIN).zoom).toBe(cam.zoom);
+    // An ordinary city's world (128 tiles) already fits at CITY_ZOOM_MIN.
+    let small = centreCamera(96, W);
+    for (let i = 0; i < 100; i += 1) small = zoomAt(small, 1 / 1.5, W / 2, H / 2, W, H, 96, 16);
+    expect(small.zoom).toBe(CITY_ZOOM_MIN);
   });
 
   it("zooms about the pointer: the ground under it stays under it", () => {

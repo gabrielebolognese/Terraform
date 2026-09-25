@@ -25,8 +25,23 @@ export interface CityCamera {
 export const CITY_ZOOM_MIN = 0.15;
 export const CITY_ZOOM_MAX = 3;
 
-export function clampZoom(zoom: number): number {
-  return Math.min(CITY_ZOOM_MAX, Math.max(CITY_ZOOM_MIN, zoom));
+/**
+ * How far out the camera may go for a world `tiles` + 2 `margin` across (at
+ * the user's request: "allow to zoom out even more, so I can look at all the
+ * city from above"): CITY_ZOOM_MIN while that shows the whole world on a
+ * 1,440-pixel screen, as it does an ordinary city's; for a bigger world - a
+ * metropolis's 1,000 tiles - as far as it takes to fit it on one.
+ */
+export function minZoomFor(tiles: number, margin = 0): number {
+  const across = (tiles + 2 * margin) * TILE_W;
+  return Math.min(CITY_ZOOM_MIN, WHOLE_WORLD_PX / across);
+}
+
+/** The screen width a whole world must fit, zoomed all the way out. */
+const WHOLE_WORLD_PX = 1440;
+
+export function clampZoom(zoom: number, tiles = 0, margin = 0): number {
+  return Math.min(CITY_ZOOM_MAX, Math.max(minZoomFor(tiles, margin), zoom));
 }
 
 /**
@@ -61,7 +76,7 @@ export function clampCamera(cam: CityCamera, tiles: number, margin = 0): CityCam
   return {
     cx: Math.min(b.maxX, Math.max(b.minX, cam.cx)),
     cy: Math.min(b.maxY, Math.max(b.minY, cam.cy)),
-    zoom: clampZoom(cam.zoom),
+    zoom: clampZoom(cam.zoom, tiles, margin),
   };
 }
 
@@ -86,7 +101,7 @@ export function pan(cam: CityCamera, dxPx: number, dyPx: number, tiles: number, 
 
 /** Zoom by `factor`, keeping the ground under (px, py) where it is - until a clamp says otherwise. */
 export function zoomAt(cam: CityCamera, factor: number, px: number, py: number, viewW: number, viewH: number, tiles: number, margin = 0): CityCamera {
-  const zoom = clampZoom(cam.zoom * factor);
+  const zoom = clampZoom(cam.zoom * factor, tiles, margin);
   const before = screenToIso(cam, viewW, viewH, px, py);
   const next = { cx: before.sx - (px - viewW / 2) / zoom, cy: before.sy - (py - viewH / 2) / zoom, zoom };
   return clampCamera(next, tiles, margin);
