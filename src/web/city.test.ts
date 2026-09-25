@@ -125,6 +125,7 @@ function mount(kind: "city" | "outpost" = "city", stores: Record<string, number>
         return o;
       },
       onBack: () => calls.push("back"),
+      onPlanner: () => calls.push("planner"),
     },
     t,
   );
@@ -319,6 +320,12 @@ describe("the city view", () => {
     const page = mount();
     (page.q(".city-back") as HTMLButtonElement).click();
     expect(page.calls).toEqual(["back"]);
+  });
+
+  it("opens the city planner, the second mode (at the user's request)", () => {
+    const page = mount();
+    (page.q(".city-planner") as HTMLButtonElement).click();
+    expect(page.calls).toEqual(["planner"]);
   });
 });
 

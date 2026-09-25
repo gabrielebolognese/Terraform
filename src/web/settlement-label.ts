@@ -7,6 +7,8 @@ import type { Settlement } from "../sim/index.js";
 
 /** "City 1", "Outpost 2" - the number is the one in the settlement's id. */
 export function settlementLabel(s: Settlement): string {
+  // Named at founding or in the planner (at the user's request), the name is the label.
+  if (s.name !== "") return s.name;
   const n = /(\d+)$/.exec(s.id)?.[1] ?? "?";
   return `${s.kind === "city" ? "City" : s.kind === "metropolis" ? "Metropolis" : "Outpost"} ${n}`;
 }

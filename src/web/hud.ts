@@ -16,7 +16,7 @@
  */
 
 import type { Derived, FacilityType, Phase, ProgressAxes, Reservoirs, Settlement, SettlementKind, Tuning } from "../sim/index.js";
-import { FACILITY_LIST, livingWorldShortfall, PHASE_INFO, TARGETS, siteElevation } from "../sim/index.js";
+import { FACILITY_LIST, livingWorldShortfall, NAME_MAX, PHASE_INFO, TARGETS, siteElevation } from "../sim/index.js";
 import type { Advice } from "./guidance.js";
 import type { BuildRow } from "./build.js";
 import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.js";
@@ -68,7 +68,8 @@ export interface HudHooks {
   /** Switch a lever off or back on. */
   readonly onToggleLever: (type: FacilityType) => void;
   /** Start choosing a site for a new settlement (micro §2.3 step 1), or stop. */
-  readonly onFound: (kind: SettlementKind) => void;
+  /** Found one of this kind, called this (empty for its number; at the user's request: "when creating a city, I can name it"). */
+  readonly onFound: (kind: SettlementKind, name: string) => void;
   readonly onCancelFound: () => void;
   /** Go down to a settlement's city view (Batch 20; Batch 21 makes it a journey). */
   readonly onOpenSettlement: (id: string) => void;
@@ -461,13 +462,23 @@ export class Hud {
     const places = el("section", "hud-settlements");
     places.append(el("h2", "hud-section-title", "Settlements"));
     const foundRow = el("div", "hud-found-row");
+    const foundName = el("input", "hud-found-name");
+    foundName.type = "text";
+    foundName.maxLength = NAME_MAX;
+    foundName.placeholder = "Name (optional)";
+    foundName.setAttribute("aria-label", "The new settlement's name");
+    const found = (kind: SettlementKind): void => {
+      const name = foundName.value;
+      foundName.value = "";
+      hooks.onFound(kind, name);
+    };
     const foundCity = el("button", "hud-found", "Found a city");
     foundCity.type = "button";
-    foundCity.addEventListener("click", () => hooks.onFound("city"));
+    foundCity.addEventListener("click", () => found("city"));
     const foundOutpost = el("button", "hud-found", "Found an outpost");
     foundOutpost.type = "button";
-    foundOutpost.addEventListener("click", () => hooks.onFound("outpost"));
-    foundRow.append(foundCity, foundOutpost);
+    foundOutpost.addEventListener("click", () => found("outpost"));
+    foundRow.append(foundName, foundCity, foundOutpost);
     this.foundButtons = [foundCity, foundOutpost];
     this.foundPrompt = el("div", "hud-found-prompt");
     this.foundPrompt.setAttribute("role", "status");

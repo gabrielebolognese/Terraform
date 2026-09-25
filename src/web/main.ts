@@ -10,6 +10,7 @@ import { readWorld } from "./readout.js";
 import { buildRows, orderDelta } from "./build.js";
 import { Globe } from "./globe.js";
 import { CityScreen } from "./city.js";
+import { PlannerScreen } from "./planner.js";
 import { WorldDriver } from "./driver.js";
 import { Journey } from "./journey.js";
 import { TravelPrompt } from "./travel-prompt.js";
@@ -53,6 +54,12 @@ import {
   liquidWaterRate,
   nextSubstepFlows,
   seaLevel,
+  renameSettlement,
+  editZone,
+  deleteZone,
+  levelZone,
+  planLinks,
+  cancelPlans,
 } from "../sim/index.js";
 import type { BuildingType } from "../sim/index.js";
 import { AUTOSAVE_INTERVAL_MS, READOUT_HZ, SPARK_CAPACITY, SPARK_HZ } from "./config.js";
@@ -257,10 +264,10 @@ let foundingSite: string | null = null;
 globe.onPickHover = (site) => {
   foundingSite = site === null ? null : `${formatLatLon(site.lat, site.lon)}, ${formatMetres(siteElevation(site.lat, site.lon, tuning))} on the planet`;
 };
-function startFounding(kind: SettlementKind): void {
+function startFounding(kind: SettlementKind, name = ""): void {
   founding = kind;
   globe.beginPick(({ lat, lon }) => {
-    const outcome = foundSettlement(state, kind, lat, lon, tuning);
+    const outcome = foundSettlement(state, kind, lat, lon, tuning, name);
     state = outcome.state;
     orderMessage = outcome.ok ? null : `Cannot found: ${outcome.reason ?? "refused"}`;
     founding = null;
@@ -284,7 +291,7 @@ const hud: Hud = new Hud(
     // The advised lever now has a row in the HUD's own build panel; the
     // instruments are a debug view and stay closed.
     onFocusLever: (type: FacilityType) => hud.focusLever(type),
-    onFound: (kind: SettlementKind) => startFounding(kind),
+    onFound: (kind: SettlementKind, name: string) => startFounding(kind, name),
     onCancelFound: () => cancelFounding(),
     // The HUD's button is itself the confirmation: straight into the journey.
     onOpenSettlement: (id: string) => journey.goTo(id, performance.now()),
@@ -360,6 +367,38 @@ const city = new CityScreen(
       return outcome;
     },
     onBack: () => journey.goToOrbit(performance.now()),
+    onPlanner: () => {
+      const id = journey.resident;
+      if (id === null) return;
+      planner.open(id);
+      city.root.hidden = true;
+    },
+  },
+  tuning,
+);
+
+/**
+ * The city planner (at the user's request), the second mode after the city
+ * view: the settlement from above, zones, drawn links, and its record. It
+ * stands in for the city view while open; the world runs on beneath both.
+ */
+const plannerAct = <O extends { state: SimState }>(outcome: O): O => {
+  state = outcome.state;
+  return outcome;
+};
+const planner = new PlannerScreen(
+  root,
+  {
+    onRename: (id, name) => plannerAct(renameSettlement(state, id, name)),
+    onZone: (id, edit) => plannerAct(editZone(state, id, edit, tuning)),
+    onDeleteZone: (id, zone) => plannerAct(deleteZone(state, id, zone)),
+    onLevelZone: (id, zone) => plannerAct(levelZone(state, id, zone, tuning)),
+    onPlan: (id, layer, tiles) => plannerAct(planLinks(state, id, layer, tiles, tuning)),
+    onCancelPlans: (id) => plannerAct(cancelPlans(state, id)),
+    onCityView: () => {
+      planner.close();
+      city.root.hidden = false;
+    },
   },
   tuning,
 );
@@ -380,6 +419,7 @@ const journey = new Journey(
     },
     unload: () => {
       city.close();
+      planner.close();
       globe.setPaused(false);
       for (const node of [stage, hudRoot, inspectorRoot, instrumentsToggle, hint]) node.hidden = false;
     },
@@ -562,6 +602,7 @@ function render(timestamp: number): void {
   if (resident !== null) {
     const here = state.settlements.find((s) => s.id === resident);
     if (here === undefined) journey.abort();
+    else if (planner.openId === resident) planner.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp);
     else city.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp, clock.pendingYears);
   }
 

@@ -61,6 +61,8 @@ export interface CityHooks {
   /** Claim chunk (i, j) of land - chunk coordinates from the founding square; the sim decides. */
   readonly onClaim: (settlementId: string, i: number, j: number) => ActionOutcome;
   readonly onBack: () => void;
+  /** The city planner, the second mode (at the user's request); absent, no button. */
+  readonly onPlanner?: () => void;
 }
 
 /** Whether a tile of the view carries a link of this layer. */
@@ -260,7 +262,11 @@ export class CityScreen {
     const head = el("header", "city-head");
     this.title = el("h2", "city-title", "");
     this.where = el("div", "city-where", "");
-    head.append(button("city-back", "Back to orbit", () => this.hooks.onBack()), this.title, this.where);
+    const modes = el("div", "city-modes");
+    modes.append(button("city-back", "Back to orbit", () => this.hooks.onBack()));
+    const onPlanner = this.hooks.onPlanner;
+    if (onPlanner !== undefined) modes.append(button("city-planner", "City planner", () => onPlanner()));
+    head.append(modes, this.title, this.where);
 
     this.status = el("p", "city-status", "");
     this.status.setAttribute("role", "status");

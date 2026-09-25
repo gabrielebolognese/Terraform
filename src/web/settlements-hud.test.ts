@@ -27,7 +27,7 @@ function mount() {
       onToggleLever: () => undefined,
       onSeed: () => undefined,
       onFocusLever: () => undefined,
-      onFound: (kind) => calls.push(`found:${kind}`),
+      onFound: (kind, name) => calls.push(`found:${kind}${name === "" ? "" : `:${name}`}`),
       onCancelFound: () => calls.push("cancel"),
       onOpenSettlement: (id) => calls.push(`open:${id}`),
     },
@@ -80,6 +80,19 @@ describe("founding a settlement from the HUD", () => {
     city!.click();
     outpost!.click();
     expect(page.calls).toEqual(["found:city", "found:outpost"]);
+  });
+
+  it("names it from the field beside the buttons (at the user's request), and empties the field for the next", () => {
+    const page = mount();
+    page.show(marsStart(), null);
+    const name = page.q<HTMLInputElement>(".hud-found-name");
+    name.value = "New Olympus";
+    page.root.querySelector<HTMLButtonElement>(".hud-found")!.click();
+    expect(page.calls).toEqual(["found:city:New Olympus"]);
+    expect(name.value).toBe("");
+    // A named settlement is listed by its name.
+    page.show(foundSettlement(marsStart(), "city", -0.72, 1.31, t, "New Olympus").state, null);
+    expect(page.q(".hud-settlement-text").textContent).toBe("New Olympus41.3°S 75.1°E - 1,604 m");
   });
 
   it("tells the player what to do while choosing a site, and how to back out", () => {
