@@ -1,20 +1,19 @@
 /**
  * The example planet's metropolises (at the user's request): first "3x
- * bigger; a little more order, in quarters; the city full besides some parts,
- * very very wide, with ALL structures, including a railway station, rovers
- * going back and forth"; then "the metropolis has an 8x8 grid - far too
- * small, do it 24x24; clear of all the stones; the center 8x8 remains as it
- * is, with stations and railways; in the outer parts 2x2, 3x3 and 4x4
- * clusters, at least one or two big land claims, spaced, where in the spaces
- * there are many corridors; one zone for solar panels; wind turbines,
- * mega-malls, storage; deep city planning zones with different colours and
- * purposes; giant railways that interconnect the extremes of the city".
+ * bigger; in quarters; very very wide, with ALL structures, a railway
+ * station, rovers going back and forth"; then "24x24, clear of all the
+ * stones; the centre as it is, with stations and railways; clusters of 2x2,
+ * 3x3 and 4x4, big land claims; many corridors in the spaces; a solar zone,
+ * wind, malls, storage; zones of colours and purposes; giant railways joining
+ * the city's extremes"; then "no empty land - in each empty tile 3 to 25
+ * structures, none of them homes, factories and standalone depots, so the
+ * city feels full; less square - a blob, same space, a more natural shape".
  */
 
 import { describe, expect, it } from "vitest";
 
 import type { Settlement } from "../sim/index.js";
-import { BUILDING_DEFS, BUILDING_TYPES, DEFAULT_TUNING, chunkKey, frameOf, makeTuning, networkOf, rocksOf, withRails } from "../sim/index.js";
+import { BUILDING_DEFS, BUILDING_TYPES, DEFAULT_TUNING, chunkKey, frameOf, groundOf, makeTuning, networkOf, rocksOf, withRails } from "../sim/index.js";
 import { examplePlanet } from "./example.js";
 
 /** The browser's tuning, as the example is built for it. */
@@ -35,57 +34,86 @@ const { state } = examplePlanet(DEFAULT_TUNING, game);
 const metropolises = state.settlements.filter((s) => s.kind === "metropolis");
 const C = game.CLAIM_CHUNK_TILES;
 
-/** Row-major: which tiles are under a building. */
-function under(s: Settlement, n: number): Uint8Array {
-  const g = new Uint8Array(n * n);
-  for (const b of s.buildings) {
+/** Row-major: which building (index) is on each tile, or -1. */
+function owners(s: Settlement, n: number): Int32Array {
+  const g = new Int32Array(n * n).fill(-1);
+  s.buildings.forEach((b, i) => {
     const def = BUILDING_DEFS[b.type];
-    for (let y = b.ty; y < b.ty + def.depth; y += 1) for (let x = b.tx; x < b.tx + def.footprint; x += 1) g[y * n + x] = 1;
-  }
+    for (let y = b.ty; y < b.ty + def.depth; y += 1) for (let x = b.tx; x < b.tx + def.footprint; x += 1) g[y * n + x] = i;
+  });
   return g;
 }
 
-/** The quarters: the founding square and its ring, eleven chunks a side, in the middle of the frame. */
-function quarters(s: Settlement): { lo: number; hi: number } {
-  const n = frameOf(s, game).n;
-  const side = s.base + 2 * C;
-  return { lo: (n - side) / 2, hi: (n + side) / 2 };
+/** The quarters: the founding square and its ring of claimed land, eleven chunks a side, wherever the frame puts them. */
+function quarters(s: Settlement): { x0: number; y0: number; side: number } {
+  const f = frameOf(s, game);
+  return { x0: -f.x0 - C, y0: -f.y0 - C, side: s.base + 2 * C };
 }
 
-/** Each chunk of the frame outside the quarters: claimed or wild, and how much of it is built on and laid with corridor. */
-function outerChunks(s: Settlement): { u: number; v: number; claimed: boolean; built: number; corridor: number }[] {
+/** The city's chunks: which of the frame's are its own, and a tally of what stands on each (by its corner). */
+function chunks(s: Settlement): { cu: number; held: (u: number, v: number) => boolean; count: Int32Array } {
   const f = frameOf(s, game);
-  const n = f.n;
-  const u8 = under(s, n);
-  const corr = new Uint8Array(n * n);
-  for (const k of s.corridors) corr[(k >> 10) * n + (k & 1023)] = 1;
+  const cu = f.n / C;
   const claims = new Set(s.claims);
-  const { lo, hi } = quarters(s);
-  const out: { u: number; v: number; claimed: boolean; built: number; corridor: number }[] = [];
-  for (let v = 0; v < n / C; v += 1) {
-    for (let u = 0; u < n / C; u += 1) {
-      if (u * C >= lo && u * C < hi && v * C >= lo && v * C < hi) continue;
-      let built = 0;
-      let corridor = 0;
-      for (let y = v * C; y < (v + 1) * C; y += 1) for (let x = u * C; x < (u + 1) * C; x += 1) {
-        built += u8[y * n + x]!;
-        corridor += corr[y * n + x]!;
-      }
-      out.push({ u, v, claimed: claims.has(chunkKey(u + f.x0 / C, v + f.y0 / C)), built: built / (C * C), corridor: corridor / (C * C) });
-    }
-  }
-  return out;
+  const held = (u: number, v: number): boolean => {
+    const i = u + f.x0 / C;
+    const j = v + f.y0 / C;
+    return claims.has(chunkKey(i, j)) || (i >= 0 && j >= 0 && i < s.base / C && j < s.base / C);
+  };
+  const count = new Int32Array(cu * cu);
+  for (const b of s.buildings) count[Math.floor(b.ty / C) * cu + Math.floor(b.tx / C)]! += 1;
+  return { cu, held, count };
 }
+
+const zone = (s: Settlement, name: RegExp) => s.zones.filter((z) => name.test(z.name));
+const DISTRICT = /^(Commerce|Agriculture|Industry|Port|Research|Suburb|Storage|Parkland) \d/;
 
 describe("the example's metropolises", () => {
-  it("are three, 992 tiles a side - the quarters' eleven chunks in the middle, ten more each side - with tens of thousands of buildings", () => {
-    // Measured: 992 tiles (31 chunks) a side, 21,029 to 21,236 buildings (were 352 tiles and ~6,400).
-    // A side of 24 of the old 44-tile quarters, 1,056 tiles, would not fit a frame: tile keys stop at 1,024.
+  it("are three, some 620 chunks each - the old city's space - with tens of thousands of buildings", () => {
+    // Measured: 619-620 chunks held (the square before held 689), 18,750 to 19,438 buildings, in a frame of 29 chunks.
     expect(metropolises).toHaveLength(3);
     for (const s of metropolises) {
-      expect(frameOf(s, game).n, s.id).toBe(31 * C);
-      expect(s.buildings.length, s.id).toBeGreaterThan(18_000);
+      const { cu, held } = chunks(s);
+      let count = 0;
+      for (let v = 0; v < cu; v += 1) for (let u = 0; u < cu; u += 1) if (held(u, v)) count += 1;
+      expect(count, s.id).toBeGreaterThan(560);
+      expect(count, s.id).toBeLessThan(720);
+      expect(frameOf(s, game).n, s.id).toBeLessThanOrEqual(31 * C);
+      expect(s.buildings.length, s.id).toBeGreaterThan(16_000);
     }
+  });
+
+  it("are shaped as a town grows, not a square: a blob, its box's corners wild, every one its own", () => {
+    // Measured: 76-82% of the box round them held (a square: 100%), none of its four corners, 13-16
+    // different widths from row to row; no two the same shape.
+    const shapes: string[] = [];
+    for (const s of metropolises) {
+      const { cu, held } = chunks(s);
+      let minU = cu;
+      let maxU = -1;
+      let minV = cu;
+      let maxV = -1;
+      let count = 0;
+      const widths = new Set<number>();
+      for (let v = 0; v < cu; v += 1) {
+        let w = 0;
+        for (let u = 0; u < cu; u += 1) {
+          if (!held(u, v)) continue;
+          w += 1;
+          count += 1;
+          minU = Math.min(minU, u);
+          maxU = Math.max(maxU, u);
+          minV = Math.min(minV, v);
+          maxV = Math.max(maxV, v);
+        }
+        if (w > 0) widths.add(w);
+      }
+      expect(count / ((maxU - minU + 1) * (maxV - minV + 1)), `${s.id}: share of its box`).toBeLessThan(0.88);
+      for (const [u, v] of [[minU, minV], [maxU, minV], [minU, maxV], [maxU, maxV]] as const) expect(held(u, v), `${s.id}: corner ${u},${v}`).toBe(false);
+      expect(widths.size, `${s.id}: widths`).toBeGreaterThanOrEqual(10);
+      shapes.push(s.claims.join(","));
+    }
+    expect(new Set(shapes).size).toBe(3);
   });
 
   it("have every structure a metropolis may build", () => {
@@ -95,18 +123,56 @@ describe("the example's metropolises", () => {
     }
   });
 
-  it("keep their quarters in the middle: straight streets the whole way across, with no building on them", () => {
+  it("leave no land empty: every chunk with room holds three buildings or more; the works filling them are no homes, 25 at most", () => {
+    // The user: "in each empty tile there has to be between 3 and 25 structures, where none is habitative".
+    // Measured: every chunk with a third of its ground off the avenues and not too steep holds 3 or more (the
+    // thinnest left: 27% buildable); 251-277 chunks of works, 25 at most in one, no home among them.
     for (const s of metropolises) {
       const n = frameOf(s, game).n;
-      const u = under(s, n);
-      const { lo, hi } = quarters(s);
-      const side = hi - lo;
+      const { cu, held, count } = chunks(s);
+      const g = groundOf(s, game);
+      const avenue = new Set(zone(s, /^Avenues/).flatMap((z) => z.tiles));
+      let roomy = 0;
+      for (let v = 0; v < cu; v += 1) {
+        for (let u = 0; u < cu; u += 1) {
+          if (!held(u, v)) continue;
+          let free = 0;
+          for (let y = v * C; y < (v + 1) * C; y += 1) for (let x = u * C; x < (u + 1) * C; x += 1) if (!avenue.has(y * 1024 + x) && !g.steep[y * n + x]) free += 1;
+          if (free < (C * C) / 3) continue;
+          roomy += 1;
+          expect(count[v * cu + u], `${s.id}: chunk ${u},${v}`).toBeGreaterThanOrEqual(3);
+        }
+      }
+      // Measured: 455-463 chunks with room.
+      expect(roomy, `${s.id}: vacuity`).toBeGreaterThan(400);
+      const works = new Set(zone(s, /^Works and stores$/).flatMap((z) => z.tiles));
+      const inWorks = s.buildings.filter((b) => works.has(b.ty * 1024 + b.tx));
+      expect(inWorks.length, `${s.id}: works`).toBeGreaterThan(2000);
+      expect(inWorks.filter((b) => BUILDING_DEFS[b.type].housing(game) > 0), `${s.id}: homes among the works`).toEqual([]);
+      const perChunk = new Map<number, number>();
+      for (const b of inWorks) {
+        const c = Math.floor(b.ty / C) * cu + Math.floor(b.tx / C);
+        perChunk.set(c, (perChunk.get(c) ?? 0) + 1);
+      }
+      expect(Math.max(...perChunk.values()), `${s.id}: most works in a chunk`).toBeLessThanOrEqual(25);
+      // Mostly factories and stores.
+      const factories = ["regolith_mine", "storage_depot", "materials_depot", "water_tank", "battery_bank", "freezer", "water_extractor", "geothermal_plant", "reactor"];
+      expect(inWorks.filter((b) => factories.includes(b.type)).length / inWorks.length, s.id).toBeGreaterThan(0.75);
+    }
+  });
+
+  it("keep their quarters in the middle: straight streets the whole way across, with no building on them", () => {
+    // Measured: 18-19 rows and 12-13 columns of boulevard across the quarters, the works among them notwithstanding.
+    for (const s of metropolises) {
+      const n = frameOf(s, game).n;
+      const own = owners(s, n);
+      const q = quarters(s);
       const lines = (across: boolean): number => {
         let groups = 0;
         let inGroup = false;
-        for (let a = lo + side / 8; a < lo + (7 * side) / 8; a += 1) {
+        for (let a = q.side / 8; a < (7 * q.side) / 8; a += 1) {
           let empty = true;
-          for (let b = lo + side / 8; b < lo + (7 * side) / 8 && empty; b += 1) if (u[across ? a * n + b : b * n + a]) empty = false;
+          for (let b = q.side / 8; b < (7 * q.side) / 8 && empty; b += 1) if (own[across ? (q.y0 + a) * n + q.x0 + b : (q.y0 + b) * n + q.x0 + a]! >= 0) empty = false;
           if (empty && !inGroup) groups += 1;
           inGroup = empty;
         }
@@ -117,24 +183,17 @@ describe("the example's metropolises", () => {
     }
   });
 
-  it("keep their quarters busy, and laid out like a motherboard: blocks wall to wall, a trace to each block", () => {
-    // Measured in the quarters: 23% of the ground built on; 0.19 tiles of corridor
-    // for each tile under a building (a street two deep round each, as once: 2.97).
+  it("keep their quarters busy and laid out like a motherboard, and the whole city on one network of each", () => {
     for (const s of metropolises) {
       const n = frameOf(s, game).n;
-      const u = under(s, n);
-      const { lo, hi } = quarters(s);
+      const own = owners(s, n);
+      const q = quarters(s);
       let covered = 0;
-      for (let y = lo; y < hi; y += 1) for (let x = lo; x < hi; x += 1) covered += u[y * n + x]!;
-      expect(covered / (hi - lo) ** 2, s.id).toBeGreaterThan(0.18);
-      const inside = s.corridors.filter((k) => (k & 1023) >= lo && (k & 1023) < hi && k >> 10 >= lo && k >> 10 < hi).length;
+      for (let y = q.y0; y < q.y0 + q.side; y += 1) for (let x = q.x0; x < q.x0 + q.side; x += 1) if (own[y * n + x]! >= 0) covered += 1;
+      expect(covered / q.side ** 2, s.id).toBeGreaterThan(0.18);
+      const inside = s.corridors.filter((k) => (k & 1023) >= q.x0 && (k & 1023) < q.x0 + q.side && k >> 10 >= q.y0 && k >> 10 < q.y0 + q.side).length;
       expect(inside / covered, s.id).toBeLessThan(0.4);
       let touching = 0;
-      const own = new Int32Array(n * n).fill(-1);
-      s.buildings.forEach((b, i) => {
-        const d = BUILDING_DEFS[b.type];
-        for (let y = b.ty; y < b.ty + d.depth; y += 1) for (let x = b.tx; x < b.tx + d.footprint; x += 1) own[y * n + x] = i;
-      });
       s.buildings.forEach((b, i) => {
         const d = BUILDING_DEFS[b.type];
         const edge: [number, number][] = [];
@@ -144,58 +203,38 @@ describe("the example's metropolises", () => {
       });
       // Measured 0.95: the wind farm's turbines stand apart.
       expect(touching / s.buildings.length, s.id).toBeGreaterThan(0.9);
-      // And one network of each over the whole city: every building on its corridors and cables.
       expect(networkOf(s.buildings, s.corridors, n).count, s.id).toBe(1);
       expect(networkOf(s.buildings, s.cables, n).count, s.id).toBe(1);
     }
   });
 
-  it("spread beyond the quarters in districts of 2, 3 and 4 chunks a side and big claims, with wild land between them", () => {
-    // Districts: claimed chunks with anything built on them - a fiftieth of their ground or more (a wind farm's
-    // turbines stand apart, and cover 5-15% of its chunks) - grouped where they touch. The land between has nothing.
+  it("have districts of 2, 3 and 4 chunks a side, and two big claims: a solar farm and a wind farm", () => {
+    // Measured: 14-18 districts - 4-7 of 2 x 2, 3-4 of 3 x 3, 7 of 4 x 4 - and both farms 6 x 6, with
+    // 1,106-1,278 solar arrays and 686-753 turbines.
     for (const s of metropolises) {
-      const chunks = outerChunks(s);
-      const at = new Map(chunks.map((c) => [`${c.u},${c.v}`, c]));
-      const seen = new Set<string>();
-      const sizes: number[] = [];
-      for (const c of chunks) {
-        const key = `${c.u},${c.v}`;
-        if (!c.claimed || c.built < 0.02 || seen.has(key)) continue;
-        let size = 0;
-        const stack = [c];
-        seen.add(key);
-        while (stack.length > 0) {
-          const d = stack.pop()!;
-          size += 1;
-          for (const [du, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-            const e = at.get(`${d.u + du},${d.v + dv}`);
-            const k = `${d.u + du},${d.v + dv}`;
-            if (e === undefined || !e.claimed || e.built < 0.02 || seen.has(k)) continue;
-            seen.add(k);
-            stack.push(e);
-          }
-        }
-        sizes.push(size);
-      }
-      // Measured: 26 to 29 districts - 8 to 11 of 2 x 2, 6 or 7 of 3 x 3, 6 or 7 of 4 x 4, and one or two of 6 x 6
-      // (a district with a chunk of steep ground, left unbuilt, counts a chunk short).
-      for (const want of [4, 9, 16]) expect(sizes.filter((z) => z === want).length, `${s.id}: districts of ${want} chunks`).toBeGreaterThanOrEqual(4);
-      expect(sizes.filter((z) => z >= 36).length, `${s.id}: big claims`).toBeGreaterThanOrEqual(1);
-      // Measured: 272 of the 840 chunks outside the quarters left wild.
-      expect(chunks.filter((c) => !c.claimed).length, `${s.id}: wild chunks`).toBeGreaterThan(200);
+      const sizes = zone(s, DISTRICT).map((z) => Math.round(z.tiles.length / (C * C)));
+      for (const want of [4, 9, 16]) expect(sizes.filter((z) => z === want).length, `${s.id}: districts of ${want} chunks`).toBeGreaterThanOrEqual(3);
+      const count = (name: string, type: string): number => {
+        const z = s.zones.find((x) => x.name === name);
+        expect(z, `${s.id}: ${name}`).toBeDefined();
+        expect(z!.tiles.length, `${s.id}: ${name} is a big claim`).toBeGreaterThanOrEqual(25 * C * C);
+        const tiles = new Set(z!.tiles);
+        return s.buildings.filter((b) => tiles.has(b.ty * 1024 + b.tx) && b.type === type).length;
+      };
+      expect(count("Solar farm", "solar_array"), s.id).toBeGreaterThan(800);
+      expect(count("Wind farm", "wind_turbine"), s.id).toBeGreaterThan(400);
     }
   });
 
-  it("lay many corridors in the spaces between the districts", () => {
-    // The claimed land between the districts (built on under a fiftieth) carries corridor on 15% of its
-    // ground, measured; the districts themselves 2.2%.
+  it("lay many corridors along the avenues between the districts", () => {
+    // Measured: corridor on 20% of the avenues' ground, 5-6% of the districts'.
     for (const s of metropolises) {
-      const chunks = outerChunks(s).filter((c) => c.claimed);
-      const spaces = chunks.filter((c) => c.built < 0.02);
-      const districts = chunks.filter((c) => c.built >= 0.02);
-      expect(spaces.length, `${s.id}: vacuity, spaces`).toBeGreaterThan(100);
-      const mean = (list: typeof chunks): number => list.reduce((a, c) => a + c.corridor, 0) / list.length;
-      expect(mean(spaces), s.id).toBeGreaterThan(4 * mean(districts));
+      const corridors = new Set(s.corridors);
+      const density = (name: RegExp): number => {
+        const tiles = zone(s, name).flatMap((z) => z.tiles);
+        return tiles.filter((k) => corridors.has(k)).length / Math.max(1, tiles.length);
+      };
+      expect(density(/^Avenues/), s.id).toBeGreaterThan(2.5 * density(DISTRICT));
     }
   });
 
@@ -205,47 +244,46 @@ describe("the example's metropolises", () => {
     expect(state.settlements.filter((s) => s.kind === "city").some((s) => rocksOf(s, game).some((r) => r !== "none"))).toBe(true);
   });
 
-  it("run giant railways: every station on one line, to all four edges of the city, bridged over the corridors", () => {
-    // Measured: 15-16 stations; 1,553 to 2,288 rail tiles within a chunk of each edge; 1,734 to 1,766 bridges.
+  it("run giant railways: every station on one line, to the city's extremes all round, bridged over the corridors", () => {
+    // Measured: 12-15 stations; 232 to 1,183 rail tiles within two chunks of each extreme of the city; 1,339-1,502 bridges.
     for (const s of metropolises) {
       const n = frameOf(s, game).n;
       const stations = s.buildings.map((b, i) => (b.type === "station" ? i : -1)).filter((i) => i >= 0);
       expect(stations.length, s.id).toBeGreaterThanOrEqual(8);
       const net = withRails(networkOf(s.buildings, [], n), s.buildings, s.rails, n);
       expect(new Set(stations.map((i) => net.of[i])).size, s.id).toBe(1);
-      const near = (test: (x: number, y: number) => boolean): number => s.rails.filter((k) => test(k & 1023, k >> 10)).length;
+      const { cu, held } = chunks(s);
+      let minU = cu;
+      let maxU = -1;
+      let minV = cu;
+      let maxV = -1;
+      for (let v = 0; v < cu; v += 1) {
+        for (let u = 0; u < cu; u += 1) {
+          if (!held(u, v)) continue;
+          minU = Math.min(minU, u);
+          maxU = Math.max(maxU, u);
+          minV = Math.min(minV, v);
+          maxV = Math.max(maxV, v);
+        }
+      }
       for (const [edge, test] of [
-        ["west", (x: number) => x < C],
-        ["east", (x: number) => x >= n - C],
-        ["north", (_: number, y: number) => y < C],
-        ["south", (_: number, y: number) => y >= n - C],
-      ] as const) expect(near(test), `${s.id} ${edge}`).toBeGreaterThan(500);
+        ["west", (k: number) => (k & 1023) < (minU + 2) * C],
+        ["east", (k: number) => (k & 1023) >= (maxU - 1) * C],
+        ["north", (k: number) => k >> 10 < (minV + 2) * C],
+        ["south", (k: number) => k >> 10 >= (maxV - 1) * C],
+      ] as const) expect(s.rails.filter(test).length, `${s.id} ${edge}`).toBeGreaterThan(100);
       const corridors = new Set(s.corridors);
       expect(s.rails.filter((k) => corridors.has(k)).length, `${s.id}: bridges`).toBeGreaterThan(500);
     }
   });
 
-  it("give over one district to solar panels, and one to wind turbines", () => {
-    // Measured: 1,398 to 1,507 solar arrays in the solar farm (and three battery banks); 908 to 943 turbines.
+  it("are planned in zones of many colours: every quarter, district, the works and the avenues", () => {
+    // Measured: 82-86 zones in 14 colours; all but one building in a zone.
     for (const s of metropolises) {
-      const count = (zone: string, type: string): number => {
-        const z = s.zones.find((x) => x.name === zone);
-        expect(z, `${s.id}: ${zone}`).toBeDefined();
-        const tiles = new Set(z!.tiles);
-        return s.buildings.filter((b) => tiles.has(b.ty * 1024 + b.tx) && b.type === type).length;
-      };
-      expect(count("Solar farm", "solar_array"), s.id).toBeGreaterThan(1000);
-      expect(count("Wind farm", "wind_turbine"), s.id).toBeGreaterThan(500);
-    }
-  });
-
-  it("are planned in zones of many colours: every quarter, district and the avenues", () => {
-    // Measured: 94 zones in 13 colours; every building but those on the avenues in one.
-    for (const s of metropolises) {
-      expect(s.zones.length, s.id).toBeGreaterThan(80);
+      expect(s.zones.length, s.id).toBeGreaterThan(60);
       expect(new Set(s.zones.map((z) => z.colour)).size, s.id).toBeGreaterThanOrEqual(10);
       const zoned = new Set(s.zones.flatMap((z) => z.tiles));
-      expect(s.buildings.filter((b) => zoned.has(b.ty * 1024 + b.tx)).length / s.buildings.length, s.id).toBeGreaterThan(0.95);
+      expect(s.buildings.filter((b) => zoned.has(b.ty * 1024 + b.tx)).length / s.buildings.length, s.id).toBeGreaterThan(0.98);
     }
   });
 

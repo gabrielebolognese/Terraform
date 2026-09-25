@@ -72,100 +72,182 @@ const RECIPES: Readonly<Record<Exclude<Purpose, "wind">, { first: readonly Build
 
 /** A district, in chunks from the frame's corner. */
 interface District {
-  readonly u: number;
-  readonly v: number;
+  u: number;
+  v: number;
   readonly w: number;
   readonly h: number;
   purpose: Purpose;
 }
 
-/** The lines the avenues run along, in chunks: the edge, round the quarters, and (outside them) the middle. */
-const LINES = [0, OUTER - 1, OUTER + 11, METROPOLIS_CHUNKS - 1];
-const MIDDLE = Math.floor(METROPOLIS_CHUNKS / 2);
 const inQuarters = (c: number): boolean => c >= OUTER && c < OUTER + 11;
 
-/** Whether chunk (u, v) is avenue: on a ring line, or a radial outside the quarters. */
-export function isAvenue(u: number, v: number): boolean {
-  if (inQuarters(u) && inQuarters(v)) return false;
-  if (LINES.includes(u) || LINES.includes(v)) return true;
-  return (u === MIDDLE && !inQuarters(v)) || (v === MIDDLE && !inQuarters(u));
+/** The middle of the frame, in chunks. */
+const MID = METROPOLIS_CHUNKS / 2;
+
+/** A metropolis's outline: how far it reaches, in chunks from its middle, at each angle. */
+export interface Outline {
+  readonly reach: (angle: number) => number;
 }
 
 /**
- * The districts: in each space between the avenues, a pattern of clusters -
- * the corners four clusters of 4, 3, 2 and 2 chunks a side, or one big one;
- * the sides a 4 and a 3, or a 3 and two 2s, or a 4 and a 2 - never touching
- * each other, each beside an avenue.
+ * The outline of a metropolis as a town grows (at the user's request: "less
+ * square, more like a normal city development - a blob, same space, a more
+ * natural shape"): round its quarters, a radius that wanders slowly with the
+ * angle (a few broad lobes), and three or four arms reaching out where it grew
+ * along its roads - scaled until it covers about `area` chunks, clipped to the
+ * frame. Each metropolis its own, from `rnd`.
  */
-export function districts(): District[] {
-  const spans: [number, number][] = [
-    [1, OUTER - 2],
-    [OUTER, MIDDLE - 1],
-    [MIDDLE + 1, OUTER + 10],
-    [OUTER + 12, METROPOLIS_CHUNKS - 2],
-  ];
-  const out: District[] = [];
-  const corner = [
-    [[4, 4, 4, 4], [0, 0, 3, 3], [0, 5, 2, 2], [5, 0, 2, 2]],
-    [[0, 0, 6, 6]],
-  ];
-  const side = [
-    [[4, 0, 4, 4], [0, 1, 3, 3]],
-    [[5, 1, 3, 3], [0, 0, 2, 2], [0, 3, 2, 2]],
-    [[0, 0, 4, 4], [6, 2, 2, 2]],
-  ];
-  let bigs = 0;
-  let sides = 0;
-  let corners = 0;
-  for (const [yi, [y0, y1]] of spans.entries()) {
-    for (const [xi, [x0, x1]] of spans.entries()) {
-      const inner = (i: number): boolean => i === 1 || i === 2;
-      if (inner(xi) && inner(yi)) continue;
-      // Local 0 on the side away from the quarters: flip the spans nearer the far edge.
-      const flipX = xi >= 2;
-      const flipY = yi >= 2;
-      const w = x1 - x0 + 1;
-      const h = y1 - y0 + 1;
-      let pattern: number[][];
-      if (!inner(xi) && !inner(yi)) {
-        // Corners: the first and the last take one big claim each (the solar and the wind farm).
-        const big = corners === 0 || corners === 3;
-        corners += 1;
-        pattern = big ? corner[1]! : corner[0]!;
-        if (big) bigs += 1;
-      } else {
-        pattern = side[sides % side.length]!;
-        sides += 1;
-      }
-      for (const [a, b, cw, ch] of pattern) {
-        // Along the band the side spans are 5 chunks: patterns are written 8 across the band, 5 along it.
-        const along = inner(xi);
-        const [la, lb, lw, lh] = along ? [b!, a!, ch!, cw!] : [a!, b!, cw!, ch!];
-        const u = flipX ? x0 + w - la - lw : x0 + la;
-        const v = flipY ? y0 + h - lb - lh : y0 + lb;
-        out.push({ u, v, w: lw, h: lh, purpose: "suburb" });
-      }
+export function outlineOf(rnd: () => number, area = 620): Outline {
+  const lobes = [2, 3, 4, 5].map((k) => ({ k, a: [0.13, 0.09, 0.06, 0.04][k - 2]! * (0.6 + 0.8 * rnd()), phase: rnd() * 2 * Math.PI }));
+  const arms = Array.from({ length: 3 + Math.floor(rnd() * 2) }, () => ({ at: rnd() * 2 * Math.PI, width: 0.18 + 0.12 * rnd(), lift: 0.22 + 0.18 * rnd() }));
+  const shape = (angle: number): number => {
+    let f = 1;
+    for (const l of lobes) f += l.a * Math.cos(l.k * angle + l.phase);
+    for (const arm of arms) {
+      const d = Math.atan2(Math.sin(angle - arm.at), Math.cos(angle - arm.at));
+      f += arm.lift * Math.exp(-((d / arm.width) ** 2));
     }
-  }
-  void bigs;
-  // Purposes: the two big claims are the solar and the wind farm; the rest by size, in turn.
-  const bySize: Record<number, Purpose[]> = {
-    4: ["commerce", "agriculture", "industry", "port", "research", "commerce", "agriculture", "industry", "port", "research", "commerce", "agriculture"],
-    3: ["storage", "suburb", "industry", "agriculture", "suburb", "storage", "commerce", "suburb", "research", "storage"],
-    2: ["parkland", "suburb", "storage", "parkland", "research", "suburb", "parkland", "storage", "suburb", "parkland"],
+    return f;
   };
-  const turn: Record<number, number> = { 2: 0, 3: 0, 4: 0 };
-  let farms = 0;
-  for (const d of out) {
-    if (d.w >= 6) {
-      d.purpose = farms === 0 ? "solar" : "wind";
-      farms += 1;
-      continue;
-    }
-    const list = bySize[d.w]!;
-    d.purpose = list[turn[d.w]! % list.length]!;
-    turn[d.w]! += 1;
+  // The biggest the frame allows: a chunk short of its edge, and never inside the quarters' corners.
+  const most = MID - 0.6;
+  // Never so close that its ring (a chunk and a half inside) would meet the quarters' ring at a corner.
+  const least = 11;
+  let scale = 12;
+  const covered = (k: number): number => {
+    let count = 0;
+    for (let v = 0; v < METROPOLIS_CHUNKS; v += 1) for (let u = 0; u < METROPOLIS_CHUNKS; u += 1) if (inside(u, v, (angle) => Math.min(most, Math.max(least, k * shape(angle))))) count += 1;
+    return count;
+  };
+  // Scaled to the area: a few rounds of bisection.
+  let lo = 6;
+  let hi = 20;
+  for (let i = 0; i < 18; i += 1) {
+    scale = (lo + hi) / 2;
+    if (covered(scale) < area) lo = scale;
+    else hi = scale;
   }
+  return { reach: (angle) => Math.min(most, Math.max(least, scale * shape(angle))) };
+}
+
+/** Whether chunk (u, v)'s middle lies inside an outline (the quarters always do). */
+function inside(u: number, v: number, reach: (angle: number) => number): boolean {
+  if (inQuarters(u) && inQuarters(v)) return true;
+  const dx = u + 0.5 - MID;
+  const dy = v + 0.5 - MID;
+  return Math.hypot(dx, dy) <= reach(Math.atan2(dy, dx));
+}
+
+/** The chunks of a metropolis, as "u,v", inside its outline. */
+export function chunksOf(outline: Outline): Set<string> {
+  const out = new Set<string>();
+  for (let v = 0; v < METROPOLIS_CHUNKS; v += 1) for (let u = 0; u < METROPOLIS_CHUNKS; u += 1) if (inside(u, v, outline.reach)) out.add(`${u},${v}`);
+  return out;
+}
+
+/** An avenue's course, in tiles of the frame: a line of points, closed round for a ring. */
+interface Route {
+  readonly points: readonly (readonly [number, number])[];
+  readonly closed: boolean;
+}
+
+/**
+ * The avenues: a ring round the quarters, a ring round the city a chunk and a
+ * half inside its outline, and eight radials from the one to the other - the
+ * railways that join the city's extremes run along them.
+ */
+function routesOf(outline: Outline, C: number): Route[] {
+  const c = (METROPOLIS_CHUNKS * C) / 2;
+  const half = 5.5 * C + C / 2;
+  const inner: [number, number][] = [
+    [c - half, c - half],
+    [c + half, c - half],
+    [c + half, c + half],
+    [c - half, c + half],
+  ];
+  const ringAt = (angle: number): number => Math.max(9.2 * C, (outline.reach(angle) - 1.6) * C);
+  const outer: [number, number][] = [];
+  for (let k = 0; k < 96; k += 1) {
+    const angle = (k / 96) * 2 * Math.PI;
+    const r = ringAt(angle);
+    outer.push([c + r * Math.cos(angle), c + r * Math.sin(angle)]);
+  }
+  const radials: Route[] = [];
+  for (let k = 0; k < 8; k += 1) {
+    const angle = (k / 8) * 2 * Math.PI;
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+    // From where the ray leaves the inner ring's square to the outer ring.
+    const leave = half / Math.max(Math.abs(dx), Math.abs(dy));
+    const r = ringAt(angle);
+    radials.push({ points: [[c + leave * dx, c + leave * dy], [c + r * dx, c + r * dy]], closed: false });
+  }
+  return [{ points: inner, closed: true }, { points: outer, closed: true }, ...radials];
+}
+
+/** A line along a route, `offset` tiles to its side, as tiles each beside the last (4-connected). */
+function laneOf(route: Route, offset: number, n: number): number[] {
+  const out: number[] = [];
+  let last: [number, number] | null = null;
+  const pts = route.closed ? [...route.points, route.points[0]!] : route.points;
+  const push = (x: number, y: number): void => {
+    if (x < 0 || y < 0 || x >= n || y >= n) {
+      last = null;
+      return;
+    }
+    if (last !== null) {
+      // Fill the corner between diagonal neighbours, so the lane is unbroken tile to tile.
+      if (last[0] !== x && last[1] !== y) out.push(last[1] * n + x);
+      if (last[0] === x && last[1] === y) return;
+    }
+    out.push(y * n + x);
+    last = [x, y];
+  };
+  for (let k = 0; k + 1 < pts.length; k += 1) {
+    const [ax, ay] = pts[k]!;
+    const [bx, by] = pts[k + 1]!;
+    const len = Math.hypot(bx - ax, by - ay);
+    if (len === 0) continue;
+    const nx = -(by - ay) / len;
+    const ny = (bx - ax) / len;
+    const steps = Math.ceil(len * 2);
+    for (let i = 0; i <= steps; i += 1) {
+      const f = i / steps;
+      push(Math.round(ax + (bx - ax) * f + nx * offset), Math.round(ay + (by - ay) * f + ny * offset));
+    }
+  }
+  return out;
+}
+
+/** Points every `every` tiles along a route, with the way it runs across there: for the cross-links. */
+function alongRoute(route: Route, every: number): { x: number; y: number; nx: number; ny: number }[] {
+  const out: { x: number; y: number; nx: number; ny: number }[] = [];
+  const pts = route.closed ? [...route.points, route.points[0]!] : route.points;
+  let carry = every / 2;
+  for (let k = 0; k + 1 < pts.length; k += 1) {
+    const [ax, ay] = pts[k]!;
+    const [bx, by] = pts[k + 1]!;
+    const len = Math.hypot(bx - ax, by - ay);
+    if (len === 0) continue;
+    let at = carry;
+    for (; at < len; at += every) out.push({ x: ax + ((bx - ax) * at) / len, y: ay + ((by - ay) * at) / len, nx: -(by - ay) / len, ny: (bx - ax) / len });
+    carry = at - len;
+  }
+  return out;
+}
+
+/** The districts' sizes and purposes, largest first: the two farms, then 4, 3 and 2 chunks a side. */
+function districtList(): District[] {
+  const out: District[] = [
+    { u: 0, v: 0, w: 6, h: 6, purpose: "solar" },
+    { u: 0, v: 0, w: 6, h: 6, purpose: "wind" },
+  ];
+  const bySize: [number, Purpose[]][] = [
+    [4, ["commerce", "agriculture", "industry", "port", "research", "commerce", "agriculture"]],
+    [3, ["storage", "suburb", "industry", "agriculture", "suburb", "storage", "commerce", "suburb"]],
+    [2, ["parkland", "suburb", "storage", "parkland", "research", "suburb", "parkland", "storage", "suburb", "parkland", "storage", "research"]],
+  ];
+  for (const [size, purposes] of bySize) for (const purpose of purposes) out.push({ u: 0, v: 0, w: size, h: size, purpose });
   return out;
 }
 
@@ -178,11 +260,13 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
   const per = founding.base / C;
   if (!Number.isInteger(per) || per + 2 !== 11) return state;
 
-  // 1. The land: every avenue and district chunk, claimed outward from the quarters (a claim must touch the city's own).
-  const plan = districts();
-  const want = new Set<string>();
-  for (let v = 0; v < METROPOLIS_CHUNKS; v += 1) for (let u = 0; u < METROPOLIS_CHUNKS; u += 1) if (isAvenue(u, v)) want.add(`${u},${v}`);
-  for (const d of plan) for (let v = d.v; v < d.v + d.h; v += 1) for (let u = d.u; u < d.u + d.w; u += 1) want.add(`${u},${v}`);
+  // 1. The land: every chunk inside the city's outline, claimed outward from the quarters (a claim must touch the city's own).
+  const outline = outlineOf(rnd);
+  const shape = chunksOf(outline);
+  const want = new Set([...shape].filter((k) => {
+    const [u, v] = k.split(",").map(Number) as [number, number];
+    return !(inQuarters(u) && inQuarters(v));
+  }));
   // Chunk (u, v) of the frame is chunk (u - OUTER - 1, v - OUTER - 1) from the founding square.
   const mid = (METROPOLIS_CHUNKS - 1) / 2;
   let pending = [...want].map((k) => k.split(",").map(Number) as [number, number]).sort((a, b) => Math.max(Math.abs(a[0] - mid), Math.abs(a[1] - mid)) - Math.max(Math.abs(b[0] - mid), Math.abs(b[1] - mid)));
@@ -197,8 +281,12 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
     if (pending.length === before) break;
   }
   let s = settlementOf(state);
-  const n = frameOf(s, t).n;
-  if (n !== METROPOLIS_CHUNKS * C) return state;
+  const f0 = frameOf(s, t);
+  const n = f0.n;
+  // The frame is the outline's box: where it falls short of the full 31 chunks, the outline is shifted with it.
+  const du = Math.round(f0.x0 / C) + OUTER + 1;
+  const dv = Math.round(f0.y0 / C) + OUTER + 1;
+  const chunkIn = (u: number, v: number): boolean => shape.has(`${u + du},${v + dv}`);
   // Cleared of every rock in the frame first (the user: "a metropolis is clear of all the stones") - before
   // anything is built, as the rocks under a building are not counted once it stands (cleared at the end, the
   // outer districts had been built on crags the rules forbid, measured by replaying them).
@@ -221,6 +309,10 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
   };
   for (const b of s.buildings) occupy(b.tx, b.ty, ...sizeOf(b.type));
   const openAt = new Uint8Array(n * n);
+  // The avenues' strips, kept clear of buildings (their lanes, and the ground between them): laid out below.
+  // And the quarters' own corridors, cables and railways: nothing may stand on a link.
+  const strip = new Uint8Array(n * n);
+  for (const list of [s.corridors, s.cables, s.rails]) for (const k of list) strip[(k >> 10) * n + (k & 1023)] = 1;
   for (let i = 0; i < n * n; i += 1) openAt[i] = !ground.steep[i] && ours(i % n, Math.floor(i / n)) ? 1 : 0;
   // Only ground a corridor can reach from the headquarters: flat land walled in by slopes is left alone (the first
   // outer city built in such pockets - 160 groups of buildings no corridor could ever join, measured).
@@ -244,7 +336,7 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
   type Rect = { x0: number; y0: number; x1: number; y1: number };
   const fits = (tx: number, ty: number, w: number, h: number, r: Rect, gap: number): boolean => {
     if (tx < r.x0 || ty < r.y0 || tx + w > r.x1 || ty + h > r.y1) return false;
-    for (let y = ty; y < ty + h; y += 1) for (let x = tx; x < tx + w; x += 1) if (!openAt[y * n + x]) return false;
+    for (let y = ty; y < ty + h; y += 1) for (let x = tx; x < tx + w; x += 1) if (!openAt[y * n + x] || strip[y * n + x]) return false;
     for (let y = Math.max(0, ty - gap); y < Math.min(n, ty + h + gap); y += 1) for (let x = Math.max(0, tx - gap); x < Math.min(n, tx + w + gap); x += 1) if (taken[y * n + x]) return false;
     return true;
   };
@@ -285,33 +377,28 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
     const i = y * n + x;
     if (openAt[i] && !taken[i]) grid[i] = 1;
   };
-  const horizontal = (u: number, v: number): boolean => LINES.includes(v) || (v === MIDDLE && !inQuarters(u));
-  const vertical = (u: number, v: number): boolean => LINES.includes(u) || (u === MIDDLE && !inQuarters(v));
-  const RAILS = [14, 17];
-  const CORRIDORS = [4, 10, 21, 27];
-  const CABLES = [4, 27];
-  for (let v = 0; v < METROPOLIS_CHUNKS; v += 1) {
-    for (let u = 0; u < METROPOLIS_CHUNKS; u += 1) {
-      if (!isAvenue(u, v)) continue;
-      const x0 = u * C;
-      const y0 = v * C;
-      for (const [on, along] of [[horizontal(u, v), true], [vertical(u, v), false]] as const) {
-        if (!on) continue;
-        const at = (a: number, b: number): [number, number] => (along ? [x0 + a, y0 + b] : [x0 + b, y0 + a]);
-        for (let a = 0; a < C; a += 1) {
-          for (const b of RAILS) lay(rail, ...at(a, b));
-          for (const b of CORRIDORS) lay(corridor, ...at(a, b));
-          for (const b of CABLES) lay(cable, ...at(a, b));
-        }
-        for (const a of [8, 24]) {
-          for (let b = CORRIDORS[0]!; b <= CORRIDORS[CORRIDORS.length - 1]!; b += 1) {
-            lay(corridor, ...at(a, b));
-            lay(cable, ...at(a, b));
-          }
-        }
+  // Offsets across an avenue, tiles from its middle: a double railway, four corridors, power along the outer two.
+  const RAILS = [-2, 1];
+  const CORRIDORS = [-12, -6, 7, 13];
+  const CABLES = [-12, 13];
+  const WIDTH = 14;
+  const routes = routesOf(outline, C).map((r) => ({ ...r, points: r.points.map(([x, y]) => [x - du * C, y - dv * C] as const) }));
+  for (const route of routes) {
+    for (const o of RAILS) for (const i of laneOf(route, o, n)) lay(rail, i % n, Math.floor(i / n));
+    for (const o of CORRIDORS) for (const i of laneOf(route, o, n)) lay(corridor, i % n, Math.floor(i / n));
+    for (const o of CABLES) for (const i of laneOf(route, o, n)) lay(cable, i % n, Math.floor(i / n));
+    for (let o = -WIDTH; o <= WIDTH; o += 1) for (const i of laneOf(route, o, n)) strip[i] = 1;
+    // Cross-links every 16 tiles, from the outer corridor to the outer corridor, over the rails on bridges.
+    for (const p of alongRoute(route, 16)) {
+      for (let o = CORRIDORS[0]!; o <= CORRIDORS[CORRIDORS.length - 1]!; o += 1) {
+        const x = Math.round(p.x + p.nx * o);
+        const y = Math.round(p.y + p.ny * o);
+        lay(corridor, x, y);
+        lay(cable, x, y);
       }
     }
   }
+
 
   // 4. The districts: blocks wall to wall, for their purpose; a station where the recipe has one.
   const PITCH = 16;
@@ -337,6 +424,46 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
     }
     return out;
   };
+  // Where each district goes: inside the outline, clear of the quarters, a chunk apart from every other
+  // district, and not across an avenue - the biggest first (a farm a chunk smaller if it must), each at one
+  // of the places it fits, chosen in turn.
+  const cu = Math.round(n / C);
+  const stripIn = new Float64Array(cu * cu);
+  for (let i = 0; i < n * n; i += 1) if (strip[i]) stripIn[Math.floor(Math.floor(i / n) / C) * cu + Math.floor((i % n) / C)]! += 1 / (C * C);
+  const quarterChunk = (u: number, v: number): boolean => inQuarters(u + du) && inQuarters(v + dv);
+  const used = new Uint8Array(cu * cu);
+  const plan: District[] = [];
+  for (const wanted of districtList()) {
+    const sizes = wanted.purpose === "solar" || wanted.purpose === "wind" ? [6, 5, 4] : [wanted.w];
+    for (const size of sizes) {
+      const places: [number, number][] = [];
+      for (let v = 0; v + size <= cu; v += 1) {
+        for (let u = 0; u + size <= cu; u += 1) {
+          let ok = true;
+          let across = 0;
+          for (let y = v - 1; y <= v + size && ok; y += 1) {
+            for (let x = u - 1; x <= u + size && ok; x += 1) {
+              const inRect = x >= u && y >= v && x < u + size && y < v + size;
+              if (x < 0 || y < 0 || x >= cu || y >= cu) {
+                if (inRect) ok = false;
+                continue;
+              }
+              if (used[y * cu + x]) ok = false;
+              if (inRect && (!chunkIn(x, y) || quarterChunk(x, y))) ok = false;
+              if (inRect) across += stripIn[y * cu + x]!;
+            }
+          }
+          // An avenue may skirt a district, not run through it: at most a third of its ground under an avenue.
+          if (ok && across / (size * size) <= 0.35) places.push([u, v]);
+        }
+      }
+      if (places.length === 0) continue;
+      const [u, v] = places[Math.floor(rnd() * places.length)]!;
+      for (let y = v; y < v + size; y += 1) for (let x = u; x < u + size; x += 1) used[y * cu + x] = 1;
+      plan.push({ u, v, w: size, h: size, purpose: wanted.purpose });
+      break;
+    }
+  }
   const districtBlocks = new Map<District, Rect[]>();
   for (const d of plan) {
     // Two tiles in from the district's edge: the avenues' outer corridors run close by.
@@ -353,7 +480,13 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
         for (const b of blocks) {
           const got = inRows(type, b, 0);
           if (got !== null) {
-            if (type === "station") stations.push(got);
+            if (type === "station") {
+              stations.push(got);
+              // An apron round it no building takes, so the railway can always reach it (walled in by its
+              // block's buildings, one district's station was on no line, measured).
+              const [sw, sh] = sizeOf("station");
+              for (let y = got.ty - 1; y <= got.ty + sh; y += 1) for (let x = got.tx - 1; x <= got.tx + sw; x += 1) if (x >= 0 && y >= 0 && x < n && y < n && !taken[y * n + x]) strip[y * n + x] = 1;
+            }
             break;
           }
         }
@@ -371,14 +504,78 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
     for (let y = d.v * C; y < (d.v + d.h) * C; y += 1) for (let x = d.u * C; x < (d.u + d.w) * C; x += 1) tiles.push(tileKey(x, y));
     zoneId += 1;
     const count = zones.filter((z) => z.name.startsWith(PURPOSES[d.purpose].name)).length;
-    zones.push({ id: zoneId, name: `${PURPOSES[d.purpose].name}${count > 0 || d.w < 6 ? ` ${count + 1}` : ""}`, colour: PURPOSES[d.purpose].colour, tiles: tiles.sort((a, b) => a - b) });
+    const farm = d.purpose === "solar" || d.purpose === "wind";
+    zones.push({ id: zoneId, name: `${PURPOSES[d.purpose].name}${count > 0 || !farm ? ` ${count + 1}` : ""}`, colour: PURPOSES[d.purpose].colour, tiles: tiles.sort((a, b) => a - b) });
   }
-  const avenueTiles: number[] = [];
-  for (let v = 0; v < METROPOLIS_CHUNKS; v += 1) {
-    for (let u = 0; u < METROPOLIS_CHUNKS; u += 1) {
-      if (!isAvenue(u, v)) continue;
-      for (let y = v * C; y < (v + 1) * C; y += 1) for (let x = u * C; x < (u + 1) * C; x += 1) avenueTiles.push(tileKey(x, y));
+
+  // 4b. No empty land (at the user's request: "in each empty tile there has to be between 3 and 25
+  // structures, none of them homes - many factories, standalone storage depots - so the city feels full"):
+  // every chunk of the city still holding fewer than three buildings is filled to between 3 and 25 of the
+  // works a city runs on, in one to three clusters wall to wall.
+  const WORKS: readonly [BuildingType, number][] = [
+    ["regolith_mine", 5],
+    ["storage_depot", 4],
+    ["water_extractor", 3],
+    ["materials_depot", 2],
+    ["water_tank", 2],
+    ["battery_bank", 2],
+    ["geothermal_plant", 2],
+    ["freezer", 1],
+    ["reactor", 1],
+    ["algae_reactor", 1],
+    ["solar_array", 1],
+    ["wind_turbine", 1],
+    ["laboratory", 0.5],
+    ["industrial_command", 0.3],
+  ];
+  const weight = WORKS.reduce((a, [, w]) => a + w, 0);
+  const pickWork = (): BuildingType => {
+    let r = rnd() * weight;
+    for (const [type, w] of WORKS) if ((r -= w) < 0) return type;
+    return "storage_depot";
+  };
+  const inChunk = new Int32Array(cu * cu);
+  for (const b of placed) if (b.tx >= 0 && b.ty >= 0 && b.tx < n && b.ty < n) inChunk[Math.floor(b.ty / C) * cu + Math.floor(b.tx / C)]! += 1;
+  /** The free slot for a footprint nearest (ax, ay) within the chunk, searched outwards ring by ring. */
+  const nearIn = (type: BuildingType, ax: number, ay: number, r: Rect): PlacedBuilding | null => {
+    const [w, h] = sizeOf(type);
+    for (let ring = 0; ring < C; ring += 1) {
+      for (let y = ay - ring; y <= ay + ring; y += 1) {
+        for (let x = ax - ring; x <= ax + ring; x += 1) {
+          if (Math.max(Math.abs(x - ax), Math.abs(y - ay)) !== ring) continue;
+          if (fits(x, y, w, h, r, 0)) return put(type, x, y);
+        }
+      }
     }
+    return null;
+  };
+  const worksTiles: number[] = [];
+  for (let v = 0; v < cu; v += 1) {
+    for (let u = 0; u < cu; u += 1) {
+      // The quarters too: their open blocks had left whole chunks bare.
+      if (!chunkIn(u, v) || inChunk[v * cu + u]! >= 3) continue;
+      const r: Rect = { x0: u * C, y0: v * C, x1: (u + 1) * C, y1: (v + 1) * C };
+      const target = 3 + Math.floor(rnd() * 23);
+      const centres = Array.from({ length: 1 + Math.floor(rnd() * 3) }, () => [r.x0 + 4 + Math.floor(rnd() * (C - 8)), r.y0 + 4 + Math.floor(rnd() * (C - 8))] as const);
+      let count = inChunk[v * cu + u]!;
+      for (let tries = 0; count < target && tries < target * 4; tries += 1) {
+        const [ax, ay] = centres[tries % centres.length]!;
+        // A chosen work, or where a big one will not go, a depot: the smallest there is.
+        if (nearIn(pickWork(), ax, ay, r) !== null || nearIn("storage_depot", ax, ay, r) !== null) count += 1;
+      }
+      inChunk[v * cu + u] = count;
+      // A district's or a quarter's own chunk, left thin by its open blocks, is filled too - but stays its own zone's.
+      if (used[v * cu + u] || quarterChunk(u, v)) continue;
+      for (let y = r.y0; y < r.y1; y += 1) for (let x = r.x0; x < r.x1; x += 1) if (!strip[y * n + x]) worksTiles.push(tileKey(x, y));
+    }
+  }
+  zoneId += 1;
+  zones.push({ id: zoneId, name: "Works and stores", colour: "#b0896a", tiles: worksTiles.sort((a, b) => a - b) });
+  const avenueTiles: number[] = [];
+  for (let i = 0; i < n * n; i += 1) {
+    const x = i % n;
+    const y = Math.floor(i / n);
+    if (strip[i] && ours(x, y) && !quarterChunk(Math.floor(x / C), Math.floor(y / C))) avenueTiles.push(tileKey(x, y));
   }
   zoneId += 1;
   zones.push({ id: zoneId, name: "Avenues - rail and corridor", colour: "#9c7a5b", tiles: avenueTiles.sort((a, b) => a - b) });
@@ -460,10 +657,14 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
     }
   }
   // The quarters' edge: every corridor there carried straight out to the avenue beside it.
-  const lo = OUTER * C;
-  const hi = (OUTER + 11) * C - 1;
-  for (let a = lo; a <= hi; a += 1) {
-    for (const [x, y, dx, dy] of [[a, lo, 0, -1], [a, hi, 0, 1], [lo, a, -1, 0], [hi, a, 1, 0]] as const) {
+  // The quarters' box in the frame.
+  const qx0 = (OUTER - du) * C;
+  const qx1 = qx0 + 11 * C - 1;
+  const qy0 = (OUTER - dv) * C;
+  const qy1 = qy0 + 11 * C - 1;
+  const inBox = (i: number): boolean => i % n >= qx0 && i % n <= qx1 && Math.floor(i / n) >= qy0 && Math.floor(i / n) <= qy1;
+  for (let a = 0; a <= 11 * C - 1; a += 1) {
+    for (const [x, y, dx, dy] of [[qx0 + a, qy0, 0, -1], [qx0 + a, qy1, 0, 1], [qx0, qy0 + a, -1, 0], [qx1, qy0 + a, 1, 0]] as const) {
       if (!corridor[y * n + x]) continue;
       const path = trace(corridor, x + dx, y + dy, dx, dy, C);
       if (path !== null) for (const i of path) corridor[i] = cable[i] = 1;
@@ -504,18 +705,60 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
     }
     return [];
   };
-  const outerStations = stations.filter((b) => !(b.tx >= lo && b.tx <= hi && b.ty >= lo && b.ty <= hi));
+  const outerStations = stations.filter((b) => !inBox(b.ty * n + b.tx));
   for (const b of outerStations) for (const i of railPath(stationTiles(b), (i) => rail[i] === 1)) rail[i] = 1;
   // The quarters' line to the ring round them.
   const quarterRail: number[] = [];
   for (let i = 0; i < n * n; i += 1) {
     const x = i % n;
     const y = (i - x) / n;
-    if (rail[i] && x >= lo && x <= hi && y >= lo && y <= hi) quarterRail.push(i);
+    if (rail[i] && inBox(y * n + x)) quarterRail.push(i);
   }
-  if (quarterRail.length > 0) for (const i of railPath(quarterRail, (i) => rail[i] === 1 && !((i % n) >= lo && (i % n) <= hi && Math.floor(i / n) >= lo && Math.floor(i / n) <= hi))) rail[i] = 1;
+  if (quarterRail.length > 0) for (const i of railPath(quarterRail, (i) => rail[i] === 1 && !inBox(i))) rail[i] = 1;
   // Wherever steep ground cut a line, the pieces joined again by the shortest way round: one railway.
   joinAll(n, stations, rail, (i) => free(i), stations[0]);
+  // A station no railway could reach (in a flat pocket walled in by slopes, its one way in built over) is a
+  // research forum instead: the same 4 x 6, so what it touches stays joined (measured: one in a metropolis).
+  if (stations.length > 0) {
+    const onLine = new Uint8Array(n * n);
+    const queue = stationTiles(stations[0]!).filter((i) => rail[i]);
+    for (const i of queue) onLine[i] = 1;
+    for (let head = 0; head < queue.length; head += 1) {
+      const i = queue[head]!;
+      const x = i % n;
+      for (const j of [x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1, i - n, i + n]) {
+        if (j < 0 || j >= n * n || onLine[j] || !rail[j]) continue;
+        onLine[j] = 1;
+        queue.push(j);
+      }
+    }
+    // Rails through other stations join too: their far sides count as reached once a near side is.
+    for (let round = 0; round < stations.length; round += 1) {
+      let grew = false;
+      for (const b of stations) {
+        const around = stationTiles(b).filter((i) => rail[i]);
+        if (!around.some((i) => onLine[i]) || around.every((i) => onLine[i])) continue;
+        const more = around.filter((i) => !onLine[i]);
+        for (const i of more) onLine[i] = 1;
+        for (let head = 0; head < more.length; head += 1) {
+          const i = more[head]!;
+          const x = i % n;
+          for (const j of [x > 0 ? i - 1 : -1, x < n - 1 ? i + 1 : -1, i - n, i + n]) {
+            if (j < 0 || j >= n * n || onLine[j] || !rail[j]) continue;
+            onLine[j] = 1;
+            more.push(j);
+          }
+        }
+        grew = true;
+      }
+      if (!grew) break;
+    }
+    for (const b of stations) {
+      if (stationTiles(b).some((i) => onLine[i])) continue;
+      const k = placed.indexOf(b);
+      if (k >= 0) placed[k] = { ...b, type: "research_forum" };
+    }
+  }
 
   // 8. The lists.
   const listOf = (grid: Uint8Array): number[] => {
@@ -523,7 +766,7 @@ export function widenMetropolis(start: SimState, id: string, env: HabitatChannel
     for (let i = 0; i < n * n; i += 1) if (grid[i]) out.push(tileKey(i % n, Math.floor(i / n)));
     return out;
   };
-  s = { ...s1, corridors: listOf(corridor), cables: listOf(cable), rails: listOf(rail), zones, jobs: [] };
+  s = { ...s1, buildings: [...placed], corridors: listOf(corridor), cables: listOf(cable), rails: listOf(rail), zones, jobs: [] };
 
   // 9. People and full stores - and at work: rovers out levelling the avenues' ground, rockets away.
   s = { ...s, population: Math.floor(housing(s, t) * 0.9) };
