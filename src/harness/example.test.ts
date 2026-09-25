@@ -211,7 +211,22 @@ describe("the example planet", () => {
     }
   });
 
-  it("spreads each city out - its centre and its corners - with a street round every building", () => {
+  it("joins its cities by the shortest traces, not a street round every building", () => {
+    // The user: "the metropolis and cities have far, far too many corridors".
+    // Measured over every city: 0.49 tiles of corridor for each tile under a
+    // building (a street round every building, as before: 1.66).
+    let corridor = 0;
+    let built = 0;
+    for (const s of state.settlements) {
+      if (s.kind !== "city") continue;
+      corridor += s.corridors.length;
+      for (const b of s.buildings) built += BUILDING_DEFS[b.type].footprint * BUILDING_DEFS[b.type].depth;
+    }
+    expect(built, "vacuity: cities").toBeGreaterThan(1000);
+    expect(corridor / built).toBeLessThan(0.8);
+  });
+
+  it("spreads each city out - its centre and its corners - with room round every building", () => {
     // The user: "not cramped up. Things at the corners, and things at the
     // center, decentralized." Measured: every city of four homes or more has
     // buildings in its centre and in 3 or 4 of its corners (the outer thirds
@@ -232,7 +247,8 @@ describe("the example planet", () => {
         for (let y = b.y0; y < b.y1; y += 1) for (let x = b.x0; x < b.x1; x += 1) if (x >= 0 && y >= 0 && x < n && y < n) owner[y * n + x] = i;
       });
       const close: string[] = [];
-      box.forEach((b, i) => {
+      // (A metropolis builds in blocks, wall to wall - "some parts can also be aggregated together".)
+      if (s.kind !== "metropolis") box.forEach((b, i) => {
         for (let y = b.y0 - 2; y <= b.y1 + 1; y += 1) {
           for (let x = b.x0 - 2; x <= b.x1 + 1; x += 1) {
             if (x < 0 || y < 0 || x >= n || y >= n) continue;

@@ -171,8 +171,24 @@ export function networkOf(buildings: readonly PlacedBuilding[], links: readonly 
  * the line. Only stations board a line: a rail beside any other building is
  * just track.
  */
+const railed = new WeakMap<Network, WeakMap<readonly number[], Network>>();
+
 export function withRails(network: Network, buildings: readonly PlacedBuilding[], rails: readonly number[], n: number): Network {
   if (rails.length === 0) return network;
+  // Kept per network and rail list (the network is kept per buildings and links): every substep asked again.
+  const kept = railed.get(network)?.get(rails);
+  if (kept !== undefined) return kept;
+  const made = withRailsFresh(network, buildings, rails, n);
+  let byRails = railed.get(network);
+  if (byRails === undefined) {
+    byRails = new WeakMap();
+    railed.set(network, byRails);
+  }
+  byRails.set(rails, made);
+  return made;
+}
+
+function withRailsFresh(network: Network, buildings: readonly PlacedBuilding[], rails: readonly number[], n: number): Network {
   const stations = buildings.map((b, i) => (b.type === "station" ? i : -1)).filter((i) => i >= 0);
   if (stations.length < 2) return network;
   const owner = ownerGrid(buildings, n);
@@ -216,6 +232,9 @@ export function withRails(network: Network, buildings: readonly PlacedBuilding[]
   return { of, count: renumber.size };
 }
 
+/** A bit for each resource, for what a network makes. */
+const BIT: Readonly<Record<MicroResource, number>> = { power: 1, water: 2, oxygen: 4, food: 8, materials: 16 };
+
 /** Why the networks kept a building from running: it draws these, and no running building on the network that carries them makes them. */
 export interface NetworkIssue {
   readonly kind: "unsupplied";
@@ -234,27 +253,32 @@ export function applyNetwork(
   operable: boolean[],
   issues: (NetworkIssue | null)[],
 ): boolean {
-  // Per network (layer and id), what its running buildings make.
-  const makes = new Map<string, Set<MicroResource>>();
-  operable.forEach((on, i) => {
-    if (!on) return;
-    for (const [r, v] of Object.entries(produces[i]!) as [MicroResource, number][]) {
-      if (!(v > 0)) continue;
-      const layer = layerOf(r);
-      const key = `${layer}:${networks[layer].of[i]!}`;
-      let set = makes.get(key);
-      if (set === undefined) {
-        set = new Set();
-        makes.set(key, set);
-      }
-      set.add(r);
+  // Per network of each layer, what its running buildings make: a bit per
+  // resource (string-keyed sets, one lookup a building a pass, were a fifth of
+  // a metropolis's substep).
+  const makes: Record<Layer, Uint8Array> = { corridors: new Uint8Array(networks.corridors.count), cables: new Uint8Array(networks.cables.count) };
+  for (let i = 0; i < operable.length; i += 1) {
+    if (!operable[i]) continue;
+    const p = produces[i]!;
+    for (const r in p) {
+      if (!((p[r as MicroResource] ?? 0) > 0)) continue;
+      const layer = layerOf(r as MicroResource);
+      makes[layer][networks[layer].of[i]!]! |= BIT[r as MicroResource];
     }
-  });
+  }
   let changed = false;
   operable.forEach((on, i) => {
     if (!on) return;
-    const missing = (Object.entries(consumes[i]!) as [MicroResource, number][])
-      .filter(([r, v]) => v > 0 && makes.get(`${layerOf(r)}:${networks[layerOf(r)].of[i]!}`)?.has(r) !== true)
+    const c = consumes[i]!;
+    let short = false;
+    for (const r in c) {
+      if (!((c[r as MicroResource] ?? 0) > 0)) continue;
+      const layer = layerOf(r as MicroResource);
+      if ((makes[layer][networks[layer].of[i]!]! & BIT[r as MicroResource]) === 0) short = true;
+    }
+    if (!short) return;
+    const missing = (Object.entries(c) as [MicroResource, number][])
+      .filter(([r, v]) => v > 0 && (makes[layerOf(r)][networks[layerOf(r)].of[i]!]! & BIT[r]) === 0)
       .map(([r]) => r);
     if (missing.length === 0) return;
     operable[i] = false;

@@ -272,28 +272,10 @@ function layOut(s: Settlement, wants: readonly BuildingType[], size: number, t: 
  * networks requires.
  */
 function streets(s: Settlement, t: Tuning): { corridors: number[]; cables: number[] } {
-  const ground = groundOf(s, t);
-  const rocks = rocksOf(s, t);
-  const n = ground.tiles;
-  const taken = new Uint8Array(n * n);
-  for (const b of s.buildings) {
-    const size = BUILDING_DEFS[b.type].footprint;
-    const depth = BUILDING_DEFS[b.type].depth;
-    for (let y = b.ty; y < b.ty + depth; y += 1) for (let x = b.tx; x < b.tx + size; x += 1) taken[y * n + x] = 1;
-  }
-  const roads: number[] = [];
-  for (let y = 0; y < n; y += 1) {
-    for (let x = 0; x < n; x += 1) {
-      if (taken[y * n + x] || ground.steep[y * n + x] || rocks[y * n + x] === "crag") continue;
-      const beside = (x > 0 && taken[y * n + x - 1]) || (x + 1 < n && taken[y * n + x + 1]) || (y > 0 && taken[(y - 1) * n + x]) || (y + 1 < n && taken[(y + 1) * n + x]);
-      if (beside) roads.push(tileKey(x, y));
-    }
-  }
-  // Power lines run along the streets too, as utilities do, and the joins
-  // between districts carry both. (Cables laid only by joining, one building
-  // at a time, took 858 whole-grid searches on a metropolis: 71% of a
-  // 14-second build.)
-  const corridors = [...roads, ...linksToConnect({ ...s, corridors: roads }, "corridors", t)].sort((a, b) => a - b);
+  // No street round every building (the user: "far, far too many corridors ...
+  // think of it like a huge motherboard, there aren't roads everywhere"):
+  // the shortest traces that join every building, and power along the same.
+  const corridors = linksToConnect(s, "corridors", t).sort((a, b) => a - b);
   const cables = [...corridors, ...linksToConnect({ ...s, cables: corridors }, "cables", t)].sort((a, b) => a - b);
   return { corridors, cables };
 }

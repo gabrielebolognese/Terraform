@@ -527,6 +527,35 @@ export function shiftContent(s: Settlement, dx: number, dy: number): Settlement 
   };
 }
 
+const covers = new WeakMap<readonly PlacedBuilding[], { t: Tuning; cover: (readonly number[] | undefined)[] }>();
+
+/**
+ * Per building, the Industrial Command Centers whose square it stands in (its
+ * middle within half the square's side of theirs, the side growing with their
+ * level) - or undefined for none, and for a command center itself. Kept per
+ * building list: every substep asked it of every building for every center
+ * (a quarter of a metropolis's substep).
+ */
+function commandCover(buildings: readonly PlacedBuilding[], t: Tuning): (readonly number[] | undefined)[] {
+  const kept = covers.get(buildings);
+  if (kept !== undefined && kept.t === t) return kept.cover;
+  const centre = (b: PlacedBuilding): [number, number] => [b.tx + BUILDING_DEFS[b.type].footprint / 2, b.ty + BUILDING_DEFS[b.type].depth / 2];
+  const commands = buildings.map((b, i) => (b.type === "industrial_command" ? i : -1)).filter((i) => i >= 0);
+  const cover = buildings.map((b) => {
+    if (commands.length === 0 || b.type === "industrial_command") return undefined;
+    const [x, y] = centre(b);
+    const list = commands.filter((c) => {
+      const cb = buildings[c]!;
+      const [cx, cy] = centre(cb);
+      const half = (t.COMMAND_SQUARE_TILES + t.COMMAND_SQUARE_PER_LEVEL * (cb.level - 1)) / 2;
+      return Math.abs(x - cx) <= half && Math.abs(y - cy) <= half;
+    });
+    return list.length === 0 ? undefined : list;
+  });
+  covers.set(buildings, { t, cover });
+  return cover;
+}
+
 // ---------------------------------------------------------------------------
 // The tick (section 7)
 // ---------------------------------------------------------------------------
@@ -592,36 +621,33 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   };
 
   // The Industrial Command Center: facilities in the square about a running one make COMMAND_BOOST more (not stacked).
-  const commands = s.buildings.map((b, i) => (b.type === "industrial_command" ? i : -1)).filter((i) => i >= 0);
-  const centre = (b: PlacedBuilding): [number, number] => [b.tx + BUILDING_DEFS[b.type].footprint / 2, b.ty + BUILDING_DEFS[b.type].depth / 2];
+  // Which command centers' squares each building stands in: geometry, kept per building list and tuning.
+  const cover = commandCover(s.buildings, t);
   const commandBoost = (i: number): number => {
-    if (commands.length === 0 || s.buildings[i]!.type === "industrial_command") return 1;
-    const [x, y] = centre(s.buildings[i]!);
-    for (const c of commands) {
-      if (!operable[c]) continue;
-      const cb = s.buildings[c]!;
-      const [cx, cy] = centre(cb);
-      const half = (t.COMMAND_SQUARE_TILES + t.COMMAND_SQUARE_PER_LEVEL * (cb.level - 1)) / 2;
-      if (Math.abs(x - cx) <= half && Math.abs(y - cy) <= half) return 1 + t.COMMAND_BOOST;
-    }
+    const list = cover[i];
+    if (list === undefined) return 1;
+    for (const c of list) if (operable[c]) return 1 + t.COMMAND_BOOST;
     return 1;
   };
 
   const totals = (): { prod: Record<MicroResource, number>; cons: Record<MicroResource, number> } => {
     const prod = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
     const cons = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
-    defs.forEach((def, i) => {
-      if (!operable[i]) return;
-      const eff = def.efficiency(env) * levels[i]! * commandBoost(i);
-      const p = def.produces(t);
-      const c = def.consumes(t, env);
+    // From what each building draws and makes, found once this substep (asked afresh
+    // for every building on every pass, it was a third of a metropolis's substep).
+    for (let i = 0; i < defs.length; i += 1) {
+      if (!operable[i]) continue;
+      const eff = effs[i]! * levels[i]! * commandBoost(i);
+      const p = makes[i]!;
+      const c = draws[i]!;
       for (const r of MICRO_RESOURCES) {
         prod[r] += (p[r] ?? 0) * eff;
         cons[r] += c[r] ?? 0;
       }
-    });
+    }
     return { prod, cons };
   };
+  const effs = defs.map((def) => def.efficiency(env));
 
   // Which life-support resources ran short at any point this substep. Their
   // consumers browned out - including the domes - so the stores may never
@@ -642,7 +668,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     let changed = false;
     defs.forEach((def, i) => {
       if (!operable[i]) return;
-      const c = def.consumes(t, env);
+      const c = draws[i]!;
       if (short.some((r) => (c[r] ?? 0) > 0)) {
         operable[i] = false;
         changed = true;

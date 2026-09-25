@@ -29,7 +29,6 @@ import {
   frameOf,
   groundOf,
   housing,
-  linksForRedundancy,
   linksToConnect,
   rocksOf,
   roverCount,
@@ -44,6 +43,8 @@ type Quarter = "civic" | "habitat" | "mixed" | "industry" | "power" | "port" | "
 const STREET = 2;
 /** Tiles of boulevard between quarters. */
 const BOULEVARD = 4;
+/** Tiles of open ground between the blocks of a quarter. */
+const BLOCK_GAP = 3;
 /** About this many tiles from one quarter to the next. */
 const QUARTER_PITCH = 44;
 
@@ -109,10 +110,11 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
     for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]] as const) if (nx >= 0 && ny >= 0 && nx < n && ny < n && !reach[ny * n + nx]) stack.push(ny * n + nx);
   }
   type Rect = { x0: number; y0: number; x1: number; y1: number };
-  const fits = (tx: number, ty: number, w: number, h: number, r: Rect): boolean => {
+  /** On reachable ground in the rectangle, `gap` tiles clear of every other building (0: wall to wall). */
+  const fits = (tx: number, ty: number, w: number, h: number, r: Rect, gap = STREET): boolean => {
     if (tx < r.x0 || ty < r.y0 || tx + w > r.x1 || ty + h > r.y1) return false;
     for (let y = ty; y < ty + h; y += 1) for (let x = tx; x < tx + w; x += 1) if (!reach[y * n + x]) return false;
-    for (let y = Math.max(0, ty - STREET); y < Math.min(n, ty + h + STREET); y += 1) for (let x = Math.max(0, tx - STREET); x < Math.min(n, tx + w + STREET); x += 1) if (taken[y * n + x]) return false;
+    for (let y = Math.max(0, ty - gap); y < Math.min(n, ty + h + gap); y += 1) for (let x = Math.max(0, tx - gap); x < Math.min(n, tx + w + gap); x += 1) if (taken[y * n + x]) return false;
     return true;
   };
   const put = (type: BuildingType, tx: number, ty: number): void => {
@@ -127,9 +129,9 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
    * corner at each try: 35% of a 13-second build).
    */
   const cursor = new Map<string, number>();
-  const inRows = (type: BuildingType, r: Rect): boolean => {
+  const inRows = (type: BuildingType, r: Rect, gap = STREET): boolean => {
     const [w, h] = sizeOf(type);
-    const key = `${r.x0},${r.y0}|${w}x${h}`;
+    const key = `${r.x0},${r.y0},${r.x1},${r.y1}|${w}x${h}|${gap}`;
     const from = cursor.get(key) ?? 0;
     if (from < 0) return false;
     const span = r.x1 - r.x0;
@@ -137,7 +139,7 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
       const x = r.x0 + (at % span);
       const y = r.y0 + Math.floor(at / span);
       if (y + h > r.y1) break;
-      if (x + w <= r.x1 && fits(x, y, w, h, r)) {
+      if (x + w <= r.x1 && fits(x, y, w, h, r, gap)) {
         put(type, x, y);
         cursor.set(key, at);
         return true;
@@ -147,14 +149,14 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
     return false;
   };
   /** The free slot nearest a point, for a suburb's cluster. */
-  const near = (type: BuildingType, ax: number, ay: number, r: Rect): boolean => {
+  const near = (type: BuildingType, ax: number, ay: number, r: Rect, gap = STREET): boolean => {
     const [w, h] = sizeOf(type);
     let best: [number, number] | null = null;
     let bestD = Infinity;
     for (let y = r.y0; y + h <= r.y1; y += 1) {
       for (let x = r.x0; x + w <= r.x1; x += 1) {
         const d = Math.hypot(x + w / 2 - ax, y + h / 2 - ay);
-        if (d < bestD && fits(x, y, w, h, r)) {
+        if (d < bestD && fits(x, y, w, h, r, gap)) {
           bestD = d;
           best = [x, y];
         }
@@ -190,6 +192,33 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
   let ports = 0;
   for (const q of quarters) if (q.kind === "port" && ++ports > 2) q.kind = "mixed";
 
+  /**
+   * A quarter as blocks - "think of it like a huge motherboard" (the user):
+   * two across, three down, `BLOCK_GAP` tiles of open ground between, some
+   * left as open ground altogether. A block's buildings stand wall to wall:
+   * they share its corridors and cables by touching, and need none of their own.
+   */
+  const blocksOf = (q: (typeof quarters)[number]): Rect[] => {
+    const across = 2;
+    const down = 3;
+    const bw = Math.floor((land - (across - 1) * BLOCK_GAP) / across);
+    const bh = Math.floor((land - (down - 1) * BLOCK_GAP) / down);
+    const out: Rect[] = [];
+    for (let j = 0; j < down; j += 1) {
+      for (let i = 0; i < across; i += 1) {
+        // Open ground: one block in three, away from the civic heart.
+        if (q.kind !== "civic" && (q.qi * 7 + q.qj * 3 + i * 5 + j * 2) % 3 === 0) continue;
+        const x0 = q.r.x0 + i * (bw + BLOCK_GAP);
+        const y0 = q.r.y0 + j * (bh + BLOCK_GAP);
+        out.push({ x0, y0, x1: x0 + bw, y1: y0 + bh });
+      }
+    }
+    return out;
+  };
+  const blocks = new Map(quarters.map((q) => [q, blocksOf(q)] as const));
+  /** Place in the first block of the quarter with room, wall to wall. */
+  const inBlocks = (type: BuildingType, q: (typeof quarters)[number]): boolean => (blocks.get(q) ?? []).some((b) => inRows(type, b, 0));
+
   /** Each suburb's middle, to lay its own corridor to the nearest boulevard. */
   const suburbs: [number, number][] = [];
 
@@ -210,17 +239,17 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
   // 5. Fill every quarter.
   for (const q of quarters) {
     if (q.kind === "suburb") {
-      // One or two clusters of four to eight domes, a greenhouse or two, solar and water; open ground between.
+      // One or two clusters of four to eight domes, a greenhouse or two, solar and water, wall to wall; open ground between.
       const clusters = 1 + Math.floor(rnd() * 2);
       for (let c = 0; c < clusters; c += 1) {
         const ax = q.r.x0 + 6 + rnd() * (land - 12);
         const ay = q.r.y0 + 6 + rnd() * (land - 12);
         const domes = 4 + Math.floor(rnd() * 5);
-        for (let k = 0; k < domes; k += 1) near("habitat_dome", ax, ay, q.r);
-        for (let k = 0; k < Math.ceil(domes / 3); k += 1) near("greenhouse", ax, ay, q.r);
-        near("solar_array", ax, ay, q.r);
-        near("solar_array", ax, ay, q.r);
-        near("water_extractor", ax, ay, q.r);
+        for (let k = 0; k < domes; k += 1) near("habitat_dome", ax, ay, q.r, 0);
+        for (let k = 0; k < Math.ceil(domes / 3); k += 1) near("greenhouse", ax, ay, q.r, 0);
+        near("solar_array", ax, ay, q.r, 0);
+        near("solar_array", ax, ay, q.r, 0);
+        near("water_extractor", ax, ay, q.r, 0);
         suburbs.push([Math.round(ax), Math.round(ay)]);
       }
       continue;
@@ -242,17 +271,19 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
           break;
         }
       }
-      for (const type of ["storage_depot", "storage_depot", "water_extractor", "rover_post", "storage_depot", "laboratory"] as const) inRows(type, q.r);
+      for (const type of ["storage_depot", "storage_depot", "water_extractor", "rover_post", "storage_depot", "laboratory"] as const) inBlocks(type, q);
       continue;
     }
     const recipe = RECIPES[q.kind];
-    for (const type of recipe.first) inRows(type, q.r);
-    // Until the quarter is full ("the zones are very busy") - but power quarters keep room for what the city will draw.
-    const passes = q.kind === "power" ? 2 : 40;
-    for (let k = 0; k < passes; k += 1) {
-      let any = false;
-      for (const type of recipe.repeat) any = inRows(type, q.r) || any;
-      if (!any) break;
+    for (const type of recipe.first) inBlocks(type, q);
+    // Each block until it is full ("the zones are very busy") - but power quarters keep room for what the city will draw.
+    for (const b of blocks.get(q) ?? []) {
+      const passes = q.kind === "power" ? 1 : 40;
+      for (let k = 0; k < passes; k += 1) {
+        let any = false;
+        for (const type of recipe.repeat) any = inRows(type, b, 0) || any;
+        if (!any) break;
+      }
     }
   }
 
@@ -276,32 +307,69 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
     const short = (["power", "water", "food", "oxygen"] as const).find((r) => net[r] < 2);
     if (short === undefined) break;
     const type = maker[short];
-    if (!room.some((q) => inRows(type, q.r)) && short === "power" && !room.some((q) => inRows("geothermal_plant", q.r))) break;
+    if (!room.some((q) => inBlocks(type, q)) && short === "power" && !room.some((q) => inBlocks("geothermal_plant", q))) break;
   }
   // What room the power quarters have left: solar fields.
-  for (const q of quarters) if (q.kind === "power") while (inRows("solar_array", q.r));
+  for (const q of quarters) if (q.kind === "power") while (inBlocks("solar_array", q));
 
-  // 7. Streets round every building, two lanes of corridor and cable down every boulevard, a lane of rail.
+  // 7. The traces: one trunk of corridor and cable down every boulevard, beside a lane of rail; a spur
+  // from each block to its nearest trunk; a road into each suburb. No street round every building.
   const lane = new Uint8Array(n * n);
   const railLane = new Uint8Array(n * n);
   for (let k = 1; k < count; k += 1) {
     const b0 = k * pitch - BOULEVARD / 2;
     for (let v = 0; v < n; v += 1) {
-      for (const off of [1, 2]) {
-        lane[v * n + b0 + off] = 1;
-        lane[(b0 + off) * n + v] = 1;
-      }
+      lane[v * n + b0 + 1] = 1;
+      lane[(b0 + 1) * n + v] = 1;
       railLane[v * n + b0] = 1;
       railLane[b0 * n + v] = 1;
     }
   }
   const free = (i: number): boolean => !taken[i] && reach[i] === 1;
-  // A suburb's own roads in, two of them: straight from its middle to the nearest boulevard each way,
-  // where the ground is free - so no one tile is the suburb's only way to the city.
+  /** The trunk lane nearest a coordinate, along one axis: every boulevard's, and the frame's edges have none. */
+  const trunkAt = (v: number): number => {
+    const k = Math.min(count - 1, Math.max(1, Math.round((v + BOULEVARD / 2) / pitch)));
+    return k * pitch - BOULEVARD / 2 + 1;
+  };
+  /** A straight trace from beside a building to a trunk lane, if the ground is clear the whole way. */
+  const trace = (x: number, y: number, dx: number, dy: number, to: number): number[] | null => {
+    const out: number[] = [];
+    for (let k = 0; k < 2 * pitch; k += 1) {
+      const px = x + dx * k;
+      const py = y + dy * k;
+      if (px < 0 || py < 0 || px >= n || py >= n) return null;
+      const i = py * n + px;
+      if (!free(i)) return null;
+      out.push(i);
+      if ((dx !== 0 && px === to) || (dy !== 0 && py === to)) return out;
+    }
+    return null;
+  };
+  // A spur from each block: from the building nearest one of its sides, straight out to the nearest trunk.
+  for (const [, rects] of blocks) {
+    for (const r of rects) {
+      const inside = placed.filter((b) => b.tx >= r.x0 && b.ty >= r.y0 && b.tx < r.x1 && b.ty < r.y1);
+      if (inside.length === 0) continue;
+      const tries: [number, number, number, number, number][] = [];
+      const west = inside.reduce((a, b) => (b.tx < a.tx ? b : a));
+      const east = inside.reduce((a, b) => (b.tx + sizeOf(b.type)[0] > a.tx + sizeOf(a.type)[0] ? b : a));
+      const north = inside.reduce((a, b) => (b.ty < a.ty ? b : a));
+      const south = inside.reduce((a, b) => (b.ty + sizeOf(b.type)[1] > a.ty + sizeOf(a.type)[1] ? b : a));
+      const midY = (b: PlacedBuilding): number => b.ty + Math.floor(sizeOf(b.type)[1] / 2);
+      const midX = (b: PlacedBuilding): number => b.tx + Math.floor(sizeOf(b.type)[0] / 2);
+      tries.push([west.tx - 1, midY(west), -1, 0, trunkAt(r.x0 - BOULEVARD)]);
+      tries.push([east.tx + sizeOf(east.type)[0], midY(east), 1, 0, trunkAt(r.x1 + BOULEVARD)]);
+      tries.push([midX(north), north.ty - 1, 0, -1, trunkAt(r.y0 - BOULEVARD)]);
+      tries.push([midX(south), south.ty + sizeOf(south.type)[1], 0, 1, trunkAt(r.y1 + BOULEVARD)]);
+      const spurs = tries.map(([x, y, dx, dy, to]) => trace(x, y, dx, dy, to)).filter((p): p is number[] => p !== null).sort((a, b) => a.length - b.length);
+      for (const i of spurs[0] ?? []) lane[i] = 1;
+    }
+  }
+  // A suburb's road in: straight from its middle to the nearest boulevard, where the ground is free.
   for (const [ax, ay] of suburbs) {
     const toX = Math.round((ax + BOULEVARD / 2) / pitch) * pitch - BOULEVARD / 2 + 1;
     const toY = Math.round((ay + BOULEVARD / 2) / pitch) * pitch - BOULEVARD / 2 + 1;
-    for (const alongX of [true, false]) {
+    for (const alongX of [Math.abs(toX - ax) <= Math.abs(toY - ay)]) {
       const [a, b] = alongX ? [ax, toX] : [ay, toY];
       for (let v = Math.min(a, b); v <= Math.max(a, b); v += 1) {
         const i = alongX ? ay * n + v : v * n + ax;
@@ -313,23 +381,13 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
   for (let y = 0; y < n; y += 1) {
     for (let x = 0; x < n; x += 1) {
       const i = y * n + x;
-      if (!free(i)) continue;
-      // Streets two deep round every building: they meet across any gap the rows leave (one deep, a metropolis was 80 networks apart).
-      let beside = false;
-      for (let dy = -2; dy <= 2 && !beside; dy += 1) {
-        for (let dx = -2; dx <= 2 && !beside; dx += 1) {
-          const bx = x + dx;
-          const by = y + dy;
-          if ((dx !== 0 || dy !== 0) && bx >= 0 && by >= 0 && bx < n && by < n && taken[by * n + bx] && Math.abs(dx) + Math.abs(dy) <= 2) beside = true;
-        }
-      }
-      if (beside || lane[i]) links.push(tileKey(x, y));
+      if (free(i) && lane[i]) links.push(tileKey(x, y));
     }
   }
   s = { ...s, buildings: placed };
-  const corridors = [...links, ...linksToConnect({ ...s, corridors: links }, "corridors", t)].sort((a, b) => a - b);
-  const joined = [...corridors, ...linksForRedundancy({ ...s, corridors }, "corridors", t)].sort((a, b) => a - b);
-  // Every building its own route to two others ("connect twice"): no one tile of corridor the only way in.
+  // What the traces leave apart - a building a block's rows left on its own - joined by the shortest way.
+  const joined = [...links, ...linksToConnect({ ...s, corridors: links }, "corridors", t)].sort((a, b) => a - b);
+  // Power runs with the corridors, as traces do on a board.
   const cables = [...joined, ...linksToConnect({ ...s, cables: joined }, "cables", t)].sort((a, b) => a - b);
 
   // 8. Railways: each station to the next, along the boulevards' rail lane.

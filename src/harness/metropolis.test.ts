@@ -11,7 +11,6 @@ import { describe, expect, it } from "vitest";
 import type { Settlement } from "../sim/index.js";
 import { BUILDING_DEFS, BUILDING_TYPES, DEFAULT_TUNING, frameOf, makeTuning, networkOf, withRails } from "../sim/index.js";
 import { examplePlanet } from "./example.js";
-import { soleLinks } from "./links-metric.js";
 
 /** The browser's tuning, as the example is built for it. */
 const game = makeTuning({
@@ -121,17 +120,35 @@ describe("the example's metropolises", () => {
     }
   });
 
-  it("are joined by many corridors, not blobs on one: hardly a tile of corridor is anywhere's only link", () => {
-    // A sole link: a corridor tile whose loss would cut part of the city off.
-    // Measured: 0.64-0.93% of corridor tiles (of ~60,000); the layout before,
-    // districts joined by one corridor each, 6.6-9.5% (of 6,000-9,000). What
-    // is left is at the edge, suburbs a ridge allows one way in.
+  it("are laid out like a motherboard: blocks wall to wall, a trace down each boulevard and to each block - not a street everywhere", () => {
+    // The user: "far, far too many corridors ... think of it like a huge
+    // motherboard, there aren't roads everywhere". Measured: 0.19 tiles of
+    // corridor for each tile under a building (the layout before, a street two
+    // deep round every building: 2.97); every building wall to wall with
+    // another (before: none).
     for (const s of metropolises) {
       const n = frameOf(s, game).n;
-      expect(networkOf(s.buildings, s.corridors, n).count).toBe(1);
-      const { links, sole } = soleLinks(s, n);
-      expect(links, s.id).toBeGreaterThan(40_000);
-      expect(sole / links, s.id).toBeLessThan(0.015);
+      const u = under(s, n);
+      let covered = 0;
+      for (const v of u) covered += v;
+      expect(s.corridors.length / covered, s.id).toBeLessThan(0.4);
+      let touching = 0;
+      const own = new Int32Array(n * n).fill(-1);
+      s.buildings.forEach((b, i) => {
+        const d = BUILDING_DEFS[b.type];
+        for (let y = b.ty; y < b.ty + d.depth; y += 1) for (let x = b.tx; x < b.tx + d.footprint; x += 1) own[y * n + x] = i;
+      });
+      s.buildings.forEach((b, i) => {
+        const d = BUILDING_DEFS[b.type];
+        const edge: [number, number][] = [];
+        for (let x = b.tx; x < b.tx + d.footprint; x += 1) edge.push([x, b.ty - 1], [x, b.ty + d.depth]);
+        for (let y = b.ty; y < b.ty + d.depth; y += 1) edge.push([b.tx - 1, y], [b.tx + d.footprint, y]);
+        if (edge.some(([x, y]) => x >= 0 && y >= 0 && x < n && y < n && own[y * n + x]! >= 0 && own[y * n + x] !== i)) touching += 1;
+      });
+      expect(touching / s.buildings.length, s.id).toBeGreaterThan(0.9);
+      // And still one network of each: every building on the city's corridors and cables.
+      expect(networkOf(s.buildings, s.corridors, n).count, s.id).toBe(1);
+      expect(networkOf(s.buildings, s.cables, n).count, s.id).toBe(1);
     }
   });
 });
