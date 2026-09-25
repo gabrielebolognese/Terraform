@@ -574,7 +574,9 @@ METROPOLIS_GRID_TILES = 96 # a metropolis: 3 x 3 a city's ground
 TERRAIN_RELIEF_M = 0       # Batch 22: local relief, metres either side of the base; OFF (flat) by default, the browser opts in
 TERRAIN_FEATURE_TILES = 10 # hill size, tiles per noise cell; at 12 m relief, 16.1% of ground too steep (measured)
 TERRAIN_CLEAR_TILES = 4    # half-width of the levelled landing zone at the centre
-TERRAIN_MAX_SLOPE = 0.15   # steepest buildable ground, rise over run to a neighbouring tile
+TERRAIN_WORLD_MARGIN = 48  # the open world: tiles of terrain round the buildable grid, every side
+TERRAIN_MOUNTAIN_SCALE = 8 TERRAIN_CANYON_SCALE = 3.5  TERRAIN_PIT_SCALE = 2.5   # big features, x relief
+TERRAIN_MAX_SLOPE = 0.3    # steepest buildable ground, rise over run along a tile edge (with a foundation)
 
 # The planet's hypsometry (detail §1.1, §4.1; Batch 22). Metres at rank k/8 of the shared elevation field.
 HYPSO_ELEV_0 = -8200       HYPSO_ELEV_1 = -4600       HYPSO_ELEV_2 = -4100

@@ -99,6 +99,14 @@ export interface HabitatChannels {
    * playthrough, which is the growth §12.3 is describing.
    */
   readonly supportIndex: number;
+
+  /**
+   * 0..1: the share of the planet's LAND that is green - the same biosphere
+   * the globe paints (`vegFrac` over `landFrac`). A settlement's ground greens
+   * with it (at the user's request: "it's incoherent if the world has a full
+   * biosphere and the cities still look like they just landed on Mars").
+   */
+  readonly greenery: number;
 }
 
 /**
@@ -179,5 +187,6 @@ export function habitat(r: Reservoirs, d: Derived, t: Tuning, liquidRatePerYear:
     maskFraction,
     openAirFraction,
     supportIndex: clamp01(t.HAB_SEALED_BASE + maskWeight * maskFraction + openWeight * openAirFraction),
+    greenery: d.landFrac > 0 ? clamp01(d.vegFrac / d.landFrac) : 0,
   };
 }

@@ -78,8 +78,10 @@ describe("a low city drowns from its lowest ground inward", () => {
       expect(wet.length).toBeGreaterThanOrEqual(wetBefore);
       wetBefore = wet.length;
     }
-    // Measured: the first wet tiles 9.5 m below the base, every tile by 8.8 m above it.
-    expect(wetBefore).toBe(1024);
+    // Measured: 997 of the 1,024 tiles under water when the city falls. (On
+    // Batch 24's terrain every tile was; the open world's ground rises higher
+    // inside the grid, and its highest knolls are still dry at the end.)
+    expect(wetBefore).toBeGreaterThan(950);
   });
 
   it("takes buildings from the lowest up: each goes offline under water before it is lost", () => {

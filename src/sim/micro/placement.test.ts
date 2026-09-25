@@ -49,7 +49,7 @@ describe("placement refuses every case §3.3 and the settlement rules name", () 
     { what: "off the grid, north", state: base, id: "settlement-1", type: "reactor", tx: 14, ty: -1, reason: /runs off the grid/ },
     { what: "off the grid, east", state: base, id: "settlement-1", type: "habitat_dome", tx: 30, ty: 14, reason: /runs off the grid/ },
     { what: "off the grid, south", state: base, id: "settlement-1", type: "habitat_dome", tx: 14, ty: 30, reason: /runs off the grid/ },
-    { what: "on ground too steep", state: base, id: "settlement-1", type: "storage_depot", tx: steep.tx, ty: steep.ty, reason: /too steep to build on \(slope 0\.\d\d, limit 0\.15\)/ },
+    { what: "on ground too steep", state: base, id: "settlement-1", type: "storage_depot", tx: steep.tx, ty: steep.ty, reason: /too steep to build on \(slope 0\.\d\d, limit 0\.3\)/ },
     { what: "overlapping, one tile shared", state: occupied, id: "settlement-1", type: "reactor", tx: 16, ty: 16, reason: /overlap another building/ },
     { what: "not paid for", state: world(59), id: "settlement-1", type: "habitat_dome", tx: 14, ty: 14, reason: /needs 60 materials, 59 available/ },
   ];
@@ -90,28 +90,32 @@ describe("placement refuses every case §3.3 and the settlement rules name", () 
     }
   });
 
-  it("refuses a step up or down to ANY side, not just one", () => {
-    // Judged from the heights alone, not from `isSteep`: a tile whose only
-    // big step (over 0.15 x 10 m) is to one particular side. Every direction
-    // must refuse. An east-only slope check passed every other test here.
+  it("refuses a rise along ANY edge of a tile, not just one", () => {
+    // Judged from the corner heights alone, not from `isSteep`: a tile whose
+    // only edge rising more than 0.3 x 10 m is one particular edge. Every edge
+    // must refuse. (Batch 22's version of this caught an east-only check;
+    // the ground is smooth now, and a tile's slope is the rise along its edges.)
     const g = groundOf({ kind: "city", ...SITE }, t);
     const limit = t.TERRAIN_MAX_SLOPE * t.TILE_METRES;
-    const h = (x: number, y: number): number | undefined => (x < 0 || y < 0 || x >= 32 || y >= 32 ? undefined : g.heightM[y * 32 + x]);
-    const sides = { east: [1, 0], west: [-1, 0], south: [0, 1], north: [0, -1] } as const;
-    for (const [side, [dx, dy]] of Object.entries(sides)) {
+    const c = (x: number, y: number): number => g.cornersM[y * 33 + x]!;
+    const edges = {
+      north: (x: number, y: number) => Math.abs(c(x, y) - c(x + 1, y)),
+      south: (x: number, y: number) => Math.abs(c(x, y + 1) - c(x + 1, y + 1)),
+      west: (x: number, y: number) => Math.abs(c(x, y) - c(x, y + 1)),
+      east: (x: number, y: number) => Math.abs(c(x + 1, y) - c(x + 1, y + 1)),
+    } as const;
+    for (const [side, rise] of Object.entries(edges)) {
       let found: [number, number] | null = null;
       for (let ty = 0; ty < 32 && found === null; ty += 1) {
         for (let tx = 0; tx < 32 && found === null; tx += 1) {
-          const here = h(tx, ty)!;
-          const steps = Object.values(sides).map(([ex, ey]) => Math.abs((h(tx + ex, ty + ey) ?? here) - here));
-          const theOne = Math.abs((h(tx + dx, ty + dy) ?? here) - here);
-          if (theOne > limit && steps.filter((d) => d > limit).length === 1) found = [tx, ty];
+          const over = Object.values(edges).filter((e) => e(tx, ty) > limit).length;
+          if (rise(tx, ty) > limit && over === 1) found = [tx, ty];
         }
       }
-      expect(found, `no tile at this site steps only to the ${side} - the case would be vacuous`).not.toBeNull();
+      expect(found, `no tile at this site rises steeply only along its ${side} edge - the case would be vacuous`).not.toBeNull();
       const [tx, ty] = found!;
       const out = placeBuilding(base, "settlement-1", "storage_depot", tx, ty, t);
-      expect(out.ok, `built on a step only to the ${side}, at ${tx},${ty}`).toBe(false);
+      expect(out.ok, `built on a tile steep only along its ${side} edge, at ${tx},${ty}`).toBe(false);
       expect(out.reason).toMatch(/too steep/);
     }
   });

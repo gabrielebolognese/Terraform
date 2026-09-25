@@ -24,6 +24,7 @@ import { linkGrid } from "./network.js";
 import type { Rock } from "./rocks.js";
 import { garage, rocksOf, siteGround } from "./rocks.js";
 import { keyTile } from "./space.js";
+import { worldOf } from "./terrain.js";
 
 export interface CityBuildingView {
   /** Index into the settlement's `buildings`. */
@@ -60,6 +61,24 @@ export interface CityView {
    * over `TILE_METRES`), the unit the renderer draws height in. Batch 22.
    */
   readonly groundZ: readonly number[];
+  /**
+   * Row-major (`y * (tiles + 1) + x`): the height at every tile CORNER, in
+   * tiles - what the ground is drawn through, so it is smooth, not steps.
+   */
+  readonly corners: readonly number[];
+  /**
+   * The open world round the grid (at the user's request): `margin` tiles of
+   * it on every side, its corner heights in tiles (corner (0, 0) is the
+   * grid's (-margin, -margin)), and the mouths of its caves in grid tiles.
+   */
+  readonly world: {
+    readonly margin: number;
+    readonly size: number;
+    readonly corners: readonly number[];
+    readonly caves: readonly { readonly x: number; readonly y: number; readonly dx: number; readonly dy: number }[];
+  };
+  /** 0..1: how green the planet's land is - the ground greens with it. */
+  readonly greenery: number;
   /** Row-major: the same heights in metres, relative to `baseElevationM` - for the words. */
   readonly heightM: readonly number[];
   /** Row-major: too steep to build on (section 3.3's blocked terrain, detail §1.3). */
@@ -120,12 +139,16 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
   // The ground as the rovers have left it: a broken crag is buildable ground.
   const ground = siteGround(s, t);
   const groundZ = ground.heightM.map((h) => h / t.TILE_METRES);
+  const world = worldOf(s, t);
   const n = ground.tiles;
   return {
     id: s.id,
     kind: s.kind,
     tiles: n,
     groundZ,
+    corners: ground.cornersM.map((h) => h / t.TILE_METRES),
+    world: { margin: world.margin, size: world.size, corners: world.cornersM.map((h) => h / t.TILE_METRES), caves: world.caves },
+    greenery: env.greenery,
     heightM: ground.heightM,
     steep: ground.steep,
     baseElevationM: siteElevation(s.lat, s.lon, t),
@@ -139,11 +162,14 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
             ? occupancy
             : 1;
       const size = BUILDING_DEFS[b.type].footprint;
+      // It stands at the highest corner under it; on a slope, a foundation
+      // fills down to the ground (the user: "building on a slope builds
+      // concrete foundations under it").
       let baseZ = -Infinity;
-      for (let y = b.ty; y < b.ty + size; y += 1) {
-        for (let x = b.tx; x < b.tx + size; x += 1) {
+      for (let y = b.ty; y <= b.ty + size; y += 1) {
+        for (let x = b.tx; x <= b.tx + size; x += 1) {
           // A building kept from an old save may stand partly off a shrunk grid.
-          if (x >= 0 && y >= 0 && x < n && y < n) baseZ = Math.max(baseZ, groundZ[y * n + x] ?? 0);
+          if (x >= 0 && y >= 0 && x <= n && y <= n) baseZ = Math.max(baseZ, (ground.cornersM[y * (n + 1) + x] ?? 0) / t.TILE_METRES);
         }
       }
       const drowned = step.flood !== null && submerged(b, step.flood);

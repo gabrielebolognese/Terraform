@@ -131,6 +131,23 @@ describe("the contract's guarantees", () => {
   });
 });
 
+describe("greenery: the share of land the biosphere has greened (the city's ground follows it)", () => {
+  it("is nothing on the dead planet, and grows through the playthrough to most of the land", () => {
+    expect(RUN[0]!.h.greenery).toBe(0);
+    const last = RUN[RUN.length - 1]!;
+    expect(last.h.greenery).toBeGreaterThan(0.5);
+    expect(last.h.greenery).toBeLessThanOrEqual(1);
+  });
+
+  it("is the globe's own green, as a share of land: vegFrac over landFrac", () => {
+    // Independent of habitat(): read straight off what derive() gives the globe.
+    for (const p of RUN.filter((_, i) => i % 30 === 0)) {
+      const expected = p.d.landFrac > 0 ? Math.min(1, p.d.vegFrac / p.d.landFrac) : 0;
+      expect(p.h.greenery, `year ${p.year}`).toBeCloseTo(expected, 12);
+    }
+  });
+});
+
 describe("water access is a band, not a level", () => {
   it("peaks inside the §2.3 ocean band", () => {
     const base = marsStart();

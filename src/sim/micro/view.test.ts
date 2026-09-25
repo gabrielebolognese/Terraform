@@ -87,7 +87,7 @@ describe("the city view", () => {
     expect(view.buildings[1]!.activity).toBe(1);
   });
 
-  it("stands each building on the highest ground under its footprint, in the renderer's unit", () => {
+  it("stands each building on the highest corner of the ground under its footprint, in the renderer's unit", () => {
     // On hills, beside the flat landing zone: find a buildable 2x2 whose tiles differ in height.
     const hills = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12 });
     const g = groundOf({ kind: "city", lat: 0.3, lon: 1.0 }, hills);
@@ -105,8 +105,11 @@ describe("the city view", () => {
     s0 = { ...s0, settlements: s0.settlements.map((c) => ({ ...c, stores: { ...c.stores, materials: 2000 } })) };
     s0 = placeBuilding(s0, "settlement-1", "geothermal_plant", tx, ty, hills).state;
     const view = cityView(s0.settlements[0]!, envOf(s0), hills);
-    const under = [0, 1].flatMap((dy) => [0, 1].map((dx) => g.heightM[(ty + dy) * 32 + tx + dx]!));
+    // The ground is smooth, through tile corners: a 2 x 2 footprint has 3 x 3 of them, and the
+    // building stands at the highest - a foundation fills down to the rest.
+    const under = [0, 1, 2].flatMap((dy) => [0, 1, 2].map((dx) => g.cornersM[(ty + dy) * 33 + tx + dx]!));
     expect(view.buildings[0]!.baseZ * hills.TILE_METRES).toBeCloseTo(Math.max(...under), 9);
+    expect(Math.max(...under) - Math.min(...under), "the spot slopes, or the foundation test is vacuous").toBeGreaterThan(0.5);
     expect(view.groundZ[ty * 32 + tx]! * hills.TILE_METRES).toBeCloseTo(g.heightM[ty * 32 + tx]!, 9);
   });
 

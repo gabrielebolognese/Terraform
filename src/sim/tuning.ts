@@ -695,8 +695,17 @@ export const BASE_TUNING = Object.freeze({
   TERRAIN_FEATURE_TILES: 10,
   /** Half-width of the square levelled at the grid's centre, where the settlement was founded. */
   TERRAIN_CLEAR_TILES: 4,
-  /** Detail §1.3: the steepest ground a building may stand on, rise over run to a neighbouring tile. */
-  TERRAIN_MAX_SLOPE: 0.15,
+  /**
+   * The open world (at the user's request): tiles of terrain drawn round the
+   * buildable grid on every side, and the scale of its big features as
+   * multiples of TERRAIN_RELIEF_M - mountains, canyons, rock pits.
+   */
+  TERRAIN_WORLD_MARGIN: 48,
+  TERRAIN_MOUNTAIN_SCALE: 8,
+  TERRAIN_CANYON_SCALE: 3.5,
+  TERRAIN_PIT_SCALE: 2.5,
+  /** Detail §1.3: the steepest ground a building may stand on, rise over run along a tile edge. 3 m in 10: a building on a slope stands on a concrete foundation (the user). */
+  TERRAIN_MAX_SLOPE: 0.3,
 
   // -------------------------------------------------------------------------
   // The planet's hypsometry (detail §1.1 and §4.1, Batch 22)
