@@ -528,6 +528,15 @@ export const BUILDING_TYPES = [
   "research_forum",
   "medical_center",
   "industrial_command",
+  // At the user's request: wind, the mall, stores of each kind, parks and the biosphere.
+  "wind_turbine",
+  "mega_mall",
+  "water_tank",
+  "battery_bank",
+  "freezer",
+  "materials_depot",
+  "park",
+  "biosphere",
   "headquarters",
 ] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];

@@ -966,6 +966,49 @@ export const BASE_TUNING = Object.freeze({
   MAX_LEVEL_REGOLITH_MINE: 10,
   MAX_LEVEL_OTHER: 8,
   ROVER_POST_PEOPLE: 100,
+  /**
+   * Wind, the mall, the stores, parks and the biosphere (at the user's
+   * request). A wind turbine opens once the air is thick enough to turn it -
+   * WIND_MIN_PRESSURE mbar (a new game starts near 6; the example planet
+   * stands at 1,044, measured) - and makes WIND_POWER at WIND_FULL_PRESSURE,
+   * in proportion below it, up to half as much again above. A park opens once
+   * the air outside is open to a mask over PARK_MIN_OPEN_AIR of the planet
+   * (0 at the start, 0.998 on the example, measured).
+   */
+  COST_WIND_TURBINE: 35,
+  WIND_POWER: 10,
+  WIND_MIN_PRESSURE: 300,
+  WIND_FULL_PRESSURE: 1000,
+  COST_MEGA_MALL: 1500,
+  MALL_FOOD: 90,
+  MALL_POWER: 70,
+  MALL_PEOPLE: 10000,
+  COST_WATER_TANK: 25,
+  TANK_WATER: 400,
+  COST_BATTERY_BANK: 40,
+  BATTERY_POWER: 150,
+  COST_FREEZER: 30,
+  FREEZER_FOOD: 400,
+  FREEZER_POWER: 1,
+  COST_MATERIALS_DEPOT: 30,
+  MATERIALS_DEPOT_MATERIALS: 1500,
+  COST_PARK: 20,
+  PARK_OXYGEN: 2,
+  PARK_WATER: 1,
+  PARK_MIN_OPEN_AIR: 0.5,
+  COST_BIOSPHERE: 800,
+  BIOSPHERE_FOOD: 40,
+  BIOSPHERE_OXYGEN: 30,
+  BIOSPHERE_POWER: 20,
+  BIOSPHERE_WATER: 12,
+  BUILD_YEARS_WIND_TURBINE: 0.2,
+  BUILD_YEARS_MEGA_MALL: 2,
+  BUILD_YEARS_WATER_TANK: 0.1,
+  BUILD_YEARS_BATTERY_BANK: 0.1,
+  BUILD_YEARS_FREEZER: 0.1,
+  BUILD_YEARS_MATERIALS_DEPOT: 0.2,
+  BUILD_YEARS_PARK: 0.1,
+  BUILD_YEARS_BIOSPHERE: 1.5,
 
   /** Habitat Dome: people housed, and life support drawn per year. */
   DOME_HOUSING: 40,

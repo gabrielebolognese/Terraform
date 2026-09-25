@@ -48,7 +48,9 @@ export interface BuildingDef {
   /** Section 2.1 gating. */
   readonly canOperate: (env: HabitatChannels, t: Tuning) => boolean;
   /** Section 2.1 scaling of production (and of the planetary output). */
-  readonly efficiency: (env: HabitatChannels) => number;
+  readonly efficiency: (env: HabitatChannels, t: Tuning) => number;
+  /** Why the planet does not yet allow one to be built (the air too thin for wind, too closed for a park); null when it does. */
+  readonly locked: (env: HabitatChannels, t: Tuning) => string | null;
 }
 
 /** Tile-key lists as sets, kept per list: the rules ask of the same lists many times (a placement preview, a replay). */
@@ -121,6 +123,14 @@ export function buildYears(type: BuildingType, t: Tuning): number {
     research_forum: t.BUILD_YEARS_RESEARCH_FORUM,
     medical_center: t.BUILD_YEARS_MEDICAL_CENTER,
     industrial_command: t.BUILD_YEARS_INDUSTRIAL_COMMAND,
+    wind_turbine: t.BUILD_YEARS_WIND_TURBINE,
+    mega_mall: t.BUILD_YEARS_MEGA_MALL,
+    water_tank: t.BUILD_YEARS_WATER_TANK,
+    battery_bank: t.BUILD_YEARS_BATTERY_BANK,
+    freezer: t.BUILD_YEARS_FREEZER,
+    materials_depot: t.BUILD_YEARS_MATERIALS_DEPOT,
+    park: t.BUILD_YEARS_PARK,
+    biosphere: t.BUILD_YEARS_BIOSPHERE,
     headquarters: t.BUILD_YEARS_SPACEPORT,
   };
   return years[type];
@@ -133,8 +143,20 @@ const ONE = (): number => 1;
 const BOTH: readonly SettlementKind[] = ["city", "outpost", "metropolis"];
 const CITY: readonly SettlementKind[] = ["city", "metropolis"];
 
-/** A definition as written: square unless it says otherwise, no research, no population asked. */
-type DefIn = Omit<BuildingDef, "depth" | "research" | "minPopulation"> & Partial<Pick<BuildingDef, "depth" | "research" | "minPopulation">>;
+/** A definition as written: square unless it says otherwise, no research, no population asked, never locked. */
+type DefIn = Omit<BuildingDef, "depth" | "research" | "minPopulation" | "locked"> & Partial<Pick<BuildingDef, "depth" | "research" | "minPopulation" | "locked">>;
+
+/** Never locked by the planet. */
+export const UNLOCKED = (): string | null => null;
+
+/** The air thick enough to turn a turbine. */
+const windLocked = (env: HabitatChannels, t: Tuning): string | null =>
+  env.pressure >= t.WIND_MIN_PRESSURE ? null : `the air is too thin to turn a turbine - ${Math.round(env.pressure)} mbar, it needs ${t.WIND_MIN_PRESSURE}`;
+/** Open air over enough of the planet for a park. */
+const parkLocked = (env: HabitatChannels, t: Tuning): string | null =>
+  env.openAirFraction >= t.PARK_MIN_OPEN_AIR
+    ? null
+    : `a park needs a terraformed world - open air over ${Math.round(t.PARK_MIN_OPEN_AIR * 100)}% of the planet, it is ${Math.round(env.openAirFraction * 100)}%`;
 
 const RAW: Readonly<Record<BuildingType, DefIn>> = {
   habitat_dome: {
@@ -466,6 +488,140 @@ const RAW: Readonly<Record<BuildingType, DefIn>> = {
     canOperate: ALWAYS,
     efficiency: ONE,
   },
+  wind_turbine: {
+    type: "wind_turbine",
+    name: "Wind Turbine",
+    summary: "A tall three-bladed turbine: power from the wind, once the air is thick enough to turn it - more the thicker it gets.",
+    footprint: 2,
+    buildable: true,
+    kinds: BOTH,
+    cost: (t) => t.COST_WIND_TURBINE,
+    consumes: NONE,
+    produces: (t) => ({ power: t.WIND_POWER }),
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: (env, t) => env.pressure >= t.WIND_MIN_PRESSURE,
+    // In proportion to the air's pressure against the full-output pressure, up to half as much again.
+    efficiency: (env, t) => Math.min(1.5, Math.max(0, env.pressure / t.WIND_FULL_PRESSURE)),
+    locked: windLocked,
+  },
+  mega_mall: {
+    type: "mega_mall",
+    name: "Mega Mall",
+    summary: "A great covered market, 8 x 6: halls of food from across the planet - and a ton of power to run it. For a city of ten thousand.",
+    footprint: 8,
+    depth: 6,
+    buildable: true,
+    kinds: CITY,
+    cost: (t) => t.COST_MEGA_MALL,
+    consumes: (t) => ({ power: t.MALL_POWER }),
+    produces: (t) => ({ food: t.MALL_FOOD }),
+    minPopulation: (t) => t.MALL_PEOPLE,
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  water_tank: {
+    type: "water_tank",
+    name: "Water Tank",
+    summary: "A great insulated tank: room for much more water.",
+    footprint: 2,
+    buildable: true,
+    kinds: BOTH,
+    cost: (t) => t.COST_WATER_TANK,
+    consumes: NONE,
+    produces: NONE,
+    housing: ZERO,
+    capacity: (t) => ({ water: t.TANK_WATER }),
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  battery_bank: {
+    type: "battery_bank",
+    name: "Battery Bank",
+    summary: "Rows of battery cabinets: power kept for the night and the dust.",
+    footprint: 2,
+    buildable: true,
+    kinds: BOTH,
+    cost: (t) => t.COST_BATTERY_BANK,
+    consumes: NONE,
+    produces: NONE,
+    housing: ZERO,
+    capacity: (t) => ({ power: t.BATTERY_POWER }),
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  freezer: {
+    type: "freezer",
+    name: "Freezer",
+    summary: "A cold store: room for much more food, for a little power.",
+    footprint: 2,
+    buildable: true,
+    kinds: BOTH,
+    cost: (t) => t.COST_FREEZER,
+    consumes: (t) => ({ power: t.FREEZER_POWER }),
+    produces: NONE,
+    housing: ZERO,
+    capacity: (t) => ({ food: t.FREEZER_FOOD }),
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  materials_depot: {
+    type: "materials_depot",
+    name: "Materials Depot",
+    summary: "A walled yard of stacked materials, with its gantry crane: room for much more.",
+    footprint: 3,
+    buildable: true,
+    kinds: BOTH,
+    cost: (t) => t.COST_MATERIALS_DEPOT,
+    consumes: NONE,
+    produces: NONE,
+    housing: ZERO,
+    capacity: (t) => ({ materials: t.MATERIALS_DEPOT_MATERIALS }),
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
+  park: {
+    type: "park",
+    name: "Park",
+    summary: "Grass, trees and a pond under the open sky: a little oxygen, a little water - for a world already terraformed.",
+    footprint: 4,
+    buildable: true,
+    kinds: CITY,
+    cost: (t) => t.COST_PARK,
+    consumes: (t) => ({ water: t.PARK_WATER }),
+    produces: (t) => ({ oxygen: t.PARK_OXYGEN }),
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: (env, t) => env.openAirFraction >= t.PARK_MIN_OPEN_AIR,
+    efficiency: ONE,
+    locked: parkLocked,
+  },
+  biosphere: {
+    type: "biosphere",
+    name: "Biosphere",
+    summary: "A 6 x 4 mega greenhouse: a whole living world under glass, giving food and oxygen for power and water.",
+    footprint: 6,
+    depth: 4,
+    buildable: true,
+    kinds: CITY,
+    cost: (t) => t.COST_BIOSPHERE,
+    consumes: (t) => ({ power: t.BIOSPHERE_POWER, water: t.BIOSPHERE_WATER }),
+    produces: (t) => ({ food: t.BIOSPHERE_FOOD, oxygen: t.BIOSPHERE_OXYGEN }),
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+  },
   headquarters: {
     type: "headquarters",
     name: "Headquarters",
@@ -486,6 +642,6 @@ const RAW: Readonly<Record<BuildingType, DefIn>> = {
 
 export const BUILDING_DEFS: Readonly<Record<BuildingType, BuildingDef>> = Object.freeze(
   Object.fromEntries(
-    (Object.entries(RAW) as [BuildingType, DefIn][]).map(([type, d]) => [type, { ...d, depth: d.depth ?? d.footprint, research: d.research ?? ZERO, minPopulation: d.minPopulation ?? ZERO }]),
+    (Object.entries(RAW) as [BuildingType, DefIn][]).map(([type, d]) => [type, { ...d, depth: d.depth ?? d.footprint, research: d.research ?? ZERO, minPopulation: d.minPopulation ?? ZERO, locked: d.locked ?? UNLOCKED }]),
   ) as Record<BuildingType, BuildingDef>,
 );
