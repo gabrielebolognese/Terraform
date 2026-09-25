@@ -158,6 +158,9 @@ function pitIn(seed: number, cx: number, cy: number, cell: number): Pit | null {
   return made;
 }
 
+/** The pits round the last sample's cell (see `terrainHeight`). */
+const near: { seed: number; cx: number; cy: number; pits: (Pit | null)[] } = { seed: NaN, cx: NaN, cy: NaN, pits: new Array<Pit | null>(9).fill(null) };
+
 /** The seed for a place: its coordinate to a few millimetres on the planet (1e-9 rad). */
 export function placeSeed(lat: number, lon: number): number {
   return hash3(Math.round(lat * 1e9), Math.round(lon * 1e9), 0x5eed);
@@ -224,9 +227,18 @@ export function terrainHeight(seed: number, tiles: number, x: number, y: number,
   const cell = 26;
   const cx0 = Math.floor(x / cell);
   const cy0 = Math.floor(y / cell);
-  for (let cy = cy0 - 1; cy <= cy0 + 1; cy += 1) {
-    for (let cx = cx0 - 1; cx <= cx0 + 1; cx += 1) {
-      const pit = pitIn(seed, cx, cy, cell);
+  // The nine cells round this one, kept from the last sample: samples come in rows, and a row
+  // stays in one cell for 26 tiles (looked up nine times a sample, a metropolis's million-tile
+  // ground spent a sixth of its making in the lookups, measured).
+  if (near.seed !== seed || near.cx !== cx0 || near.cy !== cy0) {
+    near.seed = seed;
+    near.cx = cx0;
+    near.cy = cy0;
+    for (let k = 0; k < 9; k += 1) near.pits[k] = pitIn(seed, cx0 - 1 + (k % 3), cy0 - 1 + Math.floor(k / 3), cell);
+  }
+  for (let k = 0; k < 9; k += 1) {
+    {
+      const pit = near.pits[k]!;
       if (pit === null) continue;
       const dx = x - pit.px;
       const dy = y - pit.py;
@@ -495,7 +507,17 @@ export function worldOf(place: Place, t: Tuning): World {
     const sx = (x: number): number => x - margin + x0;
     const sy = (y: number): number => y - margin + y0;
     const cornersM = new Array<number>(m * m);
-    for (let y = 0; y < m; y += 1) for (let x = 0; x < m; x += 1) cornersM[y * m + x] = clean(terrainHeight(seed, base, sx(x), sy(y), t));
+    // Inside the frame, the ground's own corners: the same heights, already made (a metropolis's
+    // million of them, made twice, were a sixth of opening it, measured).
+    const inner = groundOf(place, t).cornersM;
+    const gm = tiles + 1;
+    for (let y = 0; y < m; y += 1) {
+      for (let x = 0; x < m; x += 1) {
+        const gx = x - margin;
+        const gy = y - margin;
+        cornersM[y * m + x] = gx >= 0 && gy >= 0 && gx < gm && gy < gm ? inner[gy * gm + gx]! : clean(terrainHeight(seed, base, sx(x), sy(y), t));
+      }
+    }
     const f = 2 * size + 1;
     const fineM = new Array<number>(f * f);
     for (let y = 0; y < f; y += 1) {

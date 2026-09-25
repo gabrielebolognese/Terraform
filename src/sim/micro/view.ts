@@ -210,6 +210,22 @@ function worldInTiles(world: World, t: Tuning): CityView["world"] {
   return made;
 }
 
+/**
+ * The per-tile lists a view carries, kept per what they are made from (all
+ * immutable): rebuilt for every view, a metropolis's million tiles cost
+ * 0.42 s a view, several times a second (measured). The same lists also let
+ * the renderer see nothing has changed.
+ */
+const perTile = new WeakMap<object, { n: number; t: Tuning; also: unknown; value: unknown }>();
+function kept<T>(from: object, n: number, t: Tuning, also: unknown, make: () => T): T {
+  const hit = perTile.get(from);
+  if (hit !== undefined && hit.n === n && hit.t === t && hit.also === also) return hit.value as T;
+  const value = make();
+  perTile.set(from, { n, t, also, value });
+  return value;
+}
+const dry = new Map<number, readonly boolean[]>();
+
 export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityView {
   const step = settlementStep(s, env, t, t.SUBSTEP_YEARS);
   const home = housing(s, t);
@@ -219,15 +235,37 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
   for (const r of MICRO_RESOURCES) net[r] = step.production[r] - step.consumption[r];
   // The ground as the rovers have left it: a broken crag is buildable ground.
   const ground = siteGround(s, t);
-  const groundZ = ground.heightM.map((h) => h / t.TILE_METRES);
+  const groundZ = kept(ground.heightM, ground.tiles, t, null, () => ground.heightM.map((h) => h / t.TILE_METRES));
   const world = worldOf(s, t);
   const n = ground.tiles;
   const frame = frameOf(s, t);
   const ours = claimTest(s, t);
-  const claimed = new Array<boolean>(n * n);
-  for (let ty = 0; ty < n; ty += 1) for (let tx = 0; tx < n; tx += 1) claimed[ty * n + tx] = ours(tx, ty);
+  const claimed = kept(ground, n, t, s.claims, () => {
+    const out = new Array<boolean>(n * n);
+    for (let ty = 0; ty < n; ty += 1) for (let tx = 0; tx < n; tx += 1) out[ty * n + tx] = ours(tx, ty);
+    return out;
+  });
+  const grid = (list: readonly number[]): boolean[] => kept(list, n, t, null, () => Array.from(linkGrid(list, n), (r) => r === 1));
+  let wet = dry.get(n);
+  if (wet === undefined) {
+    wet = new Array<boolean>(n * n).fill(false);
+    dry.set(n, wet);
+  }
   const chunk = t.CLAIM_CHUNK_TILES;
   const building = constructionOf(s);
+  // Where each building stands: the highest corner under it - kept per building list and ground.
+  const bases = kept(s.buildings, n, t, ground, () =>
+    s.buildings.map((b) => {
+      let baseZ = -Infinity;
+      for (let y = b.ty; y <= b.ty + BUILDING_DEFS[b.type].depth; y += 1) {
+        for (let x = b.tx; x <= b.tx + BUILDING_DEFS[b.type].footprint; x += 1) {
+          // A building kept from an old save may stand partly off a shrunk grid.
+          if (x >= 0 && y >= 0 && x <= n && y <= n) baseZ = Math.max(baseZ, (ground.cornersM[y * (n + 1) + x] ?? 0) / t.TILE_METRES);
+        }
+      }
+      return baseZ;
+    }),
+  );
   return {
     id: s.id,
     kind: s.kind,
@@ -242,7 +280,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
       open: claimableChunks(s, t).map(({ i, j }) => ({ i, j, tx: i * chunk - frame.x0, ty: j * chunk - frame.y0 })),
     },
     groundZ,
-    corners: ground.cornersM.map((h) => h / t.TILE_METRES),
+    corners: kept(ground.cornersM, n, t, null, () => ground.cornersM.map((h) => h / t.TILE_METRES)),
     world: withGrades(worldInTiles(world, t), s.grades, t),
     greenery: env.greenery,
     heightM: ground.heightM,
@@ -262,13 +300,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
       // It stands at the highest corner under it; on a slope, a foundation
       // fills down to the ground (the user: "building on a slope builds
       // concrete foundations under it").
-      let baseZ = -Infinity;
-      for (let y = b.ty; y <= b.ty + depth; y += 1) {
-        for (let x = b.tx; x <= b.tx + size; x += 1) {
-          // A building kept from an old save may stand partly off a shrunk grid.
-          if (x >= 0 && y >= 0 && x <= n && y <= n) baseZ = Math.max(baseZ, (ground.cornersM[y * (n + 1) + x] ?? 0) / t.TILE_METRES);
-        }
-      }
+      const baseZ = bases[index]!;
       const drowned = step.flood !== null && submerged(b, step.flood);
       return { index, type: b.type, tx: b.tx, ty: b.ty, size, ...(depth === size ? {} : { depth }), operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null };
     }),
@@ -279,13 +311,13 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     capacities: capacities(s, t),
     net,
     shortages: step.shortages,
-    wet: step.flood?.wet ?? new Array<boolean>(n * n).fill(false),
+    wet: step.flood?.wet ?? wet,
     floodState: s.lostAtSeaLevelM !== null ? "flooded" : step.flood?.state ?? "dry",
     floodDepthM: step.flood?.depthM ?? null,
     lostAtSeaLevelM: s.lostAtSeaLevelM,
-    corridors: Array.from(linkGrid(s.corridors, n), (r) => r === 1),
-    cables: Array.from(linkGrid(s.cables, n), (r) => r === 1),
-    rails: Array.from(linkGrid(s.rails, n), (r) => r === 1),
+    corridors: grid(s.corridors),
+    cables: grid(s.cables),
+    rails: grid(s.rails),
     rocks: rocksOf(s, t),
     garage: garage(s),
     // A rover building is drawn as any rover at work: out, at the site, and back.

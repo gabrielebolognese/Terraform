@@ -184,3 +184,31 @@ describe("the open world round it", () => {
     }
   });
 });
+
+describe("the height of a place", () => {
+  it("is the same asked in any order, and whatever place was asked before", async () => {
+    const { placeSeed, terrainHeight } = await import("./terrain.js");
+    const t = makeTuning({ TERRAIN_RELIEF_M: 12 });
+    const a = placeSeed(0.31, -1.2);
+    const b = placeSeed(-0.5, 2.1);
+    // Alone, row by row; then the two places asked in turn, sample by sample, at the same points.
+    const alone = (seed: number): number[] => {
+      const out: number[] = [];
+      for (let y = 0; y < 60; y += 1) for (let x = 0; x < 60; x += 1) out.push(terrainHeight(seed, 96, x, y, t));
+      return out;
+    };
+    const ha = alone(a);
+    const hb = alone(b);
+    expect(ha, "vacuity: two places, two grounds").not.toEqual(hb);
+    const ta: number[] = [];
+    const tb: number[] = [];
+    for (let y = 0; y < 60; y += 1) {
+      for (let x = 0; x < 60; x += 1) {
+        ta.push(terrainHeight(a, 96, x, y, t));
+        tb.push(terrainHeight(b, 96, x, y, t));
+      }
+    }
+    expect(ta).toEqual(ha);
+    expect(tb).toEqual(hb);
+  });
+});

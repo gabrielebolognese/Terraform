@@ -275,3 +275,22 @@ describe("the save", () => {
     expect(frameOf(loaded, SMALL).n).toBe(96);
   });
 });
+
+describe("the view of claimed land", () => {
+  it("follows a claim that fills a gap inside the frame - the frame unchanged, the land the city holds not", () => {
+    // The column east of the founding square and a chunk south of it, then the chunk beside that one: the last
+    // claim moves no edge of the frame, so everything the view keeps per frame stays - but the land the city holds does not.
+    let s = claim(claim(claim(claim(city(BIG, 1e6), 3, 0), 3, 1), 3, 2), 0, 3);
+    const env = habitat(s.reservoirs, derive(s.reservoirs, worldEnv(s, NEUTRAL_ENV, BIG), BIG), BIG, 0);
+    const corner = (st: SimState): boolean => {
+      const v = cityView(first(st), env, BIG);
+      const f = frameOf(first(st), BIG);
+      return v.claimed[(3 * 32 - f.y0 + 5) * v.tiles + (1 * 32 - f.x0 + 5)]!;
+    };
+    const before = frameOf(first(s), BIG);
+    expect(corner(s), "vacuity: the corner is not the city's yet").toBe(false);
+    s = claim(s, 1, 3);
+    expect(frameOf(first(s), BIG)).toEqual(before);
+    expect(corner(s)).toBe(true);
+  });
+});

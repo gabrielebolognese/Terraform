@@ -13,7 +13,7 @@
  */
 
 import type { Tuning } from "../tuning.js";
-import type { Grade, Settlement } from "../types.js";
+import type { Grade, PlacedBuilding, Settlement } from "../types.js";
 import { BUILDING_DEFS, keySet, tilesUnder } from "./buildings.js";
 import { frameOf, keyTile, tileKey } from "./space.js";
 import type { Ground, Rock } from "./terrain.js";
@@ -139,8 +139,12 @@ function naturalRocks(s: Settlement, ground: Ground, t: Tuning): readonly Rock[]
  * under a building, a corridor or a cable (they were cleared to build), none
  * where a rover has been.
  */
-export function rocksOf(s: Settlement, t: Tuning): Rock[] {
+export function rocksOf(s: Settlement, t: Tuning): readonly Rock[] {
   const ground = groundOf(s, t);
+  // Kept while nothing it is made from has changed (every levelling rover and every view asked again:
+  // a metropolis's million tiles, most of a view's cost, measured).
+  const hit = rocksKept.get(s.buildings);
+  if (hit !== undefined && hit.ground === ground && hit.t === t && hit.cleared === s.cleared && hit.corridors === s.corridors && hit.cables === s.cables && hit.rails === s.rails) return hit.out;
   const n = ground.tiles;
   const covered = new Set<number>([...s.cleared, ...s.corridors, ...s.cables, ...s.rails]);
   for (const b of s.buildings) {
@@ -153,8 +157,11 @@ export function rocksOf(s: Settlement, t: Tuning): Rock[] {
     const { tx, ty } = keyTile(key);
     if (tx < n && ty < n) out[ty * n + tx] = "none";
   }
+  rocksKept.set(s.buildings, { ground, t, cleared: s.cleared, corridors: s.corridors, cables: s.cables, rails: s.rails, out });
   return out;
 }
+
+const rocksKept = new WeakMap<readonly PlacedBuilding[], { ground: object; t: Tuning; cleared: readonly number[]; corridors: readonly number[]; cables: readonly number[]; rails: readonly number[]; out: readonly Rock[] }>();
 
 /**
  * The rock on one tile, as `rocksOf` would say - for the placement rules,

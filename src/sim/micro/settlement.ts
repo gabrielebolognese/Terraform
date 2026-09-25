@@ -14,10 +14,12 @@
  */
 
 import type { HabitatChannels } from "../habitat.js";
+import { habitat } from "../habitat.js";
+import { derive } from "../derive.js";
 import type { Tuning } from "../tuning.js";
 import type { BuildingType, History, MicroResource, PlacedBuilding, PlannedLink, Settlement, SettlementJob, SettlementKind, SimState, Zone } from "../types.js";
-import { MICRO_RESOURCES, isCityKind } from "../types.js";
-import { BUILDING_DEFS, buildYears, keySet, levelFactor, maxLevel, tilesUnder } from "./buildings.js";
+import { MICRO_RESOURCES, NEUTRAL_ENV, isCityKind } from "../types.js";
+import { BUILDING_DEFS, UNLOCKED, buildYears, keySet, levelFactor, maxLevel, tilesUnder } from "./buildings.js";
 import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
 import { isSteep, slopeAt } from "./terrain.js";
 import type { Rock } from "./rocks.js";
@@ -85,7 +87,33 @@ export function foundingBuildings(kind: SettlementKind, t: Tuning): PlacedBuildi
   return out;
 }
 
+/**
+ * What every building adds to the stores' room and to housing, kept per
+ * building list and tuning while none of them is going up (asked twice a
+ * substep over a metropolis's 21,000 buildings, it was a fifth of the step).
+ * Summed in the same order as the loops below, so the numbers are the same.
+ */
+const standingSums = new WeakMap<readonly PlacedBuilding[], { t: Tuning; cap: Readonly<Record<MicroResource, number>>; home: number }>();
+
+function sumsOf(s: Settlement, t: Tuning): { cap: Readonly<Record<MicroResource, number>>; home: number } | null {
+  if (constructing(s) !== EMPTY) return null;
+  const kept = standingSums.get(s.buildings);
+  if (kept !== undefined && kept.t === t) return kept;
+  const made = { t, cap: capacitiesLoop(s, t), home: housingLoop(s, t) };
+  standingSums.set(s.buildings, made);
+  return made;
+}
+
 export function capacities(s: Settlement, t: Tuning): Readonly<Record<MicroResource, number>> {
+  const kept = sumsOf(s, t);
+  return kept !== null ? { ...kept.cap } : capacitiesLoop(s, t);
+}
+
+export function housing(s: Settlement, t: Tuning): number {
+  return sumsOf(s, t)?.home ?? housingLoop(s, t);
+}
+
+function capacitiesLoop(s: Settlement, t: Tuning): Record<MicroResource, number> {
   const cap: Record<MicroResource, number> = {
     power: t.MICRO_CAP_POWER,
     water: t.MICRO_CAP_WATER,
@@ -103,7 +131,7 @@ export function capacities(s: Settlement, t: Tuning): Readonly<Record<MicroResou
   return cap;
 }
 
-export function housing(s: Settlement, t: Tuning): number {
+function housingLoop(s: Settlement, t: Tuning): number {
   let total = 0;
   const building = constructing(s);
   for (const b of s.buildings) if (!building.has(tileKey(b.tx, b.ty))) total += BUILDING_DEFS[b.type].housing(t) * levelFactor(b.level, t);
@@ -169,6 +197,8 @@ export function placeBuilding(
   tx: number,
   ty: number,
   t: Tuning,
+  /** The planet as the city sees it, for what it unlocks (wind, parks); from the reservoirs when not given. */
+  env?: HabitatChannels,
 ): PlaceOutcome {
   const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
   const s = state.settlements.find((x) => x.id === settlementId);
@@ -180,6 +210,10 @@ export function placeBuilding(
   if (!def.kinds.includes(s.kind)) return refuse(`${def.name} cannot be built in an ${s.kind}`);
   const needs = def.minPopulation(t);
   if (needs > 0 && s.population < needs) return refuse(`a ${def.name} needs a city of ${needs} people - this one has ${Math.floor(s.population)}`);
+  if (def.locked !== UNLOCKED) {
+    const locked = def.locked(env ?? habitat(state.reservoirs, derive(state.reservoirs, NEUTRAL_ENV, t), t, 0), t);
+    if (locked !== null) return refuse(locked);
+  }
   if (type === "rover_post") {
     // One post for every ROVER_POST_PEOPLE people.
     const posts = s.buildings.filter((b) => b.type === "rover_post").length;
@@ -858,16 +892,42 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   const defs = s.buildings.map((b) => BUILDING_DEFS[b.type]);
   const levels = s.buildings.map((b) => levelFactor(b.level, t));
   const building = constructing(s);
+  // What a building of each type draws, makes, how well it runs and whether it may: asked once a type this
+  // substep, not once a building (a metropolis has 21,000 buildings of 28 types).
+  const kinds = new Map<BuildingType, number>();
+  const kindDraw: Partial<Record<MicroResource, number>>[] = [];
+  const kindMake: Partial<Record<MicroResource, number>>[] = [];
+  const kindDrawRow: number[][] = [];
+  const kindMakeRow: number[][] = [];
+  const kindEff: number[] = [];
+  const kindCan: boolean[] = [];
+  const kindOf = new Int32Array(defs.length);
+  defs.forEach((def, i) => {
+    let k = kinds.get(def.type);
+    if (k === undefined) {
+      k = kindDraw.length;
+      kinds.set(def.type, k);
+      const draw = def.consumes(t, env);
+      const make = def.produces(t);
+      kindDraw.push(draw);
+      kindMake.push(make);
+      kindDrawRow.push(MICRO_RESOURCES.map((r) => draw[r] ?? 0));
+      kindMakeRow.push(MICRO_RESOURCES.map((r) => make[r] ?? 0));
+      kindEff.push(def.efficiency(env, t));
+      kindCan.push(def.canOperate(env, t));
+    }
+    kindOf[i] = k;
+  });
   // A building with water over any tile of its footprint is offline (detail §4.3); one still going up is not running yet.
-  const operable = defs.map((def, i) => def.canOperate(env, t) && !(flood !== null && submerged(s.buildings[i]!, flood)) && !building.has(tileKey(s.buildings[i]!.tx, s.buildings[i]!.ty)));
+  const operable = defs.map((_, i) => kindCan[kindOf[i]!]! && !(flood !== null && submerged(s.buildings[i]!, flood)) && !building.has(tileKey(s.buildings[i]!.tx, s.buildings[i]!.ty)));
   // Section 6's networks: with them off, every building on the grid is on them.
   const n = frameOf(s, t).n;
   // Railways join the districts round the stations they link.
   const network = t.NETWORK_ENABLED
     ? { corridors: withRails(networkOf(s.buildings, s.corridors, n), s.buildings, s.rails, n), cables: withRails(networkOf(s.buildings, s.cables, n), s.buildings, s.rails, n) }
     : null;
-  const draws = defs.map((def) => def.consumes(t, env));
-  const makes = defs.map((def) => def.produces(t));
+  const draws = defs.map((_, i) => kindDraw[kindOf[i]!]!);
+  const makes = defs.map((_, i) => kindMake[kindOf[i]!]!);
   const issues: (NetworkIssue | null)[] = defs.map(() => null);
   const connect = (): void => {
     if (network !== null) while (applyNetwork(network, draws, makes, operable, issues));
@@ -884,23 +944,30 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   };
 
   const totals = (): { prod: Record<MicroResource, number>; cons: Record<MicroResource, number> } => {
-    const prod = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
-    const cons = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
-    // From what each building draws and makes, found once this substep (asked afresh
-    // for every building on every pass, it was a third of a metropolis's substep).
+    // From what each type draws and makes, found once this substep (asked afresh
+    // for every building on every pass, it was a third of a metropolis's substep),
+    // as rows in MICRO_RESOURCES order, summed in the same order as ever.
+    let p0 = 0, p1 = 0, p2 = 0, p3 = 0, p4 = 0;
+    let c0 = 0, c1 = 0, c2 = 0, c3 = 0, c4 = 0;
     for (let i = 0; i < defs.length; i += 1) {
       if (!operable[i]) continue;
-      const eff = effs[i]! * levels[i]! * commandBoost(i);
-      const p = makes[i]!;
-      const c = draws[i]!;
-      for (const r of MICRO_RESOURCES) {
-        prod[r] += (p[r] ?? 0) * eff;
-        cons[r] += c[r] ?? 0;
-      }
+      const k = kindOf[i]!;
+      const eff = kindEff[k]! * levels[i]! * commandBoost(i);
+      const p = kindMakeRow[k]!;
+      const c = kindDrawRow[k]!;
+      p0 += p[0]! * eff;
+      p1 += p[1]! * eff;
+      p2 += p[2]! * eff;
+      p3 += p[3]! * eff;
+      p4 += p[4]! * eff;
+      c0 += c[0]!;
+      c1 += c[1]!;
+      c2 += c[2]!;
+      c3 += c[3]!;
+      c4 += c[4]!;
     }
-    return { prod, cons };
+    return { prod: { power: p0, water: p1, oxygen: p2, food: p3, materials: p4 }, cons: { power: c0, water: c1, oxygen: c2, food: c3, materials: c4 } };
   };
-  const effs = defs.map((def) => def.efficiency(env));
 
   // Which life-support resources ran short at any point this substep. Their
   // consumers browned out - including the domes - so the stores may never
@@ -909,9 +976,12 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   const shortLife = new Set<MicroResource>();
   const shortAny = new Set<MicroResource>();
   // Each pass switches at least one building off or ends the loop.
+  // The totals of the last pass, while nothing has changed since (so they need not be summed again after it).
+  let settled: ReturnType<typeof totals> | null = null;
   for (let pass = 0; pass <= MICRO_RESOURCES.length + defs.length; pass += 1) {
     connect();
-    const { prod, cons } = totals();
+    settled = totals();
+    const { prod, cons } = settled;
     const short = MICRO_RESOURCES.filter((r) => s.stores[r] + (prod[r] - cons[r]) * h < 0);
     if (short.length === 0) break;
     for (const r of short) {
@@ -928,9 +998,10 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
       }
     });
     if (!changed) break;
+    settled = null;
   }
 
-  const { prod, cons } = totals();
+  const { prod, cons } = settled ?? totals();
   const cap = capacities(s, t);
   const stores = { ...s.stores };
   for (const r of MICRO_RESOURCES) stores[r] = Math.min(cap[r], Math.max(0, s.stores[r] + (prod[r] - cons[r]) * h));
@@ -1000,7 +1071,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   let planetaryCo2 = 0;
   let research = 0;
   defs.forEach((def, i) => {
-    if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env) * levels[i]!;
+    if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env, t) * levels[i]!;
     if (operable[i]) research += def.research(t) * levels[i]! * commandBoost(i);
   });
 
