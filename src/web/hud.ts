@@ -56,6 +56,11 @@ export interface HudView {
   readonly seeded: boolean;
   /** Batch 17: the settlement registry, and whether the player is choosing a founding site. */
   readonly settlements: readonly Settlement[];
+  /**
+   * Batch 25: each warned settlement's flood warning, in words, by id (none for the rest). Asked of the
+   * simulation's forecast by `main.ts`; the HUD only shows it.
+   */
+  readonly floodWarnings?: ReadonlyMap<string, string>;
   readonly founding: SettlementKind | null;
   /** Batch 22: while founding, the site under the cursor and its elevation, in words - or null. */
   readonly foundingSite?: string | null;
@@ -287,6 +292,8 @@ export class Hud {
   private readonly buildRows = new Map<FacilityType, BuildRowDom>();
   private readonly seedRow: { readonly status: HTMLElement; readonly button: HTMLButtonElement; readonly root: HTMLElement };
   private readonly settlementList: HTMLElement;
+  /** Each standing settlement's warning line, by id: its words change every readout, the row does not. */
+  private readonly floodLines = new Map<string, HTMLElement>();
   private readonly foundPrompt: HTMLElement;
   private readonly foundPromptText: HTMLElement;
   private readonly foundButtons: readonly HTMLButtonElement[];
@@ -713,8 +720,20 @@ export class Hud {
     }
     // The list only changes when the registry does; rebuild it only then.
     const key = view.settlements.map((s) => `${s.id}:${s.lat}:${s.lon}:${s.lostAtSeaLevelM}`).join("|");
-    if (key === this.renderedSettlements) return;
-    this.renderedSettlements = key;
+    if (key !== this.renderedSettlements) {
+      this.renderedSettlements = key;
+      this.renderSettlementList(view);
+    }
+    for (const [id, line] of this.floodLines) {
+      const words = view.floodWarnings?.get(id) ?? "";
+      if (line.textContent !== words) line.textContent = words;
+      line.hidden = words === "";
+      line.parentElement?.parentElement?.toggleAttribute("data-flood", words !== "");
+    }
+  }
+
+  private renderSettlementList(view: HudView): void {
+    this.floodLines.clear();
     if (view.settlements.length === 0) {
       this.settlementList.replaceChildren(el("li", "hud-settlement-empty", "None yet. Found one to claim a place on the planet."));
       return;
@@ -739,9 +758,14 @@ export class Hud {
         open.setAttribute("aria-label", `Open ${settlementLabel(s)}`);
         open.addEventListener("click", () => this.openSettlement(s.id));
         const text = el("span", "hud-settlement-text");
+        const flood = el("span", "hud-settlement-flood", "");
+        flood.setAttribute("role", "status");
+        flood.hidden = true;
+        this.floodLines.set(s.id, flood);
         text.append(
           el("span", "hud-settlement-name", settlementLabel(s)),
           el("span", "hud-settlement-where", `${sizeLabel(s, this.tuning)} - ${formatLatLon(s.lat, s.lon)} - ${formatMetres(siteElevation(s.lat, s.lon, this.tuning))}`),
+          flood,
         );
         item.append(text, open);
         return item;

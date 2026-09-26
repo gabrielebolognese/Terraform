@@ -1310,6 +1310,18 @@ button:hover {
   font-variant-numeric: tabular-nums;
 }
 
+/* Batch 25: a flood warning. Its words carry it; the colour and weight only repeat them. */
+.hud-settlement-flood {
+  display: block;
+  color: var(--warn);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-settlement-flood[hidden] {
+  display: none;
+}
+
 /* The shell's floating pieces are hidden while a city view is open; their own
    display rules must not win over the attribute. */
 .stage[hidden],

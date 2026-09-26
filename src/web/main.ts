@@ -18,6 +18,7 @@ import { TravelPrompt } from "./travel-prompt.js";
 import { ExampleMode } from "./example-mode.js";
 import { examplePlanet } from "../harness/example.js";
 import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.js";
+import { floodWarnings } from "./flood-warning.js";
 import type { FacilityType, HabitatChannels, SettlementKind, SimConfig, SimState } from "../sim/index.js";
 import {
   makeTuning,
@@ -738,6 +739,8 @@ function render(timestamp: number): void {
       build: buildRows(state, tuning),
       seeded: state.seeded,
       settlements: state.settlements,
+      // Batch 25: the flood forecast, asked of the simulation - with flooding off, none.
+      floodWarnings: floodWarnings(state, habitat(state.reservoirs, d, tuning, liquidRate), liquidRate, tuning),
       founding,
       foundingSite: founding === null ? null : foundingSite,
     });
