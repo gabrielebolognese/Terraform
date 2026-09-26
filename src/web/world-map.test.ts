@@ -109,6 +109,8 @@ describe("the world map screen", () => {
     m.frame();
     expect(m.host.querySelector(".worldmap-name")!.textContent).toBe("Ares");
     expect(m.host.querySelector(".worldmap-panel")!.textContent).toMatch(/Railways to 1 settlement/);
+    // Marked by its size (the user: "mark them as small city, medium city, or large city").
+    expect(m.host.querySelector(".worldmap-panel")!.textContent).toMatch(/Small city - \d+ people/);
     m.host.querySelector<HTMLButtonElement>(".worldmap-open")!.click();
     expect(m.calls).toEqual(["open:settlement-1"]);
     // Nowhere near a settlement: nothing chosen.

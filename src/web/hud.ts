@@ -19,7 +19,7 @@ import type { Derived, FacilityType, Phase, ProgressAxes, Reservoirs, Settlement
 import { FACILITY_LIST, livingWorldShortfall, NAME_MAX, PHASE_INFO, TARGETS, siteElevation } from "../sim/index.js";
 import type { Advice } from "./guidance.js";
 import type { BuildRow } from "./build.js";
-import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.js";
+import { formatLatLon, formatMetres, settlementLabel, sizeLabel } from "./settlement-label.js";
 import type { GameEvent } from "./events.js";
 import type { Speed } from "./config.js";
 import { READOUT_HZ, SPEEDS } from "./config.js";
@@ -741,7 +741,7 @@ export class Hud {
         const text = el("span", "hud-settlement-text");
         text.append(
           el("span", "hud-settlement-name", settlementLabel(s)),
-          el("span", "hud-settlement-where", `${formatLatLon(s.lat, s.lon)} - ${formatMetres(siteElevation(s.lat, s.lon, this.tuning))}`),
+          el("span", "hud-settlement-where", `${sizeLabel(s, this.tuning)} - ${formatLatLon(s.lat, s.lon)} - ${formatMetres(siteElevation(s.lat, s.lon, this.tuning))}`),
         );
         item.append(text, open);
         return item;

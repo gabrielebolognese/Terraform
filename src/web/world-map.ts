@@ -17,7 +17,7 @@
 
 import type { HabitatChannels, Route, Settlement, SimState, Tuning } from "../sim/index.js";
 import { MARS_RADIUS_M, keyChunk, routeCost, routeKm, siteElevation } from "../sim/index.js";
-import { settlementLabel } from "./settlement-label.js";
+import { settlementLabel, sizeLabel } from "./settlement-label.js";
 
 /** The world, in world tiles: 2,048 round, 1,024 pole to pole. */
 export const WORLD_TILES_X = 2048;
@@ -433,7 +433,7 @@ export class WorldMapScreen {
       const other = byId.get(r.a === s.id ? r.b : r.a);
       if (other !== undefined) list.append(el("li", "", `${settlementLabel(other)} - ${Math.round(r.km).toLocaleString("en")} km`));
     }
-    const kind = s.kind === "metropolis" ? "Metropolis" : s.kind === "city" ? "City" : "Outpost";
+    const kind = sizeLabel(s, this.tuning);
     this.panel.replaceChildren(
       el("h2", "worldmap-name", settlementLabel(s)),
       el("p", "worldmap-line", `${kind} - ${Math.floor(s.population).toLocaleString("en")} people - ${s.buildings.length.toLocaleString("en")} buildings`),

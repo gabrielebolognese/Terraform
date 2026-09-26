@@ -3,7 +3,8 @@
  * on the globe and the row in the HUD always say the same thing.
  */
 
-import type { Settlement } from "../sim/index.js";
+import type { Settlement, Tuning } from "../sim/index.js";
+import { sizeClass } from "../sim/index.js";
 
 /** "City 1", "Outpost 2" - the number is the one in the settlement's id. */
 export function settlementLabel(s: Settlement): string {
@@ -11,6 +12,12 @@ export function settlementLabel(s: Settlement): string {
   if (s.name !== "") return s.name;
   const n = /(\d+)$/.exec(s.id)?.[1] ?? "?";
   return `${s.kind === "city" ? "City" : s.kind === "metropolis" ? "Metropolis" : "Outpost"} ${n}`;
+}
+
+/** "Small city", "Medium city", "Large city", "Metropolis", "Outpost" (the user: "mark them as small, medium or large city"). */
+export function sizeLabel(s: Settlement, t: Tuning): string {
+  const c = sizeClass(s, t);
+  return c.charAt(0).toUpperCase() + c.slice(1);
 }
 
 /** "12.3°N 45.6°E" - north for positive latitude, east for positive longitude (see tangentFrame). */

@@ -100,7 +100,7 @@ describe("founding a settlement from the HUD", () => {
     expect(name.value).toBe("");
     // A named settlement is listed by its name.
     page.show(foundSettlement(marsStart(), "city", -0.72, 1.31, t, "New Olympus").state, null);
-    expect(page.q(".hud-settlement-text").textContent).toBe("New Olympus41.3°S 75.1°E - 1,604 m");
+    expect(page.q(".hud-settlement-text").textContent).toBe("New OlympusSmall city - 41.3°S 75.1°E - 1,604 m");
   });
 
   it("tells the player what to do while choosing a site, and how to back out", () => {
@@ -151,7 +151,7 @@ describe("founding a settlement from the HUD", () => {
     page.show(s, null);
     const rows = [...page.root.querySelectorAll(".hud-settlement-text")].map((r) => r.textContent);
     // With each site's elevation on the planet (Batch 22: "Elevation is shown at founding").
-    expect(rows).toEqual(["City 141.3°S 75.1°E - 1,604 m", "Outpost 276.8°N 5.7°W - −2,899 m"]);
+    expect(rows).toEqual(["City 1Small city - 41.3°S 75.1°E - 1,604 m", "Outpost 2Outpost - 76.8°N 5.7°W - −2,899 m"]);
     expect(Math.round(siteElevation(1.34, -0.1, t))).toBe(-2899);
   });
 

@@ -115,7 +115,7 @@ describe("opening a metropolis", () => {
     expect(longest).toBeLessThan(400);
     const start = performance.now();
     const v = cityView(other, env, game);
-    // Measured: 170 ms from what was made; 530-570 ms had the view to make its world's heights itself.
+    // Measured: 257 ms from what was made (170 at half the buildings); 530-570 ms had the view to make its world's heights itself.
     expect(performance.now() - start).toBeLessThan(400);
     // And what was made is what the view would have made itself.
     const w = worldOf(other, game);

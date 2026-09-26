@@ -26,7 +26,7 @@ import type { CardKind } from "./city-cards.js";
 import { makePreviews } from "./city-cards.js";
 import { ChunkedCity } from "./city-chunks.js";
 import { formatMetres } from "./settlement-label.js";
-import { formatLatLon, settlementLabel } from "./settlement-label.js";
+import { formatLatLon, settlementLabel, sizeLabel } from "./settlement-label.js";
 
 export interface ActionOutcome {
   readonly ok: boolean;
@@ -680,7 +680,7 @@ export class CityScreen {
   private renderPanel(view: CityView, s: Settlement, env: HabitatChannels): void {
     this.title.textContent = settlementLabel(s);
     // Detail §1.3: "Elevation is shown at founding and at placement."
-    this.where.textContent = `${s.kind === "city" ? "City" : s.kind === "metropolis" ? "Metropolis" : "Outpost"} - ${formatLatLon(s.lat, s.lon)} - ${formatMetres(view.baseElevationM)} on the planet`;
+    this.where.textContent = `${sizeLabel(s, this.tuning)} - ${formatLatLon(s.lat, s.lon)} - ${formatMetres(view.baseElevationM)} on the planet`;
     const people =
       view.kind !== "outpost"
         ? `${Math.floor(view.population)} of ${view.housing} people housed. ${this.landWords(view)} `
