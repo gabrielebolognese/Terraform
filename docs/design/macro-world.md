@@ -594,6 +594,7 @@ FLOODING_ENABLED = 0
 FLOOD_WARN_MARGIN_M = 20     # warning begins with the sea this far below the base
 FLOOD_THRESHOLD_M = 10       # the sea this far above the base declares the settlement lost
 FLOOD_BUILDING_LOSS_M = 2    # a building is lost with this much water over its highest tile
+FLOOD_ALERT_YEARS = 50       # a settlement's warning begins this many sim-years before the sea reaches its base
 
 # Roads and the settlement network (micro §6, §7.1). OFF by default; the browser opts in.
 NETWORK_ENABLED = 0          # a building runs only if its network holds a producer of what it draws

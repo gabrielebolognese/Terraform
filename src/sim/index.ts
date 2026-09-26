@@ -179,6 +179,8 @@ export type { History, HistorySample, PlannedLink, Route, Settlement, Settlement
 export { ROUTE_RESOURCES, connectSettlements, crossingLine, disconnectSettlements, flowRoutes, routeAxis, routeCost, routeKm } from "./micro/routes.js";
 export type { Axis, RouteOutcome } from "./micro/routes.js";
 export { sizeClass } from "./micro/registry.js";
+export { floodAlert, floodForecast, floodReading } from "./micro/flood.js";
+export type { FloodForecast, FloodReading, FloodState } from "./micro/flood.js";
 export type { SizeClass } from "./micro/registry.js";
 export { BUILDING_DEFS, buildYears, levelFactor, maxLevel } from "./micro/buildings.js";
 export type { BuildingDef } from "./micro/buildings.js";

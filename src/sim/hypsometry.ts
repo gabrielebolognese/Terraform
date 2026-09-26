@@ -44,6 +44,23 @@ export function elevationAtRank(rank: number, t: Tuning): number {
   return a + (b - a) * f;
 }
 
+/**
+ * The inverse of `elevationAtRank`: the least rank at which the curve reaches
+ * `m` metres (0 below the curve, 1 above it). The curve never falls, so this
+ * is the share of the planet the sea must cover to stand at `m`.
+ */
+export function rankAtElevation(m: number, t: Tuning): number {
+  const p = points(t);
+  const segments = p.length - 1;
+  if (!(m > (p[0] ?? 0))) return 0;
+  for (let k = 0; k < segments; k += 1) {
+    const a = p[k] ?? 0;
+    const b = p[k + 1] ?? a;
+    if (m <= b) return b > a ? (k + (m - a) / (b - a)) / segments : k / segments;
+  }
+  return 1;
+}
+
 /** A site's elevation in metres: detail §1.1's `base_elev_m`. */
 export function siteElevation(lat: number, lon: number, t: Tuning): number {
   return elevationAtRank(elevationRank(lat, lon), t);

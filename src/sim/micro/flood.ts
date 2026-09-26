@@ -21,10 +21,12 @@
  * find its low tiles "under water" on the first day.
  */
 
+import { iceFracRaw } from "../derive.js";
 import type { HabitatChannels } from "../habitat.js";
-import { siteElevation } from "../hypsometry.js";
+import { rankAtElevation, siteElevation } from "../hypsometry.js";
+import { clamp01 } from "../math.js";
 import type { Tuning } from "../tuning.js";
-import type { PlacedBuilding, Settlement } from "../types.js";
+import type { PlacedBuilding, Reservoirs, Settlement } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { siteGround } from "./rocks.js";
 
@@ -111,4 +113,53 @@ export function applyFlood(s: Settlement, reading: FloodReading, t: Tuning): Set
     return !(sea > reading.baseM + highest + t.FLOOD_BUILDING_LOSS_M);
   });
   return kept.length === s.buildings.length ? s : { ...s, buildings: kept };
+}
+
+/**
+ * Detail doc §4.4 - when the sea will reach a settlement (Batch 25), in
+ * sim-years at the current rate: `yearsToBase` until its base goes under,
+ * `yearsToDestroy` until it stands FLOOD_THRESHOLD_M over it. 0 once crossed;
+ * null when it is not coming - the sea still or falling, or unable ever to
+ * rise that far. Derived, never stored.
+ *
+ * Not §4.4's straight line in metres, `(base - sea) / d(sea)/dt`: sea level
+ * is a piecewise-linear curve of the ocean's share, and the share saturates
+ * in water, so a metres rate read on one stretch of the curve is wrong by up
+ * to seven times on the next (Batch 23's open item). The forecast works in
+ * what actually arrives at a steady rate - liquid water: the share the sea
+ * must cover to stand at the height (the curve, inverted), the water that
+ * makes that share (the saturation, inverted), and the water still to come
+ * at this substep's net rate. Exact through every kink while the rate holds.
+ */
+export interface FloodForecast {
+  readonly yearsToBase: number | null;
+  readonly yearsToDestroy: number | null;
+}
+
+export function floodForecast(s: Settlement, r: Reservoirs, liquidRatePerYear: number, t: Tuning): FloodForecast | null {
+  if (!t.FLOODING_ENABLED || s.lostAtSeaLevelM !== null) return null;
+  const baseM = siteElevation(s.lat, s.lon, t);
+  // The most of the planet the sea can cover: its saturation, and what the ice leaves it.
+  const most = Math.min(t.OCEAN_FRAC_MAX, 1 - clamp01(iceFracRaw(r, t)));
+  const liquid = Math.max(0, r.h2o_liq);
+  const yearsTo = (m: number): number | null => {
+    const share = rankAtElevation(m, t);
+    // The sea stands at m once it covers more than `share` of the planet.
+    const need = share >= most ? Infinity : -t.OCEAN_M_REF * Math.log(1 - share / t.OCEAN_FRAC_MAX);
+    if (liquid > need) return 0;
+    if (!Number.isFinite(need) || !(liquidRatePerYear > 0)) return null;
+    return (need - liquid) / liquidRatePerYear;
+  };
+  return { yearsToBase: yearsTo(baseM), yearsToDestroy: yearsTo(baseM + t.FLOOD_THRESHOLD_M) };
+}
+
+/**
+ * Whether a settlement is warned (§4.3 and §4.4): once the sea is within
+ * FLOOD_WARN_MARGIN_M of its base, or forecast to reach it within
+ * FLOOD_ALERT_YEARS - whichever comes first.
+ */
+export function floodAlert(forecast: FloodForecast | null, reading: FloodReading, t: Tuning): boolean {
+  if (forecast === null) return false;
+  if (reading.state !== "dry") return true;
+  return forecast.yearsToBase !== null && forecast.yearsToBase <= t.FLOOD_ALERT_YEARS;
 }

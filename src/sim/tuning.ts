@@ -767,6 +767,13 @@ export const BASE_TUNING = Object.freeze({
    * over the highest one, metres. Measured in the Batch 24 note.
    */
   FLOOD_BUILDING_LOSS_M: 2,
+  /**
+   * §4.4's "warn well ahead" (Batch 25): a settlement's warning begins this
+   * many sim-years before the sea is forecast to reach its base, as well as
+   * inside FLOOD_WARN_MARGIN_M - on the curve's steepest stretch the sea climbs
+   * 20 m in weeks. Measured in the Batch 25 note.
+   */
+  FLOOD_ALERT_YEARS: 50,
 
   // -------------------------------------------------------------------------
   // Roads and the settlement network (micro §6, §7.1; at the user's request)
@@ -1157,6 +1164,7 @@ export function validateTuning(t: Tuning): void {
   if (!(t.FLOOD_WARN_MARGIN_M >= 0)) fail("FLOOD_WARN_MARGIN_M must be >= 0");
   if (!(t.FLOOD_THRESHOLD_M > 0)) fail("FLOOD_THRESHOLD_M must be > 0");
   if (!(t.FLOOD_BUILDING_LOSS_M >= 0)) fail("FLOOD_BUILDING_LOSS_M must be >= 0");
+  if (!(t.FLOOD_ALERT_YEARS >= 0)) fail("FLOOD_ALERT_YEARS must be >= 0");
   if (!(t.COST_CORRIDOR >= 0)) fail("COST_CORRIDOR must be >= 0");
   if (!(t.COST_CABLE >= 0)) fail("COST_CABLE must be >= 0");
   if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");
