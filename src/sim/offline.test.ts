@@ -181,5 +181,11 @@ describe("what the sea took while the player was away (Batch 24)", () => {
     const damaged = { ...later, settlements: later.settlements.map((c, i) => (i === 1 ? { ...c, buildings: c.buildings.slice(1) } : c)) };
     expect(summariseAway(before, damaged, tf).headline).toBe("10 sim-years passed. Rising water took 1 building.");
     expect(summariseAway(before, later, tf).headline).not.toMatch(/sea|water/i);
+    // Both at once: the fall leads - a lost city outranks the buildings a standing one lost.
+    const both = { ...later, settlements: later.settlements.map((c, i) => (i === 0 ? oneLost.settlements[0]! : damaged.settlements[1]!)) };
+    expect(summariseAway(before, both, tf).headline).toBe("10 sim-years passed. The sea rose over a settlement - lost.");
+    // A city lost before the player left is not news when they come back.
+    const ruinBefore = { ...before, settlements: oneLost.settlements };
+    expect(summariseAway(ruinBefore, { ...oneLost, steps: oneLost.steps + 40 }, tf).headline).not.toMatch(/sea|water/i);
   });
 });

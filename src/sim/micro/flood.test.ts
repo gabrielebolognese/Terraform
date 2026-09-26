@@ -28,12 +28,14 @@ import type { SimState } from "../types.js";
 import { NEUTRAL_ENV } from "../types.js";
 import type { FloodState } from "./flood.js";
 import { floodReading, submerged } from "./flood.js";
+import { placeBuilding } from "./settlement.js";
 import { groundOf } from "./terrain.js";
 import { LOW, channels, fixture, importWater, rising, t } from "../../testkit/flood.js";
 
 interface Frame {
+  readonly state: SimState;
   readonly sea: number;
-  readonly state: FloodState;
+  readonly flood: FloodState;
   readonly wet: readonly boolean[] | null;
   readonly low: SimState["settlements"][number];
   readonly high: SimState["settlements"][number];
@@ -49,8 +51,9 @@ function drown(start: SimState): Frame[] {
     const low = s.settlements[0]!;
     const r = floodReading(low, c, t);
     frames.push({
+      state: s,
       sea: c.seaLevelM,
-      state: r.state,
+      flood: r.state,
       wet: r.wet,
       low,
       high: s.settlements[1]!,
@@ -102,7 +105,7 @@ describe("a low city drowns from its lowest ground inward", () => {
   });
 
   it("passes through every state the doc names, and is declared lost at +10 m", () => {
-    const states = FRAMES.map((f) => f.state).filter((s, i, all) => i === 0 || s !== all[i - 1]);
+    const states = FRAMES.map((f) => f.flood).filter((s, i, all) => i === 0 || s !== all[i - 1]);
     expect(states).toEqual(["warning", "partial", "flooded"]);
     const fell = FRAMES.find((f) => f.low.lostAtSeaLevelM !== null)!.low;
     // Recorded at the sea level of the substep that crossed: at least 10 m
@@ -111,6 +114,53 @@ describe("a low city drowns from its lowest ground inward", () => {
     expect(fell.lostAtSeaLevelM! - BASE).toBeLessThan(10 + 0.75);
     expect(fell.buildings).toEqual([]);
     expect(fell.population).toBe(0);
+  });
+
+  it("loses a building on a slope only once the water stands over its highest tile: partly under water, it stands", () => {
+    // Every building above stands on one tile or on the flat landing zone, so its lowest and highest ground are
+    // one height: losing a building by its lowest tile passed every test (shown by injection). A water extractor
+    // on the slope at 5,21 spans -1.43 m to +1.37 m.
+    const placed = placeBuilding(START, "settlement-1", "water_extractor", 5, 21, t);
+    expect(placed.ok, placed.reason ?? "").toBe(true);
+    const frames = drown(placed.state);
+    const g = groundOf(START.settlements[0]!, t);
+    const under = [0, 1].flatMap((dy) => [0, 1].map((dx) => g.heightM[(21 + dy) * g.tiles + 5 + dx]!));
+    const lo = Math.min(...under);
+    const hi = Math.max(...under);
+    expect(hi - lo, "vacuity: a slope under it").toBeGreaterThan(2.5);
+    const stands = (f: Frame): boolean => f.low.buildings.some((b) => b.type === "water_extractor");
+    const lostAt = frames.findIndex((f) => !stands(f));
+    expect(lostAt, "vacuity: lost before the city fell").toBeGreaterThan(0);
+    // Each substep's step sees the sea of the frame before it.
+    const seen = (i: number): number => frames[i - 1]!.sea - BASE;
+    expect(seen(lostAt)).toBeGreaterThan(hi + t.FLOOD_BUILDING_LOSS_M);
+    expect(seen(lostAt - 1)).toBeLessThanOrEqual(hi + t.FLOOD_BUILDING_LOSS_M);
+    // Partly under water - its low side wet, its high side dry - it stood, offline, for substeps on end.
+    const partly = frames.filter((f) => stands(f) && f.sea - BASE > lo && f.sea - BASE < hi);
+    // Measured: 4 substeps.
+    expect(partly.length).toBeGreaterThanOrEqual(3);
+    for (const f of partly) expect(f.submergedAt, "offline").toContain("5,21");
+  });
+
+  it("wipes out whatever still stands when it is declared lost, and records the sea it fell at", () => {
+    // By the time the fixture's city falls the water has taken every building one by one, and it never had
+    // people: "everything is destroyed" held of a city with nothing left (shown by injection). So: the substep
+    // before the fall, with a depot on its high ground and forty people put back.
+    const at = FRAMES.findIndex((f) => f.low.lostAtSeaLevelM !== null);
+    const before = FRAMES[at - 1]!.state;
+    const low = before.settlements[0]!;
+    const full: SimState = {
+      ...before,
+      settlements: before.settlements.map((c, i) => (i === 0 ? { ...c, population: 40, buildings: [...low.buildings, { type: "storage_depot" as const, tx: 5, ty: 0, level: 1 }] } : c)),
+    };
+    const after = advance(full, 1, rising).settlements[0]!;
+    expect(after.lostAtSeaLevelM, "it falls on this substep").not.toBeNull();
+    expect(after.buildings).toEqual([]);
+    expect(after.population).toBe(0);
+    expect(after.stores).toEqual({ power: 0, water: 0, oxygen: 0, food: 0, materials: 0 });
+    // The sea level that substep saw, exactly - not the threshold it crossed.
+    expect(after.lostAtSeaLevelM).toBe(channels(full).seaLevelM);
+    expect(after.lostAtSeaLevelM! - BASE).toBeGreaterThan(t.FLOOD_THRESHOLD_M);
   });
 
   it("keeps the record: a lost settlement stays lost, with the sea level it fell at", () => {
@@ -151,6 +201,16 @@ describe("the flood inside `advance`", () => {
     const whole = advance(START, 64, rising);
     expect(chunked).toEqual(whole);
     expect(whole.settlements[0]!.lostAtSeaLevelM, "the city fell inside the span").not.toBeNull();
+  });
+
+  it("is chunk-independent as the exit gate words it: 4,000 substeps at once equal a thousand fours", () => {
+    // A thousand years of the import: the sea climbs over the low city and then the high one, 473 m up.
+    let chunked = START;
+    for (let i = 0; i < 1000; i += 1) chunked = advance(chunked, 4, rising);
+    const whole = advance(START, 4000, rising);
+    expect(chunked).toEqual(whole);
+    // Measured: both fell - the low one at substep 37, the high one at 470.
+    expect(whole.settlements.map((c) => c.lostAtSeaLevelM !== null), "both crossings inside the span").toEqual([true, true]);
   });
 
   it("gives offline catch-up exactly what live play gives, through the city's fall", () => {
