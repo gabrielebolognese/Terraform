@@ -37,6 +37,21 @@ function nextId(settlements: readonly Settlement[]): string {
   return `settlement-${highest + 1}`;
 }
 
+/**
+ * How big a settlement is, in words (at the user's request: "mark them as
+ * small city, medium city or large city"): a city by the land it holds - up to
+ * 40 chunks small (the founding square is 9), up to 125 medium, more large; a
+ * metropolis and an outpost as they are.
+ */
+export type SizeClass = "small city" | "medium city" | "large city" | "metropolis" | "outpost";
+
+export function sizeClass(s: Settlement, t: Tuning): SizeClass {
+  if (s.kind !== "city") return s.kind;
+  const per = s.base / t.CLAIM_CHUNK_TILES;
+  const chunks = per * per + s.claims.length;
+  return chunks <= 40 ? "small city" : chunks <= 125 ? "medium city" : "large city";
+}
+
 export function foundSettlement(
   state: SimState,
   kind: SettlementKind,

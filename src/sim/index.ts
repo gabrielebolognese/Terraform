@@ -176,8 +176,10 @@ export { foundSettlement } from "./micro/registry.js";
 export type { FoundOutcome } from "./micro/registry.js";
 export { MARS_RADIUS_M } from "./planets/mars.js";
 export type { History, HistorySample, PlannedLink, Route, Settlement, SettlementJob, SettlementKind, Zone } from "./types.js";
-export { ROUTE_RESOURCES, connectSettlements, disconnectSettlements, flowRoutes, routeCost, routeKm } from "./micro/routes.js";
-export type { RouteOutcome } from "./micro/routes.js";
+export { ROUTE_RESOURCES, connectSettlements, crossingLine, disconnectSettlements, flowRoutes, routeAxis, routeCost, routeKm } from "./micro/routes.js";
+export type { Axis, RouteOutcome } from "./micro/routes.js";
+export { sizeClass } from "./micro/registry.js";
+export type { SizeClass } from "./micro/registry.js";
 export { BUILDING_DEFS, buildYears, levelFactor, maxLevel } from "./micro/buildings.js";
 export type { BuildingDef } from "./micro/buildings.js";
 export {

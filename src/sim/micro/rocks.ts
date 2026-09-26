@@ -189,9 +189,11 @@ export function rockAt(s: Settlement, tx: number, ty: number, t: Tuning): Rock {
   if (tx < 0 || ty < 0 || tx >= n || ty >= n) return "none";
   const key = tileKey(tx, ty);
   if (keySet(s.cleared).has(key) || keySet(s.corridors).has(key) || keySet(s.cables).has(key) || keySet(s.rails).has(key)) return "none";
-  if (tilesUnder(s.buildings).has(key)) return "none";
   const { base, x0, y0 } = frameOf(s, t);
-  return natureRock(placeSeed(s.lat, s.lon), base, tx + x0, ty + y0, ground.steep[ty * n + tx] === true, t);
+  const rock = natureRock(placeSeed(s.lat, s.lon), base, tx + x0, ty + y0, ground.steep[ty * n + tx] === true, t);
+  // Under a building, none - asked only where there is rock: the set of tiles built on is made again for each
+  // new list of buildings (asked first, replaying a 40,000-building city took 27 ms a building, measured).
+  return rock !== "none" && tilesUnder(s.buildings).has(key) ? "none" : rock;
 }
 
 /** Where the rovers set out from and come back to: the headquarters' middle, or null without one. */

@@ -230,8 +230,13 @@ export function placeBuilding(
     const worst = Math.max(...tooSteep.map(([x, y]) => slopeAt(ground, x, y)));
     return refuse(`${def.name} would stand on ground too steep to build on (slope ${worst.toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE})`);
   }
-  const taken = tilesUnder(s.buildings);
-  if (footprintTiles(f).some(([x, y]) => taken.has(tileKey(x, y)))) return refuse(`${def.name} would overlap another building`);
+  // Overlap by rectangles, not the set of every tile built on: that set is made again for each new list of
+  // buildings, and replaying a 40,000-building city placement by placement took 27 ms a building (measured).
+  const overlaps = s.buildings.some((b) => {
+    const d = BUILDING_DEFS[b.type];
+    return b.tx < tx + def.footprint && tx < b.tx + d.footprint && b.ty < ty + def.depth && ty < b.ty + d.depth;
+  });
+  if (overlaps) return refuse(`${def.name} would overlap another building`);
   // Hard rock: boulders stand in the way until a rover breaks them.
   if (footprintTiles(f).some(([x, y]) => rockAt(s, x, y, t) === "crag")) return refuse(`${def.name} would stand on hard rock - send a rover to break it first`);
   const corridors = keySet(s.corridors);
@@ -598,16 +603,32 @@ function commandCover(buildings: readonly PlacedBuilding[], t: Tuning): (readonl
   if (kept !== undefined && kept.t === t) return kept.cover;
   const centre = (b: PlacedBuilding): [number, number] => [b.tx + BUILDING_DEFS[b.type].footprint / 2, b.ty + BUILDING_DEFS[b.type].depth / 2];
   const commands = buildings.map((b, i) => (b.type === "industrial_command" ? i : -1)).filter((i) => i >= 0);
+  const halfOf = (cb: PlacedBuilding): number => (t.COMMAND_SQUARE_TILES + t.COMMAND_SQUARE_PER_LEVEL * (cb.level - 1)) / 2;
+  // The commands by square of the widest reach, so each building asks only those beside it (every building
+  // against every command, a metropolis of 40,000 buildings and hundreds of commands took 190 ms, measured).
+  const size = Math.max(1, ...commands.map((c) => 2 * halfOf(buildings[c]!)));
+  const cells = new Map<number, number[]>();
+  const cellOf = (x: number, y: number): number => (Math.floor(y / size) + 4096) * 8192 + Math.floor(x / size) + 4096;
+  for (const c of commands) {
+    const [cx, cy] = centre(buildings[c]!);
+    const k = cellOf(cx, cy);
+    cells.set(k, [...(cells.get(k) ?? []), c]);
+  }
   const cover = buildings.map((b) => {
     if (commands.length === 0 || b.type === "industrial_command") return undefined;
     const [x, y] = centre(b);
-    const list = commands.filter((c) => {
-      const cb = buildings[c]!;
-      const [cx, cy] = centre(cb);
-      const half = (t.COMMAND_SQUARE_TILES + t.COMMAND_SQUARE_PER_LEVEL * (cb.level - 1)) / 2;
-      return Math.abs(x - cx) <= half && Math.abs(y - cy) <= half;
-    });
-    return list.length === 0 ? undefined : list;
+    const list: number[] = [];
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        for (const c of cells.get(cellOf(x + dx * size, y + dy * size)) ?? []) {
+          const [cx, cy] = centre(buildings[c]!);
+          const half = halfOf(buildings[c]!);
+          if (Math.abs(x - cx) <= half && Math.abs(y - cy) <= half) list.push(c);
+        }
+      }
+    }
+    // In the order of the buildings, as before.
+    return list.length === 0 ? undefined : list.sort((a, b2) => a - b2);
   });
   covers.set(buildings, { t, cover });
   return cover;
@@ -878,6 +899,40 @@ export interface SettlementStep {
  * only ever switches buildings OFF, so it settles in at most one pass per
  * resource and never depends on building order.
  */
+/**
+ * What a list of buildings is, building by building - each one's definition, level factor and type (as an index
+ * into the types it has, in the order they first appear) - kept per list and tuning: the list only changes when
+ * something is built, and made again every substep it was a third of a 40,000-building metropolis's step (measured).
+ */
+interface BuildingShape {
+  readonly defs: readonly (typeof BUILDING_DEFS)[BuildingType][];
+  readonly levels: readonly number[];
+  readonly kindOf: Int32Array;
+  readonly types: readonly BuildingType[];
+}
+const shapes = new WeakMap<readonly PlacedBuilding[], { t: Tuning; shape: BuildingShape }>();
+function shapeOf(buildings: readonly PlacedBuilding[], t: Tuning): BuildingShape {
+  const kept = shapes.get(buildings);
+  if (kept !== undefined && kept.t === t) return kept.shape;
+  const defs = buildings.map((b) => BUILDING_DEFS[b.type]);
+  const levels = buildings.map((b) => levelFactor(b.level, t));
+  const kinds = new Map<BuildingType, number>();
+  const types: BuildingType[] = [];
+  const kindOf = new Int32Array(defs.length);
+  defs.forEach((def, i) => {
+    let k = kinds.get(def.type);
+    if (k === undefined) {
+      k = types.length;
+      kinds.set(def.type, k);
+      types.push(def.type);
+    }
+    kindOf[i] = k;
+  });
+  const shape = { defs, levels, kindOf, types };
+  shapes.set(buildings, { t, shape });
+  return shape;
+}
+
 export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tuning, h: number): SettlementStep {
   // Batch 24 - detail §4: the flood first. Its consequences are true state
   // (lost buildings, a lost settlement); whether a building stands in water
@@ -889,35 +944,27 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     const none = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
     return { next: s, operable: [], supported: false, planetaryCo2: 0, research: 0, production: none, consumption: none, shortages: [], flood, network: [] };
   }
-  const defs = s.buildings.map((b) => BUILDING_DEFS[b.type]);
-  const levels = s.buildings.map((b) => levelFactor(b.level, t));
+  const { defs, levels, kindOf, types } = shapeOf(s.buildings, t);
   const building = constructing(s);
   // What a building of each type draws, makes, how well it runs and whether it may: asked once a type this
-  // substep, not once a building (a metropolis has 21,000 buildings of 28 types).
-  const kinds = new Map<BuildingType, number>();
+  // substep, not once a building (a metropolis has 40,000 buildings of 28 types).
   const kindDraw: Partial<Record<MicroResource, number>>[] = [];
   const kindMake: Partial<Record<MicroResource, number>>[] = [];
   const kindDrawRow: number[][] = [];
   const kindMakeRow: number[][] = [];
   const kindEff: number[] = [];
   const kindCan: boolean[] = [];
-  const kindOf = new Int32Array(defs.length);
-  defs.forEach((def, i) => {
-    let k = kinds.get(def.type);
-    if (k === undefined) {
-      k = kindDraw.length;
-      kinds.set(def.type, k);
-      const draw = def.consumes(t, env);
-      const make = def.produces(t);
-      kindDraw.push(draw);
-      kindMake.push(make);
-      kindDrawRow.push(MICRO_RESOURCES.map((r) => draw[r] ?? 0));
-      kindMakeRow.push(MICRO_RESOURCES.map((r) => make[r] ?? 0));
-      kindEff.push(def.efficiency(env, t));
-      kindCan.push(def.canOperate(env, t));
-    }
-    kindOf[i] = k;
-  });
+  for (const type of types) {
+    const def = BUILDING_DEFS[type];
+    const draw = def.consumes(t, env);
+    const make = def.produces(t);
+    kindDraw.push(draw);
+    kindMake.push(make);
+    kindDrawRow.push(MICRO_RESOURCES.map((r) => draw[r] ?? 0));
+    kindMakeRow.push(MICRO_RESOURCES.map((r) => make[r] ?? 0));
+    kindEff.push(def.efficiency(env, t));
+    kindCan.push(def.canOperate(env, t));
+  }
   // A building with water over any tile of its footprint is offline (detail §4.3); one still going up is not running yet.
   const operable = defs.map((_, i) => kindCan[kindOf[i]!]! && !(flood !== null && submerged(s.buildings[i]!, flood)) && !building.has(tileKey(s.buildings[i]!.tx, s.buildings[i]!.ty)));
   // Section 6's networks: with them off, every building on the grid is on them.
@@ -1070,10 +1117,15 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
 
   let planetaryCo2 = 0;
   let research = 0;
-  defs.forEach((def, i) => {
-    if (operable[i]) planetaryCo2 += def.planetaryCo2(t) * def.efficiency(env, t) * levels[i]!;
-    if (operable[i]) research += def.research(t) * levels[i]! * commandBoost(i);
-  });
+  // A type's own numbers, once a type (asked of every building, they were a sixth of the step).
+  const kindCo2 = types.map((type) => BUILDING_DEFS[type].planetaryCo2(t));
+  const kindResearch = types.map((type) => BUILDING_DEFS[type].research(t));
+  for (let i = 0; i < defs.length; i += 1) {
+    if (!operable[i]) continue;
+    const k = kindOf[i]!;
+    planetaryCo2 += kindCo2[k]! * kindEff[k]! * levels[i]!;
+    research += kindResearch[k]! * levels[i]! * commandBoost(i);
+  }
 
   // The planner's work: drawn links built, zones levelled - and the record kept.
   let next: Settlement = { ...s, stores, population, jobs, cleared, grades, buildings: built };

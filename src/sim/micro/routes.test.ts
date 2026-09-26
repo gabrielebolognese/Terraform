@@ -11,7 +11,7 @@ import { deserialize, serialize } from "../save.js";
 import { makeTuning } from "../tuning.js";
 import type { SimState } from "../types.js";
 import { NEUTRAL_ENV } from "../types.js";
-import { foundSettlement } from "./registry.js";
+import { foundSettlement, sizeClass } from "./registry.js";
 import { connectSettlements, disconnectSettlements, routeCost, routeKm } from "./routes.js";
 import { capacities, placeBuilding } from "./settlement.js";
 
@@ -39,6 +39,43 @@ describe("laying a railway between two settlements", () => {
     expect(o.state.routes).toEqual([{ a: A, b: B, km }]);
     expect(of(o.state, A).stores.materials).toBeCloseTo(5000 - cost / 2, 9);
     expect(of(o.state, B).stores.materials).toBeCloseTo(5000 - cost / 2, 9);
+  });
+
+  it("lays its line straight across each end, edge to edge, the way the other lies", () => {
+    // The user: "it passes left to right or up to down through the city, to the very extremes of the terrain".
+    // A lies west-south-west of B: the line crosses both east to west.
+    const before = pair();
+    const after = connectSettlements(before, A, B, ON).state;
+    for (const id of [A, B]) {
+      const s = of(after, id);
+      const added = s.rails.filter((k) => !of(before, id).rails.includes(k));
+      const rows = new Set(added.map((k) => k >> 10));
+      expect(rows.size, `${id}: one row`).toBe(1);
+      // Measured: the whole width of its land (32 tiles, its founding square) but where a building stands.
+      expect(added.length, `${id}: across`).toBeGreaterThan(0.8 * s.base);
+      const xs = added.map((k) => k & 1023);
+      expect(Math.min(...xs), `${id}: from the west edge`).toBeLessThanOrEqual(2);
+      expect(Math.max(...xs), `${id}: to the east edge`).toBeGreaterThanOrEqual(s.base - 3);
+    }
+    // North to south, a column.
+    let s = foundSettlement(marsStart(undefined, ON), "city", 0.1, 0.5, ON).state;
+    s = foundSettlement(s, "city", 0.4, 0.52, ON).state;
+    s = { ...s, settlements: s.settlements.map((c) => ({ ...c, stores: { ...c.stores, materials: 1e5 } })) };
+    const down = connectSettlements(s, A, B, ON).state;
+    expect(new Set(of(down, A).rails.filter((k) => !of(s, A).rails.includes(k)).map((k) => k & 1023)).size).toBe(1);
+  });
+
+  it("marks a city small, medium or large by the land it holds", () => {
+    const s = of(pair(), A);
+    expect(sizeClass(s, ON)).toBe("small city");
+    const claims = (k: number) => Array.from({ length: k }, (_, i) => i + 3);
+    // 40 chunks small at the most, 125 medium, counting the founding square's.
+    const own = (s.base / ON.CLAIM_CHUNK_TILES) ** 2;
+    expect(sizeClass({ ...s, claims: claims(40 - own) }, ON)).toBe("small city");
+    expect(sizeClass({ ...s, claims: claims(41 - own) }, ON)).toBe("medium city");
+    expect(sizeClass({ ...s, claims: claims(125 - own) }, ON)).toBe("medium city");
+    expect(sizeClass({ ...s, claims: claims(126 - own) }, ON)).toBe("large city");
+    expect(sizeClass({ ...s, kind: "outpost" }, ON)).toBe("outpost");
   });
 
   it("is refused, changing nothing, and says why: off, to itself, twice, or short of materials at either end", () => {

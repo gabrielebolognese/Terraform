@@ -14,7 +14,78 @@
 import { MARS_RADIUS_M } from "../planets/mars.js";
 import type { Tuning } from "../tuning.js";
 import type { MicroResource, Route, Settlement, SimState } from "../types.js";
+import { tilesUnder } from "./buildings.js";
+import { rockAt, siteGround } from "./rocks.js";
 import { capacities } from "./settlement.js";
+import { claimTest, frameOf, tileKey } from "./space.js";
+import { isSteep } from "./terrain.js";
+
+/** Which way a railway leaves a settlement for another: across it east to west, or north to south. */
+export type Axis = "h" | "v";
+
+/** The way from one settlement toward another, as it crosses the first: the more east-west, "h"; the more north-south, "v". */
+export function routeAxis(from: { lat: number; lon: number }, to: { lat: number; lon: number }): Axis {
+  let dlon = to.lon - from.lon;
+  while (dlon > Math.PI) dlon -= 2 * Math.PI;
+  while (dlon < -Math.PI) dlon += 2 * Math.PI;
+  return Math.abs(dlon * Math.cos((from.lat + to.lat) / 2)) >= Math.abs(to.lat - from.lat) ? "h" : "v";
+}
+
+/**
+ * The line a railway between settlements takes across one of them (at the
+ * user's request: "the rail that connects cities: it passes left to right or
+ * up to down through the city, to the very extremes of its terrain, because it
+ * is the city interconnection line"): a straight row (or column) of tiles
+ * the whole width of the settlement's land, through its founding square - the
+ * row there with the fewest buildings on it and the least railway alongside it
+ * (a line laid beside another is a doubled track), nearest the middle. Returns the
+ * row and the tiles of it a rail can go on (its land, not under a building,
+ * not too steep, not hard rock).
+ */
+export function crossingLine(s: Settlement, axis: Axis, t: Tuning): { at: number; tiles: number[] } {
+  const f = frameOf(s, t);
+  const n = f.n;
+  const under = tilesUnder(s.buildings);
+  const rails = new Set(s.rails);
+  const ours = claimTest(s, t);
+  const ground = siteGround(s, t);
+  const tile = (along: number, across: number): [number, number] => (axis === "h" ? [along, across] : [across, along]);
+  // The founding square's own rows (or columns), in frame tiles.
+  const from = axis === "h" ? -f.y0 : -f.x0;
+  const middle = from + s.base / 2;
+  let best = Math.floor(middle);
+  let bestBlocked = Infinity;
+  for (let r = from + 1; r < from + s.base - 1; r += 1) {
+    let blocked = 0;
+    for (let a = 0; a < n; a += 1) {
+      const [x, y] = tile(a, r);
+      if (under.has(tileKey(x, y))) blocked += 1;
+      if (rails.has(tileKey(x, y))) continue;
+      for (const side of [-1, 1]) {
+        const [sx, sy] = tile(a, r + side);
+        if (rails.has(tileKey(sx, sy))) blocked += 0.5;
+      }
+    }
+    if (blocked < bestBlocked || (blocked === bestBlocked && Math.abs(r + 0.5 - middle) < Math.abs(best + 0.5 - middle))) {
+      best = r;
+      bestBlocked = blocked;
+    }
+  }
+  const tiles: number[] = [];
+  for (let a = 0; a < n; a += 1) {
+    const [x, y] = tile(a, best);
+    if (!ours(x, y) || under.has(tileKey(x, y)) || isSteep(ground, x, y) || rockAt(s, x, y, t) === "crag") continue;
+    tiles.push(tileKey(x, y));
+  }
+  return { at: best, tiles };
+}
+
+/** A settlement with the crossing line of a railway laid across it, as far as its ground allows. */
+function withCrossing(s: Settlement, axis: Axis, t: Tuning): Settlement {
+  const rails = new Set(s.rails);
+  for (const k of crossingLine(s, axis, t).tiles) rails.add(k);
+  return rails.size === s.rails.length ? s : { ...s, rails: [...rails].sort((a, b) => a - b) };
+}
 
 /** What a line carries: all but power. */
 export const ROUTE_RESOURCES: readonly MicroResource[] = ["water", "oxygen", "food", "materials"];
@@ -52,7 +123,12 @@ export function connectSettlements(state: SimState, aId: string, bId: string, t:
   for (const s of [a, b]) {
     if (s.stores.materials < half) return refuse(`${Math.round(routeKm(a, b)).toLocaleString("en")} km of railway needs ${cost.toLocaleString("en")} materials, half from each end - ${s.id} has ${Math.floor(s.stores.materials)}`, cost);
   }
-  const pay = (s: Settlement): Settlement => (s.id === aId || s.id === bId ? { ...s, stores: { ...s.stores, materials: s.stores.materials - half } } : s);
+  // Each end pays half, and the line crosses each end's land from side to side.
+  const pay = (s: Settlement): Settlement => {
+    if (s.id !== aId && s.id !== bId) return s;
+    const paid = { ...s, stores: { ...s.stores, materials: s.stores.materials - half } };
+    return withCrossing(paid, routeAxis(s, s.id === aId ? b : a), t);
+  };
   const route: Route = { a: aId, b: bId, km: routeKm(a, b) };
   return { state: { ...state, settlements: state.settlements.map(pay), routes: [...state.routes, route] }, ok: true, reason: null, cost };
 }
