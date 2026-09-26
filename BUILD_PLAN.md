@@ -30,7 +30,7 @@ This file is the source of truth for *in what order* we build it, and for what "
 | 21 | Micro: travel between orbit and a city | **COMPLETE** - [note](docs/balance/batch21-travel.md) - world equal to the last bit with or without travel; one scene at most, none in transit; marker + confirm; no per-city deserialize |
 | 22 | Detail: terrain with depth | **COMPLETE** - [note](docs/balance/batch22-terrain.md) - one shared elevation field; hypsometry to metres; slope-limited hills (browser 12 m); exact picking; a terrain golden frame |
 | 23 | Detail: sea level from the macro sim | **COMPLETE** - [note](docs/balance/batch23-sea-level.md) - sea level and its rate through HabitatChannels; rate within 0.104% of advance away from the curve's kinks; nextSubstepFlows |
-| 24 | Detail: the flood model, headless | NOT STARTED - detail §4.2, §4.3, §4.7, §6 step 3 |
+| 24 | Detail: the flood model, headless | **COMPLETE** - [note](docs/balance/batch24-flood.md) - behind FLOODING_ENABLED=0; six weak tests found by injection and fixed; browser stays off until Batch 25's warnings |
 | 25 | Detail: flood forecast and warnings | NOT STARTED - detail §4.4, §6 step 4 |
 | 26 | Detail: procedural structures and the instancing renderer | NOT STARTED - detail §2, §6 step 5 |
 | 27 | Detail: terrain resource deposits | NOT STARTED - detail §3, §6 step 6 |
@@ -904,18 +904,25 @@ its rate as derived outputs."
   tolerance.
 - No existing gate moves. This is a derived output only.
 
-## Batch 24 - Detail: the flood model, headless - NOT STARTED
+## Batch 24 - Detail: the flood model, headless - COMPLETE
+
+**Done** - see [the note](docs/balance/batch24-flood.md). Built in 5e2e760 and closed later: its
+tests passed but six faults got through them (a building judged by its lowest tile, a lost city
+keeping its buildings or people, the fall recorded at the threshold, and two in the offline
+summary). The fixture could not tell those apart. Changed from the plan: the save is v13 (v6 is where
+the loss was added); §4.3's production penalties with depth are not built; the browser does not turn
+flooding on until Batch 25's forecast and warnings exist.
 
 **Goal.** Detail §6 step 3: "Implement the flood model (section 4.2 to 4.3) headless: compute
 `flood_depth`, tile flooding, state, and building loss, and assert a low test city drowns as sea
 level rises. This is the highest-value feature; prove it in numbers before rendering."
 
-- [ ] `flood_depth`, per-tile flooding and the four states (§4.3), derived every substep and never
+- [x] `flood_depth`, per-tile flooding and the four states (§4.3), derived every substep and never
   stored.
-- [ ] Building loss on submerged tiles, and a settlement declared flooded at `FLOOD_THRESHOLD`
+- [x] Building loss on submerged tiles, and a settlement declared flooded at `FLOOD_THRESHOLD`
   (10 m), recorded as true state (§4.7).
-- [ ] Behind `FLOODING_ENABLED`, default 0 (conflict 5). Save schema v6 with a migration.
-- [ ] Offline catch-up applies crossings that happened while away, and "while you were away" says
+- [x] Behind `FLOODING_ENABLED`, default 0 (conflict 5). Save schema v6 with a migration.
+- [x] Offline catch-up applies crossings that happened while away, and "while you were away" says
   so.
 
 **Exit gate.**
