@@ -7,7 +7,9 @@
  * wind, malls, storage; zones of colours and purposes; giant railways joining
  * the city's extremes"; then "no empty land - in each empty tile 3 to 25
  * structures, none of them homes, factories and standalone depots, so the
- * city feels full; less square - a blob, same space, a more natural shape".
+ * city feels full; less square - a blob, same space, a more natural shape";
+ * then "erase the highways and corridors at the centre and the borders, so
+ * unnatural; double the number of structures in each city".
  */
 
 import { describe, expect, it } from "vitest";
@@ -123,38 +125,52 @@ describe("the example's metropolises", () => {
     }
   });
 
-  it("leave no land empty: every chunk with room holds three buildings or more; the works filling them are no homes, 25 at most", () => {
-    // The user: "in each empty tile there has to be between 3 and 25 structures, where none is habitative".
-    // Measured: every chunk with a third of its ground off the avenues and not too steep holds 3 or more (the
-    // thinnest left: 27% buildable); 251-277 chunks of works, 25 at most in one, no home among them.
+  it("leave no land empty: every chunk with room holds sixteen buildings or more; the works filling them are no homes, 50 at most", () => {
+    // The user: "in each empty tile there has to be between 3 and 25 structures, where none is habitative"; then
+    // "double the number of structures in each city" - 16 to 50.
+    // Measured: every chunk with a third of its ground reachable holds 16 or more; 8,547-9,149 works, 50 at most
+    // in a chunk, no home among them.
     for (const s of metropolises) {
       const n = frameOf(s, game).n;
       const { cu, held, count } = chunks(s);
       const g = groundOf(s, game);
-      const avenue = new Set(zone(s, /^Avenues/).flatMap((z) => z.tiles));
+      // Room is flat ground a corridor can reach from the headquarters (a pocket walled in by slopes is not).
+      const reach = new Uint8Array(n * n);
+      const hq = s.buildings.find((b) => b.type === "headquarters")!;
+      const stack = [(hq.ty + 5) * n + hq.tx + 2];
+      while (stack.length > 0) {
+        const i = stack.pop()!;
+        const x = i % n;
+        if (reach[i] || g.steep[i] || !held(Math.floor(x / C), Math.floor(i / n / C))) continue;
+        reach[i] = 1;
+        if (x > 0) stack.push(i - 1);
+        if (x < n - 1) stack.push(i + 1);
+        if (i >= n) stack.push(i - n);
+        if (i < n * n - n) stack.push(i + n);
+      }
       let roomy = 0;
       for (let v = 0; v < cu; v += 1) {
         for (let u = 0; u < cu; u += 1) {
           if (!held(u, v)) continue;
           let free = 0;
-          for (let y = v * C; y < (v + 1) * C; y += 1) for (let x = u * C; x < (u + 1) * C; x += 1) if (!avenue.has(y * 1024 + x) && !g.steep[y * n + x]) free += 1;
+          for (let y = v * C; y < (v + 1) * C; y += 1) for (let x = u * C; x < (u + 1) * C; x += 1) if (reach[y * n + x]) free += 1;
           if (free < (C * C) / 3) continue;
           roomy += 1;
-          expect(count[v * cu + u], `${s.id}: chunk ${u},${v}`).toBeGreaterThanOrEqual(3);
+          expect(count[v * cu + u], `${s.id}: chunk ${u},${v}`).toBeGreaterThanOrEqual(16);
         }
       }
-      // Measured: 455-463 chunks with room.
-      expect(roomy, `${s.id}: vacuity`).toBeGreaterThan(400);
+      // Measured: 603-604 chunks with room.
+      expect(roomy, `${s.id}: vacuity`).toBeGreaterThan(550);
       const works = new Set(zone(s, /^Works and stores$/).flatMap((z) => z.tiles));
       const inWorks = s.buildings.filter((b) => works.has(b.ty * 1024 + b.tx));
-      expect(inWorks.length, `${s.id}: works`).toBeGreaterThan(2000);
+      expect(inWorks.length, `${s.id}: works`).toBeGreaterThan(7000);
       expect(inWorks.filter((b) => BUILDING_DEFS[b.type].housing(game) > 0), `${s.id}: homes among the works`).toEqual([]);
       const perChunk = new Map<number, number>();
       for (const b of inWorks) {
         const c = Math.floor(b.ty / C) * cu + Math.floor(b.tx / C);
         perChunk.set(c, (perChunk.get(c) ?? 0) + 1);
       }
-      expect(Math.max(...perChunk.values()), `${s.id}: most works in a chunk`).toBeLessThanOrEqual(25);
+      expect(Math.max(...perChunk.values()), `${s.id}: most works in a chunk`).toBeLessThanOrEqual(50);
       // Mostly factories and stores.
       const factories = ["regolith_mine", "storage_depot", "materials_depot", "water_tank", "battery_bank", "freezer", "water_extractor", "geothermal_plant", "reactor"];
       expect(inWorks.filter((b) => factories.includes(b.type)).length / inWorks.length, s.id).toBeGreaterThan(0.75);
@@ -226,58 +242,27 @@ describe("the example's metropolises", () => {
     }
   });
 
-  it("lay many corridors along the avenues between the districts", () => {
-    // Measured: corridor on 20% of the avenues' ground, 5-6% of the districts'.
-    for (const s of metropolises) {
-      const corridors = new Set(s.corridors);
-      const density = (name: RegExp): number => {
-        const tiles = zone(s, name).flatMap((z) => z.tiles);
-        return tiles.filter((k) => corridors.has(k)).length / Math.max(1, tiles.length);
-      };
-      expect(density(/^Avenues/), s.id).toBeGreaterThan(2.5 * density(DISTRICT));
-    }
-  });
-
   it("are clear of every stone", () => {
     for (const s of metropolises) expect(rocksOf(s, game).filter((r) => r !== "none").length, s.id).toBe(0);
     // Vacuity: the planet's other settlements still have their rocks.
     expect(state.settlements.filter((s) => s.kind === "city").some((s) => rocksOf(s, game).some((r) => r !== "none"))).toBe(true);
   });
 
-  it("run giant railways: every station on one line, to the city's extremes all round, bridged over the corridors", () => {
-    // Measured: 12-15 stations; 232 to 1,183 rail tiles within two chunks of each extreme of the city; 1,339-1,502 bridges.
+  it("run giant railways: every station on one line, bridged over the corridors", () => {
+    // Measured: 6-7 stations, the quarters' own (the districts keep none since the avenues went); 51-120 bridges.
+    // The line to other settlements, edge to edge across the city: see example.test.ts.
     for (const s of metropolises) {
       const n = frameOf(s, game).n;
       const stations = s.buildings.map((b, i) => (b.type === "station" ? i : -1)).filter((i) => i >= 0);
-      expect(stations.length, s.id).toBeGreaterThanOrEqual(8);
+      expect(stations.length, s.id).toBeGreaterThanOrEqual(5);
       const net = withRails(networkOf(s.buildings, [], n), s.buildings, s.rails, n);
       expect(new Set(stations.map((i) => net.of[i])).size, s.id).toBe(1);
-      const { cu, held } = chunks(s);
-      let minU = cu;
-      let maxU = -1;
-      let minV = cu;
-      let maxV = -1;
-      for (let v = 0; v < cu; v += 1) {
-        for (let u = 0; u < cu; u += 1) {
-          if (!held(u, v)) continue;
-          minU = Math.min(minU, u);
-          maxU = Math.max(maxU, u);
-          minV = Math.min(minV, v);
-          maxV = Math.max(maxV, v);
-        }
-      }
-      for (const [edge, test] of [
-        ["west", (k: number) => (k & 1023) < (minU + 2) * C],
-        ["east", (k: number) => (k & 1023) >= (maxU - 1) * C],
-        ["north", (k: number) => k >> 10 < (minV + 2) * C],
-        ["south", (k: number) => k >> 10 >= (maxV - 1) * C],
-      ] as const) expect(s.rails.filter(test).length, `${s.id} ${edge}`).toBeGreaterThan(100);
       const corridors = new Set(s.corridors);
-      expect(s.rails.filter((k) => corridors.has(k)).length, `${s.id}: bridges`).toBeGreaterThan(500);
+      expect(s.rails.filter((k) => corridors.has(k)).length, `${s.id}: bridges`).toBeGreaterThan(30);
     }
   });
 
-  it("are planned in zones of many colours: every quarter, district, the works and the avenues", () => {
+  it("are planned in zones of many colours: every quarter, district and the works", () => {
     // Measured: 82-86 zones in 14 colours; all but one building in a zone.
     for (const s of metropolises) {
       expect(s.zones.length, s.id).toBeGreaterThan(60);

@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { Settlement, SimState } from "../sim/index.js";
+import type { PlacedBuilding, Settlement, SimState } from "../sim/index.js";
 import {
   BUILDING_DEFS,
   DEFAULT_TUNING,
@@ -15,6 +15,7 @@ import {
   groundOf,
   routeKm,
   rocksOf,
+  sizeClass,
   claimTest,
   cityView,
   computeProgress,
@@ -150,14 +151,32 @@ describe("the example planet", () => {
       const f = frameOf(s, game);
       return foundingBuildings(s.kind, game).map((b) => ({ ...b, tx: b.tx - f.x0, ty: b.ty - f.y0 }));
     };
-    let replay: SimState = { ...state, settlements: state.settlements.map((s) => ({ ...s, buildings: landed(s), stores: { ...s.stores, materials: 1e9 } })) };
+    // Each building is placed on the settlement as it stood before it - all that was built earlier near it (the
+    // rules that look at other buildings look under the footprint), and every earlier rover post (one per so
+    // many people) - the same answers as placing all 40,000 of a metropolis one after another, in seconds, not
+    // minutes (each placement checks every building there is).
+    const NEAR = 16;
     for (const s of state.settlements) {
       const founded = landed(s);
       expect(s.buildings.slice(0, founded.length), `${s.id} keeps what it was founded with`).toEqual(founded);
+      const cell = (x: number, y: number): number => Math.floor(y / NEAR) * 1024 + Math.floor(x / NEAR);
+      const grid = new Map<number, PlacedBuilding[]>();
+      const posts: PlacedBuilding[] = [];
+      const add = (b: PlacedBuilding): void => {
+        const k = cell(b.tx, b.ty);
+        grid.set(k, [...(grid.get(k) ?? []), b]);
+        if (b.type === "rover_post") posts.push(b);
+      };
+      founded.forEach(add);
       for (const b of s.buildings.slice(founded.length)) {
-        const out = placeBuilding(replay, s.id, b.type, b.tx, b.ty, game);
+        const around: PlacedBuilding[] = [...founded.filter((f) => f.type === "headquarters" || f.type === "spaceport"), ...posts];
+        const cx = Math.floor(b.tx / NEAR);
+        const cy = Math.floor(b.ty / NEAR);
+        for (let y = cy - 1; y <= cy + 1; y += 1) for (let x = cx - 1; x <= cx + 1; x += 1) for (const o of grid.get(y * 1024 + x) ?? []) if (!around.includes(o)) around.push(o);
+        const before: SimState = { ...state, settlements: state.settlements.map((c) => (c.id === s.id ? { ...c, buildings: around, stores: { ...c.stores, materials: 1e9 } } : c)) };
+        const out = placeBuilding(before, s.id, b.type, b.tx, b.ty, game);
         expect(out.ok, `${s.id}: ${b.type} at ${b.tx},${b.ty} - ${out.reason}`).toBe(true);
-        replay = out.state;
+        add(b);
       }
       expect(s.buildings.every((b) => BUILDING_DEFS[b.type].kinds.includes(s.kind))).toBe(true);
     }
@@ -248,7 +267,7 @@ describe("the example planet", () => {
       expect(s.rails.filter((k) => !on.has((k >> 10) * view.tiles + (k & 1023))), `${s.id}: rails no train runs on`).toEqual([]);
       // One line, not doubled: a 2 x 2 square of rail is a stretch laid twice side by side. Measured: at most 4
       // a city, where legs meet at their stops (laid without keeping off the line before, up to 27).
-      // (On its founding square: the avenues a big city grew run double track, and cross.)
+      // (On its founding square: the lines to other settlements cross it too.)
       const f = frameOf(s, game);
       const own = s.rails.filter((k) => (k & 1023) >= -f.x0 && k >> 10 >= -f.y0 && (k & 1023) < -f.x0 + s.base && k >> 10 < -f.y0 + s.base);
       const rails = new Set(own);
@@ -279,15 +298,13 @@ describe("the example planet", () => {
 
   it("joins its cities by the shortest traces, not a street round every building", () => {
     // The user: "the metropolis and cities have far, far too many corridors".
-    // Over every city, off its avenues (which carry many, as asked: "in the spaces
-    // many corridors"): measured 0.20 tiles of corridor for each tile under a building
-    // (0.49 before the cities grew; a street round every building, as once: 1.66).
+    // Over every city: measured 0.10 tiles of corridor for each tile under a building (0.20 at half
+    // the buildings; 0.49 before the cities grew; a street round every building, as once: 1.66).
     let corridor = 0;
     let built = 0;
     for (const s of state.settlements) {
       if (s.kind !== "city") continue;
-      const avenues = new Set(s.zones.filter((z) => z.name.startsWith("Avenues")).flatMap((z) => z.tiles));
-      corridor += s.corridors.filter((k) => !avenues.has(k)).length;
+      corridor += s.corridors.length;
       for (const b of s.buildings) built += BUILDING_DEFS[b.type].footprint * BUILDING_DEFS[b.type].depth;
     }
     expect(built, "vacuity: cities").toBeGreaterThan(1000);
@@ -374,7 +391,6 @@ describe("the example planet", () => {
       const count3 = new Int32Array(cu * cu);
       for (const b of s.buildings) count3[Math.floor(b.ty / C) * cu + Math.floor(b.tx / C)]! += 1;
       const g = groundOf(s, game);
-      const avenue = new Set(s.zones.filter((z) => z.name.startsWith("Avenues")).flatMap((z) => z.tiles));
       // Room is ground the city can reach from its headquarters over buildable land: a city keeps its hard rock
       // (a metropolis is cleared of it), and crags and slopes wall some chunks off altogether.
       const rocks = rocksOf(s, game);
@@ -397,8 +413,9 @@ describe("the example planet", () => {
         for (let u = 0; u < cu; u += 1) {
           if (!held(u, v)) continue;
           let free = 0;
-          for (let y = v * C; y < (v + 1) * C; y += 1) for (let x = u * C; x < (u + 1) * C; x += 1) if (!avenue.has(y * 1024 + x) && reach[y * n + x]) free += 1;
-          if (free >= (C * C) / 3) expect(count3[v * cu + u], `${s.id}: chunk ${u},${v}`).toBeGreaterThanOrEqual(3);
+          for (let y = v * C; y < (v + 1) * C; y += 1) for (let x = u * C; x < (u + 1) * C; x += 1) if (reach[y * n + x]) free += 1;
+          // Measured: 16 at the least (the user: "double the number of structures in each city" - 16 to 50 a chunk).
+          if (free >= (C * C) / 3) expect(count3[v * cu + u], `${s.id}: chunk ${u},${v}`).toBeGreaterThanOrEqual(16);
         }
       }
     }
@@ -432,6 +449,128 @@ describe("the example planet", () => {
     expect(reached.size).toBe(ids.length);
     // Every city and metropolis on two lines or more: one cut leaves none alone.
     for (const s of state.settlements) if (s.kind !== "outpost") expect(next.get(s.id)!.length, s.id).toBeGreaterThanOrEqual(2);
+  });
+
+  it("names every settlement, each its own name, and marks each city small, medium or large by its land", () => {
+    // The user: "name all cities, mark them as small city, medium city, or large city".
+    const names = state.settlements.map((s) => s.name);
+    for (const name of names) expect(name.length).toBeGreaterThan(2);
+    expect(new Set(names).size).toBe(names.length);
+    // The class goes with the span the city grew to: 3 to 7 chunks small, 9 to 13 medium, 15 to 17 large.
+    const byClass = new Map<string, number[]>();
+    for (const s of state.settlements) {
+      if (s.kind !== "city") {
+        expect(sizeClass(s, game)).toBe(s.kind);
+        continue;
+      }
+      const f = frameOf(s, game);
+      const list = byClass.get(sizeClass(s, game)) ?? [];
+      list.push(f.n / C);
+      byClass.set(sizeClass(s, game), list);
+    }
+    // Measured: frames of 3, 5, 7 chunks small; 9, 11, 13 medium; 15 and 17 large - nine, nine and six cities.
+    expect(byClass.get("small city")!.length).toBe(9);
+    expect(byClass.get("medium city")!.length).toBe(9);
+    expect(byClass.get("large city")!.length).toBe(6);
+    expect(Math.max(...byClass.get("small city")!)).toBeLessThan(Math.min(...byClass.get("medium city")!));
+    expect(Math.max(...byClass.get("medium city")!)).toBeLessThan(Math.min(...byClass.get("large city")!));
+  });
+
+  it("builds twice what it did in every city and metropolis, on the same land", () => {
+    // The user: "without changing the number of tiles and space, double the number of structures in each city".
+    // What each had before, measured at a95870a on the same seed (the land has not changed: the same outline).
+    const before: Record<string, number> = {
+      "settlement-1": 19441, "settlement-2": 18832, "settlement-3": 18750, "settlement-4": 107, "settlement-5": 97,
+      "settlement-6": 115, "settlement-7": 273, "settlement-8": 237, "settlement-9": 228, "settlement-10": 470,
+      "settlement-11": 598, "settlement-12": 473, "settlement-13": 1322, "settlement-14": 1299, "settlement-15": 1265,
+      "settlement-16": 2431, "settlement-17": 2492, "settlement-18": 2428, "settlement-19": 1753, "settlement-20": 1905,
+      "settlement-21": 1936, "settlement-22": 3110, "settlement-23": 2692, "settlement-24": 3077, "settlement-25": 3921,
+      "settlement-26": 4250, "settlement-27": 4440,
+    };
+    const grown = state.settlements.filter((s) => s.kind !== "outpost");
+    expect(grown).toHaveLength(Object.keys(before).length);
+    // Measured: 2.06 times at the least (a medium city), 2.13 to 2.21 for the metropolises.
+    for (const s of grown) expect(s.buildings.length / before[s.id]!, s.id).toBeGreaterThanOrEqual(2);
+  });
+
+  it("runs a straight railway across every settlement for its lines to others, edge to edge; no avenues", () => {
+    // The user: "the rail that connects cities: it passes left to right or up to down through the city, to the
+    // very extremes of the terrain, because it is the city interconnection line" - and the avenues, "so unnatural
+    // for a city development, erase them".
+    const byId = new Map(state.settlements.map((s) => [s.id, s] as const));
+    let both = 0;
+    for (const s of state.settlements) {
+      expect(s.zones.filter((z) => /avenue/i.test(z.name)), s.id).toEqual([]);
+      const f = frameOf(s, game);
+      const n = f.n;
+      const rails = new Set(s.rails);
+      const ours = claimTest(s, game);
+      /** The best straight line one way: the share of its land's row under rail, and how far in from each end it starts. */
+      const lineOf = (axis: "h" | "v"): { cover: number; gap: number } => {
+        let best = { cover: 0, gap: n };
+        for (let r = 0; r < n; r += 1) {
+          let land = 0;
+          let on = 0;
+          let lf = -1;
+          let ll = -1;
+          let first = -1;
+          let last = -1;
+          for (let a = 0; a < n; a += 1) {
+            const [x, y] = axis === "h" ? [a, r] : [r, a];
+            if (!ours(x, y)) continue;
+            land += 1;
+            if (lf < 0) lf = a;
+            ll = a;
+            if (rails.has(y * 1024 + x)) {
+              on += 1;
+              if (first < 0) first = a;
+              last = a;
+            }
+          }
+          if (land > 0 && on / land > best.cover) best = { cover: on / land, gap: Math.max(first - lf, ll - last) };
+        }
+        return best;
+      };
+      // Which way each of its lines leaves: more east-west than north-south, across; else up and down.
+      const ways = new Set<"h" | "v">();
+      for (const r of state.routes) {
+        if (r.a !== s.id && r.b !== s.id) continue;
+        const o = byId.get(r.a === s.id ? r.b : r.a)!;
+        let dlon = o.lon - s.lon;
+        if (dlon > Math.PI) dlon -= 2 * Math.PI;
+        if (dlon < -Math.PI) dlon += 2 * Math.PI;
+        ways.add(Math.abs(dlon * Math.cos((o.lat + s.lat) / 2)) >= Math.abs(o.lat - s.lat) ? "h" : "v");
+      }
+      expect(ways.size, `vacuity: ${s.id} has a line to somewhere`).toBeGreaterThan(0);
+      if (ways.size === 2) both += 1;
+      for (const way of ways) {
+        const line = lineOf(way);
+        // Measured: 0.69 of the row at the least (crags and slopes a city keeps break it), and within 39 tiles
+        // of each end of its land.
+        expect(line.cover, `${s.id} ${way}: the line's share of its row`).toBeGreaterThan(0.6);
+        expect(line.gap, `${s.id} ${way}: how far short of the edge`).toBeLessThanOrEqual(48);
+      }
+      // No highway: never two long straight railways side by side (the avenues ran a double line).
+      const long = (axis: "h" | "v"): number[] => {
+        const out: number[] = [];
+        for (let r = 0; r < n; r += 1) {
+          let run = 0;
+          let most = 0;
+          for (let a = 0; a < n; a += 1) {
+            run = rails.has(axis === "h" ? r * 1024 + a : a * 1024 + r) ? run + 1 : 0;
+            most = Math.max(most, run);
+          }
+          if (most >= 64) out.push(r);
+        }
+        return out;
+      };
+      for (const axis of ["h", "v"] as const) {
+        const rows = long(axis);
+        for (let k = 1; k < rows.length; k += 1) expect(rows[k]! - rows[k - 1]!, `${s.id}: long railways ${axis} side by side`).toBeGreaterThan(3);
+      }
+    }
+    // Measured: 34 settlements with lines both ways.
+    expect(both).toBeGreaterThan(20);
   });
 
   it("is the same planet every time, and survives the save exactly", () => {

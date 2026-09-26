@@ -11,18 +11,20 @@
  *
  * The quarters (`metropolis.ts`) stand on the founding square and its ring
  * of claimed land: eleven chunks a side, eight quarters a side. Round them,
- * ten more chunks a side are laid out on a lattice of AVENUES - a ring at the
- * city's edge, a ring round the quarters, and radials between - each a chunk
- * wide, carrying a double railway, four corridors and their cross-links, and
- * power. Between the avenues lie DISTRICTS of 2 x 2, 3 x 3 and 4 x 4 chunks,
- * and two big ones - a solar farm and a wind farm - with wild, unclaimed
- * land between them. Each district is blocks wall to wall, as the quarters
- * are, for its purpose; each is a zone of its own colour. Then the whole city
- * is joined - corridors, cables, one railway - made good (power, water, food,
- * oxygen), cleared of rock, and set to work.
+ * the city grows as a blob. First, a straight railway right across it for
+ * each way its lines to other settlements leave (the user: "the rail that
+ * connects cities passes left to right or up to down through the city, to the
+ * very extremes of the terrain") - the avenues that once ran round and
+ * through it are gone ("so unnatural for a city development, erase them").
+ * Then DISTRICTS of 2 x 2, 3 x 3 and 4 x 4 chunks, and two big ones - a solar
+ * farm and a wind farm - a chunk apart. Each district is blocks wall to wall,
+ * as the quarters are, for its purpose; each is a zone of its own colour.
+ * Every other chunk is works, 16 to 50 to a chunk. Then the whole city is
+ * joined - corridors, cables, one railway - made good (power, water, food,
+ * oxygen), and set to work.
  */
 
-import type { BuildingType, HabitatChannels, MicroResource, PlacedBuilding, Settlement, SettlementJob, SimState, Tuning, Zone } from "../sim/index.js";
+import type { Axis, BuildingType, HabitatChannels, MicroResource, PlacedBuilding, Settlement, SettlementJob, SimState, Tuning, Zone } from "../sim/index.js";
 import {
   BUILDING_DEFS,
   capacities,
@@ -32,6 +34,7 @@ import {
   groundOf,
   housing,
   levelGround,
+  crossingLine,
   rocksOf,
   tileKey,
 } from "../sim/index.js";
@@ -59,15 +62,15 @@ export const PURPOSES: Readonly<Record<Purpose, { name: string; colour: string }
 
 /** What each district is filled with: first these, then the repeat until its blocks are full (or `passes` runs out). */
 const RECIPES: Readonly<Record<Exclude<Purpose, "wind">, { first: readonly BuildingType[]; repeat: readonly BuildingType[]; passes: number; open: number }>> = {
-  solar: { first: ["battery_bank", "battery_bank", "battery_bank"], repeat: ["solar_array"], passes: 12, open: 0 },
-  commerce: { first: ["station", "mega_mall", "mega_mall", "mega_mall", "medical_center"], repeat: ["skyscraper", "skyscraper", "freezer", "habitat_dome"], passes: 6, open: 4 },
-  agriculture: { first: ["station", "biosphere", "biosphere", "biosphere", "biosphere"], repeat: ["greenhouse", "biosphere", "algae_reactor", "water_extractor", "greenhouse", "freezer"], passes: 6, open: 4 },
-  industry: { first: ["station", "industrial_command", "rover_post", "materials_depot"], repeat: ["regolith_mine", "regolith_mine", "geothermal_plant", "materials_depot", "reactor", "battery_bank", "storage_depot"], passes: 6, open: 4 },
-  port: { first: ["station", "spaceport", "spaceport", "spaceport", "spaceport"], repeat: ["storage_depot", "materials_depot", "water_tank", "spaceport", "freezer"], passes: 4, open: 3 },
-  research: { first: ["observatory", "research_forum", "research_forum", "laboratory"], repeat: ["laboratory", "laboratory", "algae_reactor", "habitat_dome"], passes: 4, open: 3 },
-  suburb: { first: ["park", "rover_post"], repeat: ["habitat_dome", "habitat_dome", "greenhouse", "habitat_dome", "water_tank"], passes: 4, open: 3 },
-  storage: { first: ["materials_depot", "materials_depot"], repeat: ["water_tank", "battery_bank", "freezer", "materials_depot", "storage_depot"], passes: 5, open: 4 },
-  parkland: { first: [], repeat: ["park", "park", "park", "habitat_dome"], passes: 3, open: 3 },
+  solar: { first: ["battery_bank", "battery_bank", "battery_bank"], repeat: ["solar_array"], passes: 40, open: 0 },
+  commerce: { first: ["mega_mall", "mega_mall", "mega_mall", "medical_center"], repeat: ["skyscraper", "skyscraper", "freezer", "habitat_dome"], passes: 40, open: 0 },
+  agriculture: { first: ["biosphere", "biosphere", "biosphere", "biosphere"], repeat: ["greenhouse", "biosphere", "algae_reactor", "water_extractor", "greenhouse", "freezer"], passes: 40, open: 0 },
+  industry: { first: ["industrial_command", "rover_post", "materials_depot"], repeat: ["regolith_mine", "regolith_mine", "geothermal_plant", "materials_depot", "reactor", "battery_bank", "storage_depot"], passes: 40, open: 0 },
+  port: { first: ["spaceport", "spaceport", "spaceport", "spaceport"], repeat: ["storage_depot", "materials_depot", "water_tank", "spaceport", "freezer"], passes: 40, open: 0 },
+  research: { first: ["observatory", "research_forum", "research_forum", "laboratory"], repeat: ["laboratory", "laboratory", "algae_reactor", "habitat_dome"], passes: 40, open: 0 },
+  suburb: { first: ["park", "rover_post"], repeat: ["habitat_dome", "habitat_dome", "greenhouse", "habitat_dome", "water_tank"], passes: 40, open: 0 },
+  storage: { first: ["materials_depot", "materials_depot"], repeat: ["water_tank", "battery_bank", "freezer", "materials_depot", "storage_depot"], passes: 40, open: 0 },
+  parkland: { first: [], repeat: ["park", "park", "park", "habitat_dome"], passes: 40, open: 0 },
 };
 
 /** A district, in chunks from the frame's corner. */
@@ -161,97 +164,6 @@ export function chunksOf(outline: Outline, g: Geometry = METROPOLIS_GEOMETRY): S
   return out;
 }
 
-/** An avenue's course, in tiles of the frame: a line of points, closed round for a ring. */
-interface Route {
-  readonly points: readonly (readonly [number, number])[];
-  readonly closed: boolean;
-}
-
-/**
- * The avenues: a ring round the quarters, a ring round the city a chunk and a
- * half inside its outline, and eight radials from the one to the other - the
- * railways that join the city's extremes run along them.
- */
-function routesOf(outline: Outline, C: number, g: Geometry): Route[] {
-  const c = (g.F * C) / 2;
-  const half = (g.Q / 2) * C + C / 2;
-  const inner: [number, number][] = [
-    [c - half, c - half],
-    [c + half, c - half],
-    [c + half, c + half],
-    [c - half, c + half],
-  ];
-  const ringAt = (angle: number): number => Math.max((g.least - 1.8) * C, (outline.reach(angle) - 1.6) * C);
-  const outer: [number, number][] = [];
-  for (let k = 0; k < 96; k += 1) {
-    const angle = (k / 96) * 2 * Math.PI;
-    const r = ringAt(angle);
-    outer.push([c + r * Math.cos(angle), c + r * Math.sin(angle)]);
-  }
-  const radials: Route[] = [];
-  for (let k = 0; k < 8; k += 1) {
-    const angle = (k / 8) * 2 * Math.PI;
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
-    // From where the ray leaves the inner ring's square to the outer ring.
-    const leave = half / Math.max(Math.abs(dx), Math.abs(dy));
-    const r = ringAt(angle);
-    radials.push({ points: [[c + leave * dx, c + leave * dy], [c + r * dx, c + r * dy]], closed: false });
-  }
-  return [{ points: inner, closed: true }, { points: outer, closed: true }, ...radials];
-}
-
-/** A line along a route, `offset` tiles to its side, as tiles each beside the last (4-connected). */
-function laneOf(route: Route, offset: number, n: number): number[] {
-  const out: number[] = [];
-  let last: [number, number] | null = null;
-  const pts = route.closed ? [...route.points, route.points[0]!] : route.points;
-  const push = (x: number, y: number): void => {
-    if (x < 0 || y < 0 || x >= n || y >= n) {
-      last = null;
-      return;
-    }
-    if (last !== null) {
-      // Fill the corner between diagonal neighbours, so the lane is unbroken tile to tile.
-      if (last[0] !== x && last[1] !== y) out.push(last[1] * n + x);
-      if (last[0] === x && last[1] === y) return;
-    }
-    out.push(y * n + x);
-    last = [x, y];
-  };
-  for (let k = 0; k + 1 < pts.length; k += 1) {
-    const [ax, ay] = pts[k]!;
-    const [bx, by] = pts[k + 1]!;
-    const len = Math.hypot(bx - ax, by - ay);
-    if (len === 0) continue;
-    const nx = -(by - ay) / len;
-    const ny = (bx - ax) / len;
-    const steps = Math.ceil(len * 2);
-    for (let i = 0; i <= steps; i += 1) {
-      const f = i / steps;
-      push(Math.round(ax + (bx - ax) * f + nx * offset), Math.round(ay + (by - ay) * f + ny * offset));
-    }
-  }
-  return out;
-}
-
-/** Points every `every` tiles along a route, with the way it runs across there: for the cross-links. */
-function alongRoute(route: Route, every: number): { x: number; y: number; nx: number; ny: number }[] {
-  const out: { x: number; y: number; nx: number; ny: number }[] = [];
-  const pts = route.closed ? [...route.points, route.points[0]!] : route.points;
-  let carry = every / 2;
-  for (let k = 0; k + 1 < pts.length; k += 1) {
-    const [ax, ay] = pts[k]!;
-    const [bx, by] = pts[k + 1]!;
-    const len = Math.hypot(bx - ax, by - ay);
-    if (len === 0) continue;
-    let at = carry;
-    for (; at < len; at += every) out.push({ x: ax + ((bx - ax) * at) / len, y: ay + ((by - ay) * at) / len, nx: -(by - ay) / len, ny: (bx - ax) / len });
-    carry = at - len;
-  }
-  return out;
-}
-
 /** The districts' sizes and purposes, largest first: the two farms, then 4, 3 and 2 chunks a side. */
 function districtList(): District[] {
   const out: District[] = [
@@ -267,29 +179,27 @@ function districtList(): District[] {
   return out;
 }
 
-/** How a city grows: its geometry, how many chunks it covers, its districts, and whether avenues run through it. */
+/** How a city grows: its geometry, how many chunks it covers, and its districts. */
 export interface GrowPlan {
   readonly g: Geometry;
   readonly area: number;
   readonly districts: readonly District[];
-  readonly avenues: boolean;
   /** Every stone in the frame broken first (a metropolis: "clear of all the stones"); else its crags are built round. */
   readonly clearRocks: boolean;
 }
 
-export function widenMetropolis(start: SimState, id: string, env: HabitatChannels, t: Tuning, rnd: () => number): SimState {
-  return growCity(start, id, env, t, rnd, { g: METROPOLIS_GEOMETRY, area: 620, districts: districtList(), avenues: true, clearRocks: true });
+export function widenMetropolis(start: SimState, id: string, env: HabitatChannels, t: Tuning, rnd: () => number, axes: readonly Axis[] = []): SimState {
+  return growCity(start, id, env, t, rnd, { g: METROPOLIS_GEOMETRY, area: 620, districts: districtList(), clearRocks: true }, axes);
 }
 
 /**
  * A city of `K` chunks across at most (the user: "even normal cities way
  * bigger in the perfect planet: at least 3x3 tiles, at most 17x17, blob
  * shaped"): its founding square the core, an outline over some 70% of its
- * box, avenues once it is 13 chunks or more, and districts in proportion.
+ * box, and districts in proportion.
  */
 export function cityPlan(K: number): GrowPlan {
   const F = K % 2 === 1 ? K : K + 1;
-  const avenues = F >= 13;
   const area = Math.max(9, Math.round(0.7 * K * K));
   const outside = area - 9;
   const out: District[] = [];
@@ -299,11 +209,10 @@ export function cityPlan(K: number): GrowPlan {
   const cycle: Purpose[] = ["suburb", "agriculture", "industry", "suburb", "storage", "research", "suburb", "commerce", "parkland", "port"];
   let k = 0;
   for (const [size, per] of [[4, 70], [3, 35], [2, 18]] as const) for (let i = 0; i < Math.floor(outside / per); i += 1) out.push({ u: 0, v: 0, w: size, h: size, purpose: cycle[k++ % cycle.length]! });
-  // Avenues need a ring's room round the founding square: 2 chunks out, the outer ring a chunk and a half in from the edge.
-  return { g: { F, Q: 3, fo: 0, least: avenues ? 5.5 : 2.2 }, area, districts: out, avenues, clearRocks: false };
+  return { g: { F, Q: 3, fo: 0, least: 2.2 }, area, districts: out, clearRocks: false };
 }
 
-export function growCity(start: SimState, id: string, env: HabitatChannels, t: Tuning, rnd: () => number, growth: GrowPlan): SimState {
+export function growCity(start: SimState, id: string, env: HabitatChannels, t: Tuning, rnd: () => number, growth: GrowPlan, axes: readonly Axis[] = []): SimState {
   const g = growth.g;
   const OUTER = outerOf(g);
   const inQuarters = (c: number): boolean => inCore(g, c);
@@ -366,8 +275,8 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
   };
   for (const b of s.buildings) occupy(b.tx, b.ty, ...sizeOf(b.type));
   const openAt = new Uint8Array(n * n);
-  // The avenues' strips, kept clear of buildings (their lanes, and the ground between them): laid out below.
-  // And the quarters' own corridors, cables and railways: nothing may stand on a link.
+  // Ground kept clear of buildings: the quarters' own corridors, cables and railways (nothing may stand on a
+  // link), the lines across the city, and the stations' aprons - laid out below.
   const strip = new Uint8Array(n * n);
   for (const list of [s.corridors, s.cables, s.rails]) for (const k of list) strip[(k >> 10) * n + (k & 1023)] = 1;
   for (let i = 0; i < n * n; i += 1) openAt[i] = !ground.steep[i] && crag[i] !== "crag" && ours(i % n, Math.floor(i / n)) ? 1 : 0;
@@ -424,8 +333,7 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
     return null;
   };
 
-  // 3. The avenues: in each avenue chunk, along the way it runs, two rails (a double line), four corridors,
-  // cross-links every 16 tiles over them (the rails go over on bridges), and power with the outer corridors.
+  // 3. The links laid as it grows: corridors, cables, railways.
   const corridor = new Uint8Array(n * n);
   const cable = new Uint8Array(n * n);
   const rail = new Uint8Array(n * n);
@@ -434,28 +342,14 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
     const i = y * n + x;
     if (openAt[i] && !taken[i]) grid[i] = 1;
   };
-  // Offsets across an avenue, tiles from its middle: a double railway, four corridors, power along the outer two.
-  const RAILS = [-2, 1];
-  const CORRIDORS = [-12, -6, 7, 13];
-  const CABLES = [-12, 13];
-  const WIDTH = 14;
-  const routes = (growth.avenues ? routesOf(outline, C, g) : []).map((r) => ({ ...r, points: r.points.map(([x, y]) => [x - du * C, y - dv * C] as const) }));
-  for (const route of routes) {
-    for (const o of RAILS) for (const i of laneOf(route, o, n)) lay(rail, i % n, Math.floor(i / n));
-    for (const o of CORRIDORS) for (const i of laneOf(route, o, n)) lay(corridor, i % n, Math.floor(i / n));
-    for (const o of CABLES) for (const i of laneOf(route, o, n)) lay(cable, i % n, Math.floor(i / n));
-    for (let o = -WIDTH; o <= WIDTH; o += 1) for (const i of laneOf(route, o, n)) strip[i] = 1;
-    // Cross-links every 16 tiles, from the outer corridor to the outer corridor, over the rails on bridges.
-    for (const p of alongRoute(route, 16)) {
-      for (let o = CORRIDORS[0]!; o <= CORRIDORS[CORRIDORS.length - 1]!; o += 1) {
-        const x = Math.round(p.x + p.nx * o);
-        const y = Math.round(p.y + p.ny * o);
-        lay(corridor, x, y);
-        lay(cable, x, y);
-      }
-    }
+  // The railways to other settlements (at the user's request: "the rail that connects cities passes left to
+  // right or up to down through the city, to the very extremes of its terrain"): a straight line across the
+  // city for each way its railways leave it, laid before anything else is built, its row kept clear.
+  for (const axis of axes) {
+    const line = crossingLine({ ...s, buildings: placed }, axis, t);
+    for (let a = 0; a < n; a += 1) strip[axis === "h" ? line.at * n + a : a * n + line.at] = 1;
+    for (const k of line.tiles) rail[(k >> 10) * n + (k & 1023)] = 1;
   }
-
 
   // 4. The districts: blocks wall to wall, for their purpose; a station where the recipe has one.
   const PITCH = 16;
@@ -482,7 +376,7 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
     return out;
   };
   // Where each district goes: inside the outline, clear of the quarters, a chunk apart from every other
-  // district, and not across an avenue - the biggest first (a farm a chunk smaller if it must), each at one
+  // district, and not across the lines - the biggest first (a farm a chunk smaller if it must), each at one
   // of the places it fits, chosen in turn.
   const cu = Math.round(n / C);
   const stripIn = new Float64Array(cu * cu);
@@ -510,7 +404,7 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
               if (inRect) across += stripIn[y * cu + x]!;
             }
           }
-          // An avenue may skirt a district, not run through it: at most a third of its ground under an avenue.
+          // A line may cross a district: at most a third of its ground kept clear.
           if (ok && across / (size * size) <= 0.35) places.push([u, v]);
         }
       }
@@ -523,7 +417,7 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
   }
   const districtBlocks = new Map<District, Rect[]>();
   for (const d of plan) {
-    // Two tiles in from the district's edge: the avenues' outer corridors run close by.
+    // Two tiles in from the district's edge: room for the corridors that join it.
     const r: Rect = { x0: d.u * C + 2, y0: d.v * C + 2, x1: (d.u + d.w) * C - 2, y1: (d.v + d.h) * C - 2 };
     const blocks = blocksOf(d, r);
     districtBlocks.set(d, blocks);
@@ -612,9 +506,10 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
   for (let v = 0; v < cu; v += 1) {
     for (let u = 0; u < cu; u += 1) {
       // The quarters too: their open blocks had left whole chunks bare.
-      if (!chunkIn(u, v) || inChunk[v * cu + u]! >= 3) continue;
+      if (!chunkIn(u, v)) continue;
       const r: Rect = { x0: u * C, y0: v * C, x1: (u + 1) * C, y1: (v + 1) * C };
-      const target = 3 + Math.floor(rnd() * 23);
+      // Twice what it was (the user: "double the number of structures in each city"): 16 to 50 on every chunk.
+      const target = 16 + Math.floor(rnd() * 35);
       const centres = Array.from({ length: 1 + Math.floor(rnd() * 3) }, () => [r.x0 + 4 + Math.floor(rnd() * (C - 8)), r.y0 + 4 + Math.floor(rnd() * (C - 8))] as const);
       let count = inChunk[v * cu + u]!;
       for (let tries = 0; count < target && tries < target * 4; tries += 1) {
@@ -644,14 +539,6 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
   }
   zoneId += 1;
   zones.push({ id: zoneId, name: "Works and stores", colour: "#b0896a", tiles: worksTiles.sort((a, b) => a - b) });
-  const avenueTiles: number[] = [];
-  for (let i = 0; i < n * n; i += 1) {
-    const x = i % n;
-    const y = Math.floor(i / n);
-    if (strip[i] && ours(x, y) && !quarterChunk(Math.floor(x / C), Math.floor(y / C))) avenueTiles.push(tileKey(x, y));
-  }
-  zoneId += 1;
-  zones.push({ id: zoneId, name: "Avenues - rail and corridor", colour: "#9c7a5b", tiles: avenueTiles.sort((a, b) => a - b) });
 
   // 5. Made good: producers added where they belong until nothing runs short.
   const net = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
@@ -673,14 +560,36 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
     oxygen: [["algae_reactor", ["agriculture", "research", "suburb", "storage"]]],
     food: [["greenhouse", ["agriculture", "suburb", "parkland", "storage"]]],
   };
-  for (let k = 0; k < 4000; k += 1) {
-    const now = supply();
-    const short = (["power", "water", "food", "oxygen"] as const).find((r) => now[r] < 2);
-    if (short === undefined) break;
-    // Where it belongs first; then any district with room (not the farms).
-    const anywhere = plan.filter((d) => d.purpose !== "solar" && d.purpose !== "wind");
-    if (!makers[short].some(([type, where]) => inDistricts(type, where.flatMap(byPurpose))) && !inDistricts(makers[short][0]![0], anywhere)) break;
-  }
+  // Last, on the works' own land: the districts are built full (twice the buildings, at the user's request), and
+  // with nowhere left in them the first metropolis ran 10,400 water a year short (measured).
+  const worksChunks: [number, number][] = [];
+  for (let v = 0; v < cu; v += 1) for (let u = 0; u < cu; u += 1) if (chunkIn(u, v) && !used[v * cu + u] && !quarterChunk(u, v)) worksChunks.push([u, v]);
+  const worksCursor = new Map<BuildingType, number>();
+  const onWorks = (type: BuildingType): boolean => {
+    for (let at = worksCursor.get(type) ?? 0; at < worksChunks.length; at += 1) {
+      const [u, v] = worksChunks[at]!;
+      // Fifty to a chunk at the most, as the works themselves (put where they fit first, 228 stood in one, measured).
+      if (inChunk[v * cu + u]! >= 50) continue;
+      if (nearIn(type, u * C + C / 2, v * C + C / 2, { x0: u * C, y0: v * C, x1: (u + 1) * C, y1: (v + 1) * C }) !== null) {
+        inChunk[v * cu + u]! += 1;
+        worksCursor.set(type, at);
+        return true;
+      }
+    }
+    worksCursor.set(type, worksChunks.length);
+    return false;
+  };
+  const makeGood = (): void => {
+    for (let k = 0; k < 4000; k += 1) {
+      const now = supply();
+      const short = (["power", "water", "food", "oxygen"] as const).find((r) => now[r] < 2);
+      if (short === undefined) break;
+      // Where it belongs first; then any district with room (not the farms); then the works.
+      const anywhere = plan.filter((d) => d.purpose !== "solar" && d.purpose !== "wind");
+      if (!makers[short].some(([type, where]) => inDistricts(type, where.flatMap(byPurpose))) && !inDistricts(makers[short][0]![0], anywhere) && !onWorks(makers[short][0]![0])) break;
+    }
+  };
+  makeGood();
 
   // 5b. Only what the city's people allow (a city smaller than a metropolis cannot have a station below
   // 5,000 people, a skyscraper below 1,000, a post for every 100): each such building swapped for one that
@@ -710,16 +619,10 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
     // What the swaps draw, made good again.
     counted = 0;
     for (const r of Object.keys(net) as MicroResource[]) net[r] = 0;
-    for (let k = 0; k < 4000; k += 1) {
-      const now = supply();
-      const short = (["power", "water", "food", "oxygen"] as const).find((r) => now[r] < 2);
-      if (short === undefined) break;
-      const anywhere = plan.filter((d) => d.purpose !== "solar" && d.purpose !== "wind");
-      if (!makers[short].some(([type, where]) => inDistricts(type, where.flatMap(byPurpose))) && !inDistricts(makers[short][0]![0], anywhere)) break;
-    }
+    makeGood();
   }
 
-  // 6. Joined: the quarters' corridors and rails carried out to the avenues; every district's blocks to the
+  // 6. Joined: the quarters' corridors carried out of the core; every district's blocks to the
   // nearest corridor; then whatever is still apart, by the shortest way.
   const s1: Settlement = { ...s, buildings: placed };
   for (const k of s1.corridors) corridor[(k >> 10) * n + (k & 1023)] = 1;
@@ -766,7 +669,7 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
       for (const i of tries[0] ?? []) corridor[i] = cable[i] = 1;
     }
   }
-  // The quarters' edge: every corridor there carried straight out to the avenue beside it.
+  // The quarters' edge: every corridor there carried straight out a chunk, toward the city round it.
   // The core's box in the frame.
   const qx0 = (OUTER - du) * C;
   const qx1 = qx0 + g.Q * C - 1;
@@ -886,7 +789,7 @@ export function growCity(start: SimState, id: string, env: HabitatChannels, t: T
   };
   s = { ...s1, buildings: [...placed], corridors: listOf(corridor), cables: listOf(cable), rails: listOf(rail), zones, jobs: [] };
 
-  // 9. People and full stores - and at work: rovers out levelling the avenues' ground, rockets away.
+  // 9. People and full stores - and at work: rovers out levelling ground, rockets away.
   s = { ...s, population: Math.floor(housing(s, t) * 0.9) };
   s = { ...s, stores: { ...capacities(s, t) } };
   state = withSettlement(state, s);

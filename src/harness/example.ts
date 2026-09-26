@@ -16,13 +16,14 @@
  * build it too.
  */
 
-import type { BuildingType, HabitatChannels, PlacedBuilding, Route, Settlement, SettlementKind, SimState, Tuning, Zone as PlannerZone } from "../sim/index.js";
+import type { Axis, BuildingType, HabitatChannels, PlacedBuilding, Route, Settlement, SettlementKind, SimState, Tuning, Zone as PlannerZone } from "../sim/index.js";
 import {
   BUILDING_DEFS,
   NEUTRAL_ENV,
   advance,
   capacities,
   claimTest,
+  crossingLine,
   derive,
   evaluatePhase,
   foundSettlement,
@@ -36,6 +37,7 @@ import {
   nextSubstepFlows,
   linksToConnect,
   tileKey,
+  routeAxis,
   routeKm,
   seedBiosphere,
   siteElevation,
@@ -493,6 +495,19 @@ export interface ExamplePlanet {
 }
 
 /**
+ * Every settlement's name, in the order they are founded (the user: "name all
+ * cities"): the three metropolises, the 24 cities smallest first, the 15
+ * outposts - after the places of Mars and those who looked at it.
+ */
+export const EXAMPLE_NAMES: readonly string[] = [
+  "Olympus", "Tharsis", "Hellas",
+  "Gale", "Jezero", "Holden", "Eberswalde", "Mawrth", "Nili", "Gusev", "Meridiani", "Ares", "Utopia", "Elysium", "Arcadia",
+  "Chryse", "Acidalia", "Noctis", "Syrtis", "Isidis", "Amazonis", "Cydonia", "Argyre", "Tempe", "Valles", "Arabia", "Schiaparelli",
+  "Huygens", "Cassini", "Lowell", "Barsoom", "Bradbury", "Sagan", "Viking", "Pathfinder", "Sojourner", "Spirit", "Opportunity",
+  "Phoenix", "Curiosity", "Ingenuity", "Zhurong",
+];
+
+/**
  * The example planet. `physics` runs the playthrough (the calibrated default);
  * `game` is the tuning the settlements are built under (the browser's).
  */
@@ -526,17 +541,33 @@ export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
     }
   }
 
+  // The railways between them, planned before anything is built: each settlement's line to another
+  // crosses it from side to side (the user: "it passes left to right or up to down through the city, to the
+  // very extremes of its terrain, because it is the city interconnection line"), so its row is kept clear.
+  const planned = plan.flatMap(({ kind }, i) => (sites[i] === undefined ? [] : [{ id: String(i), kind, lostAtSeaLevelM: null, ...sites[i]! }]));
+  const lines = interconnect(planned);
+  const axesOf = (i: number): Axis[] => {
+    const out = new Set<Axis>();
+    for (const r of lines) {
+      if (r.a === String(i)) out.add(routeAxis(sites[i]!, sites[Number(r.b)]!));
+      if (r.b === String(i)) out.add(routeAxis(sites[i]!, sites[Number(r.a)]!));
+    }
+    return [...out].sort();
+  };
+
   const sizes: Record<string, number> = {};
+  const idOf = new Map<string, string>();
   let cities = 0;
   plan.forEach(({ kind, size }, i) => {
     const site = sites[i];
     if (site === undefined) return;
-    state = foundSettlement(state, kind, site.lat, site.lon, game).state;
+    state = foundSettlement(state, kind, site.lat, site.lon, game, EXAMPLE_NAMES[i % EXAMPLE_NAMES.length]).state;
     const founded = state.settlements[state.settlements.length - 1]!;
+    idOf.set(String(i), founded.id);
     sizes[founded.id] = size;
     if (kind === "metropolis") {
       // In quarters, on claimed land, and at work (see `metropolis.ts`).
-      state = buildMetropolis(state, founded.id, env, game, rnd);
+      state = buildMetropolis(state, founded.id, env, game, rnd, axesOf(i));
       return;
     }
     const buildings = layOut(founded, wishList(kind, size, founded.buildings.some((b) => b.type === "spaceport"), game), size, game);
@@ -555,12 +586,24 @@ export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
       // most 17x17, blob shaped"): 3, 5, ... 17 chunks across, three cities of each, the bigger to the bigger.
       const K = 3 + 2 * Math.floor(cities / 3);
       cities += 1;
-      state = growCity(state, founded.id, env, game, rnd, cityPlan(K));
+      state = growCity(state, founded.id, env, game, rnd, cityPlan(K), axesOf(i));
+    } else {
+      // An outpost's line crosses it too, over what it has built.
+      let s = state.settlements.find((c) => c.id === founded.id)!;
+      const rails = new Set(s.rails);
+      for (const axis of axesOf(i)) for (const k of crossingLine(s, axis, game).tiles) rails.add(k);
+      s = { ...s, rails: [...rails].sort((a, b) => a - b) };
+      state = { ...state, settlements: state.settlements.map((c) => (c.id === founded.id ? s : c)) };
     }
     sizes[founded.id] = size;
   });
   void env;
-  return { state: { ...state, routes: interconnect(state.settlements) }, sizes };
+  const routes = lines.flatMap((r) => {
+    const a = idOf.get(r.a);
+    const b = idOf.get(r.b);
+    return a === undefined || b === undefined ? [] : [{ ...r, a, b }];
+  });
+  return { state: { ...state, routes }, sizes };
 }
 
 /**
@@ -570,13 +613,15 @@ export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
  * nearest settlement it is not yet joined to - so the network has loops, and
  * no one line cut leaves a city alone.
  */
-export function interconnect(settlements: readonly Settlement[]): Route[] {
+type Site = Pick<Settlement, "id" | "kind" | "lat" | "lon" | "lostAtSeaLevelM">;
+
+export function interconnect(settlements: readonly Site[]): Route[] {
   const list = settlements.filter((s) => s.lostAtSeaLevelM === null);
   if (list.length < 2) return [];
   const routes: Route[] = [];
   const joined = new Set<string>();
   const key = (a: string, b: string): string => (a < b ? `${a}|${b}` : `${b}|${a}`);
-  const add = (a: Settlement, b: Settlement): void => {
+  const add = (a: Site, b: Site): void => {
     if (joined.has(key(a.id, b.id))) return;
     joined.add(key(a.id, b.id));
     routes.push({ a: a.id, b: b.id, km: routeKm(a, b) });
@@ -584,7 +629,7 @@ export function interconnect(settlements: readonly Settlement[]): Route[] {
   // Prim's tree, from the first settlement.
   const inTree = new Set([list[0]!.id]);
   while (inTree.size < list.length) {
-    let best: [Settlement, Settlement, number] | null = null;
+    let best: [Site, Site, number] | null = null;
     for (const a of list) {
       if (!inTree.has(a.id)) continue;
       for (const b of list) {

@@ -20,7 +20,7 @@
  * Built by the same rules the game enforces; `example.test.ts` replays them.
  */
 
-import type { BuildingType, HabitatChannels, MicroResource, PlacedBuilding, Settlement, SettlementJob, SimState, Tuning, Zone } from "../sim/index.js";
+import type { Axis, BuildingType, HabitatChannels, MicroResource, PlacedBuilding, Settlement, SettlementJob, SimState, Tuning, Zone } from "../sim/index.js";
 import {
   BUILDING_DEFS,
   capacities,
@@ -64,7 +64,7 @@ const RECIPES: Readonly<Record<Exclude<Quarter, "suburb" | "port">, { first: rea
   power: { first: ["reactor", "reactor"], repeat: ["solar_array", "solar_array", "geothermal_plant", "solar_array", "geothermal_plant"], times: 6 },
 };
 
-export function buildMetropolis(start: SimState, id: string, env: HabitatChannels, t: Tuning, rnd: () => number): SimState {
+export function buildMetropolis(start: SimState, id: string, env: HabitatChannels, t: Tuning, rnd: () => number, axes: readonly Axis[] = []): SimState {
   const settlementOf = (st: SimState): Settlement => st.settlements.find((c) => c.id === id)!;
   const withSettlement = (st: SimState, s: Settlement): SimState => ({ ...st, settlements: st.settlements.map((c) => (c.id === id ? s : c)) });
 
@@ -489,5 +489,5 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
     return { id: k + 1, name: `${QUARTER_ZONES[q.kind].name} ${count}`, colour: QUARTER_ZONES[q.kind].colour, tiles };
   });
   // 11. And beyond the quarters, the rest of the city (`metropolis-outer.ts`).
-  return widenMetropolis(withSettlement(state, { ...s, jobs, zones }), id, env, t, rnd);
+  return widenMetropolis(withSettlement(state, { ...s, jobs, zones }), id, env, t, rnd, axes);
 }
