@@ -42,6 +42,7 @@ that state.
 | [`docs/balance/batch22-terrain.md`](docs/balance/batch22-terrain.md) | Terrain with depth: one elevation field for the globe and the settlements, metres on the planet, hills and slope, exact picking. |
 | [`docs/balance/batch23-sea-level.md`](docs/balance/batch23-sea-level.md) | Sea level from the ocean, and how fast it rises: the input the flooding batches build on. |
 | [`docs/balance/batch24-flood.md`](docs/balance/batch24-flood.md) | The flood model: a low city drowns from its lowest ground inward and is lost at +10 m, exact through offline catch-up - and the six weak tests found closing it. Off by default. |
+| [`docs/balance/batch25-flood-forecast.md`](docs/balance/batch25-flood-forecast.md) | When the sea will reach each settlement, forecast in water rather than metres (the spec's line was 58 years wrong across a kink), and the warnings in the orbit HUD. |
 | [`docs/balance/detail-pass-buildings.md`](docs/balance/detail-pass-buildings.md) | The ten buildings rebuilt with far more detail; a close-up of all ten is `docs/frames/city-buildings.png`. |
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |

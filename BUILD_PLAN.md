@@ -31,7 +31,7 @@ This file is the source of truth for *in what order* we build it, and for what "
 | 22 | Detail: terrain with depth | **COMPLETE** - [note](docs/balance/batch22-terrain.md) - one shared elevation field; hypsometry to metres; slope-limited hills (browser 12 m); exact picking; a terrain golden frame |
 | 23 | Detail: sea level from the macro sim | **COMPLETE** - [note](docs/balance/batch23-sea-level.md) - sea level and its rate through HabitatChannels; rate within 0.104% of advance away from the curve's kinks; nextSubstepFlows |
 | 24 | Detail: the flood model, headless | **COMPLETE** - [note](docs/balance/batch24-flood.md) - behind FLOODING_ENABLED=0; six weak tests found by injection and fixed; browser stays off until Batch 25's warnings |
-| 25 | Detail: flood forecast and warnings | NOT STARTED - detail §4.4, §6 step 4 |
+| 25 | Detail: flood forecast and warnings | **COMPLETE** - [note](docs/balance/batch25-flood-forecast.md) - forecast in water, not §4.4's metres (58 yr wrong across a kink); every crossing within 0.07 yr; 50-year alert horizon; browser opt-in left to the user |
 | 26 | Detail: procedural structures and the instancing renderer | NOT STARTED - detail §2, §6 step 5 |
 | 27 | Detail: terrain resource deposits | NOT STARTED - detail §3, §6 step 6 |
 | 28 | Detail: flood mitigation and the rising water | NOT STARTED - detail §4.5, §4.6, §6 step 7 |
@@ -933,12 +933,19 @@ level rises. This is the highest-value feature; prove it in numbers before rende
 - Offline catch-up equals live play through a threshold crossing, exactly.
 - Off by default: the golden run, the Batch 3 score and the golden frames are unchanged.
 
-## Batch 25 - Detail: flood forecast and warnings - NOT STARTED
+## Batch 25 - Detail: flood forecast and warnings - COMPLETE
+
+**Done** - see [the note](docs/balance/batch25-flood-forecast.md). Changed from the plan: the
+forecast extrapolates liquid water through the inverted curve, not §4.4's straight line in metres,
+which named the high city's crossing 58 sim-years late across a kink. A new constant,
+`FLOOD_ALERT_YEARS` (50), warns ahead of the §4.3 margin, which gives weeks at the sea's peak rise.
+There is no city-view warning (the habitat channels carry no water rate). Flooding stays off in the
+browser until the user chooses: an old save could hold a city already under the sea.
 
 **Goal.** Detail §6 step 4: "Add the forecast (4.4) and wire warnings into the macro overview."
 
-- [ ] `years_to_base` and `years_to_destroy` per settlement (§4.4), derived and never stored.
-- [ ] Warnings in the orbit HUD ("submersion begins in ~14 yr, total loss in ~31 yr at current
+- [x] `years_to_base` and `years_to_destroy` per settlement (§4.4), derived and never stored.
+- [x] Warnings in the orbit HUD ("submersion begins in ~14 yr, total loss in ~31 yr at current
   rate"), readable without colour.
 
 **Exit gate.**
