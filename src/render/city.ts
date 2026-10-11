@@ -23,6 +23,8 @@ import type { CityBuildingView, CityView } from "../sim/index.js";
 import type { FootprintBox } from "./iso.js";
 import { TOWARD_VIEWER, TILE_H, TILE_W, Z_PX, depthOrder, isoProject, isoToGround } from "./iso.js";
 import type { Rgba, Shape } from "./raster.js";
+import type { Box3, Host, Instance } from "./structures.js";
+import { generateStructure, structureSeed, variantOf } from "./structures.js";
 
 type V3 = readonly [number, number, number];
 interface Rgb {
@@ -579,7 +581,214 @@ function vent(x: number, y: number, z: number, w = 0.12, h = 0.08): Part[] {
 /** Where a spaceport's rocket is: on the pad (null), away, or flying this many tiles above it. */
 type RocketState = null | "away" | number;
 
-function assemble(b: CityBuildingView, time: number, rocket: RocketState = null): Kit {
+// ---------------------------------------------------------------------------
+// Procedural structure (detail §2, Batch 26): the signature, then its greebles
+// ---------------------------------------------------------------------------
+
+/** The flat material a greeble is drawn in. */
+const GREEBLE_COLOUR: Readonly<Record<Instance["colour"], Rgb>> = {
+  metal: METAL,
+  dark: DARK_METAL,
+  paint: PAINT_WHITE,
+  accent: ACCENT,
+  hazard: HAZARD,
+};
+
+/** Is a point inside a convex polygon (in x and y)? */
+function insideConvex(pts: readonly V3[], x: number, y: number): boolean {
+  let sign = 0;
+  for (let i = 0; i < pts.length; i += 1) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!;
+    const cross = (b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]);
+    if (Math.abs(cross) < 1e-12) continue;
+    const s = cross > 0 ? 1 : -1;
+    if (sign === 0) sign = s;
+    else if (s !== sign) return false;
+  }
+  return true;
+}
+
+/**
+ * Where greebles may stand on a signature, and what they must keep out of:
+ * every flat face that looks up - a roof, a pad, a ring's top - as the
+ * largest rectangle about its middle that lies inside it; and every part, as
+ * a box. In the building's own frame (tiles from its footprint's corner).
+ */
+function surfacesOf(parts: readonly Part[], ox: number, oy: number): { hosts: Host[]; solids: Box3[] } {
+  const hosts: Host[] = [];
+  const solids: Box3[] = [];
+  for (const p of parts) {
+    if (p.faces.length === 0) continue;
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let z0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    let z1 = -Infinity;
+    for (const f of p.faces) {
+      for (const q of f.pts) {
+        x0 = Math.min(x0, q[0]);
+        y0 = Math.min(y0, q[1]);
+        z0 = Math.min(z0, q[2]);
+        x1 = Math.max(x1, q[0]);
+        y1 = Math.max(y1, q[1]);
+        z1 = Math.max(z1, q[2]);
+      }
+      // A host: facing up, level, and not the underside of a sheet seen from both sides.
+      if (f.n[2] < 0.97 || p.twoSided === true || (p.alpha ?? 1) < 1 || f.pts.length < 3) continue;
+      const z = f.pts[0]![2];
+      if (f.pts.some((q) => Math.abs(q[2] - z) > 1e-6)) continue;
+      let area = 0;
+      let mx = 0;
+      let my = 0;
+      for (let i = 0; i < f.pts.length; i += 1) {
+        const a = f.pts[i]!;
+        const b = f.pts[(i + 1) % f.pts.length]!;
+        area += a[0] * b[1] - b[0] * a[1];
+        mx += a[0];
+        my += a[1];
+      }
+      if (Math.abs(area) / 2 < 0.015) continue;
+      mx /= f.pts.length;
+      my /= f.pts.length;
+      let hx = Math.max(...f.pts.map((q) => Math.abs(q[0] - mx)));
+      let hy = Math.max(...f.pts.map((q) => Math.abs(q[1] - my)));
+      // Shrink the face's box about its middle until all four corners lie inside the face.
+      for (let k = 0; k < 8 && !(insideConvex(f.pts, mx - hx, my - hy) && insideConvex(f.pts, mx + hx, my - hy) && insideConvex(f.pts, mx - hx, my + hy) && insideConvex(f.pts, mx + hx, my + hy)); k += 1) {
+        hx *= 0.85;
+        hy *= 0.85;
+      }
+      if (!(insideConvex(f.pts, mx - hx, my - hy) && insideConvex(f.pts, mx + hx, my + hy))) continue;
+      hosts.push({ x0: mx - hx - ox, y0: my - hy - oy, x1: mx + hx - ox, y1: my + hy - oy, z });
+    }
+    solids.push({ x0: x0 - ox, y0: y0 - oy, z0, x1: x1 - ox, y1: y1 - oy, z1 });
+  }
+  return { hosts, solids };
+}
+
+/** A building as its structure is generated from: its type, footprint and level, standing at the origin. */
+function canonical(type: CityBuildingView["type"], size: number, depth: number, level: number): CityBuildingView {
+  return { index: 0, type, tx: 0, ty: 0, size, ...(depth === size ? {} : { depth }), operable: true, activity: 1, baseZ: 0, submerged: false, network: null, level };
+}
+
+/**
+ * A signature's surfaces, kept by what shapes them: its type, footprint and the
+ * parts of its variant it reads. Read off the signature standing at the
+ * origin, with any rocket away (a rocket's tip is no roof).
+ */
+const surfaceCache = new Map<string, { hosts: Host[]; solids: Box3[] }>();
+function surfacesFor(type: CityBuildingView["type"], size: number, depth: number, level: number, seed: number): { hosts: Host[]; solids: Box3[] } {
+  const v = variantOf(type, seed, level);
+  const shaping = type === "habitat_dome" ? `${v.domeR}|${v.ribs}|${v.mastZ}|${v.annexes}` : type === "reactor" ? `${v.towers}|${v.towerZ}|${v.transformers}` : type === "water_extractor" ? `${v.derrickZ}|${v.tanks}|${v.tankZ}` : "";
+  const key = `${type}|${size}|${depth}|${shaping}`;
+  let kept = surfaceCache.get(key);
+  if (kept === undefined) {
+    const sig = assembleSignature(canonical(type, size, depth, level), 0, type === "spaceport" ? "away" : null, seed);
+    const parts: Part[] = [];
+    for (const item of sig.items) if (!item.live) parts.push(...asList(item.make()));
+    kept = surfacesOf(parts, 0, 0);
+    surfaceCache.set(key, kept);
+  }
+  return kept;
+}
+
+/**
+ * §2.2's procedural description of one building - its signature's seeded
+ * parameters and its greebles - from its type, seed and level alone (and its
+ * footprint). Nothing here is stored: the same inputs give the same list.
+ */
+export function structureOf(type: CityBuildingView["type"], seed: number, level: number, size: number, depth = size): ReturnType<typeof generateStructure> {
+  const key = `${type}|${seed}|${level}|${size}|${depth}`;
+  const kept = structureCache.get(key);
+  if (kept !== undefined) return kept;
+  const { hosts, solids } = surfacesFor(type, size, depth, level, seed);
+  const made = generateStructure(type, seed, level, hosts, solids);
+  // Kept, so a frame's live parts (the antennas' tips) never generate the building again - made afresh every
+  // frame they cost a city's next frame 45% (20 to 29 ms, measured). Let go wholesale past a metropolis's worth.
+  if (structureCache.size >= STRUCTURES_KEPT) structureCache.clear();
+  structureCache.set(key, made);
+  return made;
+}
+
+/** Generated structures kept, by what makes them: more than a metropolis holds (its 41,000 buildings). */
+const STRUCTURES_KEPT = 60_000;
+const structureCache = new Map<string, ReturnType<typeof generateStructure>>();
+
+/** A building's seed in its city: its type and where it stands from the founding square. */
+export function buildingSeed(view: CityView, b: CityBuildingView): number {
+  return structureSeed(view.id, b.type, b.tx + view.origin.x, b.ty + view.origin.y);
+}
+
+/** A building's procedural structure, as its city draws it. */
+export function buildingStructure(view: CityView, b: CityBuildingView): ReturnType<typeof generateStructure> {
+  return structureOf(b.type, buildingSeed(view, b), b.level ?? 1, b.size, b.depth ?? b.size);
+}
+
+/** One greeble as parts, placed on the building whose corner is (ox, oy). */
+function greebleParts(g: Instance, ox: number, oy: number): Part[] {
+  const x = ox + g.x;
+  const y = oy + g.y;
+  const hx = g.sx / 2;
+  const hy = g.sy / 2;
+  const c = GREEBLE_COLOUR[g.colour];
+  switch (g.kind) {
+    case "vent":
+      return [part(box(x - hx, y - hy, g.z, x + hx, y + hy, g.z + g.sz), c), part(box(x + hx, y - hy + 0.015, g.z + 0.012, x + hx + 0.004, y + hy - 0.015, g.z + g.sz - 0.012), RUBBER)];
+    case "tank":
+      return [part(frustum(x, y, hx, hx, g.z, g.z + g.sz, 10), c), part(frustum(x, y, hx, hx * 0.45, g.z + g.sz, g.z + g.sz + hx * 0.5, 10), DARK_METAL)];
+    case "pipe": {
+      const r = Math.min(hx, hy) * 0.55;
+      const along = g.sx > g.sy;
+      const a: V3 = along ? [x - hx, y, g.z + r + 0.012] : [x, y - hy, g.z + r + 0.012];
+      const b: V3 = along ? [x + hx, y, g.z + r + 0.012] : [x, y + hy, g.z + r + 0.012];
+      return [part(tube(a, b, r, 8), c), part(box(a[0] - 0.012, a[1] - 0.012, g.z, a[0] + 0.012, a[1] + 0.012, g.z + 0.014), DARK_METAL), part(box(b[0] - 0.012, b[1] - 0.012, g.z, b[0] + 0.012, b[1] + 0.012, g.z + 0.014), DARK_METAL)];
+    }
+    case "crate":
+      return [part(box(x - hx, y - hy, g.z, x + hx, y + hy, g.z + g.sz), c)];
+    case "panel": {
+      // A small tilted panel on a post, leaning back from the viewer.
+      const top = g.z + g.sz;
+      return [
+        part(tube([x, y, g.z], [x, y, top - 0.02], 0.008, 4), DARK_METAL),
+        part(sheet([[x - hx, y - hy, top], [x + hx, y - hy, top], [x + hx, y + hy, top - 0.05], [x - hx, y + hy, top - 0.05]]), c, { twoSided: true }),
+      ];
+    }
+    case "strut":
+      return [part(tube([x, y, g.z], [x, y, g.z + g.sz], 0.01, 5), c), part(tube([x - 0.04, y, g.z + g.sz * 0.7], [x + 0.04, y, g.z + g.sz * 0.7], 0.006, 4), c)];
+    case "antenna":
+      return [part(tube([x, y, g.z], [x, y, g.z + g.sz], 0.007, 4), c), part(box(x - 0.02, y - 0.02, g.z, x + 0.02, y + 0.02, g.z + 0.03), DARK_METAL)];
+  }
+}
+
+/**
+ * A building up close: its signature (seeded), then its greebles - still,
+ * built once with the rest of its still parts - and the antennas' blinking
+ * tips, live, lit only while it runs.
+ */
+function assemble(b: CityBuildingView, time: number, rocket: RocketState, seed: number): Kit {
+  const k = assembleSignature(b, time, rocket, seed);
+  const bd = b.depth ?? b.size;
+  const greebles = (): Instance[] => structureOf(b.type, seed, b.level ?? 1, b.size, bd).instances;
+  k.items.push({ live: false, make: () => greebles().flatMap((g) => greebleParts(g, b.tx, b.ty)) });
+  const on = b.operable;
+  k.items.push({
+    live: true,
+    make: () =>
+      greebles()
+        .filter((g) => g.blink)
+        .map((g, i) => {
+          const lit = on && Math.floor(time * 1.3 + i * 0.37 + g.x * 3) % 2 === 0;
+          const tx = b.tx + g.x;
+          const ty = b.ty + g.y;
+          const tz = g.z + g.sz;
+          return part(box(tx - 0.014, ty - 0.014, tz, tx + 0.014, ty + 0.014, tz + 0.025), lit ? RED_LIGHT : UNLIT, { emissive: true });
+        }),
+  });
+  return k;
+}
+
+function assembleSignature(b: CityBuildingView, time: number, rocket: RocketState, seed: number): Kit {
   const s = b.size;
   const x0 = b.tx;
   const y0 = b.ty;
@@ -591,11 +800,13 @@ function assemble(b: CityBuildingView, time: number, rocket: RocketState = null)
   const act = Math.round(b.activity * 20) / 20;
   const k = kit();
   const { s: add, l: live } = k;
+  // The signature's seeded parameters (Batch 26): tower counts, heights, tanks - within the archetype.
+  const v = variantOf(b.type, seed, b.level ?? 1);
   const pad = (h = 0.06, inset = 0.08): void => add(() => part(box(x0 + inset, y0 + inset, 0, x0 + s - inset, y0 + s - inset, h), CONCRETE));
 
   switch (b.type) {
     case "habitat_dome": {
-      const r = 1.24;
+      const r = v.domeR;
       const zb = 0.2;
       // "A dome is a hemisphere plus a base ring." A two-tier ring, then the glass.
       add(() => part(frustum(cx, cy, 1.42, 1.38, 0, 0.1, 36), CONCRETE));
@@ -604,12 +815,12 @@ function assemble(b: CityBuildingView, time: number, rocket: RocketState = null)
       add(() => part(tube([cx - 1.25, cy - 0.3, 0.14], [x0 + 0.02, cy - 0.3, 0.14], 0.09, 10), METAL));
       add(() => part(tube([cx + 0.3, cy - 1.25, 0.14], [cx + 0.3, y0 + 0.02, 0.14], 0.09, 10), METAL));
       add(() => part(dome(cx, cy, zb, r, 36, 9), GLASS));
-      add(() => part(domeRibs(cx, cy, zb, r, 16, [0.32, 0.72, 1.12]), FRAME));
+      add(() => part(domeRibs(cx, cy, zb, r, v.ribs, [0.32 * (r / 1.24), 0.72 * (r / 1.24), 1.12 * (r / 1.24)]), FRAME));
       // Crown hub and a mast with a beacon.
       add(() => part(frustum(cx, cy, 0.2, 0.15, zb + r - 0.03, zb + r + 0.07, 16), METAL));
       add(() => part(frustum(cx, cy, 0.06, 0.05, zb + r + 0.07, zb + r + 0.1, 10), DARK_METAL));
-      add(() => part(tube([cx, cy, zb + r + 0.1], [cx, cy, zb + r + 0.42], 0.012, 5), METAL));
-      live(() => part(box(cx - 0.025, cy - 0.025, zb + r + 0.42, cx + 0.025, cy + 0.025, zb + r + 0.46), on && Math.floor(time * 1.5) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
+      add(() => part(tube([cx, cy, zb + r + 0.1], [cx, cy, zb + r + 0.1 + v.mastZ], 0.012, 5), METAL));
+      live(() => part(box(cx - 0.025, cy - 0.025, zb + r + 0.1 + v.mastZ, cx + 0.025, cy + 0.025, zb + r + 0.14 + v.mastZ), on && Math.floor(time * 1.5) % 2 === 0 ? RED_LIGHT : UNLIT, { emissive: true }));
       // Window lights around the near half of the ring: how full the dome is.
       add(() => {
         const lit = Math.round(act * 14);
@@ -629,6 +840,15 @@ function assemble(b: CityBuildingView, time: number, rocket: RocketState = null)
       add(() => part(box(cx + 0.92, cy + 0.92, 0.34, cx + 1.32, cy + 1.32, 0.36), DARK_METAL));
       add(() => part(box(cx + 1.32, cy + 1.02, 0.02, cx + 1.325, cy + 1.22, 0.27), RUBBER));
       add(() => part(box(cx + 0.92, cy + 1.32, 0.3, cx + 1.32, cy + 1.325, 0.33), HAZARD));
+      // Annexes as it is raised (§2.4): a service hut and a tank in a free corner of the footprint.
+      for (const [ax, ay] of ([[x0 + s - 0.5, y0 + 0.12], [x0 + 0.12, y0 + s - 0.5]] as const).slice(0, v.annexes)) {
+        add(() => [
+          part(box(ax, ay, 0, ax + 0.38, ay + 0.3, 0.26), PAINT_WHITE),
+          part(box(ax - 0.01, ay - 0.01, 0.26, ax + 0.39, ay + 0.31, 0.28), DARK_METAL),
+          part(frustum(ax + 0.1, ay + 0.38, 0.09, 0.09, 0, 0.24, 12), METAL),
+          part(frustum(ax + 0.1, ay + 0.38, 0.09, 0.04, 0.24, 0.28, 12), DARK_METAL),
+        ]);
+      }
       return k;
     }
     case "solar_array": {
@@ -744,23 +964,28 @@ function assemble(b: CityBuildingView, time: number, rocket: RocketState = null)
       const rx = x0 + 1.25;
       const ry = y0 + 1.1;
       // Two cooling towers at the back, banded, with dark rims.
-      for (const [tx, ty] of [
-        [x0 + 0.42, y0 + 0.38],
-        [x0 + 0.38, y0 + 1.12],
-      ] as const) {
+      for (const [tx, ty] of (
+        [
+          [x0 + 0.42, y0 + 0.38],
+          [x0 + 0.38, y0 + 1.12],
+        ] as const
+      ).slice(0, v.towers)) {
+        const tz = v.towerZ;
         add(() => [
-          part(frustum(tx, ty, 0.2, 0.13, 0.06, 1.3, 16), PAINT_WHITE),
-          part(band(tx, ty, 0.175, 0.45, 0.06, 16), ACCENT),
-          part(band(tx, ty, 0.15, 0.95, 0.06, 16), ACCENT),
-          part(band(tx, ty, 0.14, 1.28, 0.06, 16), DARK_METAL),
+          part(frustum(tx, ty, 0.2, 0.13, 0.06, tz, 16), PAINT_WHITE),
+          part(band(tx, ty, 0.175, tz * 0.35, 0.06, 16), ACCENT),
+          part(band(tx, ty, 0.15, tz * 0.73, 0.06, 16), ACCENT),
+          part(band(tx, ty, 0.14, tz - 0.02, 0.06, 16), DARK_METAL),
           part(tube([tx + 0.12, ty, 0.3], [rx - 0.5, ty < ry ? ry - 0.3 : ty, 0.3], 0.045, 8), METAL),
         ]);
       }
       // The switchyard: transformers with their insulators.
-      for (const [sx, sy] of [
-        [x0 + 1.55, y0 + 0.18],
-        [x0 + 1.55, y0 + 0.46],
-      ] as const) {
+      for (const [sx, sy] of (
+        [
+          [x0 + 1.55, y0 + 0.18],
+          [x0 + 1.55, y0 + 0.46],
+        ] as const
+      ).slice(0, v.transformers)) {
         add(() => [
           part(box(sx, sy, 0.06, sx + 0.3, sy + 0.2, 0.26), DARK_METAL),
           part(tube([sx + 0.07, sy + 0.1, 0.26], [sx + 0.07, sy + 0.1, 0.38], 0.018, 6), PAINT_WHITE),
@@ -789,27 +1014,40 @@ function assemble(b: CityBuildingView, time: number, rocket: RocketState = null)
     case "water_extractor": {
       pad(0.16, 0.08);
       // The derrick: a lattice tower over the well, its crown block on top.
-      add(() => lattice(cx, cy, 0.24, 0.07, 0.16, 1.22, 4, DARK_METAL));
-      add(() => part(box(cx - 0.1, cy - 0.1, 1.2, cx + 0.1, cy + 0.1, 1.3), HAZARD));
+      const dz = v.derrickZ;
+      add(() => lattice(cx, cy, 0.24, 0.07, 0.16, dz, 4, DARK_METAL));
+      add(() => part(box(cx - 0.1, cy - 0.1, dz - 0.02, cx + 0.1, cy + 0.1, dz + 0.08), HAZARD));
       // The walking beam: "extractor arms move when operable".
       live(() => {
         const angle = on ? time * 1.2 : 0.6;
         const endX = cx + 0.7 * Math.cos(angle);
         const endY = cy + 0.7 * Math.sin(angle);
         return [
-          part(turnedBox(cx, cy, 0.72, 0.05, angle, 1.04, 1.12), METAL),
-          part(box(endX - 0.07, endY - 0.07, 0.98, endX + 0.07, endY + 0.07, 1.14), DARK_METAL),
+          part(turnedBox(cx, cy, 0.72, 0.05, angle, dz - 0.18, dz - 0.1), METAL),
+          part(box(endX - 0.07, endY - 0.07, dz - 0.24, endX + 0.07, endY + 0.07, dz - 0.08), DARK_METAL),
         ];
       });
       // The holding tank with bands and a ladder, piped to the pump house.
       const tx = x0 + 0.52;
       const ty = y0 + 1.45;
+      const tz = v.tankZ;
+      // A second, smaller tank at the back corner on some wells - and on every well from level 4.
+      if (v.tanks === 2) {
+        const bx = x0 + 0.36;
+        const by = y0 + 0.4;
+        add(() => [
+          part(frustum(bx, by, 0.22, 0.22, 0.16, tz - 0.12, 20), WATER),
+          part(band(bx, by, 0.225, 0.34, 0.02), METAL),
+          part(frustum(bx, by, 0.22, 0.07, tz - 0.12, tz - 0.05, 20), METAL),
+          part(tube([bx + 0.2, by + 0.1, 0.26], [cx - 0.2, cy - 0.1, 0.26], 0.03, 8), METAL),
+        ]);
+      }
       add(() => [
-        part(frustum(tx, ty, 0.33, 0.33, 0.16, 0.74, 24), WATER),
+        part(frustum(tx, ty, 0.33, 0.33, 0.16, tz, 24), WATER),
         part(band(tx, ty, 0.335, 0.3, 0.025), METAL),
         part(band(tx, ty, 0.335, 0.52, 0.025), METAL),
-        part(frustum(tx, ty, 0.33, 0.1, 0.74, 0.84, 24), METAL),
-        part(box(tx + 0.02, ty + 0.33, 0.16, tx + 0.08, ty + 0.34, 0.76), HAZARD),
+        part(frustum(tx, ty, 0.33, 0.1, tz, tz + 0.1, 24), METAL),
+        part(box(tx + 0.02, ty + 0.33, 0.16, tx + 0.08, ty + 0.34, tz + 0.02), HAZARD),
         part(tube([tx + 0.33, ty, 0.3], [x0 + 1.2, ty, 0.3], 0.035, 8), METAL),
       ]);
       // The pump house, with a vent and its own lit window.
@@ -1681,38 +1919,38 @@ export type CityQuality = "high" | "medium" | "low";
  * ground did).
  */
 const FAR_COLOUR: Readonly<Record<string, Rgb>> = {
-  habitat_dome: rgb(0.632, 0.779, 0.858),
-  solar_array: rgb(0.407, 0.522, 0.698),
-  geothermal_plant: rgb(0.712, 0.708, 0.674),
-  reactor: rgb(0.611, 0.666, 0.668),
-  water_extractor: rgb(0.608, 0.644, 0.649),
-  atmosphere_processor: rgb(0.735, 0.742, 0.731),
-  greenhouse: rgb(0.609, 0.647, 0.655),
-  regolith_mine: rgb(0.449, 0.384, 0.333),
-  storage_depot: rgb(0.771, 0.752, 0.711),
-  spaceport: rgb(0.56, 0.593, 0.57),
-  rover_post: rgb(0.607, 0.56, 0.496),
-  laboratory: rgb(0.679, 0.702, 0.698),
-  algae_reactor: rgb(0.56, 0.687, 0.648),
-  skyscraper: rgb(0.992, 0.892, 0.686),
-  observatory: rgb(0.745, 0.743, 0.733),
-  station: rgb(0.668, 0.69, 0.698),
-  research_forum: rgb(0.748, 0.781, 0.772),
-  medical_center: rgb(0.789, 0.7, 0.67),
-  industrial_command: rgb(0.685, 0.686, 0.643),
-  wind_turbine: rgb(0.855, 0.867, 0.845),
-  mega_mall: rgb(0.744, 0.742, 0.699),
-  water_tank: rgb(0.613, 0.763, 0.833),
-  battery_bank: rgb(0.600, 0.664, 0.666),
-  freezer: rgb(0.750, 0.804, 0.813),
-  materials_depot: rgb(0.648, 0.539, 0.370),
-  park: rgb(0.433, 0.660, 0.400),
-  biosphere: rgb(0.521, 0.547, 0.555),
-  headquarters: rgb(0.624, 0.548, 0.475),
+  habitat_dome: rgb(0.646, 0.789, 0.861),
+  solar_array: rgb(0.410, 0.528, 0.703),
+  geothermal_plant: rgb(0.704, 0.700, 0.668),
+  reactor: rgb(0.600, 0.662, 0.665),
+  water_extractor: rgb(0.590, 0.625, 0.618),
+  atmosphere_processor: rgb(0.731, 0.734, 0.723),
+  greenhouse: rgb(0.606, 0.648, 0.656),
+  regolith_mine: rgb(0.445, 0.383, 0.336),
+  storage_depot: rgb(0.770, 0.752, 0.712),
+  spaceport: rgb(0.557, 0.592, 0.571),
+  rover_post: rgb(0.601, 0.556, 0.492),
+  laboratory: rgb(0.675, 0.700, 0.698),
+  algae_reactor: rgb(0.555, 0.675, 0.637),
+  skyscraper: rgb(0.981, 0.894, 0.693),
+  observatory: rgb(0.744, 0.742, 0.731),
+  station: rgb(0.664, 0.693, 0.701),
+  research_forum: rgb(0.759, 0.785, 0.771),
+  medical_center: rgb(0.784, 0.704, 0.673),
+  industrial_command: rgb(0.677, 0.683, 0.647),
+  wind_turbine: rgb(0.840, 0.865, 0.854),
+  mega_mall: rgb(0.743, 0.739, 0.696),
+  water_tank: rgb(0.612, 0.762, 0.833),
+  battery_bank: rgb(0.594, 0.657, 0.656),
+  freezer: rgb(0.746, 0.799, 0.810),
+  materials_depot: rgb(0.642, 0.540, 0.373),
+  park: rgb(0.433, 0.662, 0.401),
+  biosphere: rgb(0.519, 0.547, 0.552),
+  headquarters: rgb(0.622, 0.549, 0.475),
 };
 
 /** Medium detail: each building's signature masses, coarse curves, no greebles, nothing animated. */
-function assembleMedium(b: CityBuildingView): Kit {
+function assembleMedium(b: CityBuildingView, seed = 0): Kit {
   const s = b.size;
   const x0 = b.tx;
   const y0 = b.ty;
@@ -1722,11 +1960,13 @@ function assembleMedium(b: CityBuildingView): Kit {
   const act = Math.round(b.activity * 20) / 20;
   const k = kit();
   const add = k.s;
+  // The same seeded signature as up close, so a building does not change shape as the camera pulls back.
+  const v = variantOf(b.type, seed, b.level ?? 1);
   const slab = (h = 0.05): void => add(() => part(box(x0 + 0.08, y0 + 0.08, 0, x0 + s - 0.08, y0 + s - 0.08, h), CONCRETE));
   switch (b.type) {
     case "habitat_dome":
       add(() => part(frustum(cx, cy, 1.42, 1.34, 0, 0.2, 16), PAINT_WHITE));
-      add(() => part(dome(cx, cy, 0.2, 1.24, 16, 4), GLASS));
+      add(() => part(dome(cx, cy, 0.2, v.domeR, 16, 4), GLASS));
       break;
     case "solar_array":
       slab(0.035);
@@ -1748,16 +1988,17 @@ function assembleMedium(b: CityBuildingView): Kit {
       break;
     case "reactor":
       slab();
-      add(() => part(frustum(x0 + 0.42, y0 + 0.38, 0.2, 0.13, 0.06, 1.3, 8), PAINT_WHITE));
-      add(() => part(frustum(x0 + 0.38, y0 + 1.12, 0.2, 0.13, 0.06, 1.3, 8), PAINT_WHITE));
+      add(() => part(frustum(x0 + 0.42, y0 + 0.38, 0.2, 0.13, 0.06, v.towerZ, 8), PAINT_WHITE));
+      if (v.towers === 2) add(() => part(frustum(x0 + 0.38, y0 + 1.12, 0.2, 0.13, 0.06, v.towerZ, 8), PAINT_WHITE));
       add(() => part(frustum(x0 + 1.25, y0 + 1.1, 0.56, 0.55, 0.06, 0.8, 12), CONCRETE));
       add(() => part(frustum(x0 + 1.25, y0 + 1.1, 0.565, 0.565, 0.4, 0.52, 12), on ? mix(UNLIT, COLD_LIGHT, 0.25 + 0.75 * act) : UNLIT, { emissive: true }));
       add(() => part(dome(x0 + 1.25, y0 + 1.1, 0.8, 0.55, 12, 3), CONCRETE));
       break;
     case "water_extractor":
       slab(0.16);
-      add(() => part(frustum(cx, cy, 0.3, 0.08, 0.16, 1.28, 4), DARK_METAL));
-      add(() => part(frustum(x0 + 0.52, y0 + 1.45, 0.33, 0.33, 0.16, 0.8, 10), WATER));
+      add(() => part(frustum(cx, cy, 0.3, 0.08, 0.16, v.derrickZ + 0.06, 4), DARK_METAL));
+      if (v.tanks === 2) add(() => part(frustum(x0 + 0.36, y0 + 0.4, 0.22, 0.22, 0.16, v.tankZ - 0.06, 8), WATER));
+      add(() => part(frustum(x0 + 0.52, y0 + 1.45, 0.33, 0.33, 0.16, v.tankZ + 0.06, 10), WATER));
       add(() => part(box(x0 + 1.2, y0 + 1.18, 0.16, x0 + 1.8, y0 + 1.8, 0.62), PAINT_WHITE));
       break;
     case "atmosphere_processor":
@@ -2444,7 +2685,7 @@ const asList = (made: Part | readonly Part[]): readonly Part[] => (Array.isArray
  */
 /** The key a building's cached still parts are kept under. */
 function buildingKey(b: CityBuildingView, variant: string): string {
-  return `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}|${Math.round(b.activity * 20)}|${variant}`;
+  return `${b.index}|${b.type}|${b.tx},${b.ty}|${b.baseZ}|${b.operable}|${Math.round(b.activity * 20)}|L${b.level ?? 1}|${variant}`;
 }
 
 /**
@@ -3868,7 +4109,9 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
     }
     const rocket: RocketState = b.type === "spaceport" ? rockets.get(b.ty * n + b.tx) ?? null : null;
     const site = b.construction ?? null;
-    const built = site !== null ? worksite(b, site, quality) : quality === "high" ? assemble(b, options.time, rocket) : quality === "medium" ? assembleMedium(b) : assembleLow(b);
+    // Its seed: where it stands from the founding square (claims west or north move tile indices, not this).
+    const seed = buildingSeed(view, b);
+    const built = site !== null ? worksite(b, site, quality) : quality === "high" ? assemble(b, options.time, rocket, seed) : quality === "medium" ? assembleMedium(b, seed) : assembleLow(b);
     emitBuilding(built, b, buildings, out, buildingVariant(b, quality, rocket), drawStatic && drawLive ? "all" : drawStatic ? "static" : "live");
     // A rover crossing the building's ground is drawn after it.
     if (rovers !== null) for (let y = b.ty; y < b.ty + bd; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
