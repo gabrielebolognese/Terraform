@@ -44,7 +44,7 @@ What is missing, in the user's words (2026-10-11):
 
 | Batch | Name | Status |
 |---|---|---|
-| 26 | Procedural structures (finish) | IN PROGRESS - see `BUILD_PLAN.md` §Batch 26 for the spec |
+| 26 | Procedural structures (finish) | **COMPLETE** - [note](docs/balance/batch26-structures.md) - seeded signatures and greebles on the shape pipeline; +4-5% shapes up close, next frame +1 ms |
 | 27 | The front door: title screen and worlds | NOT STARTED |
 | 28 | Time that means something: real build and upgrade times | NOT STARTED |
 | 29 | Vehicles that use the city: rovers on the ground, trains on the line | NOT STARTED |
@@ -119,6 +119,12 @@ The first build of each chunk costs 12-17% more. Medium and low detail are uncha
   README row; commit; push.
 
 **Exit gate.** `BUILD_PLAN.md` §Batch 26, verbatim.
+
+**Done** - see [the note](docs/balance/batch26-structures.md).
+- All 12 injections caught.
+- One finding: the metropolis-opening timing test failed under a full run's load (403.7 ms against
+  400; 145-148 ms alone). It is simulation code this batch does not touch, so it was left at its
+  limit and is assigned to Batch 40.
 
 ---
 
@@ -567,6 +573,8 @@ before its grace period ends, tested.
 right where it was wrong.
 
 **Deliverables:**
+- [ ] **Make the metropolis-opening timing test load-proof** (Batch 26's finding): it times the wall
+  clock, and failed at 403.7 ms in a full run against a 145-148 ms quiet measurement.
 - [ ] **A performance budget:**
   - 60 fps in the reference city;
   - 30 fps or better panning a metropolis;

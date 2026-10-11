@@ -32,7 +32,7 @@ This file is the source of truth for *in what order* we build it, and for what "
 | 23 | Detail: sea level from the macro sim | **COMPLETE** - [note](docs/balance/batch23-sea-level.md) - sea level and its rate through HabitatChannels; rate within 0.104% of advance away from the curve's kinks; nextSubstepFlows |
 | 24 | Detail: the flood model, headless | **COMPLETE** - [note](docs/balance/batch24-flood.md) - behind FLOODING_ENABLED=0; six weak tests found by injection and fixed; browser stays off until Batch 25's warnings |
 | 25 | Detail: flood forecast and warnings | **COMPLETE** - [note](docs/balance/batch25-flood-forecast.md) - forecast in water, not §4.4's metres (58 yr wrong across a kink); every crossing within 0.07 yr; 50-year alert horizon; browser opt-in left to the user |
-| 26 | Detail: procedural structures and the instancing renderer | NOT STARTED - detail §2, §6 step 5 |
+| 26 | Detail: procedural structures and the instancing renderer | **COMPLETE** - [note](docs/balance/batch26-structures.md) - the shape pipeline, not GPU instancing (conflict 6); all 28 types at two levels on a reference sheet; later batches continue in `GAME_PLAN.md` |
 | 27 | Detail: terrain resource deposits | NOT STARTED - detail §3, §6 step 6 |
 | 28 | Detail: flood mitigation and the rising water | NOT STARTED - detail §4.5, §4.6, §6 step 7 |
 
