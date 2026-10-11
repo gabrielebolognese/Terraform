@@ -17,7 +17,8 @@ that state.
 | [`docs/design/economy.md`](docs/design/economy.md) | The economy, the tech tree, and the contract the city layer reads the planet through. |
 | [`docs/design/micro-world.md`](docs/design/micro-world.md) | The settlement (micro) layer: cities, outposts, the 2.5D view, and the two-way coupling to the planet. Queued as Batches 17-21. |
 | [`docs/design/micro-detail.md`](docs/design/micro-detail.md) | The detailed micro layer: terrain with depth, procedural structures, resource deposits, and flooding from the rising sea. Queued as Batches 22-28. |
-| [`BUILD_PLAN.md`](BUILD_PLAN.md) | The build order, batched, with exit gates and cross-batch invariants. |
+| [`GAME_PLAN.md`](GAME_PLAN.md) | From Batch 26 on: the batches that turn the simulation into a game - title screen and worlds, real build times, vehicles that use the city, objectives, events, sound, an ending. `/next-batch` reads it. |
+| [`BUILD_PLAN.md`](BUILD_PLAN.md) | Batches 1 to 25: the build order that made the simulation, with exit gates and the cross-batch invariants every batch is still held to. |
 | [`docs/balance/batch1-calibration.md`](docs/balance/batch1-calibration.md) | Where the current constants actually put the curve, measured. |
 | [`docs/balance/batch2-levers.md`](docs/balance/batch2-levers.md) | What the nine player levers do, and what the playthrough exposed. |
 | [`docs/balance/batch3-balance.md`](docs/balance/batch3-balance.md) | How the S-curve was tuned, and what is still wrong with it. |
