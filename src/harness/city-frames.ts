@@ -24,6 +24,8 @@ import { rasterize } from "../render/raster.js";
 import { isoProject } from "../render/iso.js";
 import type { BuildingType, CityView, SimState } from "../sim/index.js";
 import {
+  BUILDING_DEFS,
+  BUILDING_TYPES,
   NEUTRAL_ENV,
   cityView,
   liquidWaterRate,
@@ -36,6 +38,7 @@ import {
   placeBuilding,
   worldEnv,
 } from "../sim/index.js";
+import { maxLevel } from "../sim/micro/buildings.js";
 import { FRAMES_DIR } from "./frames.js";
 import { encodePng } from "./png.js";
 
@@ -197,6 +200,58 @@ export function buildingSheet(): { view: CityView; options: CitySceneOptions } {
   return { view, options: { time: 1.3, selected: null, ghost: null } };
 }
 
+/**
+ * Batch 26's reference sheet (detail §2): every building type the game builds,
+ * each at level 1 (at the back) and at its top level (in front), running, on
+ * flat ground - the signatures that must read at a glance, and the complexity
+ * a level adds. Compared per pixel by `structures-golden.test.ts`.
+ */
+export const STRUCTURES_GOLDEN = { name: "structures-sheet.png", width: 1600, height: 1000 } as const;
+
+export function structureSheet(): { view: CityView; options: CitySceneOptions; box: { minX: number; maxX: number; minY: number; maxY: number } } {
+  const t = CITY_TUNING;
+  const ROW = 34;
+  const placed: { type: BuildingType; tx: number; ty: number; size: number; depth: number; level: number }[] = [];
+  let x = 1;
+  let y = 1;
+  let rowDepth = 0;
+  for (const type of BUILDING_TYPES) {
+    const { footprint: w, depth: d } = BUILDING_DEFS[type];
+    if (x + w > ROW) {
+      x = 1;
+      y += rowDepth + 1;
+      rowDepth = 0;
+    }
+    placed.push({ type, tx: x, ty: y, size: w, depth: d, level: 1 });
+    placed.push({ type, tx: x, ty: y + d + 1, size: w, depth: d, level: maxLevel(type, t) });
+    x += w + 1;
+    rowDepth = Math.max(rowDepth, 2 * d + 1);
+  }
+  const tiles = Math.max(ROW, y + rowDepth + 1);
+  const flat = <T,>(v: T): T[] => new Array<T>(tiles * tiles).fill(v);
+  const corners = new Array<number>((tiles + 1) * (tiles + 1)).fill(0);
+  const view: CityView = {
+    ...buildingSheet().view,
+    id: "structures",
+    tiles,
+    claimed: flat(true),
+    groundZ: flat(0),
+    corners,
+    world: { margin: 0, size: tiles, corners, caves: [], rocks: [] },
+    heightM: flat(0),
+    steep: flat(false),
+    wet: flat(false),
+    corridors: flat(false),
+    cables: flat(false),
+    rocks: flat<"none">("none"),
+    buildings: placed.map((p, index) => ({ index, type: p.type, tx: p.tx, ty: p.ty, size: p.size, ...(p.depth === p.size ? {} : { depth: p.depth }), operable: true, activity: 0.8, baseZ: 0, submerged: false, network: null, level: p.level })),
+  };
+  // Framed on the buildings: ROW tiles along x, as far along y as the last row reaches.
+  const far = y + rowDepth;
+  const box = { minX: isoProject(0, far).sx - 20, maxX: isoProject(ROW, 0).sx + 20, minY: isoProject(0, 0, 3).sy, maxY: isoProject(ROW, far).sy + 20 };
+  return { view, options: { time: 1.3, selected: null, ghost: null }, box };
+}
+
 function main(): void {
   const { view, options } = referenceCity();
   mkdirSync(FRAMES_DIR, { recursive: true });
@@ -215,7 +270,9 @@ function main(): void {
     maxY: isoProject(18, 8.5).sy + 20,
   };
   writeFileSync(join(FRAMES_DIR, "city-buildings.png"), encodePng(renderCity(sheet.view, sheet.options, 1800, 900, false, sheetBox)));
-  console.log(`wrote ${CITY_GOLDEN.name}, ${CITY_GOLDEN_WHOLE.name}, city-preview.png, city-whole.png and city-buildings.png to ${FRAMES_DIR}`);
+  const structures = structureSheet();
+  writeFileSync(join(FRAMES_DIR, STRUCTURES_GOLDEN.name), encodePng(renderCity(structures.view, structures.options, STRUCTURES_GOLDEN.width, STRUCTURES_GOLDEN.height, false, structures.box)));
+  console.log(`wrote ${CITY_GOLDEN.name}, ${CITY_GOLDEN_WHOLE.name}, city-preview.png, city-whole.png, city-buildings.png and ${STRUCTURES_GOLDEN.name} to ${FRAMES_DIR}`);
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
