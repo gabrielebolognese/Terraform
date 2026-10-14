@@ -146,7 +146,8 @@ export interface Purchase {
 
 /** Try to pay for an order. Never partially succeeds. */
 export function purchase(economy: EconomyState, cost: number, t: Tuning): Purchase {
-  if (!t.ECONOMY_ENABLED || cost <= 0) {
+  // A sandbox's credits are unlimited (Batch 27): nothing is charged.
+  if (!t.ECONOMY_ENABLED || cost <= 0 || t.SANDBOX_ENABLED) {
     return { ok: true, economy, cost: 0, reason: null };
   }
   if (economy.credits < cost) {

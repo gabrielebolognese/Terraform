@@ -16,7 +16,8 @@ import { CDF_BINS, GLOBE_FRAGMENT, GLOBE_VERTEX } from "../render/globe-shader.j
 import { cloudFieldHighAt, createScene, renderScene } from "../render/planet.js";
 import type { PlanetScene } from "../render/planet.js";
 import { sphereCdf } from "../shared/sphere-cdf.js";
-import { elevationCdf } from "../shared/planet-terrain.js";
+import { TERRAIN_IDENTITY, elevationCdf, terrainRotation } from "../shared/planet-terrain.js";
+import type { TerrainRotation } from "../shared/planet-terrain.js";
 import type { Orbit } from "./orbit.js";
 import { coast, drag, hold, initialOrbit, zoomBy } from "./orbit.js";
 import { MAX_DPR } from "./config.js";
@@ -46,7 +47,7 @@ interface Gl {
 const UNIFORMS = [
   "uResolution", "uCenter", "uRadius", "uPixelRatio", "uYaw", "uPitch", "uTime",
   "uCap", "uOcean", "uGreen", "uCloud", "uDust", "uAir", "uSky", "uTint",
-  "uElevCdf", "uCloudCdf",
+  "uElevCdf", "uCloudCdf", "uTerrain",
 ] as const;
 
 export class Globe implements PlanetSink {
@@ -70,6 +71,11 @@ export class Globe implements PlanetSink {
   /** Set while the player is choosing a founding site: the next click on the planet picks it. */
   private picking: ((site: { lat: number; lon: number }) => void) | null = null;
   private pressedAt: { x: number; y: number } | null = null;
+  /** The world's terrain orientation (Batch 27): the same `TERRAIN_SEED` the simulation ranks sites with. */
+  private terrain: TerrainRotation = TERRAIN_IDENTITY;
+  private terrainGl = Float32Array.from(TERRAIN_IDENTITY);
+  /** Set by `dispose`: the frame loop stops and the canvas is gone. */
+  private disposed = false;
 
   constructor(host: HTMLElement) {
     this.canvas = document.createElement("canvas");
@@ -131,6 +137,33 @@ export class Globe implements PlanetSink {
 
   update(channels: VisualChannels): void {
     this.channels = channels;
+  }
+
+  /** Draw the planet of a world made with this `TERRAIN_SEED` (Batch 27). */
+  setTerrain(seed: number): void {
+    const next = terrainRotation(seed);
+    if (next === this.terrain) return;
+    this.terrain = next;
+    this.terrainGl = Float32Array.from(next);
+    this.fallbackScene = null;
+  }
+
+  /** The orientation drawn now, for a thumbnail drawn the same way. */
+  get terrainRotation(): TerrainRotation {
+    return this.terrain;
+  }
+
+  /**
+   * Stop for good (leaving a world, Batch 27): the frame loop ends, the GPU
+   * context is handed back rather than left for the browser's limit on live
+   * contexts, and the canvas and markers leave the page.
+   */
+  dispose(): void {
+    this.disposed = true;
+    this.gl?.gl.getExtension("WEBGL_lose_context")?.loseContext();
+    this.gl = null;
+    this.canvas.remove();
+    this.markerLayer.remove();
   }
 
   /** The settlements to mark on the planet. Markers are created and removed to match. */
@@ -283,6 +316,7 @@ export class Globe implements PlanetSink {
   private paused = false;
 
   private frame(now: number): void {
+    if (this.disposed) return;
     if (this.paused) {
       this.lastFrame = 0;
       requestAnimationFrame((t) => this.frame(t));
@@ -361,6 +395,8 @@ export class Globe implements PlanetSink {
     gl.uniform1f(u["uAir"] ?? null, ch.atmosphereThickness);
     gl.uniform3f(u["uSky"] ?? null, ch.skyColour.r, ch.skyColour.g, ch.skyColour.b);
     gl.uniform3f(u["uTint"] ?? null, ch.surfaceTint.r, ch.surfaceTint.g, ch.surfaceTint.b);
+    // Row-major, so transposed on the way in: the shader multiplies `uTerrain * p`.
+    gl.uniformMatrix3fv(u["uTerrain"] ?? null, true, this.terrainGl);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
@@ -379,7 +415,7 @@ export class Globe implements PlanetSink {
     const spin = -this.orbit.yaw / (2 * Math.PI);
     const cached = this.fallbackScene;
     if (cached === null || (Math.abs(cached.yaw - spin) > 0.004 && now - cached.at > 250)) {
-      this.fallbackScene = { scene: createScene({ width: size, height: size, spin }), yaw: spin, at: now };
+      this.fallbackScene = { scene: createScene({ width: size, height: size, spin, terrain: this.terrain }), yaw: spin, at: now };
     }
     const scene = this.fallbackScene?.scene;
     if (scene === undefined) return;

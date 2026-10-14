@@ -596,6 +596,10 @@ FLOOD_THRESHOLD_M = 10       # the sea this far above the base declares the sett
 FLOOD_BUILDING_LOSS_M = 2    # a building is lost with this much water over its highest tile
 FLOOD_ALERT_YEARS = 50       # a settlement's warning begins this many sim-years before the sea reaches its base
 
+# Worlds (Batch 27). Both 0 by default; a new world in the browser records its own.
+TERRAIN_SEED = 0             # turns the elevation field to a seeded orientation; 0 is the original planet
+SANDBOX_ENABLED = 0          # unlimited materials and credits, everything unlocked, no losses - a sandbox world only
+
 # Roads and the settlement network (micro §6, §7.1). OFF by default; the browser opts in.
 NETWORK_ENABLED = 0          # a building runs only if its network holds a producer of what it draws
 COST_CORRIDOR = 1            # materials per corridor tile (carries water, oxygen, food, materials)

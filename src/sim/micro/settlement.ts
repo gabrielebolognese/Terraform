@@ -26,6 +26,7 @@ import type { Rock } from "./rocks.js";
 import { garage, levelFor, rockAt, roverCount, roversOut, rocksOf, roverYears, siteGround } from "./rocks.js";
 import type { FloodReading } from "./flood.js";
 import { applyFlood, floodReading, submerged } from "./flood.js";
+import { charged, unlocked } from "../sandbox.js";
 import type { Layer, LinkLayer, NetworkIssue } from "./network.js";
 import { LAYERS, applyNetwork, linksForRedundancy, linksToConnect, networkOf, withRails } from "./network.js";
 
@@ -209,12 +210,12 @@ export function placeBuilding(
   if (!def.buildable) return refuse(`the ${def.name} is founded with the settlement, never built`);
   if (!def.kinds.includes(s.kind)) return refuse(`${def.name} cannot be built in an ${s.kind}`);
   const needs = def.minPopulation(t);
-  if (needs > 0 && s.population < needs) return refuse(`a ${def.name} needs a city of ${needs} people - this one has ${Math.floor(s.population)}`);
-  if (def.locked !== UNLOCKED) {
+  if (needs > 0 && s.population < needs && !unlocked(t)) return refuse(`a ${def.name} needs a city of ${needs} people - this one has ${Math.floor(s.population)}`);
+  if (def.locked !== UNLOCKED && !unlocked(t)) {
     const locked = def.locked(env ?? habitat(state.reservoirs, derive(state.reservoirs, NEUTRAL_ENV, t), t, 0), t);
     if (locked !== null) return refuse(locked);
   }
-  if (type === "rover_post") {
+  if (type === "rover_post" && !unlocked(t)) {
     // One post for every ROVER_POST_PEOPLE people.
     const posts = s.buildings.filter((b) => b.type === "rover_post").length;
     const allowed = Math.floor(s.population / t.ROVER_POST_PEOPLE);
@@ -245,7 +246,7 @@ export function placeBuilding(
   if (footprintTiles(f).some(([x, y]) => cables.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a cable - remove it first`);
   const rails = keySet(s.rails);
   if (footprintTiles(f).some(([x, y]) => rails.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a railway - remove it first`);
-  const cost = def.cost(t);
+  const cost = charged(def.cost(t), t);
   if (s.stores.materials < cost) {
     return refuse(`${def.name} needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
   }
@@ -298,7 +299,7 @@ export function placeLink(state: SimState, settlementId: string, layer: LinkLaye
   if (rockAt(s, tx, ty, t) === "crag") return refuse(`hard rock is in the way of a ${words.one} - send a rover to break it first`);
   const key = tileKey(tx, ty);
   if (keySet(s[layer]).has(key)) return refuse(`there is a ${words.one} there already`);
-  const cost = words.cost(t);
+  const cost = charged(words.cost(t), t);
   if (s.stores.materials < cost) return refuse(`a ${words.one} needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
   const next: Settlement = { ...s, stores: { ...s.stores, materials: s.stores.materials - cost }, [layer]: [...s[layer], key].sort((a, b) => a - b) };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
@@ -326,7 +327,7 @@ export function connectAll(state: SimState, settlementId: string, t: Tuning): Pl
   const cables = linksToConnect(s, "cables", t);
   const laid = corridors.length + cables.length;
   if (laid === 0) return { state, ok: false, reason: "everything that can be connected already is", laid: 0 };
-  const cost = corridors.length * t.COST_CORRIDOR + cables.length * t.COST_CABLE;
+  const cost = charged(corridors.length * t.COST_CORRIDOR + cables.length * t.COST_CABLE, t);
   if (s.stores.materials < cost) return { state, ok: false, reason: `${laid} tiles of corridor and cable need ${cost} materials, ${Math.floor(s.stores.materials)} available`, laid: 0 };
   const next: Settlement = {
     ...s,
@@ -351,7 +352,7 @@ export function connectTwice(state: SimState, settlementId: string, t: Tuning): 
   const cables = linksForRedundancy(s, "cables", t);
   const laid = corridors.length + cables.length;
   if (laid === 0) return { state, ok: false, reason: "every building already has its two routes", laid: 0 };
-  const cost = corridors.length * t.COST_CORRIDOR + cables.length * t.COST_CABLE;
+  const cost = charged(corridors.length * t.COST_CORRIDOR + cables.length * t.COST_CABLE, t);
   if (s.stores.materials < cost) return { state, ok: false, reason: `${laid} tiles of corridor and cable need ${cost} materials, ${Math.floor(s.stores.materials)} available`, laid: 0 };
   const next: Settlement = {
     ...s,
@@ -472,7 +473,7 @@ export function upgradeBuilding(state: SimState, settlementId: string, tx: numbe
   if (b.level >= top) return refuse(`the ${def.name} is at its highest level (${top})`);
   const corner = tileKey(b.tx, b.ty);
   if (s.jobs.some((j) => j.kind === "build" && j.tile === corner)) return refuse(`the ${def.name} is ${constructionOf(s).has(corner) ? "still being built" : "already being upgraded"}`);
-  const cost = def.cost(t);
+  const cost = charged(def.cost(t), t);
   if (s.stores.materials < cost) return refuse(`an upgrade needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
   const byRover = t.BUILD_TIME_ENABLED > 0 && garage(s) !== null;
   if (byRover && roversOut(s) >= roverCount(s, t)) return refuse(`all ${roverCount(s, t)} rovers are out - an upgrade needs one`);
@@ -781,7 +782,7 @@ function buildPlanned(s: Settlement, t: Tuning, h: number): Settlement {
     const p = s.planned[k]!;
     const { tx, ty } = keyTile(p.tile);
     if (lists[p.layer].has(p.tile) || linkRefusal(s, p.layer, tx, ty, t) !== null) continue;
-    const cost = LAYER_WORDS[p.layer].cost(t);
+    const cost = charged(LAYER_WORDS[p.layer].cost(t), t);
     if (materials < cost) break;
     materials -= cost;
     lists[p.layer].add(p.tile);
@@ -937,7 +938,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   // Batch 24 - detail §4: the flood first. Its consequences are true state
   // (lost buildings, a lost settlement); whether a building stands in water
   // this substep is derived and only switches it off.
-  const flood = t.FLOODING_ENABLED && standing.lostAtSeaLevelM === null ? floodReading(standing, env, t) : null;
+  // A sandbox loses nothing to the sea (Batch 27).
+  const flood = t.FLOODING_ENABLED && !unlocked(t) && standing.lostAtSeaLevelM === null ? floodReading(standing, env, t) : null;
   const s = flood === null ? standing : applyFlood(standing, flood, t);
   if (s.lostAtSeaLevelM !== null) {
     // A ruin: nothing runs, nothing grows, nothing reaches the planet.
@@ -1029,7 +1031,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     connect();
     settled = totals();
     const { prod, cons } = settled;
-    const short = MICRO_RESOURCES.filter((r) => s.stores[r] + (prod[r] - cons[r]) * h < 0);
+    // A sandbox runs short of nothing (Batch 27): nothing browns out, no one dies of want.
+    const short = unlocked(t) ? [] : MICRO_RESOURCES.filter((r) => s.stores[r] + (prod[r] - cons[r]) * h < 0);
     if (short.length === 0) break;
     for (const r of short) {
       shortAny.add(r);
@@ -1051,7 +1054,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   const { prod, cons } = settled ?? totals();
   const cap = capacities(s, t);
   const stores = { ...s.stores };
-  for (const r of MICRO_RESOURCES) stores[r] = Math.min(cap[r], Math.max(0, s.stores[r] + (prod[r] - cons[r]) * h));
+  for (const r of MICRO_RESOURCES) stores[r] = unlocked(t) ? cap[r] : Math.min(cap[r], Math.max(0, s.stores[r] + (prod[r] - cons[r]) * h));
 
   // Rovers and rockets: each counts down by this substep; what comes home
   // lands in the stores, up to their room (the user: "if there is 140/150,

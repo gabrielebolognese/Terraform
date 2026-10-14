@@ -30,7 +30,9 @@
 
 import { fbm } from "../shared/noise.js";
 import { lookupCdf } from "../shared/sphere-cdf.js";
-import { CLOUD_WARP, GROUND, SCENE, elevationField } from "./planet.js";
+import { CLOUD_WARP, GROUND, SCENE } from "./planet.js";
+import { TERRAIN_IDENTITY, elevationTurned } from "../shared/planet-terrain.js";
+import type { TerrainRotation } from "../shared/planet-terrain.js";
 
 /** Number of entries in each CDF texture. */
 export const CDF_BINS = 1024;
@@ -49,14 +51,14 @@ export const DETAIL_OFFSET: readonly [number, number, number] = [31.7, -4.1, 12.
  * A mirror, like `toPlanetJs`: Batch 22 holds the settlements' elevations to
  * what the globe draws with it, and a GPU cannot be asked directly.
  */
-export function globeCoastRankJs(p: readonly [number, number, number], cdf: Float32Array): number {
+export function globeCoastRankJs(p: readonly [number, number, number], cdf: Float32Array, terrain: TerrainRotation = TERRAIN_IDENTITY): number {
   const detail = fbm(
     p[0] * DETAIL_FREQ + DETAIL_OFFSET[0],
     p[1] * DETAIL_FREQ + DETAIL_OFFSET[1],
     p[2] * DETAIL_FREQ + DETAIL_OFFSET[2],
     5,
   );
-  return lookupCdf(cdf, elevationField(p[0], p[1], p[2])) + (detail - 0.5) * COAST_DETAIL;
+  return lookupCdf(cdf, elevationTurned(p[0], p[1], p[2], terrain)) + (detail - 0.5) * COAST_DETAIL;
 }
 
 function f(x: number): string {
@@ -144,6 +146,7 @@ uniform vec3 uSky;
 uniform vec3 uTint;
 
 uniform sampler2D uElevCdf;
+uniform mat3 uTerrain;      // the world's terrain orientation (Batch 27), uploaded row-major with transpose
 uniform sampler2D uCloudCdf;
 
 // ---- constants, written in from planet.ts -------------------------------
@@ -320,7 +323,7 @@ vec3 surfaceAt(vec2 d, float r2) {
   float cap = clamp(uCap, 0.0, 1.0);
 
   float detail = detailField(p);
-  float elevation = cdf(uElevCdf, elevationField(p)) + (detail - 0.5) * COAST_DETAIL;
+  float elevation = cdf(uElevCdf, elevationField(uTerrain * p)) + (detail - 0.5) * COAST_DETAIL;
 
   float oceanMask = 1.0 - smoothstep(ocean - SHORE_SOFT, ocean + SHORE_SOFT, elevation);
   float depth = clamp((ocean - elevation) * 3.0, 0.0, 1.0);

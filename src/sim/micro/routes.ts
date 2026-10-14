@@ -19,6 +19,7 @@ import { rockAt, siteGround } from "./rocks.js";
 import { capacities } from "./settlement.js";
 import { claimTest, frameOf, tileKey } from "./space.js";
 import { isSteep } from "./terrain.js";
+import { charged } from "../sandbox.js";
 
 /** Which way a railway leaves a settlement for another: across it east to west, or north to south. */
 export type Axis = "h" | "v";
@@ -118,7 +119,7 @@ export function connectSettlements(state: SimState, aId: string, bId: string, t:
   if (a === undefined || b === undefined) return refuse(`there is no settlement ${a === undefined ? aId : bId}`);
   if (a.lostAtSeaLevelM !== null || b.lostAtSeaLevelM !== null) return refuse(`${a.lostAtSeaLevelM !== null ? a.id : b.id} was lost to the sea`);
   if (state.routes.some((r) => (r.a === aId && r.b === bId) || (r.a === bId && r.b === aId))) return refuse("they are joined already");
-  const cost = routeCost(a, b, t);
+  const cost = charged(routeCost(a, b, t), t);
   const half = cost / 2;
   for (const s of [a, b]) {
     if (s.stores.materials < half) return refuse(`${Math.round(routeKm(a, b)).toLocaleString("en")} km of railway needs ${cost.toLocaleString("en")} materials, half from each end - ${s.id} has ${Math.floor(s.stores.materials)}`, cost);

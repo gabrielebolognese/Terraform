@@ -153,9 +153,10 @@ export interface TechGate {
  * must behave exactly as it did when it was written, and deriving the gate
  * fresh would quietly re-gate it against whatever the tree says today.
  */
-export function techGate(state: SimState, type: FacilityType, t: { readonly TECH_GATE_ENABLED: number }): TechGate {
+export function techGate(state: SimState, type: FacilityType, t: { readonly TECH_GATE_ENABLED: number; readonly SANDBOX_ENABLED?: number }): TechGate {
   const tech = gatingTech(type);
-  if (!t.TECH_GATE_ENABLED || tech === undefined) return { allowed: true, tech, reason: null };
+  // A sandbox has everything unlocked (Batch 27).
+  if (!t.TECH_GATE_ENABLED || (t.SANDBOX_ENABLED ?? 0) > 0 || tech === undefined) return { allowed: true, tech, reason: null };
   if (state.techUnlocked.includes(tech.id)) return { allowed: true, tech, reason: null };
   return {
     allowed: false,

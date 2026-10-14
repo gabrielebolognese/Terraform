@@ -776,6 +776,27 @@ export const BASE_TUNING = Object.freeze({
   FLOOD_ALERT_YEARS: 50,
 
   // -------------------------------------------------------------------------
+  // Worlds (Batch 27): what a world is made with, recorded in the world
+  //
+  // Both 0 by default, which is the planet every test, golden frame and the
+  // Batch 3 score were calibrated on. A new world in the browser sets them.
+  // -------------------------------------------------------------------------
+  /**
+   * Turns the planet's elevation field to a seeded orientation: continents,
+   * basins and caps land elsewhere. 0 is the original planet (old saves, the
+   * golden frames). Any other value is a seed: the same value, the same planet.
+   * The field's distribution over the sphere does not change under a rotation,
+   * so the hypsometric curve and the ocean fractions keep their meaning.
+   */
+  TERRAIN_SEED: 0,
+  /**
+   * Sandbox: unlimited materials and credits, everything unlocked, no losses.
+   * A mode of a world, never of the game: OFF by default, and on only in a
+   * world made as a sandbox.
+   */
+  SANDBOX_ENABLED: 0,
+
+  // -------------------------------------------------------------------------
   // Roads and the settlement network (micro §6, §7.1; at the user's request)
   //
   // OFF by default: with it on, a building runs only when a road (or a wall

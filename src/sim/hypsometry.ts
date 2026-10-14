@@ -61,7 +61,7 @@ export function rankAtElevation(m: number, t: Tuning): number {
   return 1;
 }
 
-/** A site's elevation in metres: detail §1.1's `base_elev_m`. */
+/** A site's elevation in metres: detail §1.1's `base_elev_m`, on the world's terrain (`TERRAIN_SEED`, Batch 27). */
 export function siteElevation(lat: number, lon: number, t: Tuning): number {
-  return elevationAtRank(elevationRank(lat, lon), t);
+  return elevationAtRank(elevationRank(lat, lon, t.TERRAIN_SEED), t);
 }

@@ -32,7 +32,8 @@
 
 import type { VisualChannels } from "../sim/index.js";
 import { fbm, valueNoise } from "../shared/noise.js";
-import { PLANET_ELEVATION_FREQ, elevationField } from "../shared/planet-terrain.js";
+import { PLANET_ELEVATION_FREQ, TERRAIN_IDENTITY, elevationField, elevationTurned } from "../shared/planet-terrain.js";
+import type { TerrainRotation } from "../shared/planet-terrain.js";
 
 export interface RenderOptions {
   readonly width: number;
@@ -41,6 +42,8 @@ export interface RenderOptions {
   readonly spin?: number;
   /** Fraction of the frame's short side the planet's disc occupies. */
   readonly discScale?: number;
+  /** The world's terrain orientation (Batch 27, `terrainRotation`). The original planet when absent. */
+  readonly terrain?: TerrainRotation;
 }
 
 export interface Frame {
@@ -218,6 +221,7 @@ export function createScene(options: RenderOptions): PlanetScene {
   const height = Math.max(1, Math.floor(options.height));
   const spin = options.spin ?? 0;
   const discScale = options.discScale ?? 0.38;
+  const terrain = options.terrain ?? TERRAIN_IDENTITY;
 
   const count = width * height;
   const scene: PlanetScene = {
@@ -277,7 +281,7 @@ export function createScene(options: RenderOptions): PlanetScene {
       scene.kind[i] = KIND_DISC;
       scene.depth[i] = z;
       scene.latitude[i] = Math.abs(Math.asin(Math.max(-1, Math.min(1, worldY))));
-      scene.elevation[i] = elevationField(dx, worldY, dz);
+      scene.elevation[i] = elevationTurned(dx, worldY, dz, terrain);
       scene.cloudField[i] = cloudFieldAt(dx, worldY, dz);
       scene.capWobble[i] = capWobbleAt(dx, worldY, dz);
       scene.dustHaze[i] = dustHazeAt(dx, worldY, dz);
