@@ -1130,14 +1130,22 @@ export class CityScreen {
       },
       { passive: false },
     );
-    globalThis.addEventListener?.("keydown", (e: KeyboardEvent) => {
-      if (this.settlementId === null || e.key !== "Escape") return;
-      if (this.claiming) this.armClaim(false);
-      else if (this.levelling) this.armLevel(false);
-      else if (this.paving !== null) this.armLink(null);
-      else if (this.placing !== null) this.arm(null);
-      else this.select(null);
-    });
+    globalThis.addEventListener?.("keydown", this.onKey);
+  }
+
+  private readonly onKey = (e: KeyboardEvent): void => {
+    if (this.settlementId === null || e.key !== "Escape") return;
+    if (this.claiming) this.armClaim(false);
+    else if (this.levelling) this.armLevel(false);
+    else if (this.paving !== null) this.armLink(null);
+    else if (this.placing !== null) this.arm(null);
+    else this.select(null);
+  };
+
+  /** Leaving the world (Batch 27): the window listener goes, so nothing holds this screen or its caches. */
+  dispose(): void {
+    globalThis.removeEventListener?.("keydown", this.onKey);
+    this.root.remove();
   }
 
   private local(e: { clientX: number; clientY: number }): { x: number; y: number } {

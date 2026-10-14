@@ -34,9 +34,17 @@ export class TravelPrompt {
     row.append(this.go, cancel);
     this.root.append(this.text, row);
     host.append(this.root);
-    globalThis.addEventListener?.("keydown", (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !this.root.hidden) this.close();
-    });
+    globalThis.addEventListener?.("keydown", this.onKey);
+  }
+
+  private readonly onKey = (e: KeyboardEvent): void => {
+    if (e.key === "Escape" && !this.root.hidden) this.close();
+  };
+
+  /** Leaving the world (Batch 27). */
+  dispose(): void {
+    globalThis.removeEventListener?.("keydown", this.onKey);
+    this.root.remove();
   }
 
   get open(): boolean {

@@ -2247,3 +2247,366 @@ button:hover {
     max-height: 40vh;
   }
 }
+
+/* ======================================================================
+   The front door (Batch 27): the title screen, the worlds, the new-world
+   form, and the in-game menu. The planet turns behind the menus; the
+   panels float over it like everything else.
+   ====================================================================== */
+
+/* One world's page. It adds no box of its own, so the game's layers stack
+   exactly as they did when it owned the page. */
+.game {
+  display: contents;
+}
+
+.front {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.front[hidden] {
+  display: none;
+}
+
+.front-stage {
+  pointer-events: none;
+}
+
+.front-screen {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 100%);
+}
+
+.front-screen[data-view="title"] {
+  width: min(380px, 100%);
+}
+
+.front-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.front-logo {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.front-tagline {
+  margin: 0 0 8px;
+  color: var(--text-2);
+}
+
+.front-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.front-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.front-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 450;
+}
+
+.front-panel h2 {
+  margin: 0;
+  font-weight: 450;
+}
+
+.front-button,
+.game-menu-button {
+  padding: 9px 16px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.front-button:hover:not(:disabled),
+.game-menu-button:hover {
+  background: var(--surface-3);
+}
+
+.front-button:focus-visible,
+.game-menu-button:focus-visible,
+.front-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.front-button:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.front-button.primary {
+  border-color: var(--accent);
+}
+
+.front-button.danger {
+  color: var(--bad);
+  border-color: var(--bad);
+}
+
+.front-link {
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.front-notice {
+  position: relative;
+  z-index: 1;
+  min-height: 1.55em;
+  margin: 12px 0 0;
+  color: var(--text-2);
+  text-align: center;
+}
+
+.front-empty {
+  color: var(--text-2);
+}
+
+/* ---- the worlds list ---- */
+
+.world-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.world-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 6px 14px;
+  padding: 12px;
+  background: var(--surface-solid);
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+
+.world-thumb {
+  grid-row: span 2;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--surface-3), var(--bg));
+  overflow: hidden;
+}
+
+.world-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.world-info {
+  min-width: 0;
+}
+
+.world-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 450;
+  overflow-wrap: anywhere;
+}
+
+.world-facts,
+.world-when {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.world-when {
+  color: var(--text-3);
+}
+
+.world-problem {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-radius: 7px;
+}
+
+.world-actions,
+.world-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.world-actions .front-button,
+.world-inline .front-button {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.world-inline input,
+.new-world input:not([type="radio"]),
+.new-world select {
+  min-width: 0;
+  padding: 7px 10px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-solid);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+}
+
+.world-confirm label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+/* ---- the new-world form ---- */
+
+.new-world {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.front-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-2);
+  border: 0;
+}
+
+.front-field legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+
+.front-row {
+  display: flex;
+  gap: 8px;
+}
+
+.front-row input {
+  flex: 1;
+}
+
+.front-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  padding: 8px 10px;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.front-option:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.front-option input {
+  grid-row: span 2;
+  margin-top: 4px;
+}
+
+.front-about {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ---- in a world: the Menu button, and the menu ---- */
+
+/* Bottom right in orbit, above the globe hint; the HUD has the left side and
+   the instruments toggle the top right. In a city the build bar has the
+   bottom, so the button goes under the city's tools. */
+.game-menu-button {
+  position: fixed;
+  bottom: 40px;
+  right: 16px;
+  z-index: 8;
+  padding: 7px 14px;
+  background: var(--surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.game:has(.city:not([hidden])) .game-menu-button {
+  top: 64px;
+  bottom: auto;
+}
+
+.game-menu {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(8, 9, 10, 0.55);
+}
+
+.game-menu-panel {
+  width: min(320px, 100%);
+}
+
+@media (max-width: 520px) {
+  .front-panel {
+    padding: 16px;
+  }
+
+  .world-row {
+    grid-template-columns: 48px 1fr;
+  }
+
+  .world-thumb {
+    width: 48px;
+    height: 48px;
+  }
+}

@@ -33,6 +33,11 @@ export class ExampleMode {
     return build();
   }
 
+  /** The player's own world: the one set aside while the example shows, or `current` when it does not. */
+  mine(current: SimState): SimState {
+    return this.kept ?? current;
+  }
+
   /** Put the player's own world back, exactly as it was. Null if no example was showing. */
   leave(): SimState | null {
     const mine = this.kept;

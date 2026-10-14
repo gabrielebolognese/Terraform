@@ -290,13 +290,26 @@ export class WorldMapScreen {
       },
       { passive: false },
     );
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && this.opened && this.joining) {
-        this.joining = false;
-        this.panelKey = "";
-        this.hint.textContent = "";
-      }
-    });
+    window.addEventListener("keydown", this.onKey);
+  }
+
+  private readonly onKey = (e: KeyboardEvent): void => {
+    if (e.key === "Escape" && this.opened && this.joining) {
+      this.joining = false;
+      this.panelKey = "";
+      this.hint.textContent = "";
+    }
+  };
+
+  /** True while choosing a second settlement to join: Escape is this screen's. */
+  get busy(): boolean {
+    return this.opened && this.joining;
+  }
+
+  /** Leaving the world (Batch 27). */
+  dispose(): void {
+    window.removeEventListener("keydown", this.onKey);
+    this.root.remove();
   }
 
   /** Zoom by `factor` about a screen point: from the whole world to a city's chunks, 256 pixels a world tile. */
