@@ -31,6 +31,39 @@ Batch requested: `$ARGUMENTS` (empty means "the next incomplete one").
      ("Open", "For the next batch", "Where the project stands"), so go by position, not by title.
      Those are the recorded backlog. Present them as candidates with the evidence already written
      against each, recommend one, and ask which to take. Stop there.
+   - **`auto`**: an unattended run, started by `scripts/run-batches.sh`. Nobody is watching and
+     nobody will answer. Read `docs/PROGRESS.md` first; it, not this conversation, is where the run
+     stands.
+     - **Fix run.** If the entry of `last_completed_batch` has `review: rejected` and no
+       `fix-attempt: done` line, target that batch again. Fix every problem the review lists, re-run
+       the checks each problem names and the four verification commands, add `fix-attempt: done` to
+       the entry, commit `Batch NN: review fixes`, push, and end the run.
+     - **Otherwise** target `in_progress_batch` if it is not `none`, check `git status` and the
+       entry's notes for what is already built, and carry on from there. If it is `none`, target
+       `last_completed_batch + 1`. Before writing code, set `in_progress_batch` to it, add the
+       batch's entry under `## Batches`, and commit `Batch NN: started`.
+     - **Phases 1 and 2 run back to back.** Write the Phase 1 presentation (step 6) as text, then
+       go straight on to Phase 2. Do not stop at step 7.
+     - **Never ask a question.** Every decision you would have put to the user, take your own
+       recommendation, the one a bare "Go" would accept. Record each one under the entry's
+       `decisions:`, with its reason in one line.
+     - **Stop without building only for one of these.** Write
+       `needs_human: <batch NN: one-line reason>` as the top-level field in `docs/PROGRESS.md`,
+       commit, push, and end the run:
+       - the batch's spec contradicts the code or an earlier batch's recorded result, and neither
+         the spec nor a design doc says which wins;
+       - the batch needs something only the user can supply: an account, a paid service, assets
+         whose licence you cannot check, or a decision to delete or overwrite player data;
+       - a verification command is still red after two fix attempts, and the failure is new, not
+         one listed under `## Known red` in `docs/PROGRESS.md`.
+     - **Never mark a batch COMPLETE** while typecheck, `build:web` or `build` is red, or while the
+       suite has a failure not listed under `## Known red`.
+     - **Finishing in auto mode** (after the usual Finishing steps below): in `docs/PROGRESS.md`
+       set `last_completed_batch` to NN and `in_progress_batch` to `none`, and complete the entry
+       with `status: complete`, `note:`, the real verification numbers, and a `review request:`
+       line listing the files the batch changed. Commit, push the current branch
+       (`git push -u origin HEAD`), and end the run. A new known-red failure you recorded in the
+       balance note goes under `## Known red` too.
 
 2. **Read the batch's own section** in `GAME_PLAN.md` — goal, deliverables, exit gate and its
    **Decisions for Phase 1** — plus `GAME_PLAN.md`'s "How every batch here is held" and
@@ -60,7 +93,8 @@ Batch requested: `$ARGUMENTS` (empty means "the next incomplete one").
    - Anything in the batch's own spec you think is wrong, with the reason
 
 7. **Stop.** Ask for "Go". Do not write code, do not create files, do not start "just the first
-   part". A bare "Go" accepts the recommendations you gave on the decisions.
+   part". A bare "Go" accepts the recommendations you gave on the decisions. (In `auto` mode, do
+   not stop: carry straight on into Phase 2.)
 
 ---
 
