@@ -31,39 +31,57 @@ Batch requested: `$ARGUMENTS` (empty means "the next incomplete one").
      ("Open", "For the next batch", "Where the project stands"), so go by position, not by title.
      Those are the recorded backlog. Present them as candidates with the evidence already written
      against each, recommend one, and ask which to take. Stop there.
-   - **`auto`**: an unattended run, started by `scripts/run-batches.sh`. Nobody is watching and
-     nobody will answer. Read `docs/PROGRESS.md` first; it, not this conversation, is where the run
-     stands.
+   - **`auto`** (the argument starts with `auto`): an unattended run, started by
+     `scripts/run-batches.sh`. Nobody is watching and nobody will answer, for hours. The batches
+     are already specified in `GAME_PLAN.md`; your job is to implement them. Read
+     `docs/PROGRESS.md` first; it, not this conversation, is where the run stands. The rest of the
+     argument may say which attempt this is and why the last session ended.
+     - **A previous session may have been cut off** (turn limit, usage limit, a closed window,
+       a crash). The working tree is its work. **Never** `git reset`, `git checkout -- <file>`,
+       `git clean`, `git stash` or `git restore` it away. Read `git status`, `git diff --stat`,
+       `git log --oneline -10`, the batch's entry and its note if one exists, work out what is
+       built and what is left, and carry on from there.
+     - **Commit as you go**, not only at the end: each piece that typechecks and passes its own
+       tests gets a `Batch NN: <piece>` commit and a push. A session cut off then loses minutes,
+       not hours.
      - **Fix run.** If the entry of `last_completed_batch` has `review: rejected` and no
        `fix-attempt: done` line, target that batch again. Fix every problem the review lists, re-run
        the checks each problem names and the four verification commands, add `fix-attempt: done` to
        the entry, commit `Batch NN: review fixes`, push, and end the run.
-     - **Otherwise** target `in_progress_batch` if it is not `none`, check `git status` and the
-       entry's notes for what is already built, and carry on from there. If it is `none`, target
-       `last_completed_batch + 1`. Before writing code, set `in_progress_batch` to it, add the
+     - **Otherwise** target `in_progress_batch` if it is not `none`. If it is `none`, target
+       `last_completed_batch + 1`, and before writing code set `in_progress_batch` to it, add the
        batch's entry under `## Batches`, and commit `Batch NN: started`.
      - **Phases 1 and 2 run back to back.** Write the Phase 1 presentation (step 6) as text, then
        go straight on to Phase 2. Do not stop at step 7.
-     - **Never ask a question.** Every decision you would have put to the user, take your own
-       recommendation, the one a bare "Go" would accept. Record each one under the entry's
-       `decisions:`, with its reason in one line.
-     - **Stop without building only for one of these.** Write
-       `needs_human: <batch NN: one-line reason>` as the top-level field in `docs/PROGRESS.md`,
-       commit, push, and end the run:
-       - the batch's spec contradicts the code or an earlier batch's recorded result, and neither
-         the spec nor a design doc says which wins;
-       - the batch needs something only the user can supply: an account, a paid service, assets
-         whose licence you cannot check, or a decision to delete or overwrite player data;
-       - a verification command is still red after two fix attempts, and the failure is new, not
-         one listed under `## Known red` in `docs/PROGRESS.md`.
-     - **Never mark a batch COMPLETE** while typecheck, `build:web` or `build` is red, or while the
-       suite has a failure not listed under `## Known red`.
+     - **Never ask a question and never stop for a human.** Every decision you would have put to
+       the user, take your own recommendation, the one a bare "Go" would accept, and record it
+       under the entry's `decisions:` with its reason in one line. When something blocks you:
+       - the spec contradicts the code or an earlier result: follow the cross-batch invariants
+         first, then the code's recorded behaviour, then the spec; record the choice;
+       - the batch wants something only the user could supply (an account, a paid service,
+         licensed assets): build the nearest thing that needs none (procedural sound, generated
+         art, a local stand-in) and record the gap under the note's "Open";
+       - never delete or overwrite player data or saves; take the path that keeps them;
+       - a deliverable that cannot be made to work: put it behind its tuning constant at 0, keep
+         the rest, and record it under the note's "Open" for Batch 40.
+     - **`auto close-out`**: the batch has had five sessions already. Do not start new work.
+       Finish what is half done only if it is minutes away; otherwise put it behind its tuning
+       constant at 0 or take it out. Get typecheck and both builds green, write or complete the
+       note (what was built, what was not, why), mark the batch COMPLETE in `GAME_PLAN.md` as
+       "COMPLETE (partial)" with the unbuilt deliverables listed, and finish as below.
+     - **Memory is short on this machine.** Run the full suite once, at the end, with
+       `npx vitest run --maxWorkers=2`; during the work run only the test files you touch.
+     - **Scratch scripts** go in the system temp directory, not in `src/`. Any `src/harness/_*.ts`
+       left by an earlier session is scratch: delete it before committing.
+     - **Never mark a batch COMPLETE** while typecheck, `build:web` or `build` is red. A suite
+       failure that is new must be fixed; if after a real attempt it cannot be, record it with its
+       cause under `## Known red` and in the note, assigned to Batch 40, and go on.
+     - **A push that fails** (no network) does not stop you: commit locally and carry on.
      - **Finishing in auto mode** (after the usual Finishing steps below): in `docs/PROGRESS.md`
        set `last_completed_batch` to NN and `in_progress_batch` to `none`, and complete the entry
-       with `status: complete`, `note:`, the real verification numbers, and a `review request:`
-       line listing the files the batch changed. Commit, push the current branch
-       (`git push -u origin HEAD`), and end the run. A new known-red failure you recorded in the
-       balance note goes under `## Known red` too.
+       with `status: complete` (or `complete (partial)`), `note:`, the real verification numbers,
+       and a `review request:` line listing the files the batch changed. Commit, push the current
+       branch (`git push -u origin HEAD`), and end the run.
 
 2. **Read the batch's own section** in `GAME_PLAN.md` — goal, deliverables, exit gate and its
    **Decisions for Phase 1** — plus `GAME_PLAN.md`'s "How every batch here is held" and
