@@ -45,6 +45,7 @@ that state.
 | [`docs/balance/batch24-flood.md`](docs/balance/batch24-flood.md) | The flood model: a low city drowns from its lowest ground inward and is lost at +10 m, exact through offline catch-up - and the six weak tests found closing it. Off by default. |
 | [`docs/balance/batch25-flood-forecast.md`](docs/balance/batch25-flood-forecast.md) | When the sea will reach each settlement, forecast in water rather than metres (the spec's line was 58 years wrong across a kink), and the warnings in the orbit HUD. |
 | [`docs/balance/batch26-structures.md`](docs/balance/batch26-structures.md) | Procedural structures: each building's signature varied by a seed from where it stands, and greebles that multiply with its level - all 28 types on a reference sheet, for 4-5% more drawing up close. |
+| [`docs/balance/batch27-worlds.md`](docs/balance/batch27-worlds.md) | The front door: a title screen, any number of worlds each with its own save and seed (the seed turns the terrain), Standard / Sandbox / Terraformed start, export and import - and a world that will not load is kept, never saved over. |
 | [`docs/balance/detail-pass-buildings.md`](docs/balance/detail-pass-buildings.md) | The ten buildings rebuilt with far more detail; a close-up of all ten is `docs/frames/city-buildings.png`. |
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
@@ -77,7 +78,13 @@ minimum met, and it survives closing the tab. The Earth-like targets beyond thos
 longer; the progress bar measures those, so it reads about 87% on the winning year, and the shell
 says so.
 
-`npm run dev` opens the shell: the current phase and what it looks like, the composite progress bar,
+`npm run dev` opens on the **title screen** (Batch 27): Continue, Worlds, New world, Example planet,
+Settings, Credits, over a turning Mars. Each world is its own planet and save, made from a seed (the
+same seed, the same world) in one of three modes - Standard, Sandbox, or Terraformed start - and can
+be renamed, copied, exported to a file, imported and deleted. A save from before worlds opens as
+"My planet". In a world, Esc or **Menu** pauses it: Resume, Save, Save and quit to title.
+
+In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved
 through its prerequisites to something you can actually do today. A **Build** panel lists every

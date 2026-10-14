@@ -45,7 +45,7 @@ What is missing, in the user's words (2026-10-11):
 | Batch | Name | Status |
 |---|---|---|
 | 26 | Procedural structures (finish) | **COMPLETE** - [note](docs/balance/batch26-structures.md) - seeded signatures and greebles on the shape pipeline; +4-5% shapes up close, next frame +1 ms |
-| 27 | The front door: title screen and worlds | NOT STARTED |
+| 27 | The front door: title screen and worlds | **COMPLETE** - [note](docs/balance/batch27-worlds.md) - title screen, worlds with their own saves and seeds, Standard / Sandbox / Terraformed start; a world that will not load is kept, never saved over |
 | 28 | Time that means something: real build and upgrade times | NOT STARTED |
 | 29 | Vehicles that use the city: rovers on the ground, trains on the line | NOT STARTED |
 | 30 | The first hour: onboarding and objectives | NOT STARTED |
@@ -135,7 +135,7 @@ player keeps any number of worlds, each its own planet with its own save, and st
 renames, copies, exports and deletes them.
 
 **Deliverables:**
-- [ ] **A title screen** before anything loads:
+- [x] **A title screen** before anything loads:
   - Continue (the last world played);
   - Worlds;
   - New world;
@@ -144,12 +144,12 @@ renames, copies, exports and deletes them.
   - Credits.
 
   Over a slowly turning planet, drawn by the existing globe.
-- [ ] **The worlds list.** One row per world:
+- [x] **The worlds list.** One row per world:
   - its name, a thumbnail (the globe as last seen), the phase reached;
   - its playtime, sim-year and last played;
   - Play, Rename, Duplicate, Export (a file), Delete (confirmed by typing the name);
   - Import a world from a file.
-- [ ] **New world.**
+- [x] **New world.**
   - Name; seed (random, or typed - the same seed gives the same world).
   - Mode:
     - **Standard**, today's game;
@@ -158,12 +158,12 @@ renames, copies, exports and deletes them.
   - Pace (Batch 28's presets once they exist).
   - Each world records the tuning it was made with, so a later rebalance never silently changes an
     existing world.
-- [ ] **Storage:**
+- [x] **Storage:**
   - one `SaveStore` slot per world;
   - a world index (name, metadata, thumbnail) kept apart from the saves, so the list opens without
     loading a world.
   - The existing single save becomes the first world on first launch, by migration.
-- [ ] **Leaving a world:** an in-game menu (Esc) with Resume, Save, Settings, and Quit to title
+- [x] **Leaving a world:** an in-game menu (Esc) with Resume, Save, Settings, and Quit to title
   (saving first). Autosave keeps its 15-second rhythm per world.
 
 **Exit gate:**
@@ -188,6 +188,24 @@ renames, copies, exports and deletes them.
    the world.
 3. **Where the example planet lives.** Today it is a mode that never saves. A "Terraformed start"
    world does save. Both, or one?
+
+**Done** - see [the note](docs/balance/batch27-worlds.md). All 21 injections caught.
+
+**Decisions taken:**
+1. The seed turns the terrain (`TERRAIN_SEED`): a uniform rotation of the elevation field, read
+   alike by the simulation, the shader and the software renderer. At 0 it is the original planet.
+2. Sandbox is `SANDBOX_ENABLED` at 0, set only in a Sandbox world's recorded tuning.
+3. Both: the look-only Example planet from the title, and "Terraformed start" worlds that save.
+
+**What changed from the plan, and why:**
+- Pace is shown but fixed at Standard: Batch 28 brings the presets.
+- A defect was fixed on the way. Before, a save that failed to load was replaced by a fresh planet
+  at the first autosave. Now nothing starts over a world that will not load.
+- The example planet takes 19 s to build, not the 3 s its comment claimed. That puts about 21 s on
+  creating a Terraformed world, and 71 s on its test. Speeding it up is Batch 40's.
+- The game moved out of `main.ts` into `game.ts` as a world that can be started and stopped. The
+  city, travel prompt and world map gained `dispose()`: their window listeners had never been
+  removed.
 
 ---
 
