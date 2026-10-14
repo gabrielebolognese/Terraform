@@ -42,7 +42,9 @@ export function microStep(
     return { settlementsNext: settlements, flows: [], co2Demand: 0, research: 0 };
   }
 
-  const steps = settlements.map((s) => settlementStep(s, env, t, h));
+  // The cities live CITY_CLOCK of their years to each of the planet's (Batch 28). What they ask
+  // of the planet, and earn, is per planet-year: the planet's own clock.
+  const steps = settlements.map((s) => settlementStep(s, env, t, h * t.CITY_CLOCK));
   let co2Demand = 0;
   let research = 0;
   for (const step of steps) {

@@ -97,12 +97,15 @@ describe("build times", () => {
     expect(dome - mine).toBeCloseTo(T.BUILD_YEARS_HABITAT_DOME - T.BUILD_YEARS_SOLAR_ARRAY, 1);
   });
 
-  it("takes a rover: with every rover out, nothing more can be built", () => {
+  it("takes a rover: with every rover out, a build waits its turn (Batch 28) and no rover goes for rock", () => {
     let s = city();
     const rovers = T.ROVERS_PER_HQ;
     for (let k = 0; k < rovers; k += 1) s = place(s, "storage_depot", 10 + 3 * k, 10);
     expect(first(s).jobs).toHaveLength(rovers);
-    expect(placeBuilding(s, id(s), "storage_depot", 30, 10, T).reason).toMatch(/rovers are out/);
+    const waiting = placeBuilding(s, id(s), "storage_depot", 30, 10, T);
+    expect(waiting.ok).toBe(true);
+    expect(first(waiting.state).jobs, "no fourth rover").toHaveLength(rovers);
+    expect(first(waiting.state).buildQueue).toEqual([{ tile: tileKey(30, 10), upgrade: false, paid: T.COST_STORAGE_DEPOT }]);
     const rock = rocksOf(first(s), T).findIndex((r) => r !== "none");
     if (rock >= 0) expect(sendRover(s, id(s), rock % 64, Math.floor(rock / 64), T).reason).toMatch(/rovers are out/);
     // Removing a building still going up calls its rover home.

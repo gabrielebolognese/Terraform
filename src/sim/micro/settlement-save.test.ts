@@ -82,7 +82,8 @@ describe("a world with settlements round-trips through the save exactly", () => 
     // has the ground rovers levelled: the heights they set, not the ground made of them.
     // v12, the planner: a name, zones, the rovers' queue, the plan - what the player
     // chose - and the record, which is history: it cannot be derived again.
-    expect(Object.keys(saved).sort()).toEqual(["base", "buildings", "cables", "claims", "cleared", "corridors", "grades", "history", "id", "jobs", "kind", "lat", "level_queue", "lon", "lost_at_sea_level_m", "name", "planned", "population", "rails", "stores", "zones"]);
+    // v14 (Batch 28): the builds waiting for a rover - what the player paid for.
+    expect(Object.keys(saved).sort()).toEqual(["base", "build_queue", "buildings", "cables", "claims", "cleared", "corridors", "grades", "history", "id", "jobs", "kind", "lat", "level_queue", "lon", "lost_at_sea_level_m", "name", "planned", "population", "rails", "stores", "zones"]);
   });
 });
 

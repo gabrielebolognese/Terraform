@@ -56,6 +56,7 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     name: "",
     zones: [],
     levelQueue: [],
+    buildQueue: [],
     planned: [],
     history: EMPTY_HISTORY,
   };
@@ -153,22 +154,28 @@ export function constructionOf(s: Settlement): Map<number, number> {
     const at = j.total - j.remaining - drive;
     out.set(j.tile, Math.min(1, Math.max(0, at / Math.max(1e-9, j.work))));
   }
+  // Waiting for a rover (Batch 28): a worksite where nothing has started.
+  for (const q of s.buildQueue) if (!q.upgrade && !out.has(q.tile)) out.set(q.tile, 0);
   return out;
 }
 
 function constructing(s: Settlement): ReadonlySet<number> {
-  return s.jobs.some((j) => j.kind === "build") ? new Set(constructionOf(s).keys()) : EMPTY;
+  return s.jobs.some((j) => j.kind === "build") || s.buildQueue.some((q) => !q.upgrade) ? new Set(constructionOf(s).keys()) : EMPTY;
 }
 
 const EMPTY: ReadonlySet<number> = new Set();
 
-/** A rover to build (or upgrade) the building at (tx, ty): out from the headquarters, the work, and back. */
-function buildJob(s: Settlement, type: BuildingType, tx: number, ty: number, upgrade: boolean, t: Tuning): SettlementJob {
+/**
+ * A rover to build (or upgrade) the building at (tx, ty) to `level`: out
+ * from the headquarters, the work - which grows with the level, on Batch 28's
+ * curve - and back.
+ */
+function buildJob(s: Settlement, type: BuildingType, tx: number, ty: number, upgrade: boolean, level: number, t: Tuning): SettlementJob {
   const size = BUILDING_DEFS[type].footprint;
   const depth = BUILDING_DEFS[type].depth;
   const from = garage(s)!;
   const distance = Math.hypot(tx + size / 2 - from.x, ty + depth / 2 - from.y);
-  const work = buildYears(type, t);
+  const work = buildYears(type, t, level);
   const total = 2 * distance * t.ROVER_YEARS_PER_TILE + work;
   return { kind: "build", tile: tileKey(tx, ty), work, total, remaining: total, upgrade };
 }
@@ -252,13 +259,15 @@ export function placeBuilding(
   }
   // With build times, a rover goes out to build it.
   const byRover = t.BUILD_TIME_ENABLED > 0 && garage(s) !== null;
-  if (byRover && roversOut(s) >= roverCount(s, t)) return refuse(`all ${roverCount(s, t)} rovers are out - a ${def.name} needs one to build it`);
+  // Every rover out (Batch 28): it waits in the queue, paid for, its worksite marked out.
+  const waits = byRover && (roversOut(s) >= roverCount(s, t) || s.buildQueue.length > 0);
   const building: PlacedBuilding = { type, tx, ty, level: 1 };
   const next: Settlement = {
     ...s,
     stores: { ...s.stores, materials: s.stores.materials - cost },
     buildings: [...s.buildings, building],
-    jobs: byRover ? [...s.jobs, buildJob(s, type, tx, ty, false, t)] : s.jobs,
+    jobs: byRover && !waits ? [...s.jobs, buildJob(s, type, tx, ty, false, 1, t)] : s.jobs,
+    buildQueue: waits ? [...s.buildQueue, { tile: tileKey(tx, ty), upgrade: false, paid: cost }] : s.buildQueue,
   };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
@@ -472,16 +481,21 @@ export function upgradeBuilding(state: SimState, settlementId: string, tx: numbe
   const top = maxLevel(b.type, t);
   if (b.level >= top) return refuse(`the ${def.name} is at its highest level (${top})`);
   const corner = tileKey(b.tx, b.ty);
-  if (s.jobs.some((j) => j.kind === "build" && j.tile === corner)) return refuse(`the ${def.name} is ${constructionOf(s).has(corner) ? "still being built" : "already being upgraded"}`);
+  if (s.jobs.some((j) => j.kind === "build" && j.tile === corner) || s.buildQueue.some((q) => q.tile === corner)) {
+    const why = constructionOf(s).has(corner) ? "still being built" : s.buildQueue.some((q) => q.tile === corner && q.upgrade) ? "waiting for a rover to upgrade it" : "already being upgraded";
+    return refuse(`the ${def.name} is ${why}`);
+  }
   const cost = charged(def.cost(t), t);
   if (s.stores.materials < cost) return refuse(`an upgrade needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
   const byRover = t.BUILD_TIME_ENABLED > 0 && garage(s) !== null;
-  if (byRover && roversOut(s) >= roverCount(s, t)) return refuse(`all ${roverCount(s, t)} rovers are out - an upgrade needs one`);
+  // Every rover out (Batch 28): the upgrade waits its turn; the building runs at its level meanwhile.
+  const waits = byRover && (roversOut(s) >= roverCount(s, t) || s.buildQueue.length > 0);
   const next: Settlement = {
     ...s,
     stores: { ...s.stores, materials: s.stores.materials - cost },
     buildings: byRover ? s.buildings : s.buildings.map((x, i) => (i === index ? { ...x, level: x.level + 1 } : x)),
-    jobs: byRover ? [...s.jobs, buildJob(s, b.type, b.tx, b.ty, true, t)] : s.jobs,
+    jobs: byRover && !waits ? [...s.jobs, buildJob(s, b.type, b.tx, b.ty, true, b.level + 1, t)] : s.jobs,
+    buildQueue: waits ? [...s.buildQueue, { tile: corner, upgrade: true, paid: cost }] : s.buildQueue,
   };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
@@ -498,8 +512,16 @@ export function removeBuilding(state: SimState, settlementId: string, tx: number
   if (index < 0) return { state, ok: false, reason: "there is no building there" };
   if (!BUILDING_DEFS[s.buildings[index]!.type].buildable) return { state, ok: false, reason: `the ${BUILDING_DEFS[s.buildings[index]!.type].name} cannot be removed` };
   // A building still going up, or being upgraded, calls its rover home: the job goes with it.
+  // One still waiting for a rover never started: what was paid for it comes back (Batch 28).
   const corner = tileKey(s.buildings[index]!.tx, s.buildings[index]!.ty);
-  const next: Settlement = { ...s, buildings: s.buildings.filter((_, i) => i !== index), jobs: s.jobs.filter((j) => !(j.kind === "build" && j.tile === corner)) };
+  const refund = s.buildQueue.filter((q) => q.tile === corner).reduce((n, q) => n + q.paid, 0);
+  const next: Settlement = {
+    ...s,
+    stores: refund > 0 ? { ...s.stores, materials: s.stores.materials + refund } : s.stores,
+    buildings: s.buildings.filter((_, i) => i !== index),
+    jobs: s.jobs.filter((j) => !(j.kind === "build" && j.tile === corner)),
+    buildQueue: s.buildQueue.filter((q) => q.tile !== corner),
+  };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
 
@@ -584,6 +606,7 @@ export function shiftContent(s: Settlement, dx: number, dy: number): Settlement 
     rails: s.rails.map(move),
     zones: s.zones.map((z) => ({ ...z, tiles: z.tiles.map(move) })),
     levelQueue: s.levelQueue.map((q) => ({ ...q, tile: move(q.tile) })),
+    buildQueue: s.buildQueue.map((q) => ({ ...q, tile: move(q.tile) })),
     planned: s.planned.map((p) => ({ ...p, tile: move(p.tile) })),
     grades: s.grades.map((g) => ({ ...g, tile: move(g.tile) })),
     jobs: s.jobs.map((job) => ({ ...job, tile: move(job.tile) })),
@@ -818,6 +841,59 @@ function levelJob(s: Settlement, tx: number, ty: number, t: Tuning, to?: number)
   const years = roverYears(s, tx, ty, "none", t) - t.ROVER_WORK_YEARS_LOOSE + work;
   const materials = rock === "crag" ? t.ROCK_CRAG_MATERIALS : rock === "loose" ? t.ROCK_LOOSE_MATERIALS : 0;
   return { job: { kind: "rover", tile: key, materials, work, total: years, remaining: years, levelM: level }, reason: null };
+}
+
+/**
+ * Batch 28's build queue, a substep's turn: a rover out to the next build or
+ * upgrade whenever one is free, in the order the player left them. Builds go
+ * before levelling: they are what the player paid for.
+ */
+function sendBuilders(s: Settlement, t: Tuning): Settlement {
+  if (s.buildQueue.length === 0 || garage(s) === null) return s;
+  let jobs = s.jobs;
+  let k = 0;
+  const free = (): boolean => jobs.filter((j) => j.kind === "rover" || j.kind === "build").length < roverCount(s, t);
+  for (; k < s.buildQueue.length && free(); k += 1) {
+    const q = s.buildQueue[k]!;
+    const b = s.buildings.find((x) => tileKey(x.tx, x.ty) === q.tile);
+    // Its building gone meanwhile: nothing to send a rover to.
+    if (b === undefined) continue;
+    jobs = [...jobs, buildJob(s, b.type, b.tx, b.ty, q.upgrade, q.upgrade ? b.level + 1 : 1, t)];
+  }
+  return k === 0 ? s : { ...s, jobs, buildQueue: s.buildQueue.slice(k) };
+}
+
+/** Move a waiting build from place `from` in the queue to place `to` (Batch 28: "reorderable"). */
+export function moveQueuedBuild(state: SimState, settlementId: string, from: number, to: number): PlaceOutcome {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
+  const n = s.buildQueue.length;
+  if (!(Number.isInteger(from) && from >= 0 && from < n)) return { state, ok: false, reason: `there is no build ${from + 1} waiting` };
+  const target = Math.max(0, Math.min(n - 1, Math.round(to)));
+  if (target === from) return { state, ok: false, reason: "it is there already" };
+  const queue = [...s.buildQueue];
+  const [item] = queue.splice(from, 1);
+  queue.splice(target, 0, item!);
+  return { state: withSettlement(state, settlementId, { ...s, buildQueue: queue }), ok: true, reason: null };
+}
+
+/**
+ * Cancel a waiting build (Batch 28: "cancellable, with a refund"): what was
+ * paid comes back in full - no rover went out. A new building's worksite
+ * goes with it; an upgrade leaves the building as it is.
+ */
+export function cancelQueuedBuild(state: SimState, settlementId: string, index: number): PlaceOutcome {
+  const s = state.settlements.find((x) => x.id === settlementId);
+  if (s === undefined) return { state, ok: false, reason: `there is no settlement ${settlementId}` };
+  const q = s.buildQueue[index];
+  if (q === undefined) return { state, ok: false, reason: `there is no build ${index + 1} waiting` };
+  const next: Settlement = {
+    ...s,
+    stores: { ...s.stores, materials: s.stores.materials + q.paid },
+    buildings: q.upgrade ? s.buildings : s.buildings.filter((b) => tileKey(b.tx, b.ty) !== q.tile),
+    buildQueue: s.buildQueue.filter((_, i) => i !== index),
+  };
+  return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
 
 /** The level queue's substep: a rover out to the next tile whenever one is free. */
@@ -1133,6 +1209,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   // The planner's work: drawn links built, zones levelled - and the record kept.
   let next: Settlement = { ...s, stores, population, jobs, cleared, grades, buildings: built };
   next = buildPlanned(next, t, h);
+  next = sendBuilders(next, t);
   next = sendLevellers(next, t);
   next = { ...next, history: record(s.history, { births: birthsNow, deaths: deathsNow, short: MICRO_RESOURCES.map((r) => (shortAny.has(r) ? 1 : 0)), net: MICRO_RESOURCES.map((r) => prod[r] - cons[r]), stores: MICRO_RESOURCES.map((r) => next.stores[r]), population: next.population, housing: isCityKind(s.kind) ? housing(next, t) : 0 }, t) };
   return { next, research, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };

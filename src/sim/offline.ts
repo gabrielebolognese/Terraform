@@ -34,6 +34,9 @@ import type { Tuning } from "./tuning.js";
 import type { Phase, SimState } from "./types.js";
 import { NEUTRAL_ENV, PHASE_ORDER } from "./types.js";
 import { PHASE_INFO } from "./phase.js";
+import { BUILDING_DEFS } from "./micro/buildings.js";
+import { constructionOf } from "./micro/settlement.js";
+import { tileKey } from "./micro/space.js";
 
 export type GrantLimit = "none" | "absence-cap" | "work-cap";
 
@@ -100,8 +103,55 @@ export interface AwaySummary {
   /** Milestones crossed while away, in order. Usually empty; that is fine. */
   readonly phasesGained: readonly Phase[];
   readonly deltas: AwayDeltas;
+  /**
+   * The cities' building while away (Batch 28: "the reactor reached level 4,
+   * the mega mall is half built"), most telling first. Empty when nothing was
+   * being built.
+   */
+  readonly builds: readonly string[];
   /** One line for the player, picking whatever actually changed most. */
   readonly headline: string;
+}
+
+/** How far a build is, in the words a player uses. */
+function share(done: number): string {
+  if (done >= 0.9) return "nearly built";
+  if (done >= 0.7) return "three quarters built";
+  if (done >= 0.45) return "half built";
+  if (done >= 0.2) return "a quarter built";
+  return "begun";
+}
+
+/**
+ * What the cities built while the player was away: a building finished, a
+ * level reached, and how far what is still under way has got. Compared on
+ * true state - the buildings and the jobs - never on anything stored about it.
+ */
+export function buildsWhileAway(before: SimState, after: SimState): string[] {
+  const done: string[] = [];
+  const going: string[] = [];
+  for (const s of after.settlements) {
+    const was = before.settlements.find((x) => x.id === s.id);
+    if (was === undefined || s.lostAtSeaLevelM !== null) continue;
+    const building = constructionOf(s);
+    const wasBuilding = constructionOf(was);
+    // By corner tile: a metropolis has tens of thousands of buildings, so never a search per building.
+    const had = new Map(was.buildings.map((b) => [tileKey(b.tx, b.ty), b]));
+    const now = new Map(s.buildings.map((b) => [tileKey(b.tx, b.ty), b]));
+    for (const [key, b] of now) {
+      const old = had.get(key);
+      const name = BUILDING_DEFS[b.type].name.toLowerCase();
+      if (old !== undefined && old.type === b.type && b.level > old.level) done.push(`the ${name} reached level ${b.level}`);
+      else if (wasBuilding.has(key) && !building.has(key)) done.push(`the ${name} was finished`);
+    }
+    for (const j of s.jobs) {
+      if (j.kind !== "build" || j.upgrade) continue;
+      const b = now.get(j.tile);
+      const d = building.get(j.tile);
+      if (b !== undefined && d !== undefined) going.push(`the ${BUILDING_DEFS[b.type].name.toLowerCase()} is ${share(d)}`);
+    }
+  }
+  return [...done, ...going];
 }
 
 /**
@@ -138,7 +188,13 @@ export function summariseAway(before: SimState, after: SimState, t: Tuning): Awa
       .reduce((n, s) => n + Math.max(0, (before.settlements.find((x) => x.id === s.id)?.buildings.length ?? 0) - s.buildings.length), 0),
   };
 
-  return { simYears, phasesGained, deltas, headline: headlineFor(simYears, phasesGained, deltas) };
+  const builds = buildsWhileAway(before, after);
+  const planet = headlineFor(simYears, phasesGained, deltas);
+  // The planet's line, then the builds: at most three, and how many more.
+  const shown = builds.slice(0, 3);
+  const more = builds.length - shown.length;
+  const line = shown.length === 0 ? "" : ` In the cities, ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}.`;
+  return { simYears, phasesGained, deltas, builds, headline: planet + line };
 }
 
 function headlineFor(simYears: number, phasesGained: readonly Phase[], d: AwayDeltas): string {

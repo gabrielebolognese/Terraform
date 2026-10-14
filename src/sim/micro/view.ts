@@ -270,7 +270,7 @@ export function* prepareCity(s: Settlement, t: Tuning): Generator<number, void> 
 }
 
 export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityView {
-  const step = settlementStep(s, env, t, t.SUBSTEP_YEARS);
+  const step = settlementStep(s, env, t, t.SUBSTEP_YEARS * t.CITY_CLOCK);
   const home = housing(s, t);
   const powerLoad = step.production.power > 0 ? Math.min(1, step.consumption.power / step.production.power) : 0;
   const occupancy = home > 0 ? Math.min(1, s.population / home) : 0;

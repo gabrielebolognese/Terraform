@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 13;
+  readonly schemaVersion: 14;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -435,6 +435,12 @@ export interface Settlement {
   readonly zones: readonly Zone[];
   /** Tiles waiting for a rover to level them, in order: one goes out whenever a rover is free. */
   readonly levelQueue: readonly QueuedLevel[];
+  /**
+   * Builds and upgrades waiting for a rover (Batch 28), in order: the next
+   * goes out whenever one is free. A new building waiting here already
+   * stands as a worksite, paid for; it does not run until its rover is done.
+   */
+  readonly buildQueue: readonly QueuedBuild[];
   /** Corridors, cables and rails drawn in the planner, built in order as materials and crews allow. */
   readonly planned: readonly PlannedLink[];
   /** The city's record, for the planner's charts: what has happened, a sample a year. */
@@ -448,6 +454,13 @@ export interface Zone {
   readonly colour: string;
   /** Sorted tile keys. */
   readonly tiles: readonly number[];
+}
+
+/** A build waiting for a rover: the building whose corner is `tile`, new or raised a level, and what was paid (refunded if it is cancelled). */
+export interface QueuedBuild {
+  readonly tile: number;
+  readonly upgrade: boolean;
+  readonly paid: number;
 }
 
 /** A tile waiting for a rover, and the level it is to be brought to, metres (a zone is one plane). */

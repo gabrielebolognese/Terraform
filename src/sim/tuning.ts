@@ -1038,6 +1038,57 @@ export const BASE_TUNING = Object.freeze({
   BUILD_YEARS_PARK: 0.1,
   BUILD_YEARS_BIOSPHERE: 1.5,
   /**
+   * Real build times (Batch 28: "we start with a few dozen seconds and
+   * minutes, but as structures get bigger or upgrades get bigger, there should
+   * be more and more time"). With BUILD_CURVE_ENABLED, the work at the site
+   * for level L is BUILD_SECONDS_<TYPE> x BUILD_GROWTH_<TIER>^(L - 1) real
+   * seconds at 1x, in place of BUILD_YEARS_<TYPE> for every level. OFF (0) by
+   * default and in every world made before Batch 28; the Standard pace turns
+   * it on. Small things grow fastest per level (a depot: 20 s to about 20 min
+   * at level 8), the great structures slowest (a mega mall: 1 h to about 8 h).
+   */
+  BUILD_CURVE_ENABLED: 0,
+  BUILD_GROWTH_SMALL: 1.8,
+  BUILD_GROWTH_MEDIUM: 1.72,
+  BUILD_GROWTH_GREAT: 1.35,
+  BUILD_SECONDS_STORAGE_DEPOT: 20,
+  BUILD_SECONDS_SOLAR_ARRAY: 30,
+  BUILD_SECONDS_REGOLITH_MINE: 30,
+  BUILD_SECONDS_WATER_TANK: 30,
+  BUILD_SECONDS_BATTERY_BANK: 30,
+  BUILD_SECONDS_FREEZER: 30,
+  BUILD_SECONDS_PARK: 40,
+  BUILD_SECONDS_ROVER_POST: 60,
+  BUILD_SECONDS_MATERIALS_DEPOT: 60,
+  BUILD_SECONDS_WIND_TURBINE: 60,
+  BUILD_SECONDS_WATER_EXTRACTOR: 60,
+  BUILD_SECONDS_GREENHOUSE: 60,
+  BUILD_SECONDS_ALGAE_REACTOR: 60,
+  BUILD_SECONDS_ATMOSPHERE_PROCESSOR: 90,
+  BUILD_SECONDS_HABITAT_DOME: 120,
+  BUILD_SECONDS_GEOTHERMAL_PLANT: 120,
+  BUILD_SECONDS_LABORATORY: 180,
+  BUILD_SECONDS_REACTOR: 240,
+  BUILD_SECONDS_SPACEPORT: 900,
+  BUILD_SECONDS_SKYSCRAPER: 1200,
+  BUILD_SECONDS_MEDICAL_CENTER: 1200,
+  BUILD_SECONDS_OBSERVATORY: 1800,
+  BUILD_SECONDS_STATION: 1800,
+  BUILD_SECONDS_RESEARCH_FORUM: 1800,
+  BUILD_SECONDS_INDUSTRIAL_COMMAND: 1800,
+  BUILD_SECONDS_BIOSPHERE: 2700,
+  BUILD_SECONDS_MEGA_MALL: 3600,
+  /**
+   * The cities' clock against the planet's (Batch 28): sim-years a settlement
+   * lives through for each sim-year of the planet. One clock still - each
+   * planet substep steps every city by exactly CITY_CLOCK substeps' worth -
+   * so offline catch-up stays exact. At 1 (the default, and every world made
+   * before Batch 28) the two run together. The Standard pace slows the
+   * planet eightfold and sets 8, so the cities keep the real-time rhythm
+   * they had: a rocket's trip is still a real minute.
+   */
+  CITY_CLOCK: 1,
+  /**
    * Railways between settlements (at the user's request: "interconnected
    * cities"). Off by default: they move stores from city to city, which would
    * perturb the balanced worlds; the browser turns them on. Laid for
@@ -1195,6 +1246,11 @@ export function validateTuning(t: Tuning): void {
     if (!(t[k] > 0)) fail(`${k} must be > 0`);
   }
   if (!(t.LEVEL_BONUS >= 0)) fail("LEVEL_BONUS must be >= 0");
+  if (t.BUILD_CURVE_ENABLED !== 0 && t.BUILD_CURVE_ENABLED !== 1) fail("BUILD_CURVE_ENABLED must be 0 or 1");
+  // Strictly above 1: each level must take longer than the one before (Batch 28).
+  for (const k of ["BUILD_GROWTH_SMALL", "BUILD_GROWTH_MEDIUM", "BUILD_GROWTH_GREAT"] as const) if (!(t[k] > 1)) fail(`${k} must be > 1`);
+  for (const k of TUNING_SCALAR_KEYS) if (k.startsWith("BUILD_SECONDS_") && !(t[k] > 0)) fail(`${k} must be > 0`);
+  if (!(t.CITY_CLOCK > 0)) fail("CITY_CLOCK must be > 0");
   for (const k of ["MAX_LEVEL_HABITAT_DOME", "MAX_LEVEL_REGOLITH_MINE", "MAX_LEVEL_OTHER"] as const) if (!(Number.isInteger(t[k]) && t[k] >= 1)) fail(`${k} must be a whole number >= 1`);
   if (!(t.ROCKET_TRIP_YEARS > 0)) fail("ROCKET_TRIP_YEARS must be > 0");
   if (!(t.ROCK_LOOSE_SHARE >= 0 && t.ROCK_LOOSE_SHARE <= 1)) fail("ROCK_LOOSE_SHARE must be in [0, 1]");

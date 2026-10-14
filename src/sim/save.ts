@@ -65,7 +65,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 13;
+export const SAVE_SCHEMA_VERSION = 14;
 
 export interface SavedFacility {
   readonly type: string;
@@ -159,6 +159,8 @@ export interface SavedSettlement {
   readonly level_queue?: readonly { readonly tile: number; readonly level_m: number }[];
   readonly planned?: readonly { readonly layer: string; readonly tile: number }[];
   readonly history?: Record<string, unknown>;
+  /** Added in v14 (real build times): builds and upgrades waiting for a rover, `{ tile, upgrade, paid }`. */
+  readonly build_queue?: readonly { readonly tile: number; readonly upgrade: boolean; readonly paid: number }[];
 }
 
 /**
@@ -246,6 +248,7 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       name: s.name,
       zones: s.zones.map((z) => ({ id: z.id, name: z.name, colour: z.colour, tiles: [...z.tiles] })),
       level_queue: s.levelQueue.map((q) => ({ tile: q.tile, level_m: q.levelM })),
+      build_queue: s.buildQueue.map((q) => ({ tile: q.tile, upgrade: q.upgrade, paid: q.paid })),
       planned: s.planned.map((p) => ({ layer: p.layer, tile: p.tile })),
       history: { acc: { ...s.history.acc, short: [...s.history.acc.short], net: [...s.history.acc.net] }, taken: s.history.taken, samples: s.history.samples.map((x) => ({ ...x, short: [...x.short], stores: [...x.stores], net: [...x.net] })) },
     })),
@@ -335,7 +338,16 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 11) current = migrateV10toV11(current);
   if (version < 12) current = migrateV11toV12(current);
   if (version < 13) current = { ...current, schema_version: 13, routes: [] };
+  if (version < 14) current = migrateV13toV14(current);
   return current;
+}
+
+/** v13 -> v14: the build queue (real build times). Nothing waited: a build with no rover free was refused. */
+function migrateV13toV14(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  if (!Array.isArray(list)) return { ...save, schema_version: 14 };
+  const settlements = list.map((raw) => (typeof raw !== "object" || raw === null ? raw : { ...(raw as Record<string, unknown>), build_queue: [] }));
+  return { ...save, schema_version: 14, settlements };
 }
 
 /** v13: railways between settlements - each between two settlements that exist, once, with a length. */
@@ -773,7 +785,7 @@ function readGrades(s: Record<string, unknown>, where: string): readonly Grade[]
  * one; the record's numbers must be finite. A record missing (from v11) is
  * an empty one.
  */
-function readPlanner(s: Record<string, unknown>, where: string): Pick<Settlement, "name" | "zones" | "levelQueue" | "planned" | "history"> {
+function readPlanner(s: Record<string, unknown>, where: string): Pick<Settlement, "name" | "zones" | "levelQueue" | "buildQueue" | "planned" | "history"> {
   const nameRaw = s["name"];
   if (typeof nameRaw !== "string") throw new SaveError(`${where}.name must be a string, got ${describe(nameRaw)}`);
   const zones = asArray(s["zones"], `${where}.zones`).map((raw, j) => {
@@ -794,6 +806,17 @@ function readPlanner(s: Record<string, unknown>, where: string): Pick<Settlement
     const tile = numberAt(q, "tile", `${at}.tile`);
     if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
     return { tile, levelM: numberAt(q, "level_m", `${at}.level_m`) };
+  });
+  const buildQueue = asArray(s["build_queue"], `${where}.build_queue`).map((raw, j) => {
+    const at = `${where}.build_queue[${j}]`;
+    const q = asRecord(raw, at);
+    const tile = numberAt(q, "tile", `${at}.tile`);
+    if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
+    const upgrade = q["upgrade"];
+    if (typeof upgrade !== "boolean") throw new SaveError(`${at}.upgrade must be true or false, got ${describe(upgrade)}`);
+    const paid = numberAt(q, "paid", `${at}.paid`);
+    if (!(paid >= 0)) throw new SaveError(`${at}.paid must be >= 0, got ${paid}`);
+    return { tile, upgrade, paid };
   });
   const planned = asArray(s["planned"], `${where}.planned`).map((raw, j) => {
     const at = `${where}.planned[${j}]`;
@@ -835,7 +858,7 @@ function readPlanner(s: Record<string, unknown>, where: string): Pick<Settlement
       samples,
     };
   }
-  return { name: nameRaw.slice(0, NAME_MAX), zones, levelQueue, planned, history };
+  return { name: nameRaw.slice(0, NAME_MAX), zones, levelQueue, buildQueue, planned, history };
 }
 
 /** Claimed chunks: whole, distinct chunk keys. Whether they touch is not the save's to judge - a retune of the chunk size would break it. */

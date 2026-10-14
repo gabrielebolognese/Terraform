@@ -101,8 +101,106 @@ export function maxLevel(type: BuildingType, t: Tuning): number {
   return type === "habitat_dome" ? t.MAX_LEVEL_HABITAT_DOME : type === "regolith_mine" ? t.MAX_LEVEL_REGOLITH_MINE : t.MAX_LEVEL_OTHER;
 }
 
-/** How long a rover takes to build (or raise a level of) a type at its site, sim-years. */
-export function buildYears(type: BuildingType, t: Tuning): number {
+/** Batch 28's tiers: how fast a type's build time grows from level to level. */
+export type BuildTier = "small" | "medium" | "great";
+
+export const BUILD_TIER: Readonly<Record<BuildingType, BuildTier>> = {
+  storage_depot: "small",
+  solar_array: "small",
+  regolith_mine: "small",
+  water_tank: "small",
+  battery_bank: "small",
+  freezer: "small",
+  park: "small",
+  rover_post: "small",
+  materials_depot: "small",
+  wind_turbine: "small",
+  water_extractor: "medium",
+  greenhouse: "medium",
+  algae_reactor: "medium",
+  atmosphere_processor: "medium",
+  habitat_dome: "medium",
+  geothermal_plant: "medium",
+  laboratory: "medium",
+  reactor: "medium",
+  spaceport: "great",
+  skyscraper: "great",
+  medical_center: "great",
+  observatory: "great",
+  station: "great",
+  research_forum: "great",
+  industrial_command: "great",
+  biosphere: "great",
+  mega_mall: "great",
+  headquarters: "great",
+};
+
+/** Level 1's work at the site, real seconds at 1x (Batch 28's curve). */
+export function buildBaseSeconds(type: BuildingType, t: Tuning): number {
+  const seconds: Readonly<Record<BuildingType, number>> = {
+    storage_depot: t.BUILD_SECONDS_STORAGE_DEPOT,
+    solar_array: t.BUILD_SECONDS_SOLAR_ARRAY,
+    regolith_mine: t.BUILD_SECONDS_REGOLITH_MINE,
+    water_tank: t.BUILD_SECONDS_WATER_TANK,
+    battery_bank: t.BUILD_SECONDS_BATTERY_BANK,
+    freezer: t.BUILD_SECONDS_FREEZER,
+    park: t.BUILD_SECONDS_PARK,
+    rover_post: t.BUILD_SECONDS_ROVER_POST,
+    materials_depot: t.BUILD_SECONDS_MATERIALS_DEPOT,
+    wind_turbine: t.BUILD_SECONDS_WIND_TURBINE,
+    water_extractor: t.BUILD_SECONDS_WATER_EXTRACTOR,
+    greenhouse: t.BUILD_SECONDS_GREENHOUSE,
+    algae_reactor: t.BUILD_SECONDS_ALGAE_REACTOR,
+    atmosphere_processor: t.BUILD_SECONDS_ATMOSPHERE_PROCESSOR,
+    habitat_dome: t.BUILD_SECONDS_HABITAT_DOME,
+    geothermal_plant: t.BUILD_SECONDS_GEOTHERMAL_PLANT,
+    laboratory: t.BUILD_SECONDS_LABORATORY,
+    reactor: t.BUILD_SECONDS_REACTOR,
+    spaceport: t.BUILD_SECONDS_SPACEPORT,
+    skyscraper: t.BUILD_SECONDS_SKYSCRAPER,
+    medical_center: t.BUILD_SECONDS_MEDICAL_CENTER,
+    observatory: t.BUILD_SECONDS_OBSERVATORY,
+    station: t.BUILD_SECONDS_STATION,
+    research_forum: t.BUILD_SECONDS_RESEARCH_FORUM,
+    industrial_command: t.BUILD_SECONDS_INDUSTRIAL_COMMAND,
+    biosphere: t.BUILD_SECONDS_BIOSPHERE,
+    mega_mall: t.BUILD_SECONDS_MEGA_MALL,
+    headquarters: t.BUILD_SECONDS_SPACEPORT,
+  };
+  return seconds[type];
+}
+
+/** How much longer each level takes than the one before. */
+export function buildGrowth(type: BuildingType, t: Tuning): number {
+  const tier = BUILD_TIER[type];
+  return tier === "small" ? t.BUILD_GROWTH_SMALL : tier === "medium" ? t.BUILD_GROWTH_MEDIUM : t.BUILD_GROWTH_GREAT;
+}
+
+/** Real seconds at 1x a settlement's sim-year lasts: the planet's clock times the cities' (Batch 28). */
+export function citySecondsPerYear(t: Tuning): number {
+  return 1 / (t.TIME_SCALE * t.CITY_CLOCK);
+}
+
+/**
+ * Level `level`'s work at the site, real seconds at 1x: the curve,
+ * `BASE x GROWTH^(level - 1)`. What the player is told, and what the
+ * simulation is given in its own years.
+ */
+export function buildSeconds(type: BuildingType, level: number, t: Tuning): number {
+  return buildBaseSeconds(type, t) * buildGrowth(type, t) ** Math.max(0, level - 1);
+}
+
+/**
+ * How long a rover takes to build `level` of a type at its site - level 1 is
+ * the building, every level after an upgrade to it - in the settlement's
+ * sim-years. With the curve off, every level takes the type's BUILD_YEARS.
+ */
+export function buildYears(type: BuildingType, t: Tuning, level = 1): number {
+  if (t.BUILD_CURVE_ENABLED) return buildSeconds(type, level, t) / citySecondsPerYear(t);
+  return flatBuildYears(type, t);
+}
+
+function flatBuildYears(type: BuildingType, t: Tuning): number {
   const years: Readonly<Record<BuildingType, number>> = {
     habitat_dome: t.BUILD_YEARS_HABITAT_DOME,
     solar_array: t.BUILD_YEARS_SOLAR_ARRAY,
