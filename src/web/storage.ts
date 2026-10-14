@@ -15,13 +15,53 @@
 import type { SaveFile, SaveStore } from "../sim/index.js";
 
 const DB_NAME = "terraform";
-const DB_VERSION = 1;
+/** v2 (Batch 27): a second object store, for the worlds' index. v1's saves are untouched. */
+const DB_VERSION = 2;
 const STORE = "saves";
+const META = "meta";
+
+/**
+ * The worlds' index (Batch 27): small, kept apart from the saves so the
+ * worlds list opens without loading a world. Untrusted like a save - the
+ * reader validates it.
+ */
+export interface IndexStore {
+  loadMeta(key: string): Promise<unknown | null>;
+  saveMeta(key: string, value: unknown): Promise<void>;
+}
+
+export type GameStore = SaveStore & IndexStore;
 
 /** A store that forgets everything on reload, used when the browser has no durable option. */
-export class MemorySaveStore implements SaveStore {
+export class MemorySaveStore implements GameStore {
   readonly durable: boolean;
   private readonly slots = new Map<string, string>();
+  private readonly meta = new Map<string, string>();
+
+  loadMeta(key: string): Promise<unknown | null> {
+    const raw = this.meta.get(key);
+    return Promise.resolve(raw === undefined ? null : (JSON.parse(raw) as unknown));
+  }
+
+  saveMeta(key: string, value: unknown): Promise<void> {
+    this.meta.set(key, JSON.stringify(value));
+    return Promise.resolve();
+  }
+
+  /** Tests: write a raw value into a slot, as a corrupt or future save would sit on disk. */
+  putRaw(slot: string, value: unknown): void {
+    this.slots.set(slot, JSON.stringify(value));
+  }
+
+  /** Tests: every slot holding something. */
+  slotNames(): string[] {
+    return [...this.slots.keys()];
+  }
+
+  /** Tests: the slot exactly as stored, or undefined. */
+  raw(slot: string): string | undefined {
+    return this.slots.get(slot);
+  }
 
   constructor(durable = false) {
     this.durable = durable;
@@ -45,28 +85,36 @@ export class MemorySaveStore implements SaveStore {
   }
 }
 
-class IndexedDbSaveStore implements SaveStore {
+class IndexedDbSaveStore implements GameStore {
   readonly durable = true;
 
   constructor(private readonly db: IDBDatabase) {}
 
   load(slot: string): Promise<unknown | null> {
-    return this.run("readonly", (store) => store.get(slot)).then((value) => value ?? null);
+    return this.run(STORE, "readonly", (store) => store.get(slot)).then((value) => value ?? null);
   }
 
   save(slot: string, data: SaveFile): Promise<void> {
-    return this.run("readwrite", (store) => store.put(data, slot)).then(() => undefined);
+    return this.run(STORE, "readwrite", (store) => store.put(data, slot)).then(() => undefined);
   }
 
   clear(slot: string): Promise<void> {
-    return this.run("readwrite", (store) => store.delete(slot)).then(() => undefined);
+    return this.run(STORE, "readwrite", (store) => store.delete(slot)).then(() => undefined);
   }
 
-  private run<T>(mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  loadMeta(key: string): Promise<unknown | null> {
+    return this.run(META, "readonly", (store) => store.get(key)).then((value) => value ?? null);
+  }
+
+  saveMeta(key: string, value: unknown): Promise<void> {
+    return this.run(META, "readwrite", (store) => store.put(value, key)).then(() => undefined);
+  }
+
+  private run<T>(name: string, mode: IDBTransactionMode, work: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       let request: IDBRequest<T>;
       try {
-        request = work(this.db.transaction(STORE, mode).objectStore(STORE));
+        request = work(this.db.transaction(name, mode).objectStore(name));
       } catch (error) {
         // A transaction can throw synchronously - the database was closed by
         // the browser, or storage was cleared mid-session.
@@ -85,12 +133,12 @@ class IndexedDbSaveStore implements SaveStore {
  * Never rejects. A game that cannot save is still a game; a game that refuses
  * to start because it cannot save is not.
  */
-export function openSaveStore(): Promise<SaveStore> {
+export function openSaveStore(): Promise<GameStore> {
   if (typeof indexedDB === "undefined") {
     return Promise.resolve(new MemorySaveStore());
   }
 
-  return new Promise<SaveStore>((resolve) => {
+  return new Promise<GameStore>((resolve) => {
     let settled = false;
     const fallback = (): void => {
       if (!settled) {
@@ -110,6 +158,7 @@ export function openSaveStore(): Promise<SaveStore> {
     request.onupgradeneeded = () => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
+      if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
     };
     request.onsuccess = () => {
       if (settled) return;

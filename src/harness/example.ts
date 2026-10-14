@@ -511,11 +511,14 @@ export const EXAMPLE_NAMES: readonly string[] = [
  * The example planet. `physics` runs the playthrough (the calibrated default);
  * `game` is the tuning the settlements are built under (the browser's).
  */
-export function examplePlanet(physics: Tuning, game: Tuning): ExamplePlanet {
+export function examplePlanet(physics: Tuning, game: Tuning, seed: number | null = null): ExamplePlanet {
+  // A world's seed (Batch 27, "Terraformed start") chooses its weather and where its settlements stand; the
+  // terrain it stands on is the game tuning's TERRAIN_SEED. Without one, the example everyone sees.
   let state = terraformedMars(physics);
+  if (seed !== null) state = { ...state, seed };
   const d = derive(state.reservoirs, worldEnv(state, NEUTRAL_ENV, game), game);
   const env: HabitatChannels = habitat(state.reservoirs, d, game, liquidWaterRate(nextSubstepFlows(state, { tuning: game, env: NEUTRAL_ENV, forcing: null })));
-  const rnd = lcg(20260924);
+  const rnd = lcg(seed ?? 20260924);
 
   // Sizes from very small to very large, then the three metropolises.
   const citySizes = [1, 1, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 8, 9, 10, 12, 14, 16, 18, 22, 26];
