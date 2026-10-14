@@ -11,7 +11,7 @@ import { NEUTRAL_ENV, advance, buildFacility, foundSettlement, makeTuning, marsS
 import { REFERENCE_POLICY, applyOrdersDue } from "../harness/policy.js";
 import { boot } from "./session.js";
 import { MemorySaveStore } from "./storage.js";
-import { BROWSER_OVERRIDES, BROWSER_TUNING, PACE_OVERRIDES } from "./game-tuning.js";
+import { BROWSER_OVERRIDES, BROWSER_TUNING, NEW_WORLD_OVERRIDES, PACE_OVERRIDES } from "./game-tuning.js";
 import type { NewWorld } from "./worlds.js";
 import { LEGACY_NAME, LEGACY_SLOT, WorldLibrary, parseSeed } from "./worlds.js";
 
@@ -171,8 +171,9 @@ describe("a seed makes a world", () => {
     expect(standard.tuning["SANDBOX_ENABLED"]).toBe(0);
     expect(sandbox.tuning["SANDBOX_ENABLED"]).toBe(1);
     expect(standard.tuning["TERRAIN_SEED"]).toBe(9);
-    // The rest of a standard world's tuning is the browser's own, at the pace it was made with (Batch 28).
-    expect({ ...standard.tuning, TERRAIN_SEED: 0 }).toEqual({ ...makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES.standard }) });
+    // The rest of a standard world's tuning is the browser's own, at the pace it was made with (Batch 28), with what
+    // every world made since has (Batch 29: the rovers' routes).
+    expect({ ...standard.tuning, TERRAIN_SEED: 0 }).toEqual({ ...makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES, ...PACE_OVERRIDES.standard }) });
     expect(standard.pace).toBe("standard");
   });
 

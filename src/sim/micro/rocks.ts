@@ -15,7 +15,7 @@
 import type { Tuning } from "../tuning.js";
 import type { Grade, PlacedBuilding, Settlement } from "../types.js";
 import { BUILDING_DEFS, keySet, tilesUnder } from "./buildings.js";
-import { frameOf, keyTile, tileKey } from "./space.js";
+import { TILE_STRIDE, frameOf, keyTile, tileKey } from "./space.js";
 import type { Ground, Rock } from "./terrain.js";
 import { groundOf, natureRock, placeSeed, prepareTerrain } from "./terrain.js";
 
@@ -162,16 +162,20 @@ export function rocksOf(s: Settlement, t: Tuning): readonly Rock[] {
   const hit = rocksKept.get(s.buildings);
   if (hit !== undefined && hit.ground === ground && hit.t === t && hit.cleared === s.cleared && hit.corridors === s.corridors && hit.cables === s.cables && hit.rails === s.rails) return hit.out;
   const n = ground.tiles;
-  const covered = new Set<number>([...s.cleared, ...s.corridors, ...s.cables, ...s.rails]);
+  const out = naturalRocks(s, ground, t).slice();
+  // Every tile built on, laid on or broken: no rock. Marked straight into the copy, a tile key read back as
+  // `keyTile` reads it - a set of half a million tiles, and an object for each, was a metropolis's longest step
+  // as it opened, and the step the collector made pay (Batch 29, measured).
+  const clear = (key: number): void => {
+    const tx = key % TILE_STRIDE;
+    const ty = Math.floor(key / TILE_STRIDE);
+    if (tx < n && ty < n) out[ty * n + tx] = "none";
+  };
+  for (const list of [s.cleared, s.corridors, s.cables, s.rails]) for (const key of list) clear(key);
   for (const b of s.buildings) {
     const size = BUILDING_DEFS[b.type].footprint;
     const depth = BUILDING_DEFS[b.type].depth;
-    for (let y = b.ty; y < b.ty + depth; y += 1) for (let x = b.tx; x < b.tx + size; x += 1) covered.add(tileKey(x, y));
-  }
-  const out = [...naturalRocks(s, ground, t)];
-  for (const key of covered) {
-    const { tx, ty } = keyTile(key);
-    if (tx < n && ty < n) out[ty * n + tx] = "none";
+    for (let y = b.ty; y < b.ty + depth; y += 1) for (let x = b.tx; x < b.tx + size; x += 1) clear(tileKey(x, y));
   }
   rocksKept.set(s.buildings, { ground, t, cleared: s.cleared, corridors: s.corridors, cables: s.cables, rails: s.rails, out });
   return out;
@@ -219,15 +223,4 @@ export function roverCount(s: Settlement, t: Tuning): number {
   return t.ROVERS_PER_HQ + s.buildings.filter((b) => b.type === "rover_post").length;
 }
 
-/**
- * How long a rover takes to break the rock on (tx, ty), in sim-years: out
- * from the headquarters, the work, and back. Straight-line distance - rovers
- * cross open ground.
- */
-export function roverYears(s: Settlement, tx: number, ty: number, rock: Rock, t: Tuning): number {
-  const from = garage(s);
-  if (from === null) return Infinity;
-  const distance = Math.hypot(tx + 0.5 - from.x, ty + 0.5 - from.y);
-  const work = rock === "crag" ? t.ROVER_WORK_YEARS_CRAG : t.ROVER_WORK_YEARS_LOOSE;
-  return 2 * distance * t.ROVER_YEARS_PER_TILE + work;
-}
+// How long a rover takes to break a rock - its drive, straight or along its route - is `roverYears` in drive.ts (Batch 29).

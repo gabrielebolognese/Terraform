@@ -10,7 +10,8 @@ import { describe, expect, it } from "vitest";
 import { flatten, referenceCity, renderCity } from "../harness/city-frames.js";
 import type { CityView, Rock } from "../sim/index.js";
 import type { CityQuality, CitySceneOptions } from "./city.js";
-import { BRIDGE_Z, cityLiveChunks, railDeck, resetSceneCache, trainLinesOf, trainsAt } from "./city.js";
+import { BRIDGE_Z, cityLiveChunks, railDeck, resetSceneCache, trainLapsOf, trainLinesOf, trainsAt } from "./city.js";
+import { TRAIN_CARS } from "./vehicles.js";
 import { frameDifference } from "./planet.js";
 
 const { view: reference } = referenceCity();
@@ -127,17 +128,20 @@ describe("trains", () => {
   // Round the grid's edge, a tile in: 30 a side, 116 tiles.
   const ring = laid(open, "rails", [...row(1, 1, 30), ...row(30, 1, 30), ...col(1, 2, 29), ...col(30, 2, 29)], "long ring");
 
-  it("run on each line, one to every 56 tiles of it, four cars each, and move along it", () => {
+  it("run on each line, one to every 56 tiles of it, five cars each, and move along it", () => {
     // The ring each way round: two loops of 116, two trains each.
     expect(trainLinesOf(ring).map((l) => l.tiles.length)).toEqual([116, 116]);
     const cars = (time: number) => [...trainsAt(ring, time).values()].flat();
-    expect(cars(0)).toHaveLength(2 * 2 * 4);
+    expect(cars(0)).toHaveLength(2 * 2 * TRAIN_CARS);
     // A second later every car is somewhere else, and a lap later where it began.
     const a = cars(0).map((c) => `${c.x.toFixed(3)},${c.y.toFixed(3)}`).sort();
     const b = cars(1).map((c) => `${c.x.toFixed(3)},${c.y.toFixed(3)}`).sort();
     expect(b.filter((p) => a.includes(p))).toEqual([]);
-    const lap = 116 / 2.2;
-    const c = cars(lap).map((car) => `${car.x.toFixed(3)},${car.y.toFixed(3)}`).sort();
+    // A lap later (Batch 29: slower round the four bends, so longer than 116 tiles at full speed) where it began.
+    const [lap, other] = trainLapsOf(ring);
+    expect(lap).toBe(other);
+    expect(lap!).toBeGreaterThan(116 / 2.2);
+    const c = cars(lap!).map((car) => `${car.x.toFixed(3)},${car.y.toFixed(3)}`).sort();
     expect(c).toEqual(a);
   });
 
@@ -146,11 +150,13 @@ describe("trains", () => {
     let over = 0;
     for (let time = 0; time < 60; time += 0.05) {
       for (const car of [...trainsAt(view, time).values()].flat()) {
-        if (Math.abs(car.x - 17.5) < 0.05 && (Math.abs(car.y - 1.5) < 0.05 || Math.abs(car.y - 30.5) < 0.05)) {
+        // Over the crossing's middle, on either track (Batch 29: each way runs off the line's middle).
+        if (Math.abs(car.x - 17.5) < 0.05 && (Math.floor(car.y) === 1 || Math.floor(car.y) === 30)) {
           over += 1;
-          // Within a twentieth of a tile of the crossing's middle: within a twentieth of the climb (0.21 a tile) of the deck.
+          // A car rides on its two bogies, 0.3 tiles either side of its middle, down the climb (0.21 a tile) from the
+          // deck: 0.85 of the deck's height, and never above it.
           const up = car.z - (view.groundZ[Math.floor(car.y) * n + 17] ?? 0);
-          expect(up).toBeGreaterThan(BRIDGE_Z - 0.011);
+          expect(up).toBeGreaterThan(0.8 * BRIDGE_Z);
           expect(up).toBeLessThanOrEqual(BRIDGE_Z + 1e-9);
         }
       }

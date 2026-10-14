@@ -17,13 +17,14 @@ import type { HabitatChannels } from "../habitat.js";
 import { habitat } from "../habitat.js";
 import { derive } from "../derive.js";
 import type { Tuning } from "../tuning.js";
-import type { BuildingType, History, MicroResource, PlacedBuilding, PlannedLink, Settlement, SettlementJob, SettlementKind, SimState, Zone } from "../types.js";
+import type { BuildingType, History, MicroResource, PlacedBuilding, PlannedLink, QueuedBuild, Settlement, SettlementJob, SettlementKind, SimState, Zone } from "../types.js";
 import { MICRO_RESOURCES, NEUTRAL_ENV, isCityKind } from "../types.js";
 import { BUILDING_DEFS, UNLOCKED, buildYears, keySet, levelFactor, maxLevel, tilesUnder } from "./buildings.js";
 import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
 import { isSteep, slopeAt } from "./terrain.js";
 import type { Rock } from "./rocks.js";
-import { garage, levelFor, rockAt, roverCount, roversOut, rocksOf, roverYears, siteGround } from "./rocks.js";
+import { garage, levelFor, rockAt, roverCount, roversOut, rocksOf, siteGround } from "./rocks.js";
+import { DOOR_KEPT_CLEAR, NO_ROUTE, ROVER_PASSING, buildingSite, drive, garageApron, reachable, roverYears, tileSite, tilesDriven, wallsIn, wallsInWords } from "./drive.js";
 import type { FloodReading } from "./flood.js";
 import { applyFlood, floodReading, submerged } from "./flood.js";
 import { charged, unlocked } from "../sandbox.js";
@@ -168,16 +169,30 @@ const EMPTY: ReadonlySet<number> = new Set();
 /**
  * A rover to build (or upgrade) the building at (tx, ty) to `level`: out
  * from the headquarters, the work - which grows with the level, on Batch 28's
- * curve - and back.
+ * curve - and back. With routes on (Batch 29) it drives its route, and none
+ * reaching the building means no job (null).
  */
-function buildJob(s: Settlement, type: BuildingType, tx: number, ty: number, upgrade: boolean, level: number, t: Tuning): SettlementJob {
-  const size = BUILDING_DEFS[type].footprint;
-  const depth = BUILDING_DEFS[type].depth;
-  const from = garage(s)!;
-  const distance = Math.hypot(tx + size / 2 - from.x, ty + depth / 2 - from.y);
+function buildJob(s: Settlement, type: BuildingType, tx: number, ty: number, upgrade: boolean, level: number, t: Tuning): SettlementJob | null {
+  const way = drive(s, buildingSite({ type, tx, ty }), t);
+  if (way === null) return null;
   const work = buildYears(type, t, level);
-  const total = 2 * distance * t.ROVER_YEARS_PER_TILE + work;
-  return { kind: "build", tile: tileKey(tx, ty), work, total, remaining: total, upgrade };
+  const total = 2 * way.years + work;
+  const job: SettlementJob = { kind: "build", tile: tileKey(tx, ty), work, total, remaining: total, upgrade };
+  return way.route === undefined ? job : { ...job, route: way.route };
+}
+
+/**
+ * Batch 29, with routes on: why a building may not stand on these tiles for
+ * the rovers' sake - in front of the garage door, or where one is driving -
+ * or null.
+ */
+function roverWayRefusal(s: Settlement, tiles: readonly (readonly [number, number])[], t: Tuning): string | null {
+  if (!(t.ROVER_ROUTES_ENABLED > 0) || garage(s) === null) return null;
+  const apron = garageApron(s);
+  if (tiles.some(([x, y]) => apron.some((a) => a.tx === x && a.ty === y))) return DOOR_KEPT_CLEAR;
+  const driven = tilesDriven(s.jobs);
+  if (driven.size > 0 && tiles.some(([x, y]) => driven.has(tileKey(x, y)))) return ROVER_PASSING;
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -208,6 +223,21 @@ export function placeBuilding(
   /** The planet as the city sees it, for what it unlocks (wind, parks); from the reservoirs when not given. */
   env?: HabitatChannels,
 ): PlaceOutcome {
+  return placing(state, settlementId, type, tx, ty, t, env, false);
+}
+
+/**
+ * Whether `placeBuilding` would place it, and if not why - the same rules,
+ * without the rover's route searched for (Batch 29): asked every frame for
+ * the preview under the pointer, where a metropolis's route search took
+ * tens of milliseconds a tile. Whether one exists is known without it.
+ */
+export function checkPlacement(state: SimState, settlementId: string, type: BuildingType, tx: number, ty: number, t: Tuning, env?: HabitatChannels): PlaceOutcome {
+  const o = placing(state, settlementId, type, tx, ty, t, env, true);
+  return o.ok ? { state, ok: true, reason: null } : o;
+}
+
+function placing(state: SimState, settlementId: string, type: BuildingType, tx: number, ty: number, t: Tuning, env: HabitatChannels | undefined, dry: boolean): PlaceOutcome {
   const refuse = (reason: string): PlaceOutcome => ({ state, ok: false, reason });
   const s = state.settlements.find((x) => x.id === settlementId);
   if (s === undefined) return refuse(`there is no settlement ${settlementId}`);
@@ -253,20 +283,36 @@ export function placeBuilding(
   if (footprintTiles(f).some(([x, y]) => cables.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a cable - remove it first`);
   const rails = keySet(s.rails);
   if (footprintTiles(f).some(([x, y]) => rails.has(tileKey(x, y)))) return refuse(`${def.name} would stand on a railway - remove it first`);
+  const forRovers = roverWayRefusal(s, footprintTiles(f), t);
+  if (forRovers !== null) return refuse(forRovers);
   const cost = charged(def.cost(t), t);
   if (s.stores.materials < cost) {
     return refuse(`${def.name} needs ${cost} materials, ${Math.floor(s.stores.materials)} available`);
+  }
+  // Batch 29: every building stays one a rover can get to.
+  if (t.ROVER_ROUTES_ENABLED > 0 && garage(s) !== null) {
+    const walled = wallsIn(s, buildingSite({ type, tx, ty }), t);
+    if (walled > 0) return refuse(`${def.name}: ${wallsInWords(walled)}`);
   }
   // With build times, a rover goes out to build it.
   const byRover = t.BUILD_TIME_ENABLED > 0 && garage(s) !== null;
   // Every rover out (Batch 28): it waits in the queue, paid for, its worksite marked out.
   const waits = byRover && (roversOut(s) >= roverCount(s, t) || s.buildQueue.length > 0);
   const building: PlacedBuilding = { type, tx, ty, level: 1 };
+  const standing: Settlement = { ...s, buildings: [...s.buildings, building] };
+  // The rover's way (Batch 29): a building no rover can reach is refused, whether one goes now or it waits. Found
+  // on the ground as it was: a route ends beside its site and never crosses it, so the worksite changes nothing of
+  // it - and the ground made again for every tile a player hovers over was most of a placement's cost.
+  if (dry) {
+    if (byRover && t.ROVER_ROUTES_ENABLED > 0 && !reachable(s, buildingSite({ type, tx, ty }), t)) return refuse(`${def.name}: ${NO_ROUTE}`);
+    return { state, ok: true, reason: null };
+  }
+  const job = byRover ? buildJob(s, type, tx, ty, false, 1, t) : null;
+  if (byRover && job === null) return refuse(`${def.name}: ${NO_ROUTE}`);
   const next: Settlement = {
-    ...s,
+    ...standing,
     stores: { ...s.stores, materials: s.stores.materials - cost },
-    buildings: [...s.buildings, building],
-    jobs: byRover && !waits ? [...s.jobs, buildJob(s, type, tx, ty, false, 1, t)] : s.jobs,
+    jobs: job !== null && !waits ? [...s.jobs, job] : s.jobs,
     buildQueue: waits ? [...s.buildQueue, { tile: tileKey(tx, ty), upgrade: false, paid: cost }] : s.buildQueue,
   };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
@@ -394,9 +440,11 @@ export function sendRover(state: SimState, settlementId: string, tx: number, ty:
   const out = roversOut(s);
   const rovers = roverCount(s, t);
   if (out >= rovers) return refuse(`all ${rovers} rovers are out`);
-  const years = roverYears(s, tx, ty, rock, t);
+  const way = drive(s, tileSite(tx, ty), t);
+  if (way === null) return refuse(NO_ROUTE);
   const work = rock === "crag" ? t.ROVER_WORK_YEARS_CRAG : t.ROVER_WORK_YEARS_LOOSE;
-  const job: SettlementJob = { kind: "rover", tile: key, materials: rock === "crag" ? t.ROCK_CRAG_MATERIALS : t.ROCK_LOOSE_MATERIALS, work, total: years, remaining: years };
+  const years = 2 * way.years + work;
+  const job: SettlementJob = { kind: "rover", tile: key, materials: rock === "crag" ? t.ROCK_CRAG_MATERIALS : t.ROCK_LOOSE_MATERIALS, work, total: years, remaining: years, ...(way.route === undefined ? {} : { route: way.route }) };
   return { state: withSettlement(state, settlementId, { ...s, jobs: [...s.jobs, job] }), ok: true, reason: null };
 }
 
@@ -430,9 +478,12 @@ export function levelGround(state: SimState, settlementId: string, tx: number, t
   const rock: Rock = rocksOf(s, t)[ty * n + tx] ?? "none";
   const breaking = rock === "none" ? 0 : rock === "crag" ? t.ROVER_WORK_YEARS_CRAG : t.ROVER_WORK_YEARS_LOOSE;
   const work = t.ROVER_WORK_YEARS_LEVEL + breaking;
+  const way = drive(s, tileSite(tx, ty), t);
+  if (way === null) return refuse(NO_ROUTE);
+  // As levelling was always timed (a rock's trip, less its breaking), so a world without routes times it to the bit.
   const years = roverYears(s, tx, ty, "none", t) - t.ROVER_WORK_YEARS_LOOSE + work;
   const materials = rock === "crag" ? t.ROCK_CRAG_MATERIALS : rock === "loose" ? t.ROCK_LOOSE_MATERIALS : 0;
-  const job: SettlementJob = { kind: "rover", tile: key, materials, work, total: years, remaining: years, levelM: level };
+  const job: SettlementJob = { kind: "rover", tile: key, materials, work, total: years, remaining: years, levelM: level, ...(way.route === undefined ? {} : { route: way.route }) };
   return { state: withSettlement(state, settlementId, { ...s, jobs: [...s.jobs, job] }), ok: true, reason: null };
 }
 
@@ -490,11 +541,14 @@ export function upgradeBuilding(state: SimState, settlementId: string, tx: numbe
   const byRover = t.BUILD_TIME_ENABLED > 0 && garage(s) !== null;
   // Every rover out (Batch 28): the upgrade waits its turn; the building runs at its level meanwhile.
   const waits = byRover && (roversOut(s) >= roverCount(s, t) || s.buildQueue.length > 0);
+  // No way to it (Batch 29, routes on): refused, whether a rover goes now or it waits.
+  const job = byRover ? buildJob(s, b.type, b.tx, b.ty, true, b.level + 1, t) : null;
+  if (byRover && job === null) return refuse(`the ${def.name}: ${NO_ROUTE}`);
   const next: Settlement = {
     ...s,
     stores: { ...s.stores, materials: s.stores.materials - cost },
     buildings: byRover ? s.buildings : s.buildings.map((x, i) => (i === index ? { ...x, level: x.level + 1 } : x)),
-    jobs: byRover && !waits ? [...s.jobs, buildJob(s, b.type, b.tx, b.ty, true, b.level + 1, t)] : s.jobs,
+    jobs: job !== null && !waits ? [...s.jobs, job] : s.jobs,
     buildQueue: waits ? [...s.buildQueue, { tile: corner, upgrade: true, paid: cost }] : s.buildQueue,
   };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
@@ -609,7 +663,7 @@ export function shiftContent(s: Settlement, dx: number, dy: number): Settlement 
     buildQueue: s.buildQueue.map((q) => ({ ...q, tile: move(q.tile) })),
     planned: s.planned.map((p) => ({ ...p, tile: move(p.tile) })),
     grades: s.grades.map((g) => ({ ...g, tile: move(g.tile) })),
-    jobs: s.jobs.map((job) => ({ ...job, tile: move(job.tile) })),
+    jobs: s.jobs.map((job) => (job.kind !== "rocket" && job.route !== undefined ? { ...job, tile: move(job.tile), route: job.route.map(move) } : { ...job, tile: move(job.tile) })),
   };
 }
 
@@ -838,29 +892,37 @@ function levelJob(s: Settlement, tx: number, ty: number, t: Tuning, to?: number)
   const rock: Rock = rocksOf(s, t)[ty * n + tx] ?? "none";
   const breaking = rock === "none" ? 0 : rock === "crag" ? t.ROVER_WORK_YEARS_CRAG : t.ROVER_WORK_YEARS_LOOSE;
   const work = t.ROVER_WORK_YEARS_LEVEL + breaking;
+  const way = drive(s, tileSite(tx, ty), t);
+  if (way === null) return { job: null, reason: NO_ROUTE };
   const years = roverYears(s, tx, ty, "none", t) - t.ROVER_WORK_YEARS_LOOSE + work;
   const materials = rock === "crag" ? t.ROCK_CRAG_MATERIALS : rock === "loose" ? t.ROCK_LOOSE_MATERIALS : 0;
-  return { job: { kind: "rover", tile: key, materials, work, total: years, remaining: years, levelM: level }, reason: null };
+  return { job: { kind: "rover", tile: key, materials, work, total: years, remaining: years, levelM: level, ...(way.route === undefined ? {} : { route: way.route }) }, reason: null };
 }
 
 /**
  * Batch 28's build queue, a substep's turn: a rover out to the next build or
  * upgrade whenever one is free, in the order the player left them. Builds go
- * before levelling: they are what the player paid for.
+ * before levelling: they are what the player paid for. One no rover can get
+ * to now (Batch 29, routes on: walled in since it was queued) keeps its
+ * place, and the next goes instead.
  */
 function sendBuilders(s: Settlement, t: Tuning): Settlement {
   if (s.buildQueue.length === 0 || garage(s) === null) return s;
   let jobs = s.jobs;
   let k = 0;
+  const kept: QueuedBuild[] = [];
   const free = (): boolean => jobs.filter((j) => j.kind === "rover" || j.kind === "build").length < roverCount(s, t);
   for (; k < s.buildQueue.length && free(); k += 1) {
     const q = s.buildQueue[k]!;
     const b = s.buildings.find((x) => tileKey(x.tx, x.ty) === q.tile);
     // Its building gone meanwhile: nothing to send a rover to.
     if (b === undefined) continue;
-    jobs = [...jobs, buildJob(s, b.type, b.tx, b.ty, q.upgrade, q.upgrade ? b.level + 1 : 1, t)];
+    const job = buildJob(s, b.type, b.tx, b.ty, q.upgrade, q.upgrade ? b.level + 1 : 1, t);
+    if (job === null) kept.push(q);
+    else jobs = [...jobs, job];
   }
-  return k === 0 ? s : { ...s, jobs, buildQueue: s.buildQueue.slice(k) };
+  if (k === 0) return s;
+  return { ...s, jobs, buildQueue: kept.length === 0 ? s.buildQueue.slice(k) : [...kept, ...s.buildQueue.slice(k)] };
 }
 
 /** Move a waiting build from place `from` in the queue to place `to` (Batch 28: "reorderable"). */

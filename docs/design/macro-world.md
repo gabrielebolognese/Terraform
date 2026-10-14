@@ -666,6 +666,8 @@ BUILD_SECONDS_LABORATORY = 180     BUILD_SECONDS_REACTOR = 240       BUILD_SECON
 BUILD_SECONDS_MEDICAL_CENTER = 1200  BUILD_SECONDS_OBSERVATORY = 1800  BUILD_SECONDS_STATION = 1800    BUILD_SECONDS_RESEARCH_FORUM = 1800
 BUILD_SECONDS_INDUSTRIAL_COMMAND = 1800  BUILD_SECONDS_BIOSPHERE = 2700  BUILD_SECONDS_MEGA_MALL = 3600   # level 1, real seconds at 1x
 CITY_CLOCK = 1               # settlement sim-years per planet sim-year; the Standard pace slows the planet 8x and sets 8
+ROVER_ROUTES_ENABLED = 0     # rovers drive a route round buildings, kept with the job; its length sets the drive; new worlds use 1
+ROVER_CORRIDOR_SPEEDUP = 2   # a rover drives along a corridor this many times faster than over open ground
 INTERCITY_ENABLED = 0        INTERCITY_COST_PER_KM = 5   INTERCITY_CARRY = 300   # railways between settlements: off by default; materials a km; a year's carry
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75

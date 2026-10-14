@@ -9,7 +9,7 @@
  */
 
 import type { BuildingType, Settlement, Tuning } from "../sim/index.js";
-import { BUILDING_DEFS, buildYears, citySecondsPerYear } from "../sim/index.js";
+import { BUILDING_DEFS, buildYears, buildingSite, citySecondsPerYear, drive } from "../sim/index.js";
 import { garage } from "../sim/micro/rocks.js";
 import { tileKey } from "../sim/micro/space.js";
 
@@ -70,13 +70,15 @@ export function buildStates(s: Settlement, t: Tuning, speed: number): BuildState
   return out;
 }
 
-/** What a build will take once its rover leaves: the drive out and the work (and, for an upgrade, the drive home). */
+/**
+ * What a build will take once its rover leaves: the drive out and the work
+ * (and, for an upgrade, the drive home) - the drive along its route where
+ * routes are on (Batch 29), as the rover would go now.
+ */
 function timeOnceSent(s: Settlement, type: BuildingType, tx: number, ty: number, upgrade: boolean, level: number, t: Tuning): number {
-  const from = garage(s);
-  const size = BUILDING_DEFS[type].footprint;
-  const depth = BUILDING_DEFS[type].depth;
-  const drive = from === null ? 0 : Math.hypot(tx + size / 2 - from.x, ty + depth / 2 - from.y) * t.ROVER_YEARS_PER_TILE;
-  return drive * (upgrade ? 2 : 1) + buildYears(type, t, level);
+  const way = garage(s) === null ? null : drive(s, buildingSite({ type, tx, ty }), t);
+  const years = way === null ? 0 : way.years;
+  return years * (upgrade ? 2 : 1) + buildYears(type, t, level);
 }
 
 /** One line for a build, as the inspector and the queue say it. */

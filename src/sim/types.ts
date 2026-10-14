@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 14;
+  readonly schemaVersion: 15;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -514,7 +514,13 @@ export type SettlementJob =
   /** A rover out from the headquarters to break the rock on `tile`, bringing back `materials`. */
   /** `work` is the part of `total` spent breaking the rock; the rest is the drive out and back. */
   /** With `levelM`, it levels the tile to that height, metres, as well (and breaks what rock is there). */
-  | { readonly kind: "rover"; readonly tile: number; readonly materials: number; readonly work: number; readonly total: number; readonly remaining: number; readonly levelM?: number }
+  /**
+   * With `route` (Batch 29, ROVER_ROUTES_ENABLED), the way it drives: the tile
+   * keys where the route turns or changes ground, from the garage door to the
+   * tile it works from. Found when it set out and kept; absent, it was sent
+   * the old way (or before routes existed) and its drive is the straight line.
+   */
+  | { readonly kind: "rover"; readonly tile: number; readonly materials: number; readonly work: number; readonly total: number; readonly remaining: number; readonly levelM?: number; readonly route?: readonly number[] }
   /** A rocket off the spaceport whose corner is `tile`, to come back with materials. */
   | { readonly kind: "rocket"; readonly tile: number; readonly total: number; readonly remaining: number }
   /**
@@ -522,7 +528,7 @@ export type SettlementJob =
    * whose corner is `tile` (at the user's request: "building takes 1 rover").
    * `work` is the part of `total` at the site; the rest is the drive out and back.
    */
-  | { readonly kind: "build"; readonly tile: number; readonly work: number; readonly total: number; readonly remaining: number; readonly upgrade: boolean };
+  | { readonly kind: "build"; readonly tile: number; readonly work: number; readonly total: number; readonly remaining: number; readonly upgrade: boolean; readonly route?: readonly number[] };
 
 /** Micro §6. Networked: power, water, oxygen. Stored: food, materials. Population is separate. */
 export const MICRO_RESOURCES = ["power", "water", "oxygen", "food", "materials"] as const;

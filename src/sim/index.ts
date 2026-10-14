@@ -211,6 +211,7 @@ export {
   levelGround,
   newSettlement,
   placeBuilding,
+  checkPlacement,
   placeLink,
   removeBuilding,
   removeLink,
@@ -219,7 +220,9 @@ export {
 } from "./micro/settlement.js";
 export { LAYERS, layerOf, linksForRedundancy, linksToConnect, networkOf, withRails } from "./micro/network.js";
 export type { Layer, LinkLayer, Network, NetworkIssue } from "./micro/network.js";
-export { garage, levelFor, roverCount, rocksOf, roverYears, siteGround } from "./micro/rocks.js";
+export { garage, levelFor, roverCount, rocksOf, siteGround } from "./micro/rocks.js";
+export { DOOR_KEPT_CLEAR, NO_ROUTE, ROVER_PASSING, buildingSite, drive, expandRoute, garageApron, garageDoor, garageLeg, reachable, roverRoute, roverYears, tileSite, tilesDriven, wallsIn } from "./micro/drive.js";
+export type { RoverRoute, Site } from "./micro/drive.js";
 export type { Rock } from "./micro/rocks.js";
 export type { PlaceOutcome, SettlementStep } from "./micro/settlement.js";
 export { microStep } from "./micro/coupling.js";

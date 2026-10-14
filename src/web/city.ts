@@ -19,7 +19,7 @@ import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import type { Layer, LinkLayer } from "../sim/index.js";
-import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, buildSeconds, buildYears, cityView, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
+import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, NO_ROUTE, buildSeconds, buildYears, cityView, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
 import { isoProject } from "../render/iso.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, isoToScreen, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
@@ -918,7 +918,10 @@ export class CityScreen {
     } else {
       const out = s.jobs.filter((j) => j.kind === "rover").length;
       const rovers = roverCount(s, this.tuning);
-      this.inspectorStatus.textContent = `A rover would take ${seconds(roverYears(s, tile.tx, tile.ty, rock, this.tuning), this.tuning)} there and back. ${rovers - out} of ${rovers} rovers in.`;
+      const years = roverYears(s, tile.tx, tile.ty, rock, this.tuning);
+      // Batch 29: with routes on, a rock walled in by buildings or crags is out of reach.
+      if (!Number.isFinite(years)) this.inspectorStatus.textContent = `${NO_ROUTE[0]!.toUpperCase()}${NO_ROUTE.slice(1)}.`;
+      else this.inspectorStatus.textContent = `A rover would take ${seconds(years, this.tuning)} there and back. ${rovers - out} of ${rovers} rovers in.`;
     }
     this.inspectorSummary.textContent =
       rock === "crag"
@@ -1400,7 +1403,19 @@ export class CityScreen {
 
 /** Fill a shape list with the browser's 2D API: the same list the golden render rasterises. */
 export function fillShapes(ctx: CanvasRenderingContext2D, shapes: readonly Shape[]): void {
+  // A run of shapes clipped to one box (Batch 29: drawn again over a moving vehicle) is filled inside it, once set.
+  let clipped: Shape["clip"] = undefined;
   for (const shape of shapes) {
+    if (shape.clip !== clipped) {
+      if (clipped !== undefined) ctx.restore();
+      clipped = shape.clip;
+      if (clipped !== undefined) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(clipped.minX, clipped.minY, clipped.maxX - clipped.minX, clipped.maxY - clipped.minY);
+        ctx.clip();
+      }
+    }
     ctx.beginPath();
     for (const ring of shape.rings) {
       if (ring.length < 6) continue;
@@ -1412,4 +1427,5 @@ export function fillShapes(ctx: CanvasRenderingContext2D, shapes: readonly Shape
     ctx.fillStyle = `rgba(${Math.round(f.r * 255)}, ${Math.round(f.g * 255)}, ${Math.round(f.b * 255)}, ${f.a})`;
     ctx.fill("evenodd");
   }
+  if (clipped !== undefined) ctx.restore();
 }

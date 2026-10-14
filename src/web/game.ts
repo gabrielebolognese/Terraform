@@ -54,6 +54,7 @@ import {
   launchRocket,
   levelGround,
   placeBuilding,
+  checkPlacement,
   placeLink,
   removeBuilding,
   removeLink,
@@ -359,7 +360,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
         return outcome;
       },
       // A dry run of the same call: the returned state is dropped.
-      canPlace: (id: string, type: BuildingType, tx: number, ty: number) => placeBuilding(state, id, type, tx, ty, tuning, cityEnv ?? undefined),
+      canPlace: (id: string, type: BuildingType, tx: number, ty: number) => checkPlacement(state, id, type, tx, ty, tuning, cityEnv ?? undefined),
       onRemove: (id: string, tx: number, ty: number) => {
         const outcome = removeBuilding(state, id, tx, ty);
         state = outcome.state;

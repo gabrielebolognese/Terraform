@@ -12,7 +12,7 @@
 
 import type { HabitatChannels } from "../habitat.js";
 import type { Tuning } from "../tuning.js";
-import type { BuildingType, Grade, MicroResource, Settlement, SettlementKind } from "../types.js";
+import type { BuildingType, Grade, MicroResource, Settlement, SettlementJob, SettlementKind } from "../types.js";
 import { MICRO_RESOURCES } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { capacities, claimableChunks, claimsAllowed, constructionOf, housing, nextClaimAt, settlementStep } from "./settlement.js";
@@ -24,6 +24,9 @@ import { linkGrid } from "./network.js";
 import type { Rock } from "./rocks.js";
 import { garage, prepareRocks, rocksOf, siteGround } from "./rocks.js";
 import { claimTest, frameOf, keyTile, tileKey } from "./space.js";
+import type { Site } from "./drive.js";
+import { buildingSite, garageDoor, garageLeg, roverRoute, tileSite } from "./drive.js";
+import { keySet } from "./buildings.js";
 import type { World } from "./terrain.js";
 import { worldOf } from "./terrain.js";
 
@@ -161,6 +164,17 @@ export interface CityJobView {
   readonly remaining: number;
   /** A rover's time at the rock, within `total`; 0 for a rocket. */
   readonly work: number;
+  /**
+   * Batch 29: the way a rover drives out, in tiles - from the garage in the
+   * headquarters' middle, out of its door, round the city to where it stops
+   * to work - each point where it turns. Its own route when it has one; one
+   * found for it on the ground as it is when it was sent the old way (so no
+   * rover is drawn through a building); the straight line where none is.
+   * Absent for a rocket (and in a hand-made view: the straight line).
+   */
+  readonly path?: readonly { readonly x: number; readonly y: number }[];
+  /** Parallel to `path`: how far through the drive out each point is, 0 to 1 (a corridor is quicker to drive). */
+  readonly at?: readonly number[];
 }
 
 const POWER_PLANTS: ReadonlySet<BuildingType> = new Set<BuildingType>(["solar_array", "geothermal_plant", "reactor"]);
@@ -266,7 +280,23 @@ export function* prepareCity(s: Settlement, t: Tuning): Generator<number, void> 
   }
   kept(ground.heightM, n, t, null, () => ground.heightM.map((h) => h / t.TILE_METRES));
   kept(ground.cornersM, n, t, null, () => ground.cornersM.map((h) => h / t.TILE_METRES));
+  // Batch 29: the way each rover sent without a route (an old save's, the example's) is drawn - found here, a job
+  // a step, so the first view does not search them all at once (a metropolis's twelve took 0.9 s, measured).
+  if (garage(s) !== null) {
+    for (const j of s.jobs) {
+      if (j.kind === "rocket" || j.route !== undefined) continue;
+      roverRoute(s, jobSite(s, j), t);
+      yield 0.99;
+    }
+  }
   yield 1;
+}
+
+/** What a rover's job works on: the building whose corner is its tile, or the tile itself. */
+function jobSite(s: Settlement, j: Exclude<SettlementJob, { kind: "rocket" }>): Site {
+  const corner = keyTile(j.tile);
+  const b = j.kind === "build" ? s.buildings.find((x) => x.tx === corner.tx && x.ty === corner.ty) : undefined;
+  return b !== undefined ? buildingSite(b) : tileSite(corner.tx, corner.ty);
 }
 
 export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityView {
@@ -364,6 +394,74 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     rocks: rocksOf(s, t),
     garage: garage(s),
     // A rover building is drawn as any rover at work: out, at the site, and back.
-    jobs: s.jobs.map((j) => ({ kind: j.kind === "rocket" ? ("rocket" as const) : ("rover" as const), ...keyTile(j.tile), total: j.total, remaining: j.remaining, work: j.kind === "rocket" ? 0 : j.work })),
+    jobs: s.jobs.map((j) => jobView(s, j, t)),
   };
 }
+
+function jobView(s: Settlement, j: SettlementJob, t: Tuning): CityJobView {
+  const job = { ...keyTile(j.tile), total: j.total, remaining: j.remaining };
+  if (j.kind === "rocket") return { kind: "rocket", ...job, work: 0 };
+  return { kind: "rover", ...job, work: j.work, ...driveOf(s, j, t) };
+}
+
+/** A job's way as drawn, kept per route and the corridors it is timed over: asked of every rover five times a second. */
+const drawnWays = new WeakMap<readonly number[], { corridors: readonly number[]; leg: number; site: string; way: { path: { x: number; y: number }[]; at: number[] } }>();
+
+/**
+ * The way a rover's job is drawn (see `CityJobView.path`): its route, or one
+ * found for it, as points from the garage to where it stops; and how far
+ * through the drive each is, timed as the simulation times a route.
+ */
+function driveOf(s: Settlement, j: Exclude<SettlementJob, { kind: "rocket" }>, t: Tuning): { path: { x: number; y: number }[]; at: number[] } | Record<string, never> {
+  const from = garage(s);
+  if (from === null) return {};
+  const site = jobSite(s, j);
+  const points = j.route ?? roverRoute(s, site, t)?.points ?? null;
+  if (points === null || garageDoor(s) === null) {
+    // No way round: the straight line, stopping short of the site's middle as the rovers always did.
+    const mx = site.tx + site.w / 2;
+    const my = site.ty + site.h / 2;
+    const len = Math.hypot(mx - from.x, my - from.y) || 1;
+    const stop = Math.max(0, len - 0.45);
+    return { path: [{ x: from.x, y: from.y }, { x: from.x + ((mx - from.x) / len) * stop, y: from.y + ((my - from.y) / len) * stop }], at: [0, 1] };
+  }
+  const siteKey = `${site.tx},${site.ty},${site.w},${site.h}`;
+  const leg = garageLeg(s);
+  const kept = drawnWays.get(points);
+  if (kept !== undefined && kept.corridors === s.corridors && kept.leg === leg && kept.site === siteKey) return kept.way;
+  const corridors = keySet(s.corridors);
+  const cost = (x: number, y: number): number => (corridors.has(tileKey(x, y)) ? 1 / t.ROVER_CORRIDOR_SPEEDUP : 1);
+  const path: { x: number; y: number }[] = [{ x: from.x, y: from.y }];
+  const time: number[] = [0];
+  let total = leg;
+  points.forEach((key, k) => {
+    const { tx, ty } = keyTile(key);
+    if (k > 0) {
+      // Timed a tile at a time, half of each step on each tile's ground, as the route was found.
+      let { tx: x, ty: y } = keyTile(points[k - 1]!);
+      const sx = Math.sign(tx - x);
+      const sy = Math.sign(ty - y);
+      const len = sx !== 0 && sy !== 0 ? Math.SQRT2 : 1;
+      while (x !== tx || y !== ty) {
+        total += (len * (cost(x, y) + cost(x + sx, y + sy))) / 2;
+        x += sx;
+        y += sy;
+      }
+    }
+    path.push({ x: tx + 0.5, y: ty + 0.5 });
+    time.push(total);
+  });
+  // The last stretch: from the middle of the tile it works from, a quarter of a tile toward the site, facing it.
+  const end = keyTile(points[points.length - 1]!);
+  const dx = end.tx < site.tx ? 1 : end.tx >= site.tx + site.w ? -1 : 0;
+  const dy = dx !== 0 ? 0 : end.ty < site.ty ? 1 : -1;
+  path.push({ x: end.tx + 0.5 + dx * APPROACH, y: end.ty + 0.5 + dy * APPROACH });
+  total += APPROACH * cost(end.tx, end.ty);
+  time.push(total);
+  const way = { path, at: time.map((v) => v / total) };
+  drawnWays.set(points, { corridors: s.corridors, leg, site: siteKey, way });
+  return way;
+}
+
+/** How far past the middle of the tile it works from a rover stops, toward its site, tiles: so its arm reaches the work. */
+const APPROACH = 0.25;

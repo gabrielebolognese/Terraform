@@ -65,7 +65,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 14;
+export const SAVE_SCHEMA_VERSION = 15;
 
 export interface SavedFacility {
   readonly type: string;
@@ -143,7 +143,11 @@ export interface SavedSettlement {
   readonly cables?: readonly number[] | null;
   /** Added in v8: the rock tiles rovers have broken, as sorted keys. */
   readonly cleared?: readonly number[];
-  /** Added in v8: rovers and rockets under way, counting down in sim-years. */
+  /**
+   * Added in v8: rovers and rockets under way, counting down in sim-years.
+   * v15 (Batch 29): a rover's job may carry its `route`, the tile keys where
+   * it turns; one saved before routes has none, and keeps its time.
+   */
   readonly jobs?: readonly Record<string, unknown>[];
   /** Added in v9 (claimed land, at the user's request): the founding square's edge, tiles. */
   readonly base?: number;
@@ -339,6 +343,9 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 12) current = migrateV11toV12(current);
   if (version < 13) current = { ...current, schema_version: 13, routes: [] };
   if (version < 14) current = migrateV13toV14(current);
+  // v14 -> v15: a job may carry its route (Batch 29). Nothing to add: a job under way before routes keeps the
+  // straight drive its time was set by (`readJobs` takes a job without one as that).
+  if (version < 15) current = { ...current, schema_version: 15 };
   return current;
 }
 
@@ -916,12 +923,15 @@ function readJobs(s: Record<string, unknown>, where: string): readonly Settlemen
     if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
     if (!(total > 0) || !(remaining > 0) || remaining > total) throw new SaveError(`${at} has ${remaining} of ${total} years left, which no job can`);
     if (kind === "rocket") return { kind, tile, total, remaining };
+    // v15: the way it drives, where it turns.
+    const route = readRoute(job["route"], `${at}.route`);
+    const routed = route === undefined ? {} : { route };
     if (kind === "build") {
       const work = numberAt(job, "work", `${at}.work`);
       if (work < 0 || work > total) throw new SaveError(`${at}.work ${work} is outside its ${total}-year trip`);
       const upgrade = job["upgrade"];
       if (typeof upgrade !== "boolean") throw new SaveError(`${at}.upgrade must be true or false`);
-      return { kind, tile, total, remaining, work, upgrade };
+      return { kind, tile, total, remaining, work, upgrade, ...routed };
     }
     if (kind === "rover") {
       const materials = numberAt(job, "materials", `${at}.materials`);
@@ -929,11 +939,35 @@ function readJobs(s: Record<string, unknown>, where: string): readonly Settlemen
       if (materials < 0) throw new SaveError(`${at}.materials is negative (${materials})`);
       if (work < 0 || work > total) throw new SaveError(`${at}.work ${work} is outside its ${total}-year trip`);
       // v10: a rover levelling its tile carries the level.
-      if (job["levelM"] !== undefined) return { kind, tile, total, remaining, materials, work, levelM: numberAt(job, "levelM", `${at}.levelM`) };
-      return { kind, tile, total, remaining, materials, work };
+      if (job["levelM"] !== undefined) return { kind, tile, total, remaining, materials, work, levelM: numberAt(job, "levelM", `${at}.levelM`), ...routed };
+      return { kind, tile, total, remaining, materials, work, ...routed };
     }
     throw new SaveError(`${at}.kind must be "rover", "rocket" or "build", got ${describe(kind)}`);
   });
+}
+
+/**
+ * A route as saved (v15): tile keys, each from the last by a straight run
+ * along a row, a column or a diagonal - the only ways a route turns. Absent
+ * for a job sent without one.
+ */
+function readRoute(raw: unknown, at: string): readonly number[] | undefined {
+  if (raw === undefined) return undefined;
+  const list = asArray(raw, at);
+  if (list.length === 0) throw new SaveError(`${at} is empty - a route has at least the tile it starts from`);
+  const keys = list.map((k, i) => {
+    if (typeof k !== "number" || !Number.isInteger(k) || k < 0) throw new SaveError(`${at}[${i}] must be a tile key, got ${describe(k)}`);
+    return k;
+  });
+  keys.forEach((k, i) => {
+    if (i === 0) return;
+    const { tx, ty } = keyTile(k);
+    const { tx: px, ty: py } = keyTile(keys[i - 1]!);
+    const dx = Math.abs(tx - px);
+    const dy = Math.abs(ty - py);
+    if ((dx === 0 && dy === 0) || (dx !== 0 && dy !== 0 && dx !== dy)) throw new SaveError(`${at}[${i}] is not a straight run from the tile before it`);
+  });
+  return keys;
 }
 
 /**

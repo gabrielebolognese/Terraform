@@ -22,9 +22,15 @@
 import type { CityBuildingView, CityView } from "../sim/index.js";
 import type { FootprintBox } from "./iso.js";
 import { TOWARD_VIEWER, TILE_H, TILE_W, Z_PX, depthOrder, isoProject, isoToGround } from "./iso.js";
-import type { Rgba, Shape } from "./raster.js";
+import type { ClipBox, Rgba, Shape } from "./raster.js";
 import type { Box3, Host, Instance } from "./structures.js";
 import { generateStructure, structureSeed, variantOf } from "./structures.js";
+import type { RailHeight, Rover, TrainCar } from "./vehicles.js";
+import type { Footprint } from "./vehicles.js";
+import { TRAIN_LANE, cornersOf, jobProgress, roversAt, trainCarsOf, trainLaps, trainsAt as carsByTile } from "./vehicles.js";
+
+export { trainLinesOf } from "./vehicles.js";
+export type { TrainLine } from "./vehicles.js";
 
 type V3 = readonly [number, number, number];
 interface Rgb {
@@ -2807,6 +2813,11 @@ export function cityChunkReach(view: CityView, size: number, cx: number, cy: num
   const y0 = cy * size - 6;
   const x1 = (cx + 1) * size;
   const y1 = (cy + 1) * size;
+  const { top, lo } = reachOf(view);
+  return { minX: ((x0 - y1) * TILE_W) / 2, maxX: ((x1 - y0) * TILE_W) / 2, minY: ((x0 + y0) * TILE_H) / 2 - top * Z_PX, maxY: ((x1 + y1) * TILE_H) / 2 - (lo - 1.5) * Z_PX };
+}
+
+function reachOf(view: CityView): { top: number; lo: number } {
   let r = reaches.get(view);
   if (r === undefined) {
     const range = groundRange(view);
@@ -2815,9 +2826,32 @@ export function cityChunkReach(view: CityView, size: number, cx: number, cy: num
     r = { top, lo: range.lo };
     reaches.set(view, r);
   }
-  const { top } = r;
-  const range = { lo: r.lo };
-  return { minX: ((x0 - y1) * TILE_W) / 2, maxX: ((x1 - y0) * TILE_W) / 2, minY: ((x0 + y0) * TILE_H) / 2 - top * Z_PX, maxY: ((x1 + y1) * TILE_H) / 2 - (range.lo - 1.5) * Z_PX };
+  return r;
+}
+
+/**
+ * The chunks whose image (`cityChunkReach`) touches the viewport, back to
+ * front. The view's reach is worked out once and each chunk tested with
+ * arithmetic alone: asked of a metropolis's 13,000 chunks every frame, the
+ * test done chunk by chunk through `cityChunkReach` came to most of a frame
+ * (Batch 29, measured).
+ */
+export function cityChunksInView(view: CityView, size: number, viewport: { readonly minX: number; readonly maxX: number; readonly minY: number; readonly maxY: number }): [number, number][] {
+  const r = cityChunkRange(view, size);
+  const { top, lo } = reachOf(view);
+  const out: [number, number][] = [];
+  for (let cy = r.cy0; cy <= r.cy1; cy += 1) {
+    for (let cx = r.cx0; cx <= r.cx1; cx += 1) {
+      const x0 = cx * size - 6;
+      const y0 = cy * size - 6;
+      const x1 = (cx + 1) * size;
+      const y1 = (cy + 1) * size;
+      if (((x0 - y1) * TILE_W) / 2 > viewport.maxX || ((x1 - y0) * TILE_W) / 2 < viewport.minX) continue;
+      if (((x0 + y0) * TILE_H) / 2 - top * Z_PX > viewport.maxY || ((x1 + y1) * TILE_H) / 2 - (lo - 1.5) * Z_PX < viewport.minY) continue;
+      out.push([cx, cy]);
+    }
+  }
+  return out.sort((a, b) => a[0] + a[1] - (b[0] + b[1]) || a[0] - b[0]);
 }
 
 /**
@@ -3508,9 +3542,10 @@ function railDetail(view: CityView, tx: number, ty: number, z: number, quality: 
     };
     if (deck > 0 || ze > z + 0.001) {
       // The deck under the bed: its concrete side, down a little from the bed.
-      out.push(part(sheet(strip(0.3, 0, -0.06)), CONCRETE, { twoSided: true }));
+      out.push(part(sheet(strip(0.34, 0, -0.06)), CONCRETE, { twoSided: true }));
     }
-    out.push(part(sheet(strip(0.28, 0, 0.02)), BALLAST, { twoSided: true }));
+    // Wide enough for two tracks (Batch 29).
+    out.push(part(sheet(strip(0.32, 0, 0.02)), BALLAST, { twoSided: true }));
     if (quality === "low") return;
     if (quality === "high") {
       for (const f of [0.25, 0.75]) {
@@ -3520,7 +3555,8 @@ function railDetail(view: CityView, tx: number, ty: number, z: number, quality: 
         out.push(part(dx !== 0 ? box(sx - 0.05, ty + 0.24, sz + 0.02, sx + 0.05, ty + 0.76, sz + 0.05) : box(tx + 0.24, sy - 0.05, sz + 0.02, tx + 0.76, sy + 0.05, sz + 0.05), SLEEPER));
       }
     }
-    for (const off of [-0.14, 0.14]) out.push(part(sheet(strip(0.022, off, 0.08)), RAIL_STEEL, { twoSided: true }));
+    // Two tracks, a train each way (Batch 29): each its two rails either side of the track's middle.
+    for (const off of [-TRAIN_LANE - 0.06, -TRAIN_LANE + 0.06, TRAIN_LANE - 0.06, TRAIN_LANE + 0.06]) out.push(part(sheet(strip(0.018, off, 0.08)), RAIL_STEEL, { twoSided: true }));
   });
   if (!any) out.push(part(sheet([[tx + 0.22, ty + 0.22, zc + 0.02], [tx + 0.78, ty + 0.22, zc + 0.02], [tx + 0.78, ty + 0.78, zc + 0.02], [tx + 0.22, ty + 0.78, zc + 0.02]]), BALLAST));
   if (deck >= BRIDGE_Z && quality !== "low") {
@@ -3535,230 +3571,130 @@ function railDetail(view: CityView, tx: number, ty: number, z: number, quality: 
 // ---------------------------------------------------------------------------
 // Trains (at the user's request: "working trains ... giant railways that
 // interconnect the extremes of the city, with trains passing ... maglev
-// trains on top"). Drawn, not simulated: each loop of line has trains spaced
-// along it, gliding round it with the render clock.
+// trains on top") and rovers at work. Where each is comes from `vehicles.ts`
+// (Batch 29: on their tracks car by car, on their routes round the
+// buildings); drawn here, each with the tile it is drawn with, so a building
+// in front of it hides it.
 // ---------------------------------------------------------------------------
 
-/** How far apart the trains on a line are, tiles; how fast they go, tiles a second; cars a train. */
-const TRAIN_SPACING = 56;
-const TRAIN_SPEED = 2.2;
-const TRAIN_CARS = 4;
-
-/** A loop a train runs round: the tiles in order, and each tile's rail height. */
-export interface TrainLine {
-  readonly tiles: readonly number[];
-}
-
-const trainLines = new WeakMap<readonly boolean[], TrainLine[]>();
-
-/**
- * The lines trains run on, from the rails alone: a train goes straight on
- * where two lines cross, keeps right where it meets a junction of three, follows
- * the line round a bend, and turns back at a dead end (a station's platform,
- * or the end of a spur). That rule sends exactly one way out for each way in,
- * so every stretch of line, each way, lies on one loop, and a train comes
- * round it back to where it began. (Straight on at every junction, the first
- * version, never turned into a branch met side-on: 38% of a metropolis's
- * railway saw no train, measured.) Loops shorter than a train's run are left
- * empty.
- */
-export function trainLinesOf(view: CityView): TrainLine[] {
-  const rails = view.rails;
-  if (rails === undefined) return [];
-  const kept = trainLines.get(rails);
-  if (kept !== undefined) return kept;
-  const n = view.tiles;
-  const at = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < n && y < n && rails[y * n + x] === true;
-  // Directions: 0 east, 1 south, 2 west, 3 north; turning right is one step on.
-  const DX = [1, 0, -1, 0];
-  const DY = [0, 1, 0, -1];
-  const next = (tile: number, dir: number): number => {
-    const x = tile % n;
-    const y = (tile - x) / n;
-    const open = (d: number): boolean => at(x + DX[d]!, y + DY[d]!);
-    const right = (dir + 1) % 4;
-    const left = (dir + 3) % 4;
-    const ways = [0, 1, 2, 3].filter(open).length;
-    if (ways === 4) return dir;
-    for (const d of ways === 3 ? [right, dir, left] : [dir, right, left]) if (open(d)) return d;
-    return (dir + 2) % 4;
-  };
-  const lines: TrainLine[] = [];
-  const done = new Uint8Array(n * n * 4);
-  for (let start = 0; start < n * n; start += 1) {
-    if (!rails[start]) continue;
-    const x = start % n;
-    const y = (start - x) / n;
-    for (let first = 0; first < 4; first += 1) {
-      if (!at(x + DX[first]!, y + DY[first]!) || done[start * 4 + first]) continue;
-      // Leave the tile that way: the loop is every (tile, heading-out) until it comes round again.
-      const path: number[] = [];
-      let tile = start;
-      let out = first;
-      while (!done[tile * 4 + out]) {
-        done[tile * 4 + out] = 1;
-        path.push(tile);
-        tile += DX[out]! + DY[out]! * n;
-        out = next(tile, out);
-      }
-      lines.push({ tiles: path });
-    }
+/** The bed's height at a tile's middle, for the trains: kept per view, asked of every piece of every line. */
+const railHeights = new WeakMap<CityView, RailHeight>();
+function railHeightOf(view: CityView): RailHeight {
+  let h = railHeights.get(view);
+  if (h === undefined) {
+    h = (tx, ty) => railZ(view, tx, ty);
+    railHeights.set(view, h);
   }
-  trainLines.set(rails, lines);
-  return lines;
+  return h;
 }
 
-interface TrainCar {
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-  /** Heading, radians. */
-  readonly angle: number;
-  /** The front car carries the nose. */
-  readonly lead: boolean;
-}
-
-/** The last frame's cars: a frame drawn chunk by chunk asks for them once a chunk. */
-let lastTrains: { view: CityView; time: number; cars: Map<number, TrainCar[]> } | null = null;
-
-/** Every train car at this moment, by the tile it is over. */
+/** Every train car at this moment, by the tile it is drawn with. */
 export function trainsAt(view: CityView, time: number): Map<number, TrainCar[]> {
-  if (lastTrains !== null && lastTrains.view === view && lastTrains.time === time) return lastTrains.cars;
-  const out = new Map<number, TrainCar[]>();
-  lastTrains = { view, time, cars: out };
-  const n = view.tiles;
-  const centre = (tile: number): [number, number, number] => {
-    const x = tile % n;
-    const y = (tile - x) / n;
-    return [x + 0.5, y + 0.5, railZ(view, x, y)];
-  };
-  trainLinesOf(view).forEach((line, li) => {
-    const len = line.tiles.length;
-    // A loop shorter than a train's run (a stub a few tiles long) is line, but no train goes round it.
-    if (len < TRAIN_CARS * 3) return;
-    const trains = Math.max(1, Math.floor(len / TRAIN_SPACING));
-    for (let k = 0; k < trains; k += 1) {
-      const head = time * TRAIN_SPEED + (k * len) / trains + li * 7.3;
-      for (let c = 0; c < TRAIN_CARS; c += 1) {
-        const s = (((head - c) % len) + len) % len;
-        const i0 = Math.floor(s);
-        const f = s - i0;
-        const a = centre(line.tiles[i0]!);
-        const b = centre(line.tiles[(i0 + 1) % len]!);
-        // A car on a dead end's turn stays on its tile.
-        const x = a[0] + (b[0] - a[0]) * f;
-        const y = a[1] + (b[1] - a[1]) * f;
-        const z = a[2] + (b[2] - a[2]) * f;
-        const angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
-        const tile = Math.min(n - 1, Math.max(0, Math.floor(y))) * n + Math.min(n - 1, Math.max(0, Math.floor(x)));
-        const car: TrainCar = { x, y, z, angle: Number.isFinite(angle) ? angle : 0, lead: c === 0 };
-        const list = out.get(tile);
-        if (list === undefined) out.set(tile, [car]);
-        else list.push(car);
-      }
-    }
-  });
-  return out;
+  return carsByTile(view, time, railHeightOf(view));
+}
+
+/** Every train car at this moment. */
+export function trainCars(view: CityView, time: number): TrainCar[] {
+  return trainCarsOf(view, time, railHeightOf(view));
+}
+
+/** Seconds a lap of each loop takes, in `trainLinesOf` order. */
+export function trainLapsOf(view: CityView): number[] {
+  return trainLaps(view, railHeightOf(view));
 }
 
 const MAGLEV_BODY = rgb(0.93, 0.94, 0.95);
 const MAGLEV_GLOW = rgb(0.35, 0.75, 1);
+const FREIGHT_LOCO = rgb(0.78, 0.36, 0.14);
+const FREIGHT_BED = rgb(0.3, 0.3, 0.32);
+const CONTAINERS = [rgb(0.2, 0.42, 0.66), rgb(0.72, 0.62, 0.2), rgb(0.55, 0.24, 0.2), rgb(0.3, 0.52, 0.34)] as const;
 
-/** A maglev car: floating a hand's breadth over the line on its blue glow, a white body, a band of windows, a nose on the front car. */
+/** A point `u` along and `v` across a car from its middle. */
+function onCar(c: TrainCar, u: number, v = 0): [number, number] {
+  const ca = Math.cos(c.angle);
+  const sa = Math.sin(c.angle);
+  return [c.x + u * ca - v * sa, c.y + u * sa + v * ca];
+}
+
+/**
+ * Train cars. A maglev: floating a hand's breadth over the line on its blue
+ * glow, a white body, a band of windows, a nose on the front car. Freight
+ * (Batch 29: "maglev and freight look different"): on wheels on the rails, an
+ * orange locomotive with its cab, then flat wagons each with a container.
+ */
 function drawTrains(list: readonly TrainCar[] | undefined, time: number, out: Shape[]): void {
   if (list === undefined) return;
   for (const c of list) {
     const parts: Part[] = [];
+    const hl = c.halfL;
+    const hw = c.halfW;
+    if (c.freight) {
+      const base = c.z + 0.08;
+      // Two bogies on the rails.
+      for (const u of [-hl + 0.16, hl - 0.16]) {
+        const [bx, by] = onCar(c, u);
+        parts.push(part(turnedBox(bx, by, 0.11, hw * 0.85, c.angle, base - 0.02, base + 0.05), RUBBER));
+      }
+      parts.push(part(turnedBox(c.x, c.y, hl, hw * 0.9, c.angle, base + 0.05, base + 0.08), FREIGHT_BED));
+      if (c.lead) {
+        // The locomotive: a long hood, a cab at the front with a lit window, a lamp.
+        parts.push(part(turnedBox(c.x, c.y, hl * 0.95, hw * 0.85, c.angle, base + 0.08, base + 0.2), FREIGHT_LOCO));
+        const [kx, ky] = onCar(c, hl - 0.15);
+        parts.push(part(turnedBox(kx, ky, 0.13, hw * 0.9, c.angle, base + 0.08, base + 0.27), FREIGHT_LOCO));
+        const [wx, wy] = onCar(c, hl - 0.02);
+        parts.push(part(turnedBox(wx, wy, 0.012, hw * 0.7, c.angle, base + 0.19, base + 0.25), WARM_LIGHT, { emissive: true }));
+        const [lx, ly] = onCar(c, hl + 0.005);
+        parts.push(part(turnedBox(lx, ly, 0.01, 0.03, c.angle, base + 0.1, base + 0.14), rgb(1, 0.95, 0.75), { emissive: true }));
+      } else {
+        const colour = CONTAINERS[(c.train * 7 + c.car * 3) % CONTAINERS.length] ?? CONTAINERS[0];
+        parts.push(part(turnedBox(c.x, c.y, hl * 0.9, hw * 0.85, c.angle, base + 0.08, base + 0.24), colour));
+        // The container's ribs.
+        for (const u of [-0.2, 0, 0.2]) {
+          const [rx, ry] = onCar(c, u);
+          parts.push(part(turnedBox(rx, ry, 0.012, hw * 0.87, c.angle, base + 0.09, base + 0.235), shade(colour, 0.8)));
+        }
+      }
+      emitParts(parts, out);
+      continue;
+    }
     const base = c.z + 0.1;
-    parts.push(part(turnedBox(c.x, c.y, 0.42, 0.12, c.angle, base - 0.03, base), MAGLEV_GLOW, { emissive: true }));
-    parts.push(part(turnedBox(c.x, c.y, 0.44, 0.16, c.angle, base, base + 0.2), MAGLEV_BODY));
-    parts.push(part(turnedBox(c.x, c.y, 0.4, 0.162, c.angle, base + 0.1, base + 0.16), Math.floor(time * 0.5 + c.x) % 5 === 0 ? GLASS : WARM_LIGHT, { emissive: true }));
-    parts.push(part(turnedBox(c.x, c.y, 0.44, 0.1, c.angle, base + 0.2, base + 0.23), ACCENT));
+    parts.push(part(turnedBox(c.x, c.y, hl - 0.02, hw * 0.75, c.angle, base - 0.03, base), MAGLEV_GLOW, { emissive: true }));
+    parts.push(part(turnedBox(c.x, c.y, hl, hw, c.angle, base, base + 0.2), MAGLEV_BODY));
+    parts.push(part(turnedBox(c.x, c.y, hl - 0.04, hw + 0.002, c.angle, base + 0.1, base + 0.16), Math.floor(time * 0.5 + c.x) % 5 === 0 ? GLASS : WARM_LIGHT, { emissive: true }));
+    parts.push(part(turnedBox(c.x, c.y, hl, hw * 0.6, c.angle, base + 0.2, base + 0.23), ACCENT));
     if (c.lead) {
-      const nx = c.x + Math.cos(c.angle) * 0.44;
-      const ny = c.y + Math.sin(c.angle) * 0.44;
-      parts.push(part(turnedBox(nx + Math.cos(c.angle) * 0.06, ny + Math.sin(c.angle) * 0.06, 0.06, 0.13, c.angle, base, base + 0.12), MAGLEV_BODY));
-      parts.push(part(turnedBox(nx + Math.cos(c.angle) * 0.11, ny + Math.sin(c.angle) * 0.11, 0.015, 0.05, c.angle, base + 0.04, base + 0.08), rgb(1, 0.95, 0.75), { emissive: true }));
+      // The nose, within the car's length: the car is what the line has room for.
+      const [nx, ny] = onCar(c, hl - 0.05);
+      parts.push(part(turnedBox(nx, ny, 0.05, hw * 0.8, c.angle, base + 0.2, base + 0.26), MAGLEV_BODY));
+      const [lx, ly] = onCar(c, hl + 0.003);
+      parts.push(part(turnedBox(lx, ly, 0.01, 0.04, c.angle, base + 0.04, base + 0.08), rgb(1, 0.95, 0.75), { emissive: true }));
     }
     emitParts(parts, out);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Rovers at work and rockets in flight (at the user's request). Both are
-// drawn, not simulated: where each is comes from its job's time left, plus
-// the moments since the last substep so they move smoothly.
-// ---------------------------------------------------------------------------
-
-interface Rover {
-  readonly x: number;
-  readonly y: number;
-  readonly z: number;
-  /** Heading: the axis it mostly drives along, +1 or -1. */
-  readonly dx: number;
-  readonly dy: number;
-  readonly hue: number;
-  /** At the rock, breaking it: how far through, 0..1; null while driving. */
-  readonly working: number | null;
+/** One train car's shapes, drawn alone: how a maglev and a freight car look. */
+export function drawCarShapes(car: TrainCar, time = 0): Shape[] {
+  const out: Shape[] = [];
+  drawTrains([car], time, out);
+  return out;
 }
 
-/** How far through each job is, 0..1, at this moment. */
-function jobProgress(total: number, remaining: number, since: number): number {
-  return Math.min(1, Math.max(0, (total - remaining + since) / total));
+/** One rover's shapes, drawn alone at a moment: its arm moves with the clock while it works. */
+export function drawRoverShapes(rover: Rover, time: number): Shape[] {
+  const out: Shape[] = [];
+  drawRovers([rover], time, out);
+  return out;
 }
 
-/** Every rover out on a job, by the tile it is on: out from the headquarters, at the rock, and back. */
-function roversAt(view: CityView, since: number): Map<number, Rover[]> {
-  const byTile = new Map<number, Rover[]>();
-  const g = view.garage;
-  if (g === null) return byTile;
-  const n = view.tiles;
-  view.jobs.forEach((job, k) => {
-    if (job.kind !== "rover") return;
-    const tx = job.tx + 0.5;
-    const ty = job.ty + 0.5;
-    const len = Math.hypot(tx - g.x, ty - g.y) || 1;
-    const ux = (tx - g.x) / len;
-    const uy = (ty - g.y) / len;
-    // It leaves by the garage door on the side facing the rock, and stops beside the rock.
-    const start = Math.max(0, Math.min(len, 2.6));
-    const stop = Math.max(start, len - 0.45);
-    const elapsed = jobProgress(job.total, job.remaining, since) * job.total;
-    const drive = Math.max(1e-9, (job.total - job.work) / 2);
-    let along: number;
-    let sign = 1;
-    let working: number | null = null;
-    if (elapsed < drive) along = start + (stop - start) * (elapsed / drive);
-    else if (elapsed < drive + job.work) {
-      along = stop;
-      working = (elapsed - drive) / Math.max(1e-9, job.work);
-    } else {
-      along = stop - (stop - start) * Math.min(1, (elapsed - drive - job.work) / drive);
-      sign = -1;
-    }
-    const x = g.x + ux * along;
-    const y = g.y + uy * along;
-    const tile = Math.min(n - 1, Math.max(0, Math.floor(y))) * n + Math.min(n - 1, Math.max(0, Math.floor(x)));
-    const major = Math.abs(ux) >= Math.abs(uy);
-    const rover: Rover = {
-      x,
-      y,
-      z: view.groundZ[tile] ?? 0,
-      dx: major ? Math.sign(ux * sign) || 1 : 0,
-      dy: major ? 0 : Math.sign(uy * sign) || 1,
-      hue: ((k * 0.37) % 1 + 1) % 1,
-      working,
-    };
-    const list = byTile.get(tile);
-    if (list === undefined) byTile.set(tile, [rover]);
-    else list.push(rover);
-  });
-  return byTile;
-}
+/** The last frame's rockets: a frame drawn chunk by chunk asks for them once a chunk. */
+let lastRockets: { view: CityView; since: number; out: Map<number, RocketState> } | null = null;
 
 /** Each spaceport's rocket, by the spaceport's corner tile: in flight at a height, or away. */
 function rocketsAt(view: CityView, since: number): Map<number, RocketState> {
+  if (lastRockets !== null && lastRockets.view === view && lastRockets.since === since) return lastRockets.out;
   const out = new Map<number, RocketState>();
+  lastRockets = { view, since, out };
   for (const job of view.jobs) {
     if (job.kind !== "rocket") continue;
     const q = jobProgress(job.total, job.remaining, since);
@@ -3774,51 +3710,47 @@ function rocketsAt(view: CityView, since: number): Map<number, RocketState> {
 const ROVER_BODY = rgb(0.9, 0.88, 0.84);
 const ROVER_TRIM = [rgb(0.92, 0.48, 0.16), rgb(0.2, 0.5, 0.78), rgb(0.85, 0.72, 0.2)] as const;
 
-/** A six-wheeled rover: chassis, cab, a stripe, a mast, a headlamp - and, at a rock, a drill and its dust. */
+/** A point `u` along and `v` across a rover from its middle. */
+function onRover(r: Rover, u: number, v = 0): [number, number] {
+  const ca = Math.cos(r.angle);
+  const sa = Math.sin(r.angle);
+  return [r.x + u * ca - v * sa, r.y + u * sa + v * ca];
+}
+
+/** A six-wheeled rover, facing where it drives: chassis, cab, a stripe, a mast, a headlamp - and, at work, a drill and its dust. */
 function drawRovers(list: readonly Rover[] | undefined, time: number, out: Shape[]): void {
   if (list === undefined) return;
   for (const r of list) {
-    const ax = Math.abs(r.dx);
-    // Half-extents along and across its heading.
-    const hl = 0.19;
-    const hw = 0.11;
-    const ex = ax ? hl : hw;
-    const ey = ax ? hw : hl;
+    const hl = r.halfL;
+    const hw = r.halfW;
     const trim = ROVER_TRIM[Math.floor(r.hue * ROVER_TRIM.length)] ?? ROVER_TRIM[0];
     const parts: Part[] = [];
     for (const u of [-0.13, 0, 0.13]) {
       for (const v of [-1, 1]) {
-        const cx = r.x + (ax ? u : v * (hw + 0.005));
-        const cy = r.y + (ax ? v * (hw + 0.005) : u);
-        parts.push(part(box(cx - 0.035, cy - 0.035, r.z, cx + 0.035, cy + 0.035, r.z + 0.07), RUBBER));
+        const [cx, cy] = onRover(r, u, v * (hw + 0.005 - 0.035));
+        parts.push(part(turnedBox(cx, cy, 0.035, 0.035, r.angle, r.z, r.z + 0.07), RUBBER));
       }
     }
-    parts.push(part(box(r.x - ex, r.y - ey, r.z + 0.05, r.x + ex, r.y + ey, r.z + 0.12), ROVER_BODY));
-    parts.push(part(box(r.x - ex - 0.002, r.y - ey - 0.002, r.z + 0.08, r.x + ex + 0.002, r.y + ey + 0.002, r.z + 0.095), trim));
-    const fx = r.x + r.dx * 0.09;
-    const fy = r.y + r.dy * 0.09;
-    const cab = 0.08;
-    parts.push(part(box(fx - (ax ? cab : hw * 0.8), fy - (ax ? hw * 0.8 : cab), r.z + 0.12, fx + (ax ? cab : hw * 0.8), fy + (ax ? hw * 0.8 : cab), r.z + 0.2), GLASS));
-    const bx = r.x - r.dx * 0.13;
-    const by = r.y - r.dy * 0.13;
-    parts.push(part(box(bx - 0.01, by - 0.01, r.z + 0.12, bx + 0.01, by + 0.01, r.z + 0.3), DARK_METAL));
-    const lx = r.x + r.dx * (hl + 0.005);
-    const ly = r.y + r.dy * (hl + 0.005);
-    parts.push(part(box(lx - 0.02, ly - 0.02, r.z + 0.08, lx + 0.02, ly + 0.02, r.z + 0.11), rgb(1, 0.95, 0.75), { emissive: true }));
+    parts.push(part(turnedBox(r.x, r.y, hl, hw - 0.01, r.angle, r.z + 0.05, r.z + 0.12), ROVER_BODY));
+    parts.push(part(turnedBox(r.x, r.y, hl + 0.002, hw - 0.008, r.angle, r.z + 0.08, r.z + 0.095), trim));
+    const [fx, fy] = onRover(r, 0.09);
+    parts.push(part(turnedBox(fx, fy, 0.08, hw * 0.8, r.angle, r.z + 0.12, r.z + 0.2), GLASS));
+    const [bx, by] = onRover(r, -0.13);
+    parts.push(part(turnedBox(bx, by, 0.01, 0.01, r.angle, r.z + 0.12, r.z + 0.3), DARK_METAL));
+    const [lx, ly] = onRover(r, hl + 0.005);
+    parts.push(part(turnedBox(lx, ly, 0.005, 0.02, r.angle, r.z + 0.08, r.z + 0.11), rgb(1, 0.95, 0.75), { emissive: true }));
     if (r.working !== null) {
-      // The drill arm, hammering, reaching past the nose into the rock.
+      // The drill arm, hammering, reaching past the nose into the work.
       const beat = 0.03 * Math.abs(Math.sin(time * 18));
-      const dx0 = r.x + r.dx * (hl + 0.02);
-      const dy0 = r.y + r.dy * (hl + 0.02);
-      const dx1 = r.x + r.dx * (hl + 0.24);
-      const dy1 = r.y + r.dy * (hl + 0.24);
-      parts.push(part(box(Math.min(dx0, dx1) - 0.02, Math.min(dy0, dy1) - 0.02, r.z + 0.06 + beat, Math.max(dx0, dx1) + 0.02, Math.max(dy0, dy1) + 0.02, r.z + 0.1 + beat), HAZARD));
+      const [ax, ay] = onRover(r, hl + 0.13);
+      parts.push(part(turnedBox(ax, ay, 0.12, 0.02, r.angle, r.z + 0.06 + beat, r.z + 0.1 + beat), HAZARD));
     }
     emitParts(parts, out);
     if (r.working !== null) {
       for (let i = 0; i < 3; i += 1) {
         const c = (((time * 0.8 + i / 3) % 1) + 1) % 1;
-        out.push(puff(r.x + r.dx * 0.4 + 0.1 * Math.sin(i * 2.1), r.y + r.dy * 0.4 + 0.1 * Math.cos(i * 2.1), r.z + 0.05 + c * 0.35, 5 + c * 7, rgb(0.7, 0.5, 0.38), 0.5 * (1 - c)));
+        const [px, py] = onRover(r, 0.4, 0.1 * Math.sin(i * 2.1));
+        out.push(puff(px, py, r.z + 0.05 + c * 0.35, 5 + c * 7, rgb(0.7, 0.5, 0.38), 0.5 * (1 - c)));
       }
     }
   }
@@ -4004,13 +3936,62 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
   const layer = options.layer;
   const drawStatic = layer === undefined || layer === "static";
   const drawLive = layer === undefined || layer === "live";
-  // Rovers and rockets move every frame, so they are never cached: a rover is
-  // drawn with the tile it is on, a rocket with its spaceport.
+  // Rovers and rockets move every frame, so they are never cached: a vehicle is
+  // drawn with the tile `drawTile` gives it (Batch 29: the nearest of those it
+  // is over, so all the ground under it is drawn first), a rocket with its spaceport.
   const since = options.sinceYears ?? 0;
   const rovers = quality !== "low" && drawLive ? roversAt(view, since) : null;
   const trains = quality !== "low" && drawLive ? trainsAt(view, options.time) : null;
   const rockets = rocketsAt(view, since);
   const vp = options.viewport;
+  // Batch 29, depth: drawn alone - the live layer the browser lays over a chunk's still picture - what moves would
+  // cover everything in the picture, a building standing in front of it too (a train behind a tower was drawn
+  // over the tower: 17% of a metropolis's cars, measured). So each vehicle's patch of the picture is drawn again
+  // from the vehicle on: everything later in the order that overlaps it, clipped to the patch - outside it the
+  // picture is already right. (Drawn again whole, unclipped, it covered what stood in front of it in turn, and
+  // making that right too drew three times the shapes a frame: measured.)
+  const liveAlone = !drawStatic;
+  /** The vehicles' patches of the picture so far, merged where they touch (a train's cars are one). */
+  const patches: ClipBox[] = [];
+  const touching = (a: ClipBox, b: ClipBox): boolean => a.maxX > b.minX && a.minX < b.maxX && a.maxY > b.minY && a.minY < b.maxY;
+  const imageOf = (o: Occupant): ClipBox => {
+    // The occupant's image: its columns across, and from the floor up to
+    // the tallest thing it could carry (a building, a badge, a plume).
+    const top = (o.building >= 0 ? (view.buildings[o.building]?.baseZ ?? 0) + buildingTop(view.buildings[o.building]!.type) + 1.5 : view.groundZ[o.ty * n + o.tx] ?? 0) + 0.6;
+    return { minX: ((o.tx - o.ty - o.h) * TILE_W) / 2, maxX: ((o.tx + o.w - o.ty) * TILE_W) / 2, minY: ((o.tx + o.ty) * TILE_H) / 2 - top * Z_PX, maxY: ((o.tx + o.w + o.ty + o.h) * TILE_H) / 2 - floor * Z_PX };
+  };
+  /** A vehicle's patch: its body on the ground and up to `height` over it, on screen. */
+  const remember = (f: Footprint & { readonly z: number }, height: number): void => {
+    let box: ClipBox = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+    for (const [x, y] of cornersOf(f)) {
+      const sx = ((x - y) * TILE_W) / 2;
+      const sy = ((x + y) * TILE_H) / 2;
+      box = { minX: Math.min(box.minX, sx - 1), maxX: Math.max(box.maxX, sx + 1), minY: Math.min(box.minY, sy - (f.z + height) * Z_PX - 1), maxY: Math.max(box.maxY, sy - f.z * Z_PX + 1) };
+    }
+    for (let k = patches.length - 1; k >= 0; k -= 1) {
+      const p = patches[k]!;
+      if (!touching(p, box)) continue;
+      box = { minX: Math.min(p.minX, box.minX), maxX: Math.max(p.maxX, box.maxX), minY: Math.min(p.minY, box.minY), maxY: Math.max(p.maxY, box.maxY) };
+      patches.splice(k, 1);
+      k = patches.length;
+    }
+    patches.push(box);
+  };
+  /** The rovers and trains drawn with the tiles of an occupant. */
+  const vehiclesOn = (o: Occupant): void => {
+    for (let y = o.ty; y < o.ty + o.h; y += 1) {
+      for (let x = o.tx; x < o.tx + o.w; x += 1) {
+        const r = rovers?.get(y * n + x);
+        const c = trains?.get(y * n + x);
+        drawRovers(r, options.time, out);
+        drawTrains(c, options.time, out);
+        if (liveAlone) {
+          for (const v of r ?? []) remember(v, 0.32);
+          for (const v of c ?? []) remember(v, 0.36);
+        }
+      }
+    }
+  };
   // Up close the ground is drawn through the half-tile samples; further away through tile corners.
   const gridZ = heightAt(view, quality === "high");
   const drawWorld = (cells: readonly WorldCell[]): void => {
@@ -4021,108 +4002,105 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
       for (const shape of c.shapes) out.push(shape);
     }
   };
-  drawWorld(src.worldBack);
-  for (const i of order) {
-    const o = occupants[i]!;
-    if (vp !== undefined && cull) {
-      // The occupant's image: its columns across, and from the floor up to
-      // the tallest thing it could carry (a building, a badge, a plume).
-      const x0 = ((o.tx - o.ty - o.h) * TILE_W) / 2;
-      const x1 = ((o.tx + o.w - o.ty) * TILE_W) / 2;
-      const top = (o.building >= 0 ? (view.buildings[o.building]?.baseZ ?? 0) + buildingTop(view.buildings[o.building]!.type) + 1.5 : view.groundZ[o.ty * n + o.tx] ?? 0) + 0.6;
-      const y0 = ((o.tx + o.ty) * TILE_H) / 2 - top * Z_PX;
-      const y1 = ((o.tx + o.w + o.ty + o.h) * TILE_H) / 2 - floor * Z_PX;
-      if (x1 < vp.minX || x0 > vp.maxX || y1 < vp.minY || y0 > vp.maxY) continue;
-    }
-    if (o.building < 0) {
-      if (!drawStatic) {
-        // Live alone: the rovers on this ground.
-        if (rovers !== null) for (let y = o.ty; y < o.ty + o.h; y += 1) for (let x = o.tx; x < o.tx + o.w; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
-        if (trains !== null) for (let y = o.ty; y < o.ty + o.h; y += 1) for (let x = o.tx; x < o.tx + o.w; x += 1) drawTrains(trains.get(y * n + x), options.time, out);
-        continue;
-      }
-      // Ground never animates: its shapes are built once per layout and kept
-      // (Batch 22 - rebuilding ~1,000 columns cost most of a 9 ms frame).
-      const kept = ground.get(i);
-      if (kept !== undefined) {
-        for (const shape of kept) out.push(shape);
-        // Whatever moves over it: a patch of merged ground further away carries its rovers and trains too.
-        for (let y = o.ty; y < o.ty + o.h; y += 1) {
-          for (let x = o.tx; x < o.tx + o.w; x += 1) {
-            if (rovers !== null) drawRovers(rovers.get(y * n + x), options.time, out);
-            if (trains !== null) drawTrains(trains.get(y * n + x), options.time, out);
-          }
-        }
-        continue;
-      }
-      const start = out.length;
-      if (o.w > 1) {
-        // A patch of open ground further away, through its four corners.
-        groundMesh(o.tx, o.ty, o.w, o.w, gridZ, view.greenery, null, out);
-        ground.set(i, out.slice(start));
-        for (let y = o.ty; y < o.ty + o.h; y += 1) {
-          for (let x = o.tx; x < o.tx + o.w; x += 1) {
-            if (rovers !== null) drawRovers(rovers.get(y * n + x), options.time, out);
-            if (trains !== null) drawTrains(trains.get(y * n + x), options.time, out);
-          }
-        }
-        continue;
-      }
+  /** A tile (or patch) of ground's shapes, made once per layout and kept (Batch 22 - rebuilding ~1,000 columns cost most of a 9 ms frame). */
+  const groundShapes = (i: number, o: Occupant): readonly Shape[] => {
+    const kept = ground.get(i);
+    if (kept !== undefined) return kept;
+    const made: Shape[] = [];
+    if (o.w > 1) {
+      // A patch of open ground further away, through its four corners.
+      groundMesh(o.tx, o.ty, o.w, o.w, gridZ, view.greenery, null, made);
+    } else {
       const z = view.groundZ[o.ty * n + o.tx] ?? 0;
       const rock = view.rocks[o.ty * n + o.tx] ?? "none";
       // Smooth ground: the tile through its four corners - no steps.
-      groundMesh(o.tx, o.ty, 1, quality === "high" ? 0.5 : 1, gridZ, view.greenery, null, out);
-      if (quality === "high" && rock === "none") shrubs(o.tx, o.ty, gridZ, view.greenery, out);
+      groundMesh(o.tx, o.ty, 1, quality === "high" ? 0.5 : 1, gridZ, view.greenery, null, made);
+      if (quality === "high" && rock === "none") shrubs(o.tx, o.ty, gridZ, view.greenery, made);
       // The rocks the simulation knows (a rover can break exactly what is drawn).
       if (rock === "crag") {
-        if (showBoulders(o.tx, o.ty, view.steep[o.ty * n + o.tx] === true, quality)) emitParts(boulders(o.tx, o.ty, z, quality), out);
+        if (showBoulders(o.tx, o.ty, view.steep[o.ty * n + o.tx] === true, quality)) emitParts(boulders(o.tx, o.ty, z, quality), made);
       } else if (rock === "loose" && quality === "high") {
-        emitParts(scatter(o.tx, o.ty, z), out);
+        emitParts(scatter(o.tx, o.ty, z), made);
       } else if (rock === "loose" && quality === "medium") {
-        emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, 0.14, 0.07, z, z + 0.1, 5), ROCK)], out);
+        emitParts([part(frustum(o.tx + 0.5, o.ty + 0.5, 0.14, 0.07, z, z + 0.1, 5), ROCK)], made);
       }
-      if (view.corridors[o.ty * n + o.tx] === true) emitParts(corridorDetail(view, src.connectors.corridors, o.tx, o.ty, z, quality), out);
-      if (view.cables[o.ty * n + o.tx] === true) emitParts(cableDetail(view, src.connectors.cables, o.tx, o.ty, z, quality), out);
-      if (view.rails?.[o.ty * n + o.tx] === true) emitParts(railDetail(view, o.tx, o.ty, z, quality), out);
-      ground.set(i, out.slice(start));
-      if (rovers !== null) drawRovers(rovers.get(o.ty * n + o.tx), options.time, out);
-      if (trains !== null) drawTrains(trains.get(o.ty * n + o.tx), options.time, out);
-      continue;
+      if (view.corridors[o.ty * n + o.tx] === true) emitParts(corridorDetail(view, src.connectors.corridors, o.tx, o.ty, z, quality), made);
+      if (view.cables[o.ty * n + o.tx] === true) emitParts(cableDetail(view, src.connectors.cables, o.tx, o.ty, z, quality), made);
+      if (view.rails?.[o.ty * n + o.tx] === true) emitParts(railDetail(view, o.tx, o.ty, z, quality), made);
     }
-    const b = view.buildings[o.building]!;
-    const shapesFrom = out.length;
-    // The building's ground, levelled at its highest corner; on a slope a
-    // concrete foundation fills down to the lowest (the user: "building on a
-    // slope terrain builds concrete foundations under it").
-    let lowest = Infinity;
+    ground.set(i, made);
+    return made;
+  };
+  /** A building, as `mode` asks: on its levelled ground or foundation, everything; its still parts; or its moving parts alone. */
+  const buildingShapes = (b: CityBuildingView, mode: "all" | "static" | "live"): Kit => {
     const bd = b.depth ?? b.size;
-    for (let y = b.ty; y <= b.ty + bd; y += 1) for (let x = b.tx; x <= b.tx + b.size; x += 1) lowest = Math.min(lowest, corner(view, x, y));
-    const drop = b.baseZ - lowest;
-    if (!drawStatic) {
-      // Live alone: nothing of the building's ground.
-    } else if (drop > 0.02) {
-      const footing = box(b.tx, b.ty, lowest - 0.05, b.tx + b.size, b.ty + bd, b.baseZ);
-      emitParts([part(footing.slice(1, 3), FOUNDATION)], out);
-      out.push({ rings: [ringOf(footing[0]!.pts)], fill: { ...shade(FOUNDATION, 1.08), a: 1 } });
-    } else {
-      out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + bd, b.baseZ)], fill: { ...groundColour(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ, 0, view.greenery), a: 1 } });
+    if (mode !== "live") {
+      // The building's ground, levelled at its highest corner; on a slope a
+      // concrete foundation fills down to the lowest (the user: "building on a
+      // slope terrain builds concrete foundations under it").
+      let lowest = Infinity;
+      for (let y = b.ty; y <= b.ty + bd; y += 1) for (let x = b.tx; x <= b.tx + b.size; x += 1) lowest = Math.min(lowest, corner(view, x, y));
+      if (b.baseZ - lowest > 0.02) {
+        const footing = box(b.tx, b.ty, lowest - 0.05, b.tx + b.size, b.ty + bd, b.baseZ);
+        emitParts([part(footing.slice(1, 3), FOUNDATION)], out);
+        out.push({ rings: [ringOf(footing[0]!.pts)], fill: { ...shade(FOUNDATION, 1.08), a: 1 } });
+      } else {
+        out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + bd, b.baseZ)], fill: { ...groundColour(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ, 0, view.greenery), a: 1 } });
+      }
     }
     const rocket: RocketState = b.type === "spaceport" ? rockets.get(b.ty * n + b.tx) ?? null : null;
     const site = b.construction ?? null;
     // Its seed: where it stands from the founding square (claims west or north move tile indices, not this).
     const seed = buildingSeed(view, b);
     const built = site !== null ? worksite(b, site, quality) : quality === "high" ? assemble(b, options.time, rocket, seed) : quality === "medium" ? assembleMedium(b, seed) : assembleLow(b);
-    emitBuilding(built, b, buildings, out, buildingVariant(b, quality, rocket), drawStatic && drawLive ? "all" : drawStatic ? "static" : "live");
-    // A rover crossing the building's ground is drawn after it.
-    if (rovers !== null) for (let y = b.ty; y < b.ty + bd; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) drawRovers(rovers.get(y * n + x), options.time, out);
-    // Steam and other particles only up close: they move.
-    if (quality === "high" && drawLive) out.push(...built.extras);
+    emitBuilding(built, b, buildings, out, buildingVariant(b, quality, rocket), mode);
+    return built;
+  };
+  drawWorld(src.worldBack);
+  for (const i of order) {
+    const o = occupants[i]!;
+    if (vp !== undefined && cull) {
+      const im = imageOf(o);
+      if (im.maxX < vp.minX || im.minX > vp.maxX || im.maxY < vp.minY || im.minY > vp.maxY) continue;
+    }
+    const b = o.building >= 0 ? view.buildings[o.building]! : null;
+    const shapesFrom = out.length;
+    if (liveAlone) {
+      // What moves on it, over the picture: a building's lights, steam, a rocket.
+      const built = b !== null ? buildingShapes(b, "live") : null;
+      // Each vehicle's patch it overlaps, drawn again from it, clipped to the patch.
+      if (patches.length > 0) {
+        const im = imageOf(o);
+        for (const patch of patches) {
+          if (!touching(patch, im)) continue;
+          const from = out.length;
+          if (b !== null) buildingShapes(b, "all");
+          else for (const shape of groundShapes(i, o)) out.push(shape);
+          for (let k = from; k < out.length; k += 1) out[k] = { ...out[k]!, clip: patch };
+        }
+      }
+      vehiclesOn(o);
+      if (built !== null && quality === "high") out.push(...built.extras);
+    } else if (b === null) {
+      for (const shape of groundShapes(i, o)) out.push(shape);
+      // Whatever moves over it: a patch of merged ground further away carries its rovers and trains too.
+      vehiclesOn(o);
+      continue;
+    } else {
+      const built = buildingShapes(b, drawStatic && drawLive ? "all" : "static");
+      // A vehicle drawn with the building's ground (a rover on the straight line of an old job, crossing it) is drawn after it.
+      vehiclesOn(o);
+      // Steam and other particles only up close: they move.
+      if (quality === "high" && drawLive) out.push(...built.extras);
+    }
+    if (b === null) continue;
     // Building mode: the building and its footing see-through, so what stands behind can be seen and built.
     if (options.seeThrough === true) {
       for (let k = shapesFrom; k < out.length; k += 1) out[k] = { ...out[k]!, fill: { ...out[k]!.fill, a: out[k]!.fill.a * SEE_THROUGH_ALPHA } };
     }
     // Not connected to what it needs reads differently from any other reason it is off; a worksite is neither.
-    if (!b.operable && site === null && layer === undefined) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ + buildingTop(b.type) + 0.35));
+    const bd = b.depth ?? b.size;
+    if (!b.operable && (b.construction ?? null) === null && layer === undefined) badges.push(...(b.network !== null ? unlinkedBadge : offlineBadge)(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ + buildingTop(b.type) + 0.35));
   }
 
   drawWorld(src.worldFront);

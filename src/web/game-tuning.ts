@@ -49,6 +49,17 @@ export const BROWSER_OVERRIDES: TuningOverrides = {
 export const BROWSER_TUNING: Tuning = makeTuning(BROWSER_OVERRIDES);
 validateTuning(BROWSER_TUNING);
 
+/**
+ * What every world made since gets, whatever its mode and pace: the features
+ * from Batch 29 on that change the balance. A world made before one keeps
+ * playing as it did - its recorded tuning has it off - so these never go in
+ * `BROWSER_OVERRIDES`, the tuning of the worlds before worlds.
+ */
+export const NEW_WORLD_OVERRIDES: TuningOverrides = {
+  // Rovers drive round the city, not through it, and the way they drive sets their trips (Batch 29).
+  ROVER_ROUTES_ENABLED: 1,
+};
+
 /** "Standard", today's game; "Sandbox"; "Terraformed start", the example planet as a start that saves. */
 export type WorldMode = "standard" | "sandbox" | "terraformed";
 export const WORLD_MODES: readonly WorldMode[] = ["standard", "sandbox", "terraformed"];
@@ -105,7 +116,7 @@ export function paceOf(t: Tuning): WorldPace {
  */
 export function worldTuning(mode: WorldMode, seed: number, pace: WorldPace = "standard"): Tuning {
   const sandbox: TuningOverrides = mode === "sandbox" ? { SANDBOX_ENABLED: 1, TECH_GATE_ENABLED: 0, FLOODING_ENABLED: 0 } : {};
-  const t = makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES[pace], TERRAIN_SEED: seed, ...sandbox });
+  const t = makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES, ...PACE_OVERRIDES[pace], TERRAIN_SEED: seed, ...sandbox });
   validateTuning(t);
   return t;
 }

@@ -15,7 +15,7 @@
  */
 
 import type { CitySceneOptions } from "../render/city.js";
-import { CHUNK_TILES_BY_QUALITY, chunkId, cityChunkRange, cityChunkReach, cityChunkSignature, cityLiveChunks, cityScene } from "../render/city.js";
+import { CHUNK_TILES_BY_QUALITY, chunkId, cityChunkReach, cityChunkSignature, cityChunksInView, cityLiveChunks, cityScene } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { CityView } from "../sim/index.js";
 
@@ -89,17 +89,8 @@ export class ChunkedCity<P> {
     const size = CHUNK_TILES_BY_QUALITY[options.quality ?? "high"];
     const key = (cx: number, cy: number): string => `${size}:${chunkId(cx, cy)}`;
     const want = pictureScale(scale);
-    const r = cityChunkRange(view, size);
-    const visible: [number, number][] = [];
-    for (let cy = r.cy0; cy <= r.cy1; cy += 1) {
-      for (let cx = r.cx0; cx <= r.cx1; cx += 1) {
-        const reach = cityChunkReach(view, size, cx, cy);
-        if (reach.maxX < viewport.minX || reach.minX > viewport.maxX || reach.maxY < viewport.minY || reach.minY > viewport.maxY) continue;
-        visible.push([cx, cy]);
-      }
-    }
     // Back to front, as the painter draws.
-    visible.sort((a, b) => a[0] + a[1] - (b[0] + b[1]) || a[0] - b[0]);
+    const visible = cityChunksInView(view, size, viewport);
     const live = cityLiveChunks(view, options, size);
     // First the pictures to draw this frame: chunks never drawn, nearest the middle of the view first,
     // for `firstBudgetMs`; then stale ones for `budgetMs`. The rest keep their old picture, or wait.

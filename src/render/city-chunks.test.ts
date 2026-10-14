@@ -42,11 +42,14 @@ const tag = (s: { fill: { r: number; g: number; b: number; a: number }; rings: r
   `${s.fill.r.toFixed(4)},${s.fill.g.toFixed(4)},${s.fill.b.toFixed(4)},${s.fill.a.toFixed(4)}|${s.rings.map((r) => r.slice(0, 4).map((v) => v.toFixed(3)).join(",")).join(";")}|${s.rings[0]!.length}`;
 
 describe("the scene in chunks", () => {
+  /** The metropolis with nothing moving through it: no trains, no rovers out. */
+  const still: CityView = { ...metropolis, id: "still", rails: (metropolis.rails ?? []).map(() => false), jobs: metropolis.jobs.filter((j) => j.kind === "rocket") };
+
   for (const quality of ["high", "medium", "low"] as CityQuality[]) {
-    it(`is the whole scene, every shape once, at ${quality} detail - the example's largest metropolis`, () => {
+    it(`is the whole scene, every shape once, at ${quality} detail - the example's largest metropolis, nothing moving through it`, () => {
       const o: CitySceneOptions = { time: 2.2, selected: null, ghost: null, quality, sinceYears: 0.1 };
-      const whole = cityScene(metropolis, o);
-      const { stat, live, overlay } = pieces(metropolis, o, 8);
+      const whole = cityScene(still, o);
+      const { stat, live, overlay } = pieces(still, o, 8);
       const all = [...stat, ...live, ...overlay] as Parameters<typeof tag>[0][];
       expect(all.length).toBe(whole.length);
       const count = new Map<string, number>();
@@ -55,6 +58,27 @@ describe("the scene in chunks", () => {
       expect([...count.values()].filter((v) => v !== 0)).toEqual([]);
       if (quality === "high") expect(live.length, "vacuity: something moves (medium and low draw nothing moving)").toBeGreaterThan(0);
       expect(stat.length, "and most of it stands still").toBeGreaterThan(20 * live.length);
+    });
+
+    it(`is the whole scene and nothing else, at ${quality} detail - with its trains and rovers, what covers them drawn again over them`, () => {
+      // Batch 29: what moves is drawn over a chunk's still picture, so whatever stands in front of a vehicle is drawn
+      // again over it. Every shape of the whole scene is in the pieces; the only ones more are those drawn again.
+      const o: CitySceneOptions = { time: 2.2, selected: null, ghost: null, quality, sinceYears: 0.1 };
+      const whole = cityScene(metropolis, o);
+      const { stat, live, overlay } = pieces(metropolis, o, 8);
+      const all = [...stat, ...live, ...overlay] as Parameters<typeof tag>[0][];
+      const count = new Map<string, number>();
+      for (const s of whole) count.set(tag(s), (count.get(tag(s)) ?? 0) + 1);
+      for (const s of all) count.set(tag(s), (count.get(tag(s)) ?? 0) - 1);
+      const missing = [...count.entries()].filter(([, v]) => v > 0);
+      expect(missing).toEqual([]);
+      const known = new Set(whole.map(tag));
+      expect(all.filter((s) => !known.has(tag(s))).map(tag)).toEqual([]);
+      const again = all.length - whole.length;
+      if (quality !== "low") expect(again, "vacuity: something was drawn again over a vehicle").toBeGreaterThan(0);
+      else expect(again, "furthest out nothing moves").toBe(0);
+      // A few hundred shapes against the whole metropolis: measured in the batch note.
+      expect(again).toBeLessThan(whole.length / 100);
     });
   }
 

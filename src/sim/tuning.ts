@@ -1089,6 +1089,20 @@ export const BASE_TUNING = Object.freeze({
    */
   CITY_CLOCK: 1,
   /**
+   * Rovers drive round the city, not through it (Batch 29: "the rovers skin
+   * through buildings"). With ROVER_ROUTES_ENABLED, a rover's way from the
+   * garage to its job is a route over corridors and open ground - never under
+   * a building, over hard rock or up ground too steep to build on - found
+   * once, when it sets out, and kept with the job. Its length sets the
+   * drive's time: ROVER_YEARS_PER_TILE a tile over open ground, that divided
+   * by ROVER_CORRIDOR_SPEEDUP along a corridor (a reason to build roads). A
+   * job no route reaches is refused. OFF (0) by default and in every world
+   * made before Batch 29 (their drive stays the straight line, though their
+   * rovers are drawn round the buildings); every new world turns it on.
+   */
+  ROVER_ROUTES_ENABLED: 0,
+  ROVER_CORRIDOR_SPEEDUP: 2,
+  /**
    * Railways between settlements (at the user's request: "interconnected
    * cities"). Off by default: they move stores from city to city, which would
    * perturb the balanced worlds; the browser turns them on. Laid for
@@ -1251,6 +1265,9 @@ export function validateTuning(t: Tuning): void {
   for (const k of ["BUILD_GROWTH_SMALL", "BUILD_GROWTH_MEDIUM", "BUILD_GROWTH_GREAT"] as const) if (!(t[k] > 1)) fail(`${k} must be > 1`);
   for (const k of TUNING_SCALAR_KEYS) if (k.startsWith("BUILD_SECONDS_") && !(t[k] > 0)) fail(`${k} must be > 0`);
   if (!(t.CITY_CLOCK > 0)) fail("CITY_CLOCK must be > 0");
+  if (t.ROVER_ROUTES_ENABLED !== 0 && t.ROVER_ROUTES_ENABLED !== 1) fail("ROVER_ROUTES_ENABLED must be 0 or 1");
+  // At least 1: a corridor is never slower than open ground, so the straight line over open ground is the A* heuristic's floor.
+  if (!(t.ROVER_CORRIDOR_SPEEDUP >= 1)) fail("ROVER_CORRIDOR_SPEEDUP must be >= 1");
   for (const k of ["MAX_LEVEL_HABITAT_DOME", "MAX_LEVEL_REGOLITH_MINE", "MAX_LEVEL_OTHER"] as const) if (!(Number.isInteger(t[k]) && t[k] >= 1)) fail(`${k} must be a whole number >= 1`);
   if (!(t.ROCKET_TRIP_YEARS > 0)) fail("ROCKET_TRIP_YEARS must be > 0");
   if (!(t.ROCK_LOOSE_SHARE >= 0 && t.ROCK_LOOSE_SHARE <= 1)) fail("ROCK_LOOSE_SHARE must be in [0, 1]");

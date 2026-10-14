@@ -13,27 +13,35 @@ import { NEUTRAL_ENV, advance, foundSettlement, launchRocket, makeTuning, marsSt
 import type { Tuning } from "../sim/index.js";
 import { playPacing } from "../harness/pacing.js";
 import { ALL_SPEEDS, CLASSIC_SPEEDS, STANDARD_SPEEDS, speedsFor } from "./config.js";
-import { BROWSER_OVERRIDES, BROWSER_TUNING, PACE_OVERRIDES, paceOf, worldTuning } from "./game-tuning.js";
+import { BROWSER_OVERRIDES, BROWSER_TUNING, NEW_WORLD_OVERRIDES, PACE_OVERRIDES, paceOf, worldTuning } from "./game-tuning.js";
 
-const STANDARD = makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES.standard });
-const CLASSIC = makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES.classic });
+/** What a new world plays at each pace (since Batch 29, with the rovers' routes). */
+const STANDARD = worldTuning("standard", 0, "standard");
+const CLASSIC = worldTuning("standard", 0, "classic");
+/** The two paces as Batch 28 made them, before routes: the cities' clock alone. */
+const STANDARD_28 = makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES.standard });
+const CLASSIC_28 = makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES.classic });
 const MIN = 60;
 const HOUR = 3600;
 /** The reference playthrough's length, sim-years (`golden.test.ts`: Phase 6 at 1710). */
 const ARC_YEARS = 1710;
 
 describe("the scripted playthrough, in real time at 1x", () => {
-  // Measured (Batch 28): Classic 8 s / 19.3 min / 1.57 h / 8 s / 12.4 min;
+  // Measured (Batch 28, before routes): Classic 8 s / 19.3 min / 1.57 h / 8 s / 12.4 min;
   // Standard 33 s / 19.9 min / 1.79 h / 8 s / 1.65 h.
+  // Measured (Batch 29, a new world, routes on): Classic 8 s / 19.9 min / 1.66 h / 8 s / 12.4 min;
+  // Standard 33 s / 21.5 min / 2.02 h / 8 s / 1.65 h.
   const classic = playPacing(CLASSIC, 4 * HOUR).moments;
   const standard = playPacing(STANDARD, 4 * HOUR).moments;
+  const classic28 = playPacing(CLASSIC_28, 4 * HOUR).moments;
+  const standard28 = playPacing(STANDARD_28, 4 * HOUR).moments;
 
   it("Standard: the first building stands within a minute (33 s)", () => {
     expect(standard.firstBuilding).not.toBeNull();
     expect(standard.firstBuilding!).toBeLessThan(MIN);
   });
 
-  it("Standard: a city of 1,000 at 1-3 h (1.79 h)", () => {
+  it("Standard: a city of 1,000 at 1-3 h (2.02 h)", () => {
     expect(standard.city1000! / HOUR).toBeGreaterThanOrEqual(1);
     expect(standard.city1000! / HOUR).toBeLessThanOrEqual(3);
   });
@@ -44,7 +52,7 @@ describe("the scripted playthrough, in real time at 1x", () => {
     expect(standard.phase2! / HOUR).toBeLessThanOrEqual(3);
   });
 
-  it("the first upgrade misses the plan's 4-8 min in both paces (19.9 min, 19.3 Classic) - held where it is", () => {
+  it("the first upgrade misses the plan's 4-8 min in both paces (21.5 min, 19.9 Classic) - held where it is", () => {
     // An upgrade costs a building's price for +10%: the script, like a player,
     // builds new until it has nothing it needs. Recorded, not hidden: the miss is
     // the upgrade's value, which this batch does not set. A regression guard only.
@@ -53,8 +61,20 @@ describe("the scripted playthrough, in real time at 1x", () => {
   });
 
   it("Standard slows the planet and not the cities: Phase 2 comes 8x later, the city of 1,000 within a fifth", () => {
+    // The clock alone, as Batch 28 made the paces: routes cost the two paces differently (below).
+    expect(standard28.phase2! / classic28.phase2!).toBeCloseTo(8, 0);
+    expect(standard28.city1000! / classic28.city1000!).toBeLessThan(1.2);
     expect(standard.phase2! / classic.phase2!).toBeCloseTo(8, 0);
-    expect(standard.city1000! / classic.city1000!).toBeLessThan(1.2);
+  });
+
+  it("the rovers' routes cost the city of 1,000 an eighth at Standard (1.79 h to 2.02 h), a sixteenth at Classic (1.57 h to 1.66 h)", () => {
+    // Batch 29: the scripted city packs its buildings edge to edge round the headquarters, with 13 tiles of
+    // corridor, so a rover's way round them is 4x the straight line (50 tiles against 12, measured). At the
+    // Standard pace rovers are what the city waits for most (its builds are long). Measured 1.128 and 1.057.
+    expect(standard.city1000! / standard28.city1000!).toBeGreaterThan(1.05);
+    expect(standard.city1000! / standard28.city1000!).toBeLessThan(1.2);
+    expect(classic.city1000! / classic28.city1000!).toBeGreaterThan(1);
+    expect(classic.city1000! / classic28.city1000!).toBeLessThan(1.1);
   });
 });
 
@@ -100,8 +120,11 @@ describe("a world's pace is its tuning", () => {
     expect(paceOf(BROWSER_TUNING)).toBe("classic");
   });
 
-  it("leaves a Classic world exactly the browser's tuning it always was, but for its seed", () => {
-    expect({ ...worldTuning("standard", 0, "classic") }).toEqual({ ...BROWSER_TUNING });
+  it("leaves a Classic world exactly the browser's tuning it always was, but for its seed and what every new world has since", () => {
+    expect({ ...worldTuning("standard", 0, "classic") }).toEqual({ ...makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES }) });
+    // Batch 29: what every new world has since is the rovers' routes, and the worlds before worlds never had them.
+    expect(NEW_WORLD_OVERRIDES).toEqual({ ROVER_ROUTES_ENABLED: 1 });
+    expect(BROWSER_TUNING.ROVER_ROUTES_ENABLED).toBe(0);
   });
 
   it("offers a Standard world slow speeds, a sandbox and the debug setting every speed, a Classic world its own", () => {

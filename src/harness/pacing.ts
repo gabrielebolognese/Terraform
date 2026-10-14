@@ -85,9 +85,10 @@ function spiral(s: Settlement, tiles: number): readonly (readonly [number, numbe
 
 /**
  * Play `seconds` of real time at 1x under `t`. Deterministic: the same tuning
- * gives the same run, the moments to the substep.
+ * gives the same run, the moments to the substep. `onStep`, if given, is
+ * shown the state after every substep.
  */
-export function playPacing(t: Tuning, seconds: number, stopWhenDone = true): PacingRun {
+export function playPacing(t: Tuning, seconds: number, stopWhenDone = true, onStep?: (state: SimState, step: number) => void): PacingRun {
   const cfg = { tuning: t, env: NEUTRAL_ENV, forcing: null };
   const founded = foundSettlement(marsStart(undefined, t), "city", PACING_SITE.lat, PACING_SITE.lon, t, "Pacing");
   if (!founded.ok) throw new Error(`the pacing city could not be founded: ${founded.reason}`);
@@ -183,6 +184,8 @@ export function playPacing(t: Tuning, seconds: number, stopWhenDone = true): Pac
   for (; step < totalSteps; step += 1) {
     if (step % stepsPerLook === 0) look();
     state = advance(state, 1, cfg);
+    // An observer (Batch 29's scripted day): it sees each substep's state and changes nothing.
+    onStep?.(state, step);
     const after = city();
     const now = (step + 1) * realPerStep;
     // A building stands once it is no longer a worksite.

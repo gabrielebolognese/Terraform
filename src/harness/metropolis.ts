@@ -32,7 +32,8 @@ import {
   linksToConnect,
   rocksOf,
   roverCount,
-  roverYears,
+  roverRoute,
+  tileSite,
   garage,
   tileKey,
 } from "../sim/index.js";
@@ -462,9 +463,16 @@ export function buildMetropolis(start: SimState, id: string, env: HabitatChannel
     for (let k = 0; k < Math.min(rovers - 2, 12) && rockList.length > 0; k += 1) {
       const [rock, x, y] = rockList[Math.floor(rnd() * rockList.length)]!;
       if (jobs.some((j) => j.tile === tileKey(x, y))) continue;
-      const total = roverYears(s, x, y, rock, t);
+      // Batch 29: each rover out on the way it would drive, timed by it, whatever the tuning - so opening the city
+      // never has to find the way for it (twelve searches as a metropolis opened slowed the next one's ground by
+      // half a second, measured). A rock no rover can get to has none sent; its draw is made all the same, so the
+      // rest of the example is as it was.
       const work = rock === "crag" ? t.ROVER_WORK_YEARS_CRAG : t.ROVER_WORK_YEARS_LOOSE;
-      jobs.push({ kind: "rover", tile: tileKey(x, y), materials: rock === "crag" ? t.ROCK_CRAG_MATERIALS : t.ROCK_LOOSE_MATERIALS, work, total, remaining: total * (0.15 + 0.8 * rnd()) });
+      const share = 0.15 + 0.8 * rnd();
+      const way = roverRoute(s, tileSite(x, y), t);
+      if (way === null) continue;
+      const total = 2 * way.years + work;
+      jobs.push({ kind: "rover", tile: tileKey(x, y), materials: rock === "crag" ? t.ROCK_CRAG_MATERIALS : t.ROCK_LOOSE_MATERIALS, work, total, remaining: total * share, route: way.points });
     }
     for (const b of placed) {
       if (b.type === "spaceport" && rnd() < 0.5) jobs.push({ kind: "rocket", tile: tileKey(b.tx, b.ty), total: t.ROCKET_TRIP_YEARS, remaining: t.ROCKET_TRIP_YEARS * (0.05 + 0.9 * rnd()) });

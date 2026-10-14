@@ -29,6 +29,20 @@ export interface Rgba {
 export interface Shape {
   readonly rings: readonly (readonly number[])[];
   readonly fill: Rgba;
+  /**
+   * Filled only inside this box, iso pixels, if given (Batch 29): what is drawn
+   * again over a moving vehicle, so it changes nothing outside the vehicle's
+   * own patch of the picture.
+   */
+  readonly clip?: ClipBox;
+}
+
+/** An upright box in iso pixel space. */
+export interface ClipBox {
+  readonly minX: number;
+  readonly maxX: number;
+  readonly minY: number;
+  readonly maxY: number;
 }
 
 /** screen = iso * scale + offset. */
@@ -73,8 +87,12 @@ export function rasterize(
         maxY = Math.max(maxY, ring[k]!);
       }
     }
-    const rowFrom = Math.max(0, Math.floor(minY));
-    const rowTo = Math.min(height - 1, Math.ceil(maxY));
+    // A clip box: pixel centres inside it only.
+    const clip = shape.clip;
+    const cx0 = clip === undefined ? 0 : Math.max(0, Math.ceil(clip.minX * scale + offsetX - 0.5));
+    const cx1 = clip === undefined ? width - 1 : Math.min(width - 1, Math.ceil(clip.maxX * scale + offsetX - 0.5) - 1);
+    const rowFrom = Math.max(0, Math.floor(minY), clip === undefined ? 0 : Math.ceil(clip.minY * scale + offsetY - 0.5));
+    const rowTo = Math.min(height - 1, Math.ceil(maxY), clip === undefined ? height - 1 : Math.ceil(clip.maxY * scale + offsetY - 0.5) - 1);
     for (let row = rowFrom; row <= rowTo; row += 1) {
       const yc = row + 0.5;
       xs.length = 0;
@@ -95,8 +113,8 @@ export function rasterize(
       xs.sort((p, q) => p - q);
       for (let k = 0; k + 1 < xs.length; k += 2) {
         // Pixel centres in [xa, xb).
-        const from = Math.max(0, Math.ceil(xs[k]! - 0.5));
-        const to = Math.min(width - 1, Math.ceil(xs[k + 1]! - 0.5) - 1);
+        const from = Math.max(cx0, Math.ceil(xs[k]! - 0.5));
+        const to = Math.min(cx1, Math.ceil(xs[k + 1]! - 0.5) - 1);
         for (let col = from; col <= to; col += 1) {
           const o = (row * width + col) * 3;
           acc[o] = shape.fill.r * a + acc[o]! * (1 - a);
