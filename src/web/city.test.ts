@@ -463,11 +463,11 @@ describe("the headquarters, rovers and rockets (at the user's request)", () => {
     page.clickAt(20.5, 16.5, 0);
     expect(page.q(".city-inspector-name").textContent).toBe("Spaceport");
     expect(page.q(".city-launch").hidden).toBe(false);
-    expect(page.q(".city-inspector-summary").textContent).toMatch(/back in about 60 s at 1x with 20 materials/);
+    expect(page.q(".city-inspector-summary").textContent).toMatch(/back in about 1 min at 1x with 20 materials/);
     (page.q(".city-launch") as HTMLButtonElement).click();
     page.frame(16);
     expect(page.calls.at(-1)).toMatch(/^launch@/);
-    expect(page.q(".city-inspector-summary").textContent).toMatch(/Its rocket is away: back in about 60 s at 1x\./);
+    expect(page.q(".city-inspector-summary").textContent).toMatch(/Its rocket is away: back in about 1 min at 1x\./);
   });
 
   it("offers no card for the headquarters, and no way to remove it", () => {

@@ -132,6 +132,35 @@ describe("the front door, through the real components", () => {
     expect(root.querySelector(".game-menu h2")?.textContent).toBe("Ares");
   });
 
+  it("offers both paces in New world, Standard first, and the world keeps the one chosen (Batch 28)", async () => {
+    const { app, root } = page();
+    await app.start();
+    buttonNamed(root, "New world").click();
+    const pace = root.querySelector<HTMLSelectElement>(".new-world-pace")!;
+    expect(pace.disabled).toBe(false);
+    expect([...pace.options].map((o) => o.value)).toEqual(["standard", "classic"]);
+    expect(pace.value).toBe("standard");
+    pace.value = "classic";
+    type(root.querySelector<HTMLInputElement>(".new-world-name")!, "Old ways");
+    submit(root.querySelector<HTMLFormElement>(".new-world")!);
+    await created(app);
+    const w = app.library.worlds.find((x) => x.name === "Old ways")!;
+    expect(w.pace).toBe("classic");
+    expect(w.tuning["BUILD_CURVE_ENABLED"]).toBe(0);
+    // A Classic world keeps its fast speeds; the HUD offers them.
+    expect([...root.querySelectorAll(".hud-speed")].map((b) => b.textContent)).toEqual(["pause", "1x", "10x", "100x", "1000x"]);
+  });
+
+  it("gives a Standard world the slow speeds only", async () => {
+    const { app, root } = page();
+    await app.start();
+    buttonNamed(root, "New world").click();
+    submit(root.querySelector<HTMLFormElement>(".new-world")!);
+    await created(app);
+    expect(app.library.worlds[0]!.pace).toBe("standard");
+    expect([...root.querySelectorAll(".hud-speed")].map((b) => b.textContent)).toEqual(["pause", "1x", "2x", "3x"]);
+  });
+
   it("rename and delete from the worlds list; delete waits for the name typed exactly", async () => {
     const { app, root, store } = page();
     await app.start();

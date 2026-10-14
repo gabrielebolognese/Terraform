@@ -63,8 +63,25 @@ export const T_AXIS_HI = 300;
 export const P_AXIS_LO = 1;
 export const P_AXIS_HI = 1013;
 
-export const SPEEDS = [0, 1, 10, 100, 1000] as const;
-export type Speed = (typeof SPEEDS)[number];
+/** Every speed the clock knows. Which a world offers is its pace's and its mode's (Batch 28). */
+export type Speed = 0 | 1 | 2 | 3 | 10 | 100 | 1000;
+
+/** The speeds before real build times: a Classic world keeps them. */
+export const CLASSIC_SPEEDS: readonly Speed[] = [0, 1, 10, 100, 1000];
+/** Real build times at 1x, with 2x and 3x for the planet's slow stretches (Batch 28). */
+export const STANDARD_SPEEDS: readonly Speed[] = [0, 1, 2, 3];
+/** A sandbox, and the debug setting: every speed. */
+export const ALL_SPEEDS: readonly Speed[] = [0, 1, 2, 3, 10, 100, 1000];
+
+/**
+ * The speeds a world offers. The fast ones would make a mockery of real build
+ * times, so a Standard world has pause, 1x, 2x and 3x; a sandbox (nothing to
+ * wait for) and the debug setting have them all; a Classic world keeps its own.
+ */
+export function speedsFor(t: { readonly SANDBOX_ENABLED: number; readonly BUILD_CURVE_ENABLED: number }, debug = false): readonly Speed[] {
+  if (debug || t.SANDBOX_ENABLED > 0) return ALL_SPEEDS;
+  return t.BUILD_CURVE_ENABLED > 0 ? STANDARD_SPEEDS : CLASSIC_SPEEDS;
+}
 
 /**
  * Micro §1.4's camera move, each way (Batch 21). Presentation only: the

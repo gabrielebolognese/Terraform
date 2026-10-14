@@ -46,6 +46,7 @@ async function start(app: HTMLElement): Promise<void> {
     launch: startGame,
     buildExample: () => ({ state: examplePlanet(DEFAULT_TUNING, BROWSER_TUNING).state, tuning: BROWSER_TUNING }),
     download,
+    debugSpeeds: new URLSearchParams(location.search).has("debug"),
   });
   await front.start();
 }

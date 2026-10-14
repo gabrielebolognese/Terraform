@@ -49,6 +49,8 @@ import {
   claimLand,
   connectTwice,
   upgradeBuilding,
+  moveQueuedBuild,
+  cancelQueuedBuild,
   launchRocket,
   levelGround,
   placeBuilding,
@@ -69,7 +71,7 @@ import {
   cancelPlans,
 } from "../sim/index.js";
 import type { BuildingType } from "../sim/index.js";
-import { READOUT_HZ, SPARK_CAPACITY, SPARK_HZ } from "./config.js";
+import { READOUT_HZ, SPARK_CAPACITY, SPARK_HZ, speedsFor } from "./config.js";
 import type { Speed } from "./config.js";
 import { EventLog } from "./events.js";
 import { advise, withAffordability } from "./guidance.js";
@@ -90,6 +92,8 @@ export interface GameOptions {
   readonly lookOnly?: { readonly banner: string } | null;
   /** The world's own start, for the instruments' Reset. */
   readonly fresh: () => SimState;
+  /** The debug setting: every speed, whatever the world's pace (Batch 28). */
+  readonly debugSpeeds?: boolean;
 }
 
 export interface GameHooks {
@@ -125,6 +129,8 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   const tuning = options.tuning;
   let state: SimState = options.state;
   let speed: Speed = 1;
+  /** What this world offers (Batch 28): a Standard world's are slow, a sandbox's all. */
+  const speeds = speedsFor(tuning, options.debugSpeeds === true);
   let droppedYears = 0;
   let seedMessage: string | null = null;
   let orderMessage: string | null = null;
@@ -240,6 +246,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   function setSpeed(next: Speed): void {
     speed = next;
     clock.speed = next;
+    city.speed = next;
     if (next !== 0) clock.resync();
   }
 
@@ -335,6 +342,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       onWorldMap: () => worldMap.open(),
     },
     tuning,
+    speeds,
   );
 
   /**
@@ -380,6 +388,16 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       },
       onUpgrade: (id, tx, ty) => {
         const outcome = upgradeBuilding(state, id, tx, ty, tuning);
+        state = outcome.state;
+        return outcome;
+      },
+      onMoveQueued: (id, from, to) => {
+        const outcome = moveQueuedBuild(state, id, from, to);
+        state = outcome.state;
+        return outcome;
+      },
+      onCancelQueued: (id, index) => {
+        const outcome = cancelQueuedBuild(state, id, index);
         state = outcome.state;
         return outcome;
       },
@@ -591,6 +609,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     },
     tuning,
     globe,
+    speeds,
   );
 
   // The tab stops receiving animation frames when hidden, so the first frame
@@ -681,7 +700,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       const here = state.settlements.find((s) => s.id === resident);
       if (here === undefined) journey.abort();
       else if (planner.openId === resident) planner.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp);
-      else city.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp, clock.pendingYears);
+      else city.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp, clock.pendingYears * tuning.CITY_CLOCK);
     }
     if (worldMap.isOpen) worldMap.frame(state, habitat(state.reservoirs, d, tuning, liquidRate), timestamp);
 

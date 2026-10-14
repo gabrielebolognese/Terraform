@@ -19,9 +19,12 @@ import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import type { Layer, LinkLayer } from "../sim/index.js";
-import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, buildYears, cityView, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
+import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, buildSeconds, buildYears, cityView, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
+import { isoProject } from "../render/iso.js";
 import type { CityCamera } from "./city-camera.js";
-import { centreCamera, footprintOrigin, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
+import { centreCamera, footprintOrigin, isoToScreen, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
+import type { BuildState } from "./build-time.js";
+import { buildStates, buildWords, formatDuration, realSeconds } from "./build-time.js";
 import type { CardKind } from "./city-cards.js";
 import { makePreviews } from "./city-cards.js";
 import { ChunkedCity } from "./city-chunks.js";
@@ -60,6 +63,10 @@ export interface CityHooks {
   readonly onConnectTwice: (settlementId: string) => ActionOutcome & { readonly laid: number };
   /** Claim chunk (i, j) of land - chunk coordinates from the founding square; the sim decides. */
   readonly onClaim: (settlementId: string, i: number, j: number) => ActionOutcome;
+  /** Batch 28's queue: move waiting build `from` to place `to`; absent, no buttons. */
+  readonly onMoveQueued?: (settlementId: string, from: number, to: number) => ActionOutcome;
+  /** Cancel waiting build `index`, refunded in full; absent, no button. */
+  readonly onCancelQueued?: (settlementId: string, index: number) => ActionOutcome;
   readonly onBack: () => void;
   /** The city planner, the second mode (at the user's request); absent, no button. */
   readonly onPlanner?: () => void;
@@ -113,10 +120,13 @@ function button(className: string, text: string, onClick: () => void): HTMLButto
   return b;
 }
 
-/** Sim-years as the real seconds they take at 1x, in words. */
+/** How many builds the panel lists, and labels over their worksites (the example planet has hundreds under way). */
+const BUILDS_SHOWN = 24;
+
+/** A settlement's sim-years as the real time they take at 1x, in words. */
 function seconds(years: number, t: Tuning): string {
-  const s = Math.max(1, Math.round(years / t.TIME_SCALE));
-  return s >= 90 ? `about ${Math.round(s / 60)} min at 1x` : `about ${s} s at 1x`;
+  // "About": to the nearest second (a countdown rounds up instead, so it never shows 0 early).
+  return `about ${formatDuration(Math.max(1, Math.round(realSeconds(years, t, 1))))} at 1x`;
 }
 
 function fmt(n: number): string {
@@ -245,6 +255,17 @@ export class CityScreen {
   private selectedTile: { tx: number; ty: number } | null = null;
   /** Sim-years into the current substep, for smooth rovers and rockets. */
   private sinceYears = 0;
+  /** The world's speed, for countdowns in real time (Batch 28). The game sets it. */
+  speed = 1;
+  /** The builds under way and waiting (Batch 28): the panel's list, and the labels over the worksites. */
+  private readonly buildsSection: HTMLElement;
+  private readonly buildsList: HTMLElement;
+  private readonly countdowns: HTMLElement;
+  private buildsKey = "";
+  private builds: BuildState[] = [];
+  private readonly countdownLabels = new Map<number, HTMLElement>();
+  /** The buildings by corner tile, for placing the labels; remade when the buildings change. */
+  private labelIndex: { of: readonly Settlement["buildings"][number][]; byTile: Map<number, Settlement["buildings"][number]> } = { of: [], byTile: new Map() };
   /** While a drag lays ("lay") or takes up ("clear"), and the last tile it touched. */
   private painting: { mode: "lay" | "clear"; last: number } | null = null;
   private selected: number | null = null;
@@ -349,8 +370,16 @@ export class CityScreen {
     );
     this.inspector.append(this.inspectorName, this.inspectorStatus, this.inspectorSummary, this.inspectorFlows, actions);
 
-    panel.append(head, this.status, stores, this.inspector);
-    this.root.append(this.canvas, panel, this.tools, this.dock, this.tip);
+    this.buildsSection = el("section", "city-builds");
+    this.buildsSection.append(el("h3", "city-section-title", "Builds"));
+    this.buildsList = el("ol", "city-build-list");
+    this.buildsSection.append(this.buildsList);
+    this.buildsSection.hidden = true;
+    this.countdowns = el("div", "city-countdowns");
+    this.countdowns.setAttribute("aria-hidden", "true");
+
+    panel.append(head, this.status, stores, this.buildsSection, this.inspector);
+    this.root.append(this.canvas, this.countdowns, panel, this.tools, this.dock, this.tip);
     host.append(this.root);
     this.bindInput();
   }
@@ -530,7 +559,7 @@ export class CityScreen {
     // rocks or jobs - anything a click does - refreshes it at once, so the
     // player never waits for their click.
     let view = this.view;
-    const links = [settlement.corridors, settlement.cables, settlement.cleared, settlement.jobs.length, settlement.claims];
+    const links = [settlement.corridors, settlement.cables, settlement.cleared, settlement.jobs.length, settlement.claims, settlement.buildQueue];
     const changed = settlement.buildings !== this.viewBuildings || links.some((l, i) => l !== this.viewLinks[i]);
     if (view === null || view.id !== settlement.id || changed || now - this.viewAt >= VIEW_MS) {
       view = cityView(settlement, env, this.tuning);
@@ -673,6 +702,97 @@ export class CityScreen {
       now: () => performance.now(),
     });
     this.chunks.draw(view, { ...this.sceneOptions(now), quality: qualityFor(cam, size.w, size.h, view.world.size) }, viewport, k);
+    this.placeCountdowns(view, cam, size);
+  }
+
+  /** The countdown over each worksite (Batch 28), kept over its ground as the camera moves. */
+  private placeCountdowns(view: CityView, cam: CityCamera, size: { w: number; h: number }): void {
+    const s = this.settlement;
+    if (s === null || this.countdownLabels.size === 0) return;
+    if (this.labelIndex.of !== s.buildings) this.labelIndex = { of: s.buildings, byTile: new Map(s.buildings.map((b) => [tileKey(b.tx, b.ty), b])) };
+    for (const [tile, label] of this.countdownLabels) {
+      const b = this.labelIndex.byTile.get(tile);
+      if (b === undefined) {
+        label.hidden = true;
+        continue;
+      }
+      const def = BUILDING_DEFS[b.type];
+      const z = view.groundZ[b.ty * view.tiles + b.tx] ?? 0;
+      const iso = isoProject(b.tx + def.footprint / 2, b.ty + def.depth / 2, z);
+      const at = isoToScreen(cam, size.w, size.h, iso.sx, iso.sy);
+      label.hidden = at.px < 0 || at.py < 0 || at.px > size.w || at.py > size.h;
+      label.style.transform = `translate(${Math.round(at.px)}px, ${Math.round(at.py)}px) translate(-50%, -100%)`;
+    }
+  }
+
+  /** The panel's list of builds and the worksite labels: rebuilt when the work changes, their times every refresh. */
+  private renderBuilds(s: Settlement): void {
+    const all = buildStates(s, this.tuning, this.speed);
+    this.builds = all;
+    // The list and the labels show the first BUILDS_SHOWN; a line says how many more.
+    const builds = all.slice(0, BUILDS_SHOWN);
+    this.buildsSection.hidden = builds.length === 0;
+    const key = `${all.length}#` + builds.map((b) => `${b.kind}:${b.tile}:${b.upgrade ? 1 : 0}`).join("|");
+    if (key !== this.buildsKey) {
+      this.buildsKey = key;
+      const id = s.id;
+      this.buildsList.replaceChildren(
+        ...builds.map((b) => {
+          const row = el("li", "city-build");
+          row.dataset["kind"] = b.kind;
+          row.dataset["tile"] = String(b.tile);
+          row.append(el("span", "city-build-words", ""));
+          if (b.kind === "waiting") {
+            const n = s.buildQueue.length;
+            const move = this.hooks.onMoveQueued;
+            const cancel = this.hooks.onCancelQueued;
+            if (move !== undefined) {
+              const up = button("city-build-up", "Up", () => this.queueAction(move(id, b.place, b.place - 1)));
+              up.disabled = b.place === 0;
+              up.setAttribute("aria-label", "Move up the queue");
+              const down = button("city-build-down", "Down", () => this.queueAction(move(id, b.place, b.place + 1)));
+              down.disabled = b.place === n - 1;
+              down.setAttribute("aria-label", "Move down the queue");
+              row.append(up, down);
+            }
+            if (cancel !== undefined) {
+              const x = button("city-build-cancel", "Cancel", () => this.queueAction(cancel(id, b.place)));
+              x.setAttribute("aria-label", "Cancel, with a full refund");
+              row.append(x);
+            }
+          }
+          return row;
+        }),
+      );
+      if (all.length > builds.length) this.buildsList.append(el("li", "city-build-more", `and ${all.length - builds.length} more`));
+      // The labels over the worksites: one for each build of a new building, under way or waiting.
+      const wanted = new Set(builds.filter((b) => !b.upgrade || b.kind === "building").map((b) => b.tile));
+      for (const [tile, label] of this.countdownLabels) {
+        if (!wanted.has(tile)) {
+          label.remove();
+          this.countdownLabels.delete(tile);
+        }
+      }
+      for (const tile of wanted) {
+        if (this.countdownLabels.has(tile)) continue;
+        const label = el("div", "city-countdown");
+        this.countdowns.append(label);
+        this.countdownLabels.set(tile, label);
+      }
+    }
+    const rows = this.buildsList.children;
+    builds.forEach((b, i) => {
+      const words = rows[i]?.querySelector(".city-build-words");
+      if (words !== null && words !== undefined) words.textContent = buildWords(b);
+      const label = this.countdownLabels.get(b.tile);
+      if (label !== undefined) label.textContent = b.kind === "building" ? formatDuration(b.seconds) : "waiting";
+    });
+  }
+
+  private queueAction(outcome: ActionOutcome): void {
+    this.notice = outcome.ok ? null : `Cannot: ${outcome.reason ?? "refused"}.`;
+    this.buildsKey = "";
+    if (this.settlement !== null) this.renderBuilds(this.settlement);
   }
 
   // ---- panel -----------------------------------------------------------------
@@ -691,6 +811,7 @@ export class CityScreen {
         : `Short of ${view.shortages.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")} - buildings that use it are browned out.`;
     this.status.textContent = people + need;
     this.status.dataset["state"] = view.shortages.length === 0 ? "ok" : "short";
+    this.renderBuilds(s);
 
     for (const r of MICRO_RESOURCES) {
       const row = this.storeRows.get(r);
@@ -726,16 +847,25 @@ export class CityScreen {
     this.inspector.hidden = b === undefined && this.selectedTile === null;
     this.removeButton.hidden = b === undefined || !BUILDING_DEFS[b.type].buildable;
     const level = b?.level ?? 1;
-    const up = b !== undefined && BUILDING_DEFS[b.type].buildable && level < maxLevel(b.type, this.tuning) && (b.construction ?? null) === null;
+    const busy = b !== undefined && this.builds.some((x) => x.tile === tileKey(b.tx, b.ty));
+    const up = b !== undefined && BUILDING_DEFS[b.type].buildable && level < maxLevel(b.type, this.tuning) && (b.construction ?? null) === null && !busy;
     this.upgradeButton.hidden = !up;
-    if (up && b !== undefined) this.upgradeButton.textContent = `Upgrade to level ${level + 1} (${BUILDING_DEFS[b.type].cost(this.tuning)})`;
+    if (up && b !== undefined) {
+      const t = this.tuning;
+      const time = t.BUILD_TIME_ENABLED > 0 ? `, ${formatDuration(realSeconds(buildYears(b.type, t, level + 1), t, 1))}` : "";
+      this.upgradeButton.textContent = `Upgrade to level ${level + 1} (${BUILDING_DEFS[b.type].cost(t)}${time})`;
+    }
     this.roverButton.hidden = !(b === undefined && this.selectedTile !== null);
     this.launchButton.hidden = b?.type !== "spaceport";
     if (b === undefined && this.selectedTile !== null) this.renderRock(view, s, this.selectedTile);
     if (b !== undefined && index !== null) {
       const def = BUILDING_DEFS[b.type];
       this.inspectorName.textContent = def.name;
-      this.inspectorStatus.textContent = offlineReason(view, index, env, this.tuning) ?? "Running.";
+      // Its build first (Batch 28): when it stands, or takes its next level, in real time.
+      const work = this.builds.find((x) => x.tile === tileKey(b.tx, b.ty));
+      const reason = offlineReason(view, index, env, this.tuning);
+      this.inspectorStatus.textContent =
+        work === undefined ? reason ?? "Running." : work.upgrade ? `${reason ?? "Running"}${reason === null ? "." : ""} ${buildWords(work)}` : buildWords(work);
       this.inspectorStatus.dataset["state"] = b.operable ? "ok" : "off";
       this.inspectorSummary.textContent = def.buildable ? `Level ${level} of ${maxLevel(b.type, this.tuning)}. ${def.summary}` : def.summary;
       const extra: string[] = [];
@@ -976,7 +1106,12 @@ export class CityScreen {
     const locked = this.env === null ? null : def.locked(this.env, t);
     if (locked !== null) lines.push(`Not yet: ${locked}.`);
     lines.push(`${def.footprint} x ${def.depth} tiles. Costs ${def.cost(t)} materials.`);
-    if (t.BUILD_TIME_ENABLED > 0) lines.push(`A rover builds it in ${Math.round(buildYears(kind, t) * 10)} month${Math.round(buildYears(kind, t) * 10) === 1 ? "" : "s"} at the site (${seconds(buildYears(kind, t), t)}), plus the drive.`);
+    if (t.BUILD_TIME_ENABLED > 0 && t.BUILD_CURVE_ENABLED > 0) {
+      // Batch 28: real time at 1x, and every level longer than the last.
+      lines.push(`A rover builds it in ${formatDuration(buildSeconds(kind, 1, t))} at 1x, plus the drive; level ${maxLevel(kind, t)} takes ${formatDuration(buildSeconds(kind, maxLevel(kind, t), t))}.`);
+    } else if (t.BUILD_TIME_ENABLED > 0) {
+      lines.push(`A rover builds it in ${Math.round(buildYears(kind, t) * 10)} month${Math.round(buildYears(kind, t) * 10) === 1 ? "" : "s"} at the site (${seconds(buildYears(kind, t), t)}), plus the drive.`);
+    }
     lines.push(`Upgrades to level ${maxLevel(kind, t)}, each +${Math.round(t.LEVEL_BONUS * 100)}% on the last.`);
     return { title: def.name, lines };
   }

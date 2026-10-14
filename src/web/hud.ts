@@ -22,7 +22,7 @@ import type { BuildRow } from "./build.js";
 import { formatLatLon, formatMetres, settlementLabel, sizeLabel } from "./settlement-label.js";
 import type { GameEvent } from "./events.js";
 import type { Speed } from "./config.js";
-import { READOUT_HZ, SPEEDS } from "./config.js";
+import { CLASSIC_SPEEDS, READOUT_HZ } from "./config.js";
 
 export interface HudView {
   readonly simYear: number;
@@ -306,7 +306,13 @@ export class Hud {
 
   private readonly openSettlement: (id: string) => void;
 
-  constructor(parent: HTMLElement, hooks: HudHooks, private readonly tuning: Tuning) {
+  constructor(
+    parent: HTMLElement,
+    hooks: HudHooks,
+    private readonly tuning: Tuning,
+    /** The speeds this world offers (Batch 28: `speedsFor`). */
+    speeds: readonly Speed[] = CLASSIC_SPEEDS,
+  ) {
     this.openSettlement = hooks.onOpenSettlement;
     const shell = el("section", "hud");
 
@@ -329,7 +335,7 @@ export class Hud {
     const speedRow = el("div", "hud-speeds");
     speedRow.setAttribute("role", "group");
     speedRow.setAttribute("aria-label", "Simulation speed");
-    for (const s of SPEEDS) {
+    for (const s of speeds) {
       const button = el("button", "hud-speed", s === 0 ? "pause" : `${s}x`);
       button.type = "button";
       button.addEventListener("click", () => hooks.onSpeed(s));

@@ -24,7 +24,7 @@
  */
 
 import type { Tuning, TuningOverrides } from "../sim/index.js";
-import { TUNING_SCALAR_KEYS, makeTuning, validateTuning } from "../sim/index.js";
+import { DEFAULT_TUNING, TUNING_SCALAR_KEYS, makeTuning, validateTuning } from "../sim/index.js";
 
 export const BROWSER_OVERRIDES: TuningOverrides = {
   EVENTS_ENABLED: 1,
@@ -58,18 +58,54 @@ export const MODE_NAMES: Readonly<Record<WorldMode, string>> = {
   terraformed: "Terraformed start",
 };
 
-/** Batch 28's presets arrive later; until then there is one pace. */
-export type WorldPace = "standard";
-export const WORLD_PACES: readonly WorldPace[] = ["standard"];
+/**
+ * How fast a world runs (Batch 28), recorded in it as tuning like its mode.
+ *
+ * "Standard" is real build times: the planet runs eight times slower than it
+ * did - a sim-year is 4.4 real minutes at 1x, the arc about five days of 1x
+ * play - while the cities keep the rhythm they had (CITY_CLOCK 8: a rocket's
+ * trip is still a real minute) and buildings take the curve's real time.
+ * Offline, the world runs at the live rate for up to OFFLINE_CAP_HOURS, so a
+ * long build finishes while the player is away.
+ *
+ * "Classic" is the game before Batch 28, and every world made before it.
+ */
+export type WorldPace = "standard" | "classic";
+export const WORLD_PACES: readonly WorldPace[] = ["standard", "classic"];
+export const PACE_NAMES: Readonly<Record<WorldPace, string>> = {
+  standard: "Standard - real build times",
+  classic: "Classic - the fast game before real build times",
+};
+
+/** The planet's slowdown in the Standard pace; the cities' clock makes it up. */
+export const STANDARD_SLOWDOWN = 8;
+
+export const PACE_OVERRIDES: Readonly<Record<WorldPace, TuningOverrides>> = {
+  standard: {
+    TIME_SCALE: DEFAULT_TUNING.TIME_SCALE / STANDARD_SLOWDOWN,
+    // One substep is the same real time as before (8.3 s at 1x) and a city's step the same quarter of its year.
+    SUBSTEP_YEARS: DEFAULT_TUNING.SUBSTEP_YEARS / STANDARD_SLOWDOWN,
+    CITY_CLOCK: STANDARD_SLOWDOWN,
+    BUILD_CURVE_ENABLED: 1,
+    OFFLINE_RATE_FACTOR: 1,
+    OFFLINE_CAP_HOURS: 10,
+  },
+  classic: {},
+};
+
+/** A world's pace, read from its tuning: the curve is what makes a pace Standard. */
+export function paceOf(t: Tuning): WorldPace {
+  return t.BUILD_CURVE_ENABLED ? "standard" : "classic";
+}
 
 /**
  * A new world's tuning: the browser's, its terrain turned by the seed, and
  * the mode's own rules. A mode is a tuning, recorded in the world - never a
  * flag the game reads, so a sandbox cannot leak into a standard world.
  */
-export function worldTuning(mode: WorldMode, seed: number): Tuning {
+export function worldTuning(mode: WorldMode, seed: number, pace: WorldPace = "standard"): Tuning {
   const sandbox: TuningOverrides = mode === "sandbox" ? { SANDBOX_ENABLED: 1, TECH_GATE_ENABLED: 0, FLOODING_ENABLED: 0 } : {};
-  const t = makeTuning({ ...BROWSER_OVERRIDES, TERRAIN_SEED: seed, ...sandbox });
+  const t = makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES[pace], TERRAIN_SEED: seed, ...sandbox });
   validateTuning(t);
   return t;
 }

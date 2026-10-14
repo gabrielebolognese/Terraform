@@ -19,8 +19,8 @@ import type { GameHandle, GameOptions, GameHooks } from "./game.js";
 import { Autosaver } from "./session.js";
 import type { GameStore } from "./storage.js";
 import { AUTOSAVE_INTERVAL_MS } from "./config.js";
-import type { WorldMode } from "./game-tuning.js";
-import { BROWSER_TUNING, MODE_NAMES, WORLD_MODES } from "./game-tuning.js";
+import type { WorldMode, WorldPace } from "./game-tuning.js";
+import { BROWSER_TUNING, MODE_NAMES, PACE_NAMES, WORLD_MODES, WORLD_PACES } from "./game-tuning.js";
 import type { Clock, WorldMeta } from "./worlds.js";
 import { WorldLibrary, parseSeed, startState } from "./worlds.js";
 import { drawThumbnail, planetLook } from "./thumbnail.js";
@@ -39,6 +39,8 @@ export interface AppDeps {
   readonly download: (filename: string, text: string) => void;
   /** Draw the title's planet. Off in a test, where there is no GPU to draw it with. */
   readonly titleGlobe?: boolean;
+  /** The debug setting (`?debug` on the page): every speed in every world (Batch 28). */
+  readonly debugSpeeds?: boolean;
 }
 
 type View = "title" | "worlds" | "new" | "settings" | "credits" | "game";
@@ -218,7 +220,7 @@ export class App {
     const facts = el(
       "p",
       "world-facts",
-      `${MODE_NAMES[w.mode]} - ${phaseName(w.phase)} - year ${Math.floor(w.simYear).toLocaleString("en")} - played ${formatPlaytime(w.playtimeMs)}`,
+      `${MODE_NAMES[w.mode]}${w.pace === "classic" ? " (Classic pace)" : ""} - ${phaseName(w.phase)} - year ${Math.floor(w.simYear).toLocaleString("en")} - played ${formatPlaytime(w.playtimeMs)}`,
     );
     const when = el("p", "world-when", w.lastPlayedAt > 0 ? `Last played ${new Date(w.lastPlayedAt).toLocaleString()} - seed ${w.seed}` : `Seed ${w.seed}`);
     info.append(name, facts, when);
@@ -337,11 +339,13 @@ export class App {
 
     const paceLabel = el("label", "front-field", "Pace");
     const pace = el("select", "new-world-pace");
-    const standard = el("option", "", "Standard");
-    standard.value = "standard";
-    pace.append(standard);
-    pace.disabled = true;
-    paceLabel.append(pace, el("span", "front-about", "More paces arrive with real build times."));
+    for (const p of WORLD_PACES) {
+      const option = el("option", "", PACE_NAMES[p]);
+      option.value = p;
+      pace.append(option);
+    }
+    pace.value = "standard";
+    paceLabel.append(pace, el("span", "front-about", "Standard: builds take real minutes, then hours, and finish while you are away. Classic: the fast game from before."));
 
     const create = el("button", "front-button primary", "Create world");
     create.type = "submit";
@@ -356,7 +360,7 @@ export class App {
       // Let the message paint before a long build.
       setTimeout(() => {
         void this.queue(async () => {
-          const meta = await this.library.create({ name: name.value, seed: s, mode, pace: "standard" });
+          const meta = await this.library.create({ name: name.value, seed: s, mode, pace: (WORLD_PACES as readonly string[]).includes(pace.value) ? (pace.value as WorldPace) : "standard" });
           this.say("");
           await this.playNow(meta.id);
         });
@@ -413,6 +417,7 @@ export class App {
         tuning,
         awayMessage: away,
         storageWarning: this.deps.store.durable ? null : "this browser has no durable storage available, so progress will not survive a reload",
+        debugSpeeds: this.deps.debugSpeeds === true,
         fresh: () => startState({ name: world.name, seed: world.seed, mode: world.mode === "terraformed" ? "standard" : world.mode, pace: world.pace }, tuning),
       },
       world,

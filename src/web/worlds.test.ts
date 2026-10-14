@@ -7,11 +7,11 @@
 import { describe, expect, it } from "vitest";
 
 import type { SimState, Tuning } from "../sim/index.js";
-import { NEUTRAL_ENV, advance, buildFacility, foundSettlement, marsStart, siteElevation, toSave } from "../sim/index.js";
+import { NEUTRAL_ENV, advance, buildFacility, foundSettlement, makeTuning, marsStart, siteElevation, toSave } from "../sim/index.js";
 import { REFERENCE_POLICY, applyOrdersDue } from "../harness/policy.js";
 import { boot } from "./session.js";
 import { MemorySaveStore } from "./storage.js";
-import { BROWSER_TUNING } from "./game-tuning.js";
+import { BROWSER_OVERRIDES, BROWSER_TUNING, PACE_OVERRIDES } from "./game-tuning.js";
 import type { NewWorld } from "./worlds.js";
 import { LEGACY_NAME, LEGACY_SLOT, WorldLibrary, parseSeed } from "./worlds.js";
 
@@ -70,6 +70,8 @@ describe("the save from before worlds", () => {
     const now = await loaded(lib, mine.id);
     expect(now.state).toEqual(old.state);
     expect(now.tuning).toEqual(BROWSER_TUNING);
+    // Played before real build times: a Classic world, and it stays one (Batch 28).
+    expect(mine.pace).toBe("classic");
   });
 
   it("is carried in once: a second launch reads the index and finds the same one world", async () => {
@@ -82,6 +84,24 @@ describe("the save from before worlds", () => {
     const second = new WorldLibrary(store, c.now);
     await second.open();
     expect(second.worlds.map((w) => w.name)).toEqual(["Renamed"]);
+  });
+
+  it("reads a world Batch 27 made - entered as \"standard\", before there were paces - as Classic, from its tuning (Batch 28)", async () => {
+    const store = new MemorySaveStore();
+    const c = clock();
+    const made = new WorldLibrary(store, c.now);
+    await made.open();
+    const w = await made.create({ name: "Before paces", seed: 5, mode: "standard", pace: "classic" });
+    // As Batch 27 wrote it: the label "standard", and a tuning with no curve in it at all.
+    const index = (await store.loadMeta("worlds")) as { worlds: Record<string, unknown>[] };
+    const { BUILD_CURVE_ENABLED: _gone, ...older } = w.tuning;
+    void _gone;
+    await store.saveMeta("worlds", { ...index, worlds: index.worlds.map((x) => ({ ...x, pace: "standard", tuning: older })) });
+    const later = new WorldLibrary(store, c.now);
+    await later.open();
+    expect(later.find(w.id)?.pace).toBe("classic");
+    const opened = await loaded(later, w.id);
+    expect(opened.tuning.BUILD_CURVE_ENABLED).toBe(0);
   });
 
   it("leaves a first launch with no save with no worlds", async () => {
@@ -151,8 +171,9 @@ describe("a seed makes a world", () => {
     expect(standard.tuning["SANDBOX_ENABLED"]).toBe(0);
     expect(sandbox.tuning["SANDBOX_ENABLED"]).toBe(1);
     expect(standard.tuning["TERRAIN_SEED"]).toBe(9);
-    // The rest of a standard world's tuning is the browser's own.
-    expect({ ...standard.tuning, TERRAIN_SEED: 0 }).toEqual({ ...Object.fromEntries(Object.entries(BROWSER_TUNING)) });
+    // The rest of a standard world's tuning is the browser's own, at the pace it was made with (Batch 28).
+    expect({ ...standard.tuning, TERRAIN_SEED: 0 }).toEqual({ ...makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES.standard }) });
+    expect(standard.pace).toBe("standard");
   });
 
   it("reads a typed seed as itself, and any other text as the same number every time", () => {

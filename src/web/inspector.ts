@@ -27,7 +27,7 @@ import type {
 import type { FacilityDef } from "../sim/index.js";
 import type { VisualChannels } from "../sim/index.js";
 import { FACILITY_LIST, PHASE_INFO, RESERVOIR_KEYS, TARGETS, toHex } from "../sim/index.js";
-import { P_AXIS_HI, P_AXIS_LO, SPEEDS, T_AXIS_HI, T_AXIS_LO } from "./config.js";
+import { CLASSIC_SPEEDS, P_AXIS_HI, P_AXIS_LO, T_AXIS_HI, T_AXIS_LO } from "./config.js";
 import type { Speed } from "./config.js";
 import type { Ring } from "./ring.js";
 import type { ArcSample } from "./arc.js";
@@ -173,7 +173,7 @@ export class Inspector {
    * The inspector used to own a 260 px canvas of its own; the planet now fills
    * the page behind it, and the scrubber drives that instead.
    */
-  constructor(root: HTMLElement, hooks: InspectorHooks, tuning: Tuning, planet: PlanetSink = NO_PLANET) {
+  constructor(root: HTMLElement, hooks: InspectorHooks, tuning: Tuning, planet: PlanetSink = NO_PLANET, speeds: readonly Speed[] = CLASSIC_SPEEDS) {
     root.textContent = "";
     const app = el("div", "app");
 
@@ -213,7 +213,7 @@ export class Inspector {
 
     const speedRow = el("div", "row speeds");
     speedRow.append(el("span", "row-label", "Speed"));
-    for (const speed of SPEEDS) {
+    for (const speed of speeds) {
       const button = el("button", "chip", speed === 0 ? "pause" : `${speed}x`);
       button.addEventListener("click", () => hooks.onSpeed(speed));
       speedRow.append(button);

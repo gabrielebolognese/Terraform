@@ -2610,3 +2610,87 @@ button:hover {
     height: 48px;
   }
 }
+
+/* ======================================================================
+   Real build times (Batch 28): the city's list of builds, and the
+   countdown over each worksite.
+   ====================================================================== */
+
+.city-builds[hidden] {
+  display: none;
+}
+
+.city-build-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.city-build {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.city-build[data-kind="building"] {
+  border-color: var(--accent);
+}
+
+.city-build-words {
+  flex: 1 1 100%;
+  color: var(--text-2);
+}
+
+.city-build button {
+  padding: 3px 9px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.city-build button:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+
+.city-build-cancel {
+  margin-left: auto;
+}
+
+.city-countdowns {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.city-countdown {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+}
+
+.city-countdown[hidden] {
+  display: none;
+}

@@ -30,7 +30,7 @@ import { DEFAULT_TUNING, NAME_MAX, NEUTRAL_ENV, SaveError, fromSave, marsStart, 
 import { examplePlanet } from "../harness/example.js";
 import type { GameStore } from "./storage.js";
 import type { WorldMode, WorldPace } from "./game-tuning.js";
-import { BROWSER_TUNING, WORLD_MODES, WORLD_PACES, fromRecord, tuningRecord, worldTuning } from "./game-tuning.js";
+import { BROWSER_TUNING, WORLD_MODES, fromRecord, paceOf, tuningRecord, worldTuning } from "./game-tuning.js";
 
 /** Epoch milliseconds, injected. */
 export type Clock = () => number;
@@ -123,8 +123,10 @@ function readMeta(raw: unknown): WorldMeta | null {
   if (typeof r["id"] !== "string" || typeof r["slot"] !== "string") return null;
   const num = (k: string, d: number): number => (typeof r[k] === "number" && Number.isFinite(r[k]) ? (r[k] as number) : d);
   const mode = WORLD_MODES.includes(r["mode"] as WorldMode) ? (r["mode"] as WorldMode) : "standard";
-  const pace = WORLD_PACES.includes(r["pace"] as WorldPace) ? (r["pace"] as WorldPace) : "standard";
   const tuning = typeof r["tuning"] === "object" && r["tuning"] !== null ? (r["tuning"] as Record<string, number>) : tuningRecord(BROWSER_TUNING);
+  // The pace is the world's tuning (Batch 28), never a label beside it: a world made before real
+  // build times was entered as "standard" and is Classic.
+  const pace: WorldPace = tuning["BUILD_CURVE_ENABLED"] === 1 ? "standard" : "classic";
   return {
     id: r["id"],
     slot: r["slot"],
@@ -225,7 +227,7 @@ export class WorldLibrary {
       name: LEGACY_NAME,
       seed: s.seed,
       mode: "standard",
-      pace: "standard",
+      pace: "classic",
       tuning: tuningRecord(BROWSER_TUNING),
       createdAt: at,
       lastPlayedAt: at,
@@ -259,7 +261,7 @@ export class WorldLibrary {
 
   /** Make a world: its tuning from the mode and seed, its first save, then its entry. */
   async create(spec: NewWorld): Promise<WorldMeta> {
-    const t = worldTuning(spec.mode, spec.seed);
+    const t = worldTuning(spec.mode, spec.seed, spec.pace);
     const state = startState(spec, t);
     const at = this.now();
     const id = this.freshId(`w${at.toString(36)}`);
@@ -269,7 +271,7 @@ export class WorldLibrary {
       name: cleanName(spec.name, "New world"),
       seed: spec.seed,
       mode: spec.mode,
-      pace: spec.pace,
+      pace: paceOf(t),
       tuning: tuningRecord(t),
       createdAt: at,
       lastPlayedAt: at,
