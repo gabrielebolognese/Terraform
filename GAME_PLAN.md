@@ -46,7 +46,7 @@ What is missing, in the user's words (2026-10-11):
 |---|---|---|
 | 26 | Procedural structures (finish) | **COMPLETE** - [note](docs/balance/batch26-structures.md) - seeded signatures and greebles on the shape pipeline; +4-5% shapes up close, next frame +1 ms |
 | 27 | The front door: title screen and worlds | **COMPLETE** - [note](docs/balance/batch27-worlds.md) - title screen, worlds with their own saves and seeds, Standard / Sandbox / Terraformed start; a world that will not load is kept, never saved over |
-| 28 | Time that means something: real build and upgrade times | NOT STARTED |
+| 28 | Time that means something: real build and upgrade times | **COMPLETE** - [note](docs/balance/batch28-build-times.md) - the curve (20 s to 8 h), a build queue, a Standard pace (planet 8x slower, cities on their own clock) beside Classic; first upgrade misses 4-8 min |
 | 29 | Vehicles that use the city: rovers on the ground, trains on the line | NOT STARTED |
 | 30 | The first hour: onboarding and objectives | NOT STARTED |
 | 31 | Knowing what is happening: alerts, notifications and statistics | NOT STARTED |
@@ -218,7 +218,7 @@ get bigger, there should be more and more time." Building has the rhythm of a bu
 - the great structures and the top levels take hours, and finish while the player is away.
 
 **Deliverables:**
-- [ ] **A build-time curve**, in real time at 1×: `time(type, level) = BASE[type] × GROWTH^(level - 1)`.
+- [x] **A build-time curve**, in real time at 1×: `time(type, level) = BASE[type] × GROWTH^(level - 1)`.
   - `BASE` is set by size and tier, and `GROWTH` per tier. All in `tuning.ts` and the §10 table.
   - Proposed starting targets, to be measured and tuned:
 
@@ -232,20 +232,20 @@ get bigger, there should be more and more time." Building has the rhythm of a bu
     | Mega mall | 1 h | 8 h |
     | Biosphere | 45 min | |
 
-- [ ] **Upgrades follow the curve.** Each level takes longer than the one before, never the first
+- [x] **Upgrades follow the curve.** Each level takes longer than the one before, never the first
   build's time again.
-- [ ] **Rover trips** add the drive along their real route (Batch 29), not the straight line.
-- [ ] **A build queue per city:**
+- [ ] **Rover trips** (deferred to Batch 29: there are no roads to follow yet) add the drive along their real route (Batch 29), not the straight line.
+- [x] **A build queue per city:**
   - jobs wait for a free rover;
   - the queue is shown, reorderable and cancellable (with a refund);
   - more rover posts mean more builds at once.
-- [ ] **Offline:** long builds keep going while the game is closed. Coming back says what finished
+- [x] **Offline:** long builds keep going while the game is closed. Coming back says what finished
   ("While you were away: the reactor reached level 4, the mega mall is half built").
-- [ ] **Speed:**
+- [x] **Speed:**
   - The 100× and 1000× speeds move to Sandbox (and to a debug setting).
   - Standard runs at 1×, with a pause and a 2× or 3× for the planet's slow stretches. Decided in
     Phase 1.
-- [ ] **The countdown shown everywhere a build is:** over the worksite, in the city panel, in the
+- [x] **The countdown shown everywhere a build is:** over the worksite, in the city panel, in the
   queue, in real time ("3 min 20 s").
 
 **Exit gate:**
@@ -278,6 +278,29 @@ get bigger, there should be more and more time." Building has the rhythm of a bu
    sim-years does not move.
 3. **Pay to hurry?** Spending credits or materials to finish a build early: a builder-game staple,
    but a design choice.
+
+**Done** - see [the note](docs/balance/batch28-build-times.md).
+
+**Decisions taken:**
+1. **(a), as the world's pace.** "Standard" slows the planet 8x (`TIME_SCALE` 0.00375) with the
+   substep shrunk to match (1/32 sim-year, still 8.3 real seconds). A new `CITY_CLOCK` (8) keeps the
+   cities' real-time rhythm. "Classic" is everything before, and every existing world, read from
+   its recorded tuning. The default tuning is unchanged, so the golden run, the Batch 3 score and
+   the golden frames do not move.
+2. The city economy was left per sim-year, with the cities on their own clock. Measured, a city of
+   1,000 people comes at 1.79 h.
+3. No pay to hurry.
+
+**What changed from the plan, and why:**
+- **"First phase at 6-12 h"** was impossible: Phase 1 is at sim-year 2. It became Phase 1 within
+  15 min (8 s) and Phase 2 at 1-3 h (1.65 h).
+- **The first upgrade misses 4-8 min** (19.9 min; 19.3 at Classic). An upgrade's +10% for a full
+  building's price is the cause, not build times.
+- **Rover trips along the real route** wait for Batch 29.
+- **Offline runs at the live rate for 10 hours** in a Standard world, so builds finish while away.
+  Ten 48-hour absences still stay short of the arc (1,350 of 1,710 sim-years).
+- **Found:** a Terraformed world catches up at 39 s per hour away (Classic 11 s). Left for
+  Batch 40, with the example's build time.
 
 ---
 

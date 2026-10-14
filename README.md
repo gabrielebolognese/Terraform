@@ -46,6 +46,7 @@ that state.
 | [`docs/balance/batch25-flood-forecast.md`](docs/balance/batch25-flood-forecast.md) | When the sea will reach each settlement, forecast in water rather than metres (the spec's line was 58 years wrong across a kink), and the warnings in the orbit HUD. |
 | [`docs/balance/batch26-structures.md`](docs/balance/batch26-structures.md) | Procedural structures: each building's signature varied by a seed from where it stands, and greebles that multiply with its level - all 28 types on a reference sheet, for 4-5% more drawing up close. |
 | [`docs/balance/batch27-worlds.md`](docs/balance/batch27-worlds.md) | The front door: a title screen, any number of worlds each with its own save and seed (the seed turns the terrain), Standard / Sandbox / Terraformed start, export and import - and a world that will not load is kept, never saved over. |
+| [`docs/balance/batch28-build-times.md`](docs/balance/batch28-build-times.md) | Real build times: a curve from 20 seconds to 8 hours, a build queue, and a Standard pace where the planet runs 8x slower while the cities keep their rhythm - measured on a scripted playthrough, with the one target it misses and why. |
 | [`docs/balance/detail-pass-buildings.md`](docs/balance/detail-pass-buildings.md) | The ten buildings rebuilt with far more detail; a close-up of all ten is `docs/frames/city-buildings.png`. |
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
@@ -83,6 +84,13 @@ Settings, Credits, over a turning Mars. Each world is its own planet and save, m
 same seed, the same world) in one of three modes - Standard, Sandbox, or Terraformed start - and can
 be renamed, copied, exported to a file, imported and deleted. A save from before worlds opens as
 "My planet". In a world, Esc or **Menu** pauses it: Resume, Save, Save and quit to title.
+
+A world's **pace** (Batch 28): **Standard** has real build times - a solar array in 30 seconds, a
+reactor in 4 minutes and its top level in about 3 hours, a mega mall in an hour - with the planet
+eight times slower than before and the cities at the rhythm they had. Builds queue for a free rover,
+count down in real time over the worksite and in the city's Builds list, and keep going while you
+are away. Speeds are pause, 1x, 2x and 3x (every speed in a Sandbox, or with `?debug`). **Classic**
+is the fast game from before, and every world made before it.
 
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
