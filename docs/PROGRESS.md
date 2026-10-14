@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 28
-in_progress_batch: none
+in_progress_batch: 29
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -37,3 +37,6 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
 - note: docs/balance/batch28-build-times.md
 - commits: 964c218, 3b0d532, f716cf8
 - review: accepted (by the user, before the unattended runner)
+
+### Batch 29 - Vehicles that use the city: rovers on the ground, trains on the line
+- status: in progress
