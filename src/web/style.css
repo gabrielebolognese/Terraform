@@ -2694,3 +2694,337 @@ button:hover {
 .city-countdown[hidden] {
   display: none;
 }
+
+/* ---------- the first hour (Batch 30): the guide, objectives, milestones ---------- */
+
+/* The guide's card: top centre over the planet; in a city, under the tools bar. */
+.guide-card {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 7;
+  width: min(520px, calc(100vw - 32px));
+  padding: 12px 16px 14px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.game:has(.city:not([hidden])) .guide-card {
+  top: 150px;
+}
+
+.guide-card[hidden] {
+  display: none;
+}
+
+.guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.guide-progress {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.guide-skip {
+  padding: 3px 9px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.guide-skip:hover {
+  color: var(--text);
+  background: var(--surface-3);
+}
+
+.guide-title {
+  margin-top: 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.guide-how {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+/* The control the guide points at: a ring that breathes, whatever the control's own look. */
+.guide-target {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px;
+  animation: guide-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes guide-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(130, 180, 255, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(130, 180, 255, 0);
+  }
+}
+
+/* Objectives: a button beside the Menu button, and a panel on the right. */
+.objectives-toggle {
+  position: fixed;
+  bottom: 84px;
+  right: 16px;
+  z-index: 8;
+  padding: 7px 14px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.game:has(.city:not([hidden])) .objectives-toggle {
+  top: 108px;
+  bottom: auto;
+}
+
+.objectives-toggle[hidden],
+.objectives-panel[hidden] {
+  display: none;
+}
+
+.objectives-toggle[data-ready] {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.objectives-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 128px;
+  z-index: 9;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+  padding: 12px 16px 16px;
+  background: var(--surface-solid);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+
+.game:has(.city:not([hidden])) .objectives-panel {
+  top: 152px;
+  bottom: auto;
+  max-height: calc(100vh - 180px);
+}
+
+.objectives-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.objectives-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.objectives-notice {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--good);
+}
+
+.objectives-chain h3 {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.objective {
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.objective[data-done] {
+  border-color: var(--good);
+}
+
+.objective-title {
+  font-weight: 600;
+}
+
+.objective-counts,
+.objective-progress,
+.objective-reward {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.objective-reward {
+  color: var(--warn);
+}
+
+.objective-bar {
+  height: 6px;
+  margin-top: 8px;
+  background: var(--surface-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.objective-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--good));
+}
+
+.objective-claim {
+  margin-top: 8px;
+  padding: 6px 16px;
+  font: inherit;
+  color: var(--bg);
+  background: var(--good);
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.objective-claimed,
+.objective-next {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+
+.objective-claimed::before {
+  content: "\2713  ";
+  color: var(--good);
+}
+
+/* Milestones: a card in the upper middle of the screen, and a moment of light round its edge. */
+.milestone-card {
+  position: fixed;
+  top: 22%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  width: min(440px, calc(100vw - 32px));
+  padding: 18px 22px 16px;
+  text-align: center;
+  background: var(--surface-solid);
+  border: 1px solid var(--warn);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.milestone-card[hidden] {
+  display: none;
+}
+
+.milestone-card.milestone-on {
+  animation: milestone-in 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+
+@keyframes milestone-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.milestone-eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.milestone-title {
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.milestone-text {
+  margin-top: 6px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.milestone-close {
+  margin-top: 12px;
+  padding: 5px 18px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.milestone-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 24;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: inset 0 0 120px 20px rgba(227, 180, 110, 0.55);
+}
+
+.milestone-flash.milestone-on {
+  animation: milestone-flash 1.6s ease-out;
+}
+
+@keyframes milestone-flash {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* The cosmetic of "Three cities joined": every city's marker on the planet in gold. */
+.globe-markers[data-gold] .globe-marker:not([data-kind="outpost"]) .globe-marker-pin {
+  background: #f5b82e;
+  box-shadow: 0 0 0 2px rgba(245, 184, 46, 0.45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guide-target,
+  .milestone-card.milestone-on,
+  .milestone-flash.milestone-on {
+    animation: none;
+  }
+}

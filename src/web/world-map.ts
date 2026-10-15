@@ -16,7 +16,7 @@
  */
 
 import type { HabitatChannels, Route, Settlement, SimState, Tuning } from "../sim/index.js";
-import { MARS_RADIUS_M, keyChunk, routeCost, routeKm, siteElevation } from "../sim/index.js";
+import { MARS_RADIUS_M, hasCosmetic, keyChunk, routeCost, routeKm, siteElevation } from "../sim/index.js";
 import { settlementLabel, sizeLabel } from "./settlement-label.js";
 
 /** The world, in world tiles: 2,048 round, 1,024 pole to pole. */
@@ -112,6 +112,8 @@ function button(className: string, text: string, onClick: () => void): HTMLButto
 }
 
 const KIND_COLOUR: Readonly<Record<Settlement["kind"], string>> = { metropolis: "#ffd36b", city: "#8fd3ff", outpost: "#c9c9cf" };
+/** Batch 30's cosmetic: cities and metropolises in gold, once "Three cities joined" is claimed. */
+export const GOLD = "#f5b82e";
 
 export class WorldMapScreen {
   readonly root: HTMLElement;
@@ -385,11 +387,12 @@ export class WorldMapScreen {
       ctx.fill();
     }
     // The settlements: up close the chunks each holds, further out a mark; and names.
+    const gold = hasCosmetic(state, "gold_markers", this.tuning);
     const C = this.tuning.CLAIM_CHUNK_TILES;
     const chunkTiles = (C * this.tuning.TILE_METRES) / 1000 / WORLD_TILE_KM;
     for (const s of state.settlements) {
       const p = worldPoint(s.lat, s.lon);
-      ctx.fillStyle = s.lostAtSeaLevelM !== null ? "#666" : KIND_COLOUR[s.kind];
+      ctx.fillStyle = s.lostAtSeaLevelM !== null ? "#666" : gold && s.kind !== "outpost" ? GOLD : KIND_COLOUR[s.kind];
       if (chunkTiles * cam.scale >= 1.5) {
         const per = s.base / C;
         const half = per / 2;

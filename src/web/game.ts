@@ -70,6 +70,11 @@ import {
   levelZone,
   planLinks,
   cancelPlans,
+  claimObjective,
+  hasCosmetic,
+  hasUnlock,
+  objectiveStatus,
+  skipGuide,
 } from "../sim/index.js";
 import type { BuildingType } from "../sim/index.js";
 import { READOUT_HZ, SPARK_CAPACITY, SPARK_HZ, speedsFor } from "./config.js";
@@ -81,6 +86,9 @@ import type { LeverView } from "./inspector.js";
 import { Inspector } from "./inspector.js";
 import { SimClock } from "./loop.js";
 import { Ring } from "./ring.js";
+import { GuidePanel, ObjectivesPanel, guideHint, rewardWords } from "./onboarding.js";
+import type { GuideContext } from "./onboarding.js";
+import { MilestoneCards, MilestoneWatch } from "./milestones.js";
 
 export interface GameOptions {
   readonly state: SimState;
@@ -542,7 +550,32 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   exampleBanner.append(exampleText, exampleBack);
   root.append(exampleBanner);
 
+  /**
+   * The first hour (Batch 30): the guide's card, the objectives, and the
+   * milestones. Skip and Claim are the player's actions, through the
+   * simulation like every other; the cards and the chime only watch.
+   */
+  const guide = new GuidePanel(root, root, () => {
+    state = skipGuide(state);
+  });
+  const objectives = new ObjectivesPanel(root, tuning, (id) => {
+    const outcome = claimObjective(state, id, tuning);
+    state = outcome.state;
+    const words = rewardWords({ materials: outcome.materials, people: Math.floor(outcome.people), rovers: outcome.rovers, credits: outcome.credits, unlock: null, cosmetic: null });
+    return { ok: outcome.ok, reason: outcome.reason, words: words === "" ? "the reward" : words };
+  });
+  const milestones = new MilestoneWatch();
+  const cards = new MilestoneCards(root);
+  /** Where the player is looking, for the guide's words. */
+  function guideContext(): GuideContext {
+    const resident = journey.resident;
+    if (resident !== null) return planner.openId === resident ? "planner" : "city";
+    return worldMap.isOpen ? "map" : "orbit";
+  }
+
   function freshViews(): void {
+    milestones.reset();
+    cards.clear();
     journey.abort();
     travelPrompt.close();
     seedMessage = null;
@@ -807,9 +840,16 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
         floodWarnings: floodWarnings(state, habitat(state.reservoirs, d, tuning, liquidRate), liquidRate, tuning),
         founding,
         foundingSite: founding === null ? null : foundingSite,
+        canFoundMetropolis: tuning.SANDBOX_ENABLED > 0 || hasUnlock(state, "metropolis", tuning),
       });
 
       globe.setSettlements(state.settlements);
+      globe.setGold(hasCosmetic(state, "gold_markers", tuning));
+      // The first hour (Batch 30): nothing of it while the example planet shows - that is not the player's world.
+      const mine = !example.active;
+      guide.update(mine ? guideHint({ state, tuning, context: guideContext(), founding: founding !== null, selected: city.hasSelection }) : null);
+      objectives.update(mine ? objectiveStatus(state, tuning) : []);
+      if (mine) cards.push(milestones.observe(state, tuning));
       inspector.update(
         {
           simYear: year,
@@ -835,6 +875,8 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
         rings,
       );
     }
+
+    cards.frame(timestamp);
 
     if (example.mayPersist && !options.lookOnly && hooks.saveDue()) {
       hooks.save(state);
@@ -909,6 +951,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       city.dispose();
       worldMap.dispose();
       travelPrompt.dispose();
+      guide.dispose();
       root.remove();
     },
   };

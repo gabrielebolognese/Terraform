@@ -166,6 +166,11 @@ export class Globe implements PlanetSink {
     this.markerLayer.remove();
   }
 
+  /** Batch 30's cosmetic: every city's marker in gold, once "Three cities joined" is claimed. */
+  setGold(on: boolean): void {
+    this.markerLayer.toggleAttribute("data-gold", on);
+  }
+
   /** The settlements to mark on the planet. Markers are created and removed to match. */
   setSettlements(settlements: readonly Settlement[]): void {
     const live = new Set(settlements.map((s) => s.id));
