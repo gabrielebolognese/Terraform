@@ -29,7 +29,7 @@ Press **New world** and choose:
   - **Sandbox** gives unlimited materials and credits, unlocks everything, and nothing is ever
     lost. Every game speed is available. Use it to experiment.
   - **Terraformed start** puts you on a living planet with cities already built, laid out from
-    your seed. It takes about twenty seconds to make, and unlike the Example planet it is yours and
+    your seed. It takes about 45 seconds to make, and unlike the Example planet it is yours and
     is saved.
 - **Pace.**
   - **Standard - real build times** (recommended). Buildings take real time: seconds for the

@@ -4,6 +4,46 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 32 - People, not a number
+
+The people of your cities now want more than air and food as their city grows. Look after them
+and they are happier: a happy city fills its homes faster and every building in it works better.
+
+**New**
+- **Needs beyond life support.** From 500 people a city wants green space (a Park or a Biosphere)
+  and food grown more than one way. From 2,000 it wants medical care and research. From 5,000 it
+  wants transport (a Station), and from 10,000 shops (a Mega Mall). A city is never asked for
+  something before it may build what meets it.
+- **Reach.** A service meets a need only for the homes near it: those in the square 33 tiles
+  across centred on it, 6 tiles wider for every level, on the same corridors. It must be running.
+- **Happiness**, 0% to 100%, 50% content. Each need met raises it and each need not met lowers
+  it. At 100% a city grows half as fast again and its buildings make 10% more; at 0% it grows at
+  half the speed and they make 10% less.
+- **People** on the city panel: the city's happiness and each need, how much of the city it
+  reaches, and what would meet it.
+- **Coverage** in the city planner: choose a service to see the homes it reaches in green and the
+  gaps in red.
+- **People in the city.** Crowds gather on a Station's platforms and stroll a Park's paths, more
+  as the service reaches more homes. Click a service to see how many people it reaches.
+
+**Changed**
+- In a new world, the status line says "Life support is met" when power, water, oxygen and food
+  are all supplied, since there is now more to need.
+- Skyscraper windows light up as the city's homes fill, as a Habitat Dome's do.
+- The planner's **Overview** lists the city's happiness and each need.
+- **Terraformed start:** the ready-made cities now have parks, medical centers, laboratories,
+  stations and malls among their homes, and somewhat fewer people for it.
+- Worlds made before this update play as they always have: their people need only life support.
+
+**Known issues**
+- In a Terraformed start, Stations reach only some of a city's homes: a Station stands beside the
+  railway, and the ready-made cities have only a few lines.
+- Making a Terraformed start takes longer than before: about 45 seconds, where it took about 20.
+- Happiness is not yet shown on the world map's city cards, in the Settlements list, in Alerts or
+  in Statistics.
+
+---
+
 ## Update 31 - Knowing what is happening
 
 The game now tells you when something needs you and takes you straight there, and keeps charts of
@@ -216,3 +256,8 @@ and railways between settlements; and the Example planet.
 - In a city, the pop-up messages can cover the Objectives panel while it is open.
 - The statistics' charts show each line's latest value in their key; there is no reading under the
   pointer.
+- A new city shows "Spaceport offline" until power reaches it.
+- In a Terraformed start, Stations reach only some of a city's homes.
+- Making a Terraformed start takes longer than before: about 45 seconds, where it took about 20.
+- Happiness is not yet shown on the world map's city cards, in the Settlements list, in Alerts or
+  in Statistics.

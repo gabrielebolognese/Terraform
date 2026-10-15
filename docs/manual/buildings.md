@@ -32,9 +32,9 @@ building makes, houses or stores.
 | Atmosphere Processor | 60 | 2×2 | 4 oxygen, made from the planet's carbon dioxide (it helps the planet too). Uses power | 1.5 min, up to 67 min | Needs some carbon dioxide in the air |
 | Algae Reactor | 40 | 2×2 | 5 oxygen. Uses power and water | 1 min, up to 45 min | |
 | Greenhouse | 30 | 2×2 | 4 food. Uses power and water | 1 min, up to 45 min | Cities only |
-| Park | 20 | 4×4 | 2 oxygen. Uses water | 40 s, up to 41 min | Cities only, when open air covers half the planet |
-| Biosphere | 800 | 6×4 | 40 food and 30 oxygen. Uses power and water | 45 min, up to 6.1 h | Cities only |
-| Mega Mall | 1,500 | 8×6 | 90 food. Uses 70 power | 1 h, up to 8.2 h | Cities only, at 10,000 people |
+| Park | 20 | 4×4 | 2 oxygen. Uses water. Green space for the homes in reach* | 40 s, up to 41 min | Cities only, when open air covers half the planet |
+| Biosphere | 800 | 6×4 | 40 food and 30 oxygen. Uses power and water. Green space for the homes in reach, and a second way of growing food* | 45 min, up to 6.1 h | Cities only |
+| Mega Mall | 1,500 | 8×6 | 90 food. Uses 70 power. Shops for the homes in reach* | 1 h, up to 8.2 h | Cities only, at 10,000 people |
 
 ## Materials and storage
 
@@ -53,17 +53,21 @@ building makes, houses or stores.
 |---|---|---|---|---|---|
 | Spaceport | 80 | 3×3 | Brings in a trickle of materials, water, oxygen and food, and launches supply rockets. Uses power | 15 min, up to 2 h | A city's first one comes free |
 | Rover Post | 300 | 5×5 | One more rover | 1 min, up to 61 min | Cities only, one per 100 people |
-| Station | 600 | 4×6 | Joins a large city's districts by rail into one network | 30 min, up to 4.1 h | Cities only, at 5,000 people |
+| Station | 600 | 4×6 | Joins a large city's districts by rail into one network. Transport for the homes in reach* | 30 min, up to 4.1 h | Cities only, at 5,000 people |
 | Industrial Command Center | 450 | 6×4 | Every building within 15 tiles makes 10% more (more at higher levels) | 30 min, up to 4.1 h | |
 
 ## Research and services
 
 | Building | Cost | Size | What it does | Build time | Notes |
 |---|---|---|---|---|---|
-| Laboratory | 120 | 3×3 | Earns 12 research credits a planet year. Uses power and water | 3 min, up to 2.2 h | |
-| Astronomy Observatory | 400 | 5×5 | Earns 40 research credits a planet year. Uses power | 30 min, up to 4.1 h | Cities only, at 2,000 people |
-| Research Forum | 500 | 4×6 | Earns 30 research credits a planet year and makes the city grow 25% faster (one is enough). Uses power, water and food | 30 min, up to 4.1 h | Cities only |
-| Medical Center | 350 | 5×5 | Shelters up to 400 people from dying when only oxygen or food runs short | 20 min, up to 2.7 h | Cities only, at 1,000 people |
+| Laboratory | 120 | 3×3 | Earns 12 research credits a planet year. Uses power and water. Research for the homes in reach* | 3 min, up to 2.2 h | |
+| Astronomy Observatory | 400 | 5×5 | Earns 40 research credits a planet year. Uses power. Research for the homes in reach* | 30 min, up to 4.1 h | Cities only, at 2,000 people |
+| Research Forum | 500 | 4×6 | Earns 30 research credits a planet year and makes the city grow 25% faster (one is enough). Uses power, water and food. Research for the homes in reach* | 30 min, up to 4.1 h | Cities only |
+| Medical Center | 350 | 5×5 | Shelters up to 400 people from dying when only oxygen or food runs short. Medical care for the homes in reach* | 20 min, up to 2.7 h | Cities only, at 1,000 people |
+
+\* In a world made from Update 32 on, people need more than life support as a city grows, and
+these buildings meet those needs for the homes in the square 33 tiles across centred on them (6
+tiles wider a level), on the same corridors. See [People and their needs](people.md).
 
 ## Already there
 

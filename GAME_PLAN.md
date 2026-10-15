@@ -50,7 +50,7 @@ What is missing, in the user's words (2026-10-11):
 | 29 | Vehicles that use the city: rovers on the ground, trains on the line | **COMPLETE** - [note](docs/balance/batch29-vehicles.md) - rovers drive routes round the city (new worlds; their length sets the trip), trains ride car by car on a track each way and stop at stations; every vehicle drawn behind what stands in front of it; no vehicle inside a building, measured |
 | 30 | The first hour: onboarding and objectives | **COMPLETE** - [note](docs/balance/batch30-first-hour.md) - a guide through seven first steps, driven by the state; nine objectives in three chains with rewards (settlers, rovers, materials, credits, the metropolis, gold markers); milestone cards and a chime; the guide takes 42 min (claiming land waits for 200 people) |
 | 31 | Knowing what is happening: alerts, notifications and statistics | **COMPLETE** - [note](docs/balance/batch31-alerts.md) - alerts derived at the readout, each type fired by a run that causes it and not by one beside it; toasts by priority and the alert centre, each clicking through to its city and building; the planet's record in the save, bounded by halving (125 samples, 25 kB after 1,000 sim-years); statistics; each city at a glance |
-| 32 | People, not a number: needs, services and happiness | NOT STARTED |
+| 32 | People, not a number: needs, services and happiness | **COMPLETE** - [note](docs/balance/batch32-people.md) - six needs above life support in two tiers, met by running services in reach of the homes over the corridors; happiness from them moves growth (x0.5 to x1.5) and output (x0.9 to x1.1), each need by its tuned factor through a real `advance`; coverage overlays, crowds, towers lit by occupancy; the example rebuilt with its services among the homes, every city perfect with needs on |
 | 33 | Events that ask for decisions | NOT STARTED |
 | 34 | Earth: shipments, contracts and the market | NOT STARTED |
 | 35 | Sound: music, ambience and effects | NOT STARTED |
@@ -553,16 +553,16 @@ Water Extractor. 47 injected faults: 43 caught at once, 4 only after a new or st
 people need beyond survival decides how fast a city grows and how well it works.
 
 **Deliverables:**
-- [ ] **Needs in tiers:**
+- [x] **Needs in tiers:**
   - life support, as today;
-  - comfort: parks, food variety, space per person;
+  - comfort: parks, food variety, ~~space per person~~ (left out: see below);
   - services: medical, research, shops, transport.
 
   Each from the buildings that provide it, within a reach, over the city's networks.
-- [ ] **Happiness**, derived from the needs met. It changes growth (as the research forum's bonus
+- [x] **Happiness**, derived from the needs met. It changes growth (as the research forum's bonus
   does now) and productivity: a building runs a little better or worse.
-- [ ] **Coverage overlays in the planner:** where medical, parks or transport reach, and the gaps.
-- [ ] **People in the view:** a crowd count at stations and parks; lights by occupancy.
+- [x] **Coverage overlays in the planner:** where medical, parks or transport reach, and the gaps.
+- [x] **People in the view:** a crowd count at stations and parks; lights by occupancy.
 
 **Exit gate:**
 - Each need, met against unmet in otherwise identical cities through a real `advance`, moves growth
@@ -574,6 +574,49 @@ people need beyond survival decides how fast a city grows and how well it works.
 
 **Decisions for Phase 1:** how many needs, and whether jobs (people working buildings) come in now
 or never.
+
+**Done** - see [the note](docs/balance/batch32-people.md). Built unattended (`/next-batch auto`) in
+one session. Each need, met against unmet in otherwise identical cities through one substep of the
+real `advance`, moves growth by twice its weight times `HAPPINESS_GROWTH` and output (materials
+and research credits) by twice its weight times `HAPPINESS_OUTPUT`, to nine decimals. Behind
+`NEEDS_ENABLED` (0); the golden run, the golden frames, the Batch 3 score and determinism are
+unchanged with it off (111 tests). Every new world turns it on; worlds made before keep their
+recorded tuning. The example planet, laid out before needs, measured a metropolis mood of -0.74 and
+13 of its 27 cities short with needs on; rebuilt with services among its homes, every city is
+perfect with needs on and off, every asked need but transport met for 89.9% of homes or more.
+
+**Decisions taken** (each recorded with its reason in the note):
+1. **Six needs above life support, two tiers.** Comfort from 500 people: green space (a Park or a
+   Biosphere) and food variety (two kinds grown). Services from 2,000: medical care, research,
+   transport (a Station, from 5,000) and shops (a Mega Mall, from 10,000) - never asked before
+   their building may be built. **Space per person is left out:** people never outnumber homes and
+   growth fills every home, so spare room is unmet in every settled city whatever the player
+   builds: a tax, not a decision.
+2. **Jobs: not now.** A labour model reprices every building and every measured gate; happiness's
+   output factor stands in for how well people work. Recorded for later.
+3. **The mood:** each asked need adds its weight met and takes it away unmet (-1 to 1, 0 for a city
+   asking nothing). Growth x(1 + 0.5 x mood), output x(1 + 0.1 x mood); unhappy people do not
+   leave. Output means what buildings make and research earns, not the planet's CO2 draw (as the
+   Industrial Command Center's boost).
+4. **Reach:** a running provider reaches the homes whose middle is in the square 33 tiles across
+   about its own (6 more a level), on the same corridors (rails join stations' districts); homes
+   weighted by the people they house.
+5. **Derived inside the substep's brownout passes, never stored:** no save change.
+6. **On in every new world** (Standard, Sandbox and Terraformed start alike).
+
+**What changed from the plan, and why:**
+- **The example had to be rebuilt** (`src/harness/services.ts`). Its districts kept homes, services
+  and farms apart: a metropolis's homes were 1-10% in reach of each service, and green space reached
+  5% even with a 121-tile square. Each city is now given providers among its homes, over buildings it
+  can spare, keeping the example's own rules (streets, 16 to 50 a chunk, zones, stations on the
+  railway). It costs the example 10.6% of its people and 16.7 s more to build, measured.
+- **Transport is the one need the example meets in part** (0.9% to 65% of a city's homes): a
+  station goes only beside the railway, and the example's railways are a few lines. The cities'
+  moods are 0.55 to 0.78 for it, the metropolises 0.64 to 0.67.
+- **Needs move the first hours' pacing.** The scripted player builds no services: its city of
+  1,000 comes at 2.16 h, not 2.02 h (Standard), still inside the 1-3 h target. The first comfort
+  need wants a Biosphere, 800 materials against a new city's 400 and 45 minutes to build: a player
+  meeting it by 1,000 people is not faster (2.14 h).
 
 ---
 
@@ -766,3 +809,7 @@ right where it was wrong.
   Batch 40.
 - Production penalties with flood depth (detail §4.3).
 - A forecast that sees the sea's acceleration (Batch 25's open item).
+- Jobs: people working buildings, a labour model (Batch 32's decision: not now).
+- Space per person as a need: wants a growth model where people choose a city - jobs or
+  migration - before spare room can be a choice (Batch 32).
+- Rail spurs to the example's new stations, so transport reaches all its homes (Batch 32).

@@ -123,6 +123,16 @@ credits, people) over the whole game from a record the simulation keeps in the s
 halving, and each city's record, now with what it made and used of each resource. Each city's line in
 the HUD and the world map says its people, what is short and what is being built.
 
+**People, not a number** (Batch 32). In a new world a growing city's people want more than life
+support: green space and varied food from 500 people; medical care, research, transport and shops
+from 2,000 (transport from a station's 5,000, shops from a mall's 10,000). A running service reaches
+the homes in a square about it, on the same corridors, and each need met or unmet moves the city's
+mood, which multiplies its growth (x0.5 to x1.5) and what its buildings make (x0.9 to x1.1) -
+derived every substep inside `advance`, never stored, behind `NEEDS_ENABLED`. The city panel has a
+**People** section, the planner a **Coverage** overlay of where each service reaches and the gaps;
+crowds gather at stations and parks, and towers light as their homes fill. The example planet was
+rebuilt with its services among its homes, and every one of its cities stays perfect with needs on.
+
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved
