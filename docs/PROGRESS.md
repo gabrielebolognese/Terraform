@@ -548,4 +548,80 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   src/sim/micro/settlement.ts src/sim/micro/view.ts src/sim/tuning.ts src/web/city.ts
   src/web/first-hour.test.ts src/web/game-tuning.ts src/web/needs-words.ts src/web/pace.test.ts
   src/web/people.test.ts src/web/planner.ts src/web/style.css
+- review 1: rejected
+  1. The game now tells the player the wrong waiting time, and so does the manual. The services
+     pass runs for the Example planet as well as for a Terraformed start. `examplePlanet` runs
+     `serveCities` unless `services: false`, and `src/web/main.ts:47` builds the Example planet
+     without that option. Measured in this review, one process each: the Example planet takes
+     34.9 s with the pass and 20.0 s without it; a Terraformed start (seed 12345) takes 39.1 s.
+     What the player reads:
+     - `src/web/app.ts:51` (New world, Terraformed start: "about twenty seconds to make") and
+       `src/web/app.ts:359` ("Making a living planet - about twenty seconds...") are both still
+       twenty seconds. The manual now says about 45 (`docs/manual/getting-started.md:32`).
+     - `src/web/app.ts:431` ("Building the example planet - about twenty seconds...") and
+       `docs/manual/getting-started.md:13` ("It takes about twenty seconds to build") are both
+       wrong. getting-started.md is a page this batch changed.
+     - Update 32's known issue (`docs/manual/update-notes.md:41`, and `:261` in the current list)
+       names only the Terraformed start.
+
+     Needed: the on-screen words, the code comments that repeat them (`src/web/app.ts:36`,
+     `src/web/worlds.ts:100-102`, `src/web/game.ts:543`, `:653`) and the manual all giving the
+     measured times; the Example planet added to the known issue.
+  2. `docs/manual/cities.md:156-157` says a city wants "medical care, research, transport and shops
+     from 2,000 on". Transport is asked from 5,000 and shops from 10,000 (`needAskedFrom`, tested
+     in `src/sim/micro/needs.test.ts:158`; `people.md` says so correctly).
+  3. Two new tests have no row in the note's injection table, so the table does not show either
+     was ever broken by a fault:
+     - `src/sim/micro/needs.test.ts:148` (the same in any chunks): no fault recorded at all. Needed:
+       a fault it catches, or the note's reason why no fault in this feature can break it.
+     - `src/sim/micro/needs.test.ts:139` (no needs with them off, nor for an outpost). It does see a
+       fault: probed in this review, `needsOn` ignoring `NEEDS_ENABLED` (`settlement.ts`) fails it
+       and the seven exit-gate tests. Needed: the row, in the table and in the count.
+  4. The note does not lead with what went wrong. `docs/balance/batch32-people.md` opens with
+     "What was built" (`:5-43`), and "What went wrong, and what it cost" starts at `:45`. Batches
+     29 to 31 put it first, as the rule asks.
+
+  Checked and sound:
+  - Typecheck, `build` and `build:web` (538.83 kB JS, 184.18 kB gzip, past Vite's 500 kB warning,
+    as recorded) are green.
+  - Full suite (`--maxWorkers=2 --minWorkers=1`): 112 files, 1,310 tests, all passed (425 s; the
+    Known-red opening test passed).
+  - The exit gate is met by `src/sim/micro/needs.test.ts`:
+    - each need, met against unmet, through one substep of the real `advance`, moves growth by
+      2 x weight x `HAPPINESS_GROWTH` and materials and research credits by
+      2 x weight x `HAPPINESS_OUTPUT`, to nine decimals. This is measured from population and
+      stores, not from the mood the code reports.
+    - `NEEDS_ENABLED` is 0 in `tuning.ts` and in `BROWSER_TUNING`, and only `NEW_WORLD_OVERRIDES`
+      turns it on. Old worlds keep it off, because `fromRecord` gives a constant added since the
+      world was made its default.
+    - The example passes "perfect with needs on" (`src/harness/example.test.ts`).
+  - Two of the note's injections, one at a time. Each was caught as the note records, and
+    `git status` was clean after each:
+    - a provider counted whether it runs or not (`needs.ts:207`): "a provider that is not running"
+      and "browned out", expected 1 to be 0;
+    - the crowd always 0 (`render/people.ts`): "the crowd there now" and "the crowd drawn",
+      expected 0 to be 16.
+  - Simulation rules:
+    - the mood is found inside `settlementStep`'s brownout passes, in `advance`, on the substep
+      grid;
+    - the fallback after the passes cannot be reached (each pass switches a building off or ends
+      the loop);
+    - all 14 new constants are in `tuning.ts`, in `validateTuning` and in the §10 table;
+    - `needs.ts` imports only the simulation;
+    - the crowd constants are display constants in `src/render/`;
+    - the panel, inspector and planner only read the view;
+    - nothing is stored, so there is no save change.
+  - The reach cache hits from one substep to the next: `networkOf` and `withRails` are cached, so
+    the step and the view pass the same network object.
+  - Three manual statements match the code:
+    - "green space and research: 7.5 points ... medical care, transport and shops: 10": the weights
+      0.15, 0.1 and 0.2, with happiness at 50% + 50% x mood;
+    - "Happiness 70%: growth +20%, buildings make +4%.": `happinessWords` with mood 0.4;
+    - "a Biosphere costs 800 materials ... a new city's stores hold 400 ... about 45 minutes":
+      `COST_BIOSPHERE`, `MICRO_CAP_MATERIALS`, `BUILD_SECONDS_BIOSPHERE` 2,700.
+  - Measured thresholds carry their measurements: 0.899 and 0.553 in the example, 56.4 and 8.3
+    minutes in the first hour, 1.069 and 1.048 for pacing.
+  - The decisions are ones a bare "Go" would accept, including leaving out space per person, for
+    the reason given. None deletes or overwrites player data. Saved Terraformed-start worlds keep
+    their layout; only new ones are rebuilt.
 
