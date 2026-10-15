@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 31
-in_progress_batch: 32
+last_completed_batch: 32
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -478,9 +478,28 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     the migration keeps every city sample and makes nothing up.
 
 ### Batch 32 - People, not a number: needs, services and happiness
-- status: in progress
+- status: complete
 - note: docs/balance/batch32-people.md
+- manual: docs/manual/people.md (new: needs, reach, happiness, seeing it), docs/manual/update-notes.md
+  (Update 32, known issues, and the missing "Spaceport offline" line Batch 31's review noted),
+  docs/manual/cities.md (the status line, People, the planner's Coverage, the example cities),
+  docs/manual/buildings.md (what each service meets, its reach), docs/manual/controls.md (the
+  Coverage row), docs/manual/getting-started.md (a Terraformed start takes about 45 s),
+  docs/manual/README.md (contents, the game in one minute)
+- commits: 26ba419 (started), 550d294, 7e38d23, 1016324, c95abce, 6a65ee6, dfca0fe, and the
+  completing commit
 - sessions: 1 (started 2026-10-15)
+- found:
+  - the example planet failed the needs outright (metropolis mood -0.74, 13 of 27 cities short
+    with needs on); rebuilt with its services among its homes (src/harness/services.ts), every city
+    perfect with needs on and off. The pass first ran over ten minutes and was killed; it now takes
+    16.7 s, and the example builds in 45.0 s (21.9 s without it).
+  - stations had to board the railway (the user's rule for the metropolis): transport is met for
+    0.9-65% of the example's homes; moods 0.55-0.78.
+  - two measured first-hour tests moved with needs on in new worlds (the routes' cost measured
+    the needs too; the first reward's worth); both hold their new measurements, with the reasons.
+  - docs/AUTO_BATCH_SETUP.md (untracked, not this batch's) was committed by mistake in 6a65ee6 and
+    taken out of the index again in dfca0fe; the file on disk is untouched and untracked.
 - decisions:
   - Six needs above life support, in two tiers: comfort (green space, food variety) asked from 500
     people; services (medical care, research, transport, shops) from 2,000. A need is never asked
@@ -503,4 +522,30 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     with the reasons beside them.
   - The crowd is display (2% of the people a station or park reaches, a figure per 5, at most 16);
     towers lit by occupancy with needs on only, so the golden frames keep theirs.
+  - In the example, green space is a park on a terraformed world and a biosphere before one.
+- verification: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 112 files, 1,310
+  tests, all passed (456 s; the Known-red opening test passed); build:web green (538.8 kB JS,
+  184.2 kB gzip - past Vite's 500 kB warning, as recorded since Batch 31); build green; the built
+  page, its script and its styles served and fetched over HTTP (the script holds the People
+  section, the coverage row and the needs' words). With needs off: the golden run, the golden
+  frames, the Batch 3 score, visuals and offline, 8 files, 111 tests, all passed.
+- injections: 40 faults, one at a time, the file checked against its copy after each:
+  - the simulation, 13: 11 caught at once; research credits not scaled was missed until every test
+    city earned research (now caught); the fallback after the brownout passes changes nothing
+    (unreachable: the passes always settle);
+  - the browser, 16: all caught at once;
+  - the example's services, 11: 10 caught by a named test (8 by the example's own, 2 by the quick
+    services test); with the replace-the-port fault the example's run died twice before any test
+    reported, so the quick test gained a town where only the headquarters has room, which catches
+    it; the quick test also missed the leftover-links fault at first (the example's tests caught
+    it) and now checks the links directly.
+- review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch32-people.md
+  docs/design/macro-world.md docs/manual/README.md docs/manual/buildings.md docs/manual/cities.md
+  docs/manual/controls.md docs/manual/getting-started.md docs/manual/people.md
+  docs/manual/update-notes.md src/harness/example.test.ts src/harness/example.ts
+  src/harness/pacing.ts src/harness/services.test.ts src/harness/services.ts src/render/city.ts
+  src/render/people.ts src/sim/index.ts src/sim/micro/needs.test.ts src/sim/micro/needs.ts
+  src/sim/micro/settlement.ts src/sim/micro/view.ts src/sim/tuning.ts src/web/city.ts
+  src/web/first-hour.test.ts src/web/game-tuning.ts src/web/needs-words.ts src/web/pace.test.ts
+  src/web/people.test.ts src/web/planner.ts src/web/style.css
 
