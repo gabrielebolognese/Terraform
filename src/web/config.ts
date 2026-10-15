@@ -36,6 +36,12 @@ export const READOUT_HZ = 10;
  * it rises.
  */
 export const ALERT_HZ = 2;
+/**
+ * Milliseconds a look may spend working out settlements' conditions for
+ * their new step; the rest keep what they showed until their turn. A new
+ * step for every settlement of the example planet costs 160 ms (measured).
+ */
+export const ALERT_BUDGET_MS = 4;
 export const ALERT_QUIET_MS = 60_000;
 export const STORM_WARN_SECONDS = 120;
 /** How long a toast stays, by priority, ms; and how many show at once. */

@@ -15,7 +15,7 @@
  * frame, and asks the simulation, by hooks, to change anything.
  */
 
-import type { HabitatChannels, Route, Settlement, SimState, Tuning } from "../sim/index.js";
+import type { HabitatChannels, MicroResource, Route, Settlement, SimState, Tuning } from "../sim/index.js";
 import { MARS_RADIUS_M, hasCosmetic, keyChunk, routeCost, routeKm, siteElevation } from "../sim/index.js";
 import { settlementLabel, sizeLabel } from "./settlement-label.js";
 import { cityOverview, overviewWords } from "./city-overview.js";
@@ -130,6 +130,8 @@ export class WorldMapScreen {
   private state: SimState | null = null;
   /** The settlement chosen, and whether the next choice joins it by rail. */
   selected: string | null = null;
+  /** What each settlement is short of, as the alerts last saw it (Batch 31): the overview's. Set by the game. */
+  shortages: ReadonlyMap<string, readonly MicroResource[]> = new Map();
   joining = false;
   private notice: string | null = null;
   private drag: { x: number; y: number; moved: boolean } | null = null;
@@ -191,7 +193,7 @@ export class WorldMapScreen {
       }
     }
     this.draw(state, now);
-    this.renderPanel(state, env);
+    this.renderPanel(state);
   }
 
   /** Map pixels from the view's size, and the camera, fitted to the whole world the first time. */
@@ -427,11 +429,11 @@ export class WorldMapScreen {
     }
   }
 
-  private renderPanel(state: SimState, env: HabitatChannels): void {
+  private renderPanel(state: SimState): void {
     const s = state.settlements.find((x) => x.id === this.selected) ?? null;
     const routes = s === null ? [] : state.routes.filter((r) => r.a === s.id || r.b === s.id);
     // Batch 31: the city at a glance - people, what is short, what is being built.
-    const glance = s === null || s.lostAtSeaLevelM !== null ? null : cityOverview(s, env, this.tuning);
+    const glance = s === null || s.lostAtSeaLevelM !== null ? null : cityOverview(s, this.shortages.get(s.id) ?? [], this.tuning);
     const words = glance === null || s === null ? "" : overviewWords(glance, s);
     const key = JSON.stringify([s?.id, s === null ? 0 : Math.floor(s.population), routes.length, this.joining, state.routes.length, s === null ? 0 : Math.floor(s.stores.materials / 100), words]);
     if (key === this.panelKey) return;

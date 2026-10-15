@@ -309,6 +309,58 @@ describe("alerts are derived, never stored", () => {
     expect(look(dark, 2000 + 2 * ALERT_QUIET_MS + 1), "back after it").toContain("blackout");
   });
 
+  it("within a look's budget: each look works out one more settlement's new step, the rest keep what they showed, and the round reaches them all", () => {
+    // Three cities, each with its spaceport offline (nothing makes power), then each with a solar array built.
+    let s = founded();
+    s = foundSettlement(s, "city", 0.36, -1.05, T, "Nix").state;
+    s = foundSettlement(s, "city", -0.2, 2.0, T, "Tharsis").state;
+    s = { ...s, settlements: s.settlements.map((c) => ({ ...c, stores: { ...c.stores, materials: 5000 } })) };
+    const offline = (alerts: readonly Alert[]) => alerts.filter((a) => a.kind === "offline").map((a) => (a.target.kind === "city" ? a.target.id : "")).sort();
+    let lit = s;
+    for (const c of s.settlements) {
+      const hq = c.buildings.find((b) => b.type === "headquarters")!;
+      let placed = false;
+      for (let r = 4; r < 12 && !placed; r += 1) {
+        for (let k = 0; k < 8 * r && !placed; k += 1) {
+          const ang = (k / (8 * r)) * 2 * Math.PI;
+          const o = placeBuilding(lit, c.id, "solar_array", Math.round(hq.tx + r * Math.cos(ang)), Math.round(hq.ty + r * Math.sin(ang)), T);
+          if (o.ok) {
+            const joined = connectAll(o.state, c.id, T);
+            lit = joined.ok ? joined.state : o.state;
+            placed = true;
+          }
+        }
+      }
+      expect(placed, `a solar array in ${c.id}`).toBe(true);
+    }
+    for (let i = 0; i < 600 && lit.settlements.some((c) => constructionOf(c).size > 0 || c.jobs.length > 0); i += 1) lit = advance(lit, 1, cfg(T));
+    expect(offline(conditions(s, envOf(s, T), 0, T))).toEqual(["settlement-1", "settlement-2", "settlement-3"]);
+    expect(offline(conditions(lit, envOf(lit, T), 0, T)), "vacuity: the arrays end it").toEqual([]);
+    // No time at all to spare: the clock moves on every reading.
+    let tick = 0;
+    const watch = new AlertWatch();
+    const look = (state: SimState) => offline(watch.observe({ state, env: envOf(state, T), liquidRatePerYear: 0, tuning: T, now: (tick += 500), budgetMs: 0, clock: () => (tick += 1) }).now);
+    // New settlement objects, as a new step makes: nothing about them is worked out yet. And the same for the
+    // world as opened, so its conditions are not those a look above already worked out.
+    const stepped = { ...lit, settlements: lit.settlements.map((c) => ({ ...c })) };
+    s = { ...s, settlements: s.settlements.map((c) => ({ ...c })) };
+    // A world just opened: one settlement a look, and what each shows when its turn comes was already so - not announced.
+    const fresh: Alert[] = [];
+    const opening = (state: SimState) => {
+      const l = watch.observe({ state, env: envOf(state, T), liquidRatePerYear: 0, tuning: T, now: (tick += 500), budgetMs: 0, clock: () => (tick += 1) });
+      fresh.push(...l.fresh);
+      return offline(l.now);
+    };
+    expect(opening(s)).toHaveLength(1);
+    expect(opening(s)).toHaveLength(2);
+    expect(opening(s)).toEqual(["settlement-1", "settlement-2", "settlement-3"]);
+    expect(fresh, "nothing announced that was already so").toEqual([]);
+    expect(look(stepped)).toHaveLength(2);
+    expect(look(stepped)).toHaveLength(1);
+    expect(look(stepped)).toEqual([]);
+    expect(look(stepped), "and stays fresh").toEqual([]);
+  });
+
   it("a quiet, healthy city says nothing at all, for a long while", () => {
     const healthy = settle(connect(place(place(place(place(powered(), "water_extractor"), "greenhouse"), "solar_array"), "solar_array")));
     const run = play(healthy, 200);
