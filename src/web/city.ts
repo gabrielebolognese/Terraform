@@ -31,6 +31,8 @@ import { ChunkedCity } from "./city-chunks.js";
 import { formatMetres } from "./settlement-label.js";
 import { RESOURCE_NAMES, offlineWords } from "./offline-words.js";
 import { formatLatLon, settlementLabel, sizeLabel } from "./settlement-label.js";
+import { happinessWords, needLines } from "./needs-words.js";
+import { crowdAt } from "../render/people.js";
 
 export interface ActionOutcome {
   readonly ok: boolean;
@@ -193,6 +195,11 @@ export class CityScreen {
   private readonly inspectorStatus: HTMLElement;
   private readonly inspectorSummary: HTMLElement;
   private readonly inspectorFlows: HTMLElement;
+  /** Batch 32: the people's happiness and their needs, with needs on. */
+  private readonly people: HTMLElement;
+  private readonly happiness: HTMLElement;
+  private readonly needList: HTMLElement;
+  private needsKey = "";
   private readonly removeButton: HTMLButtonElement;
   private readonly roverButton: HTMLButtonElement;
   private readonly launchButton: HTMLButtonElement;
@@ -293,6 +300,12 @@ export class CityScreen {
     }
     stores.append(list);
 
+    this.people = el("section", "city-people");
+    this.people.hidden = true;
+    this.happiness = el("p", "city-happiness", "");
+    this.needList = el("ul", "city-need-list");
+    this.people.append(el("h3", "city-section-title", "People"), this.happiness, this.needList);
+
     // The build bar: a row of cards along the bottom, with the hint above it.
     this.dock = el("section", "city-dock");
     this.dock.setAttribute("aria-label", "Build");
@@ -348,7 +361,7 @@ export class CityScreen {
     this.countdowns = el("div", "city-countdowns");
     this.countdowns.setAttribute("aria-hidden", "true");
 
-    panel.append(head, this.status, stores, this.buildsSection, this.inspector);
+    panel.append(head, this.status, this.people, stores, this.buildsSection, this.inspector);
     this.root.append(this.canvas, this.countdowns, panel, this.tools, this.dock, this.tip);
     host.append(this.root);
     this.bindInput();
@@ -806,6 +819,7 @@ export class CityScreen {
         : `Short of ${view.shortages.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")} - buildings that use it are browned out.`;
     this.status.textContent = people + need;
     this.status.dataset["state"] = view.shortages.length === 0 ? "ok" : "short";
+    this.renderPeople(view);
     this.renderBuilds(s);
 
     for (const r of MICRO_RESOURCES) {
@@ -870,6 +884,12 @@ export class CityScreen {
       const k = levelFactor(level, this.tuning);
       const made = Object.fromEntries(Object.entries(def.produces(this.tuning)).map(([r, v]) => [r, (v ?? 0) * k]));
       if (level > 1) extra.push(`Level ${level}: x${k.toFixed(2)} output.`);
+      // Batch 32: a service's reach, and the crowd at a station or a park.
+      if (b.reaches !== undefined) {
+        extra.push(b.operable ? `Reaches the homes of ${Math.round(b.reaches).toLocaleString("en")} people.` : "Reaches no one while it is not running.");
+        const crowd = crowdAt(b);
+        if (crowd > 0) extra.push(`About ${crowd.toLocaleString("en")} people here now.`);
+      }
       this.inspectorFlows.textContent = `Uses ${rateList(def.consumes(this.tuning, env))}. Makes ${rateList(made)}. ${extra.join(" ")}`.trim();
       if (b.type === "spaceport") {
         const job = s.jobs.find((j) => j.kind === "rocket" && j.tile === tileKey(b.tx, b.ty));
@@ -879,6 +899,29 @@ export class CityScreen {
             : `Its rocket is away: back in ${seconds(job.remaining, this.tuning)}.`;
       }
     }
+  }
+
+  /** Batch 32: how happy the people are, and each need - shown only with needs on, in a city. */
+  private renderPeople(view: CityView): void {
+    const needs = view.needs ?? null;
+    this.people.hidden = needs === null;
+    if (needs === null) return;
+    const lines = needLines(needs, this.tuning);
+    const words = happinessWords(needs);
+    const key = words + lines.map((l) => l.text).join("|");
+    if (key === this.needsKey) return;
+    this.needsKey = key;
+    this.happiness.textContent = words;
+    this.happiness.dataset["mood"] = needs.mood > 0.005 ? "happy" : needs.mood < -0.005 ? "unhappy" : "content";
+    this.needList.replaceChildren(
+      ...lines.map((l) => {
+        const li = el("li", "city-need");
+        li.dataset["state"] = l.state;
+        li.dataset["need"] = l.id;
+        li.append(el("span", "city-need-name", l.name), el("span", "city-need-text", l.text));
+        return li;
+      }),
+    );
   }
 
   /** The land the city holds, in words: its claims, and when the next opens. */

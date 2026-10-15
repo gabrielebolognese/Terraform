@@ -255,15 +255,16 @@ export function peopleReached(s: Settlement, operable: readonly boolean[], build
 }
 
 /**
- * For the planner's overlay: each provider of a need, its square (in grid
- * tiles) and whether it runs; and each home, whether a running one reaches it.
+ * For the planner's overlay: each provider of a need (its index in the
+ * buildings), its square in grid tiles and whether it runs; and each home,
+ * whether a running one reaches it.
  */
 export function needCoverage(
   s: Settlement,
   id: NeedId,
   operable: readonly boolean[],
   t: Tuning,
-): { readonly squares: readonly { readonly x0: number; readonly y0: number; readonly x1: number; readonly y1: number; readonly running: boolean }[]; readonly homes: readonly { readonly index: number; readonly reached: boolean }[] } {
+): { readonly squares: readonly { readonly index: number; readonly x0: number; readonly y0: number; readonly x1: number; readonly y1: number; readonly running: boolean }[]; readonly homes: readonly { readonly index: number; readonly reached: boolean }[] } {
   const need = NEED_BY_ID[id];
   const k = NEEDS.indexOf(need);
   const squares = s.buildings.flatMap((b, i) => {
@@ -271,7 +272,7 @@ export function needCoverage(
     const cx = b.tx + BUILDING_DEFS[b.type].footprint / 2;
     const cy = b.ty + BUILDING_DEFS[b.type].depth / 2;
     const half = reachSide(b.level, t) / 2;
-    return [{ x0: cx - half, y0: cy - half, x1: cx + half, y1: cy + half, running: operable[i] === true }];
+    return [{ index: i, x0: cx - half, y0: cy - half, x1: cx + half, y1: cy + half, running: operable[i] === true }];
   });
   if (!need.reach) return { squares, homes: [] };
   const reach = reachOf(s.buildings, walkNetwork(s, t), t);

@@ -46,6 +46,7 @@ import {
 import { buildMetropolis } from "./metropolis.js";
 import { cityPlan, growCity } from "./metropolis-outer.js";
 import { REFERENCE_POLICY, applyOrdersDue } from "./policy.js";
+import { serveCities } from "./services.js";
 
 /** Where the reference playthrough has plateaued: progress 98.6%, Phase 6 (measured). */
 export const EXAMPLE_YEARS = 2800;
@@ -511,7 +512,7 @@ export const EXAMPLE_NAMES: readonly string[] = [
  * The example planet. `physics` runs the playthrough (the calibrated default);
  * `game` is the tuning the settlements are built under (the browser's).
  */
-export function examplePlanet(physics: Tuning, game: Tuning, seed: number | null = null): ExamplePlanet {
+export function examplePlanet(physics: Tuning, game: Tuning, seed: number | null = null, options: { readonly services?: boolean } = {}): ExamplePlanet {
   // A world's seed (Batch 27, "Terraformed start") chooses its weather and where its settlements stand; the
   // terrain it stands on is the game tuning's TERRAIN_SEED. Without one, the example everyone sees.
   let state = terraformedMars(physics);
@@ -600,7 +601,8 @@ export function examplePlanet(physics: Tuning, game: Tuning, seed: number | null
     }
     sizes[founded.id] = size;
   });
-  void env;
+  // Batch 32: every city given what its people need beyond life support, among its homes (see `services.ts`).
+  if (options.services !== false) state = serveCities(state, env, game).state;
   const routes = lines.flatMap((r) => {
     const a = idOf.get(r.a);
     const b = idOf.get(r.b);
