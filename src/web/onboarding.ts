@@ -13,7 +13,7 @@
  * Neither writes the world: Skip and Claim go through the game's actions.
  */
 
-import type { ObjectiveChain, ObjectiveStatus, Reward, SimState, Tuning } from "../sim/index.js";
+import type { ObjectiveChain, ObjectiveStatus, Progress, Reward, SimState, Tuning } from "../sim/index.js";
 import { GUIDE_STEPS, OBJECTIVE_CHAINS, guideActive, guideReached, largestCity } from "../sim/index.js";
 
 /** Where the player is: the planet from orbit, a city, the world map, the city planner. */
@@ -194,10 +194,23 @@ export function rewardWords(r: Reward): string {
   return parts.join(", ");
 }
 
-/** Progress in words: "312 of 500 people", "6.4 of 100 mbar". */
+/**
+ * Progress in words: "312 of 500 people", "6.4 of 100 mbar"; a goal measured
+ * from where the world began says how far it has come since, and where it
+ * stands: "0.6 of 2.8 K up from the start (213.8 now, 216 needed)".
+ */
 export function progressWords(o: ObjectiveStatus): string {
   const n = (v: number): string => (Number.isInteger(v) ? v.toLocaleString("en") : v.toFixed(1));
-  return `${n(o.progress.now)} of ${n(o.progress.target)} ${o.def.unit}`;
+  const p = o.progress;
+  if (p.from === 0) return `${n(p.now)} of ${n(p.target)} ${o.def.unit}`;
+  return `${n(Math.max(0, p.now - p.from))} of ${n(p.target - p.from)} ${o.def.unit} up from the start (${n(p.now)} now, ${n(p.target)} needed)`;
+}
+
+/** How full an objective's bar is, 0..1: from where it starts to its target. */
+export function barFraction(p: Progress): number {
+  const span = p.target - p.from;
+  if (!(span > 0)) return p.done ? 1 : 0;
+  return Math.max(0, Math.min(1, (p.now - p.from) / span));
 }
 
 /**
@@ -317,12 +330,13 @@ export class ObjectivesPanel {
     const bar = document.createElement("div");
     bar.className = "objective-bar";
     bar.setAttribute("role", "meter");
-    bar.setAttribute("aria-valuemin", "0");
+    bar.setAttribute("aria-valuemin", String(o.progress.from));
     bar.setAttribute("aria-valuemax", String(o.progress.target));
-    bar.setAttribute("aria-valuenow", String(Math.min(o.progress.now, o.progress.target)));
+    bar.setAttribute("aria-valuenow", String(Math.max(o.progress.from, Math.min(o.progress.now, o.progress.target))));
+    bar.setAttribute("aria-valuetext", progressWords(o));
     const fill = document.createElement("div");
     fill.className = "objective-bar-fill";
-    fill.style.width = `${Math.max(0, Math.min(1, o.progress.target > 0 ? o.progress.now / o.progress.target : 1)) * 100}%`;
+    fill.style.width = `${barFraction(o.progress) * 100}%`;
     bar.append(fill);
     const how = document.createElement("p");
     how.className = "objective-progress";

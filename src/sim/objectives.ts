@@ -28,6 +28,7 @@ import { BUILDING_DEFS } from "./micro/buildings.js";
 import { networkOf, withRails } from "./micro/network.js";
 import { capacities, housing } from "./micro/settlement.js";
 import { frameOf } from "./micro/space.js";
+import { MARS_START_RESERVOIRS } from "./planets/mars.js";
 import { unlocked } from "./sandbox.js";
 import type { Tuning } from "./tuning.js";
 import type { Settlement, SimState } from "./types.js";
@@ -148,6 +149,12 @@ export interface Reward {
 export interface Progress {
   /** How far along, in the objective's own unit (people, years, mbar, kelvin, railways, cities). */
   readonly now: number;
+  /**
+   * Where the bar starts, in the same unit: 0 for a count, and for a
+   * temperature the planet's as the world began. Kelvin from absolute zero
+   * would show a new world's first phase goal 98.7% done (213.2 of 216 K).
+   */
+  readonly from: number;
   readonly target: number;
   readonly done: boolean;
 }
@@ -173,7 +180,7 @@ function most(s: SimState, of: (c: Settlement) => number): number {
 }
 
 function atLeast(now: number, target: number): Progress {
-  return { now, target, done: now >= target };
+  return { now, from: 0, target, done: now >= target };
 }
 
 /** Years in a row, to the city's latest, with at least `people` living there and nothing running short. */
@@ -223,6 +230,29 @@ export function citiesJoined(s: SimState): number {
 function temperature(s: SimState, t: Tuning): number {
   const env = effectiveEnv(eventEnv(NEUTRAL_ENV, s.seed, s.steps * t.SUBSTEP_YEARS, t), s.facilities, t);
   return derive(s.reservoirs, env, t).T;
+}
+
+const START_T = new WeakMap<Tuning, number>();
+
+/**
+ * The planet's temperature as the world began, K: Mars's start, nothing
+ * built, no weather. Objectives are on only in a Standard world, and every
+ * one starts there (`marsStart`).
+ */
+export function startTemperature(t: Tuning): number {
+  let k = START_T.get(t);
+  if (k === undefined) {
+    k = derive(MARS_START_RESERVOIRS, NEUTRAL_ENV, t).T;
+    START_T.set(t, k);
+  }
+  return k;
+}
+
+/** A phase goal: the temperature, from the world's start to the phase's, done once the latched phase is reached. */
+function warmedTo(s: SimState, t: Tuning, phase: Phase, target: number): Progress {
+  const from = Math.min(startTemperature(t), target);
+  const done = s.phaseReached >= phase;
+  return { now: done ? target : Math.min(target, temperature(s, t)), from, target, done };
 }
 
 /**
@@ -275,10 +305,7 @@ export const OBJECTIVES: readonly ObjectiveDef[] = Object.freeze([
     title: "The caps let go",
     counts: (t) => `The planet reaches Phase 2, runaway thickening: above ${t.T_SUBL_CAP} K the polar caps start to boil off into the air.`,
     unit: "K",
-    progress: (s, t) => {
-      const done = s.phaseReached >= Phase.RunawayThickening;
-      return { now: done ? t.T_SUBL_CAP : Math.min(t.T_SUBL_CAP, temperature(s, t)), target: t.T_SUBL_CAP, done };
-    },
+    progress: (s, t) => warmedTo(s, t, Phase.RunawayThickening, t.T_SUBL_CAP),
     reward: (t) => ({ ...NOTHING, credits: t.REWARD_RUNAWAY_CREDITS }),
   },
   {
@@ -296,10 +323,7 @@ export const OBJECTIVES: readonly ObjectiveDef[] = Object.freeze([
     title: "First water",
     counts: (t) => `The planet reaches Phase 3, first water: liquid water at the surface, above ${t.T_FREEZE} K with more than ${t.PHASE3_P_MIN} mbar of air.`,
     unit: "K",
-    progress: (s, t) => {
-      const done = s.phaseReached >= Phase.FirstWater;
-      return { now: done ? t.T_FREEZE : Math.min(t.T_FREEZE, temperature(s, t)), target: t.T_FREEZE, done };
-    },
+    progress: (s, t) => warmedTo(s, t, Phase.FirstWater, t.T_FREEZE),
     reward: (t) => ({ ...NOTHING, credits: t.REWARD_WATER_CREDITS }),
   },
   // ---- the network: settlements joined by rail --------------------------

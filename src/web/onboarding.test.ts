@@ -34,6 +34,7 @@ import { startGame } from "./game.js";
 import type { GameHandle } from "./game.js";
 import { worldTuning } from "./game-tuning.js";
 import { Hud } from "./hud.js";
+import { playPlanet } from "../harness/pacing.js";
 import { MilestoneCards, MilestoneWatch } from "./milestones.js";
 import { GUIDE_TARGET_CLASS, GuidePanel, ObjectivesPanel, guideHint } from "./onboarding.js";
 import type { GuideContext } from "./onboarding.js";
@@ -310,6 +311,49 @@ describe("the objectives panel", () => {
     expect(panel.panel.textContent).toContain("A hundred people - claimed");
     expect(panel.panel.textContent).toContain("Steady supply");
     expect(panel.toggle.textContent).toBe("Objectives");
+  });
+});
+
+describe("the objectives panel's planet bars", () => {
+  /** An open panel, and what it shows of a goal for a world: its row, and how full its bar is, %. */
+  function panelOn(): { goal: (s: SimState, id: string) => HTMLElement; fill: (s: SimState, id: string) => number } {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const panel = new ObjectivesPanel(host, T, () => ({ ok: false, reason: null, words: "" }));
+    panel.toggle.click();
+    const goal = (s: SimState, id: string): HTMLElement => {
+      panel.update(objectiveStatus(s, T));
+      const row = panel.panel.querySelector<HTMLElement>(`.objective[data-id="${id}"]`);
+      expect(row, `${id} on show`).not.toBeNull();
+      return row!;
+    };
+    return { goal, fill: (s, id) => parseFloat(goal(s, id).querySelector<HTMLElement>(".objective-bar-fill")!.style.width) };
+  }
+  const fresh = (): SimState => foundSettlement(marsStart(undefined, T), "city", SITE.lat, SITE.lon, T).state;
+
+  it("start near empty on a new world, measured from the planet as it began", () => {
+    const { goal, fill } = panelOn();
+    const world = fresh();
+    // Each planet goal opened in turn on the same new world, the ones before it claimed.
+    const opened = (claimed: string[]): SimState => ({ ...world, goals: { ...world.goals, claimed } });
+    // Measured (213.2 K and 6.2 mbar, the start's weather included): 4.7%, 6.2% and 0.2%.
+    // Counted from absolute zero, the two temperature goals started 98.7% and 78.0% full.
+    expect(fill(opened([]), "planet_runaway")).toBeLessThan(10);
+    expect(fill(opened(["planet_runaway"]), "planet_pressure")).toBeLessThan(10);
+    expect(fill(opened(["planet_runaway", "planet_pressure"]), "planet_water")).toBeLessThan(10);
+    // The meter's own numbers: from the planet's temperature as the world began, the words saying how far it has come.
+    const row = goal(opened([]), "planet_runaway");
+    const meter = row.querySelector(".objective-bar")!;
+    expect(Number(meter.getAttribute("aria-valuemin"))).toBe(derive(marsStart(undefined, T).reservoirs, NEUTRAL_ENV, T).T);
+    expect(Number(meter.getAttribute("aria-valuemax"))).toBe(T.T_SUBL_CAP);
+    expect(row.querySelector(".objective-progress")!.textContent).toBe("0.1 of 3.0 K up from the start (213.2 now, 216 needed)");
+  });
+
+  it("fill as the planet warms, and all the way once the phase is reached", () => {
+    const { fill } = panelOn();
+    // Not empty for ever: the planet played alone for 90 minutes, warmed to 215.7 K, fills the first 90.2%.
+    expect(fill(playPlanet(T, 90 * 60).state, "planet_runaway")).toBeGreaterThan(50);
+    expect(fill({ ...fresh(), phaseReached: 2 }, "planet_runaway")).toBe(100);
   });
 });
 
