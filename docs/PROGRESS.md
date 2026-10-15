@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 31
-in_progress_batch: none
+in_progress_batch: 32
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -476,3 +476,16 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     - The chart readout under the pointer is the reverse: in the bottom list, not in Update 31's.
   - The eleven decisions are ones a bare "Go" would accept. None deletes or overwrites player data:
     the migration keeps every city sample and makes nothing up.
+
+### Batch 32 - People, not a number: needs, services and happiness
+- status: in progress
+- sessions: 1 (started 2026-10-15)
+- decisions:
+  - Six needs above life support, in two tiers: comfort (green space, food variety) asked from 500
+    people; services (medical care, research, transport, shops) from 2,000. A need is never asked
+    before its building may be built: transport from 5,000 (a station's), shops from 10,000 (a
+    mega mall's). "Space per person" is left out: people never outnumber homes and growth fills
+    every home, so spare room would be unmet in every settled city whatever the player built.
+  - Jobs (people working buildings) not now: a labour model reprices every building and every
+    measured gate; happiness's output factor stands in for how well people work.
+
