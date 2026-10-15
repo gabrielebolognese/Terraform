@@ -657,3 +657,46 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     500 kB warning as recorded); build green; the built script holds "about forty seconds" three
     times and "twenty seconds" none.
   - commits: 4ee3158, and the commit recording this
+- review 2: accepted
+  Review 1's four problems are fixed:
+  1. Waiting times.
+     - The New world hint and both "Making..." / "Building..." lines say about forty seconds
+       (`src/web/app.ts:51`, `:359`, `:431`), and so do the comments that repeat them.
+     - `getting-started.md:13` and `:32` say forty too. Measured: the Example planet 34.9-49.7 s,
+       a Terraformed start 39.1-47.8 s.
+     - Update 32's known issue and the current list name the Example planet.
+     - Nothing under `src/` or `docs/manual/` still says twenty or 45 seconds for either.
+  2. `docs/manual/cities.md:156-157` gives 2,000 / 5,000 / 10,000, as `needAskedFrom` and its test
+     do.
+  3. The note's table has the three rows, and the chunk test can now fail. Its city of 1,990 moves
+     its mood during the run: 0.25 at the start, -0.30 at the end, both asserted.
+  4. The note leads with "What went wrong, and what it cost".
+
+  Checked in this review:
+  - Typecheck, `build` and `build:web` are green (538.83 kB JS, 184.18 kB gzip, past Vite's
+    500 kB warning, as recorded).
+  - Full suite (`--maxWorkers=2 --minWorkers=1`): 112 files, 1,310 tests, all passed (504 s; the
+    Known-red opening test passed).
+  - Two injections, one at a time, `git status` clean after each:
+    - the mood found once per `advance` call and held for the rest of it (a call counter in
+      `advance`, a latch in `settlementStep`'s `feel`): the chunk test fails, 6,325 people in one
+      call against 5,541 in 16, as the note records;
+    - the planner's coverage counting a dark provider's homes as reached (`needs.ts:282`): "a
+      service that is not running ... every home a gap" fails, the pixel reached green, not the
+      gap's red.
+  - Three manual statements match the code:
+    - the Coverage row's Off, Green space, Medical care, Research, Transport, Shops
+      (`COVERAGE_NEEDS`, the needs that reach);
+    - at a Station or a Park the inspector says how many people are there now (`crowdAt`, station
+      and park only);
+    - the Cities page's thresholds, as above.
+  - "Their people are happy" (`cities.md:216`) is said of a Terraformed start alone, and rightly:
+    the Example planet is built with `BROWSER_TUNING`, needs off.
+  - The walls still hold: nothing in `src/sim/` imports from `src/web/` or `src/render/`.
+  - All 14 new constants are in `tuning.ts` and the §10 table. Only `NEW_WORLD_OVERRIDES` turns
+    `NEEDS_ENABLED` on.
+
+  One slip, not grounds for rejecting the batch: to correct in passing. The note's decision 10
+  (`docs/balance/batch32-people.md`, "The scripted pacing player unchanged") says the `needs`
+  script option "measures one who does not". It measures a player who does meet the needs
+  (`src/harness/pacing.ts:79-84`), as this entry's own decisions say.
