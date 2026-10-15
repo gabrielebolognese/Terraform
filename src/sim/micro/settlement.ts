@@ -30,6 +30,8 @@ import { applyFlood, floodReading, submerged } from "./flood.js";
 import { charged, unlocked } from "../sandbox.js";
 import type { Layer, LinkLayer, NetworkIssue } from "./network.js";
 import { LAYERS, applyNetwork, linksForRedundancy, linksToConnect, networkOf, withRails } from "./network.js";
+import type { NeedsReading } from "./needs.js";
+import { readNeeds } from "./needs.js";
 
 /** Section 7.2: the resources whose shortage is a life-support emergency. */
 const LIFE_SUPPORT: readonly MicroResource[] = ["power", "water", "oxygen", "food"];
@@ -1031,6 +1033,8 @@ export interface SettlementStep {
   readonly flood: FloodReading | null;
   /** Parallel to `buildings`: why the network kept each from running, or null. All null with the network off. */
   readonly network: readonly (NetworkIssue | null)[];
+  /** Batch 32: the people's needs and the mood they make, or null with them off and for an outpost. Derived, never stored. */
+  readonly needs: NeedsReading | null;
 }
 
 /**
@@ -1087,7 +1091,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   if (s.lostAtSeaLevelM !== null) {
     // A ruin: nothing runs, nothing grows, nothing reaches the planet.
     const none = { power: 0, water: 0, oxygen: 0, food: 0, materials: 0 };
-    return { next: s, operable: [], supported: false, planetaryCo2: 0, research: 0, production: none, consumption: none, shortages: [], flood, network: [] };
+    return { next: s, operable: [], supported: false, planetaryCo2: 0, research: 0, production: none, consumption: none, shortages: [], flood, network: [], needs: null };
   }
   const { defs, levels, kindOf, types } = shapeOf(s.buildings, t);
   const building = constructing(s);
@@ -1125,6 +1129,18 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     if (network !== null) while (applyNetwork(network, draws, makes, operable, issues));
   };
 
+  // Batch 32: the people's needs, met by the providers running, make the mood; every building makes more or less
+  // for it. Found again on every pass below: a pass only switches buildings off, so the mood only falls, and the
+  // passes still settle.
+  const needsOn = t.NEEDS_ENABLED > 0 && isCityKind(s.kind);
+  let needs: NeedsReading | null = null;
+  let out = 1;
+  const feel = (): void => {
+    if (!needsOn) return;
+    needs = readNeeds(s, operable, building, network?.corridors ?? null, t);
+    out = needs?.output ?? 1;
+  };
+
   // The Industrial Command Center: facilities in the square about a running one make COMMAND_BOOST more (not stacked).
   // Which command centers' squares each building stands in: geometry, kept per building list and tuning.
   const cover = commandCover(s.buildings, t);
@@ -1144,7 +1160,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     for (let i = 0; i < defs.length; i += 1) {
       if (!operable[i]) continue;
       const k = kindOf[i]!;
-      const eff = kindEff[k]! * levels[i]! * commandBoost(i);
+      const eff = kindEff[k]! * levels[i]! * commandBoost(i) * out;
       const p = kindMakeRow[k]!;
       const c = kindDrawRow[k]!;
       p0 += p[0]! * eff;
@@ -1172,6 +1188,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   let settled: ReturnType<typeof totals> | null = null;
   for (let pass = 0; pass <= MICRO_RESOURCES.length + defs.length; pass += 1) {
     connect();
+    feel();
     settled = totals();
     const { prod, cons } = settled;
     // A sandbox runs short of nothing (Batch 27): nothing browns out, no one dies of want.
@@ -1194,6 +1211,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     settled = null;
   }
 
+  if (settled === null) feel();
   const { prod, cons } = settled ?? totals();
   const cap = capacities(s, t);
   const stores = { ...s.stores };
@@ -1245,7 +1263,9 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     if (supported && home > 0) population = Math.max(population, Math.min(home, t.MICRO_SEED_POPULATION));
     // A running Research Forum: people are drawn to the city.
     const forum = defs.some((def, i) => operable[i] && def.type === "research_forum") ? 1 + t.FORUM_GROWTH_BONUS : 1;
-    const growth = home > 0 ? t.MICRO_GROWTH_RATE * forum * population * (1 - population / home) * (supported ? 1 : 0) : 0;
+    // Batch 32: happy people are drawn to the city, unhappy ones put off.
+    const happy = (needs as NeedsReading | null)?.growth ?? 1;
+    const growth = home > 0 ? t.MICRO_GROWTH_RATE * forum * happy * population * (1 - population / home) * (supported ? 1 : 0) : 0;
     // Medical Centers (at the user's request: "avoids that people die when
     // there is a scarcity of oxygen or food, as people find shelter here"):
     // while oxygen or food alone runs short, the people they shelter do not
@@ -1270,7 +1290,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     if (!operable[i]) continue;
     const k = kindOf[i]!;
     planetaryCo2 += kindCo2[k]! * kindEff[k]! * levels[i]!;
-    research += kindResearch[k]! * levels[i]! * commandBoost(i);
+    research += kindResearch[k]! * levels[i]! * commandBoost(i) * out;
   }
 
   // The planner's work: drawn links built, zones levelled - and the record kept.
@@ -1279,5 +1299,5 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   next = sendBuilders(next, t);
   next = sendLevellers(next, t);
   next = { ...next, history: record(s.history, { births: birthsNow, deaths: deathsNow, short: MICRO_RESOURCES.map((r) => (shortAny.has(r) ? 1 : 0)), net: MICRO_RESOURCES.map((r) => prod[r] - cons[r]), made: MICRO_RESOURCES.map((r) => prod[r]), drawn: MICRO_RESOURCES.map((r) => cons[r]), stores: MICRO_RESOURCES.map((r) => next.stores[r]), population: next.population, housing: isCityKind(s.kind) ? housing(next, t) : 0 }, t) };
-  return { next, research, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
+  return { next, research, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues, needs };
 }

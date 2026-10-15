@@ -676,6 +676,13 @@ REWARD_FIRST_PEOPLE = 50     REWARD_STEADY_PEOPLE = 75   REWARD_TOWN_ROVERS = 2 
 REWARD_RUNAWAY_CREDITS = 1000  REWARD_PRESSURE_CREDITS = 2000  REWARD_WATER_CREDITS = 3000  REWARD_RAIL_MATERIALS = 200  REWARD_JOINED_CREDITS = 2000
                              # what they pay: settlers and materials into the largest city (as many as it has homes and room for), credits to the bank
 PLANET_HISTORY_EVERY = 4     PLANET_HISTORY_SAMPLES = 240  # Batch 31: the planet's record, a sample every this many substeps; full, it keeps every other and samples half as often
+NEEDS_ENABLED = 0            # Batch 32: people's needs and happiness (growth and output); new worlds use 1
+NEEDS_COMFORT_PEOPLE = 500   NEEDS_SERVICES_PEOPLE = 2000  # people from which a city asks for comfort (green space, food variety) and services (medical, research, transport, shops)
+NEED_REACH_TILES = 33        NEED_REACH_PER_LEVEL = 6      # a provider reaches the homes in the square this many tiles a side about it, more each level
+NEED_WEIGHT_GREEN = 0.15     NEED_WEIGHT_VARIETY = 0.1     NEED_WEIGHT_MEDICAL = 0.2
+NEED_WEIGHT_RESEARCH = 0.15  NEED_WEIGHT_TRANSPORT = 0.2   NEED_WEIGHT_SHOPS = 0.2   # met adds the weight to the mood (-1 to 1), unmet takes it away
+FOOD_VARIETY_KINDS = 2       # kinds of food grown (Greenhouse, Biosphere, Mega Mall) for food variety to be met
+HAPPINESS_GROWTH = 0.5       HAPPINESS_OUTPUT = 0.1        # growth x(1 + this x mood); every building makes x(1 + this x mood)
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75
 SOLAR_POWER = 6            GEOTHERMAL_POWER = 8       REACTOR_POWER = 24
