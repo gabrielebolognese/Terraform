@@ -175,7 +175,8 @@ The alerts on the example planet (42 settlements, 246,095 buildings), on this ma
   healthy city says nothing for 200 substeps.
 - `src/web/alert-centre.test.ts` (11):
   - the centre's count and urgent mark in words;
-  - the record merging repeats, and the click-through;
+  - the record merging repeats of the same alert (not a different building in the same city), and
+    the click-through;
   - the toasts' priorities, time and limit;
   - the planet's record as the instruments showed it, weather included, at every sample through a
     storm;
@@ -189,9 +190,10 @@ The alerts on the example planet (42 settlements, 246,095 buildings), on this ma
 
 ## Injections
 
-46 faults, one at a time, each against the tests meant to catch it. Each file was restored from a
-copy and checked clean against git after each. **42 caught at once; 4 caught only after a new or
-stronger test.**
+47 injections, one at a time, each against the tests meant to catch it. Each file was restored
+from a copy and checked clean against git after each. **43 caught at once; 4 caught only after a
+new or stronger test.** One fault, the sample taken without the weather, was injected twice: missed
+by the simulation's tests, then caught by the statistics test written for it.
 
 | Fault | Caught by |
 |---|---|
@@ -241,6 +243,7 @@ stronger test.**
 | Conditions kept whatever the planet | the planet read afresh |
 | The happenings passed over when only the jobs changed | a build finished |
 | The overview's shortages from the wrong settlement | what is short, and the homes |
+| The record merges different buildings finished in one city | the same thing again is one line counting up (2 lines against 3) |
 
 ## Verification
 
