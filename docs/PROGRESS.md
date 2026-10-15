@@ -238,3 +238,56 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   src/web/globe.ts src/web/hud.ts src/web/milestones.ts src/web/onboarding.test.ts
   src/web/onboarding.ts src/web/pace.test.ts src/web/style.css src/web/world-map.ts
   src/web/worlds.test.ts
+- review 1: rejected
+  1. The record says a target was met when the measurement shows it was not. `GAME_PLAN.md:469-470`
+     and `docs/balance/batch30-first-hour.md:255-257` say Batch 28's open item, "the first upgrade
+     at 4-8 minutes", is met for a taught player, at 1.8 minutes. 1.8 minutes is outside 4-8
+     minutes. Measured in this review: the taught player's first upgrade is done at 108 s
+     (`playPacing(worldTuning("standard", 0, "standard"), 600, false, undefined, { guided: true,
+     claim: true }).moments.firstUpgrade`). The guide orders it at 42 s and the step latches at
+     50 s. Needed: record the item as still missed, with the measurement and the reason (the guide
+     now brings the first upgrade too early, the untaught script too late), in both places.
+  2. The planet objectives' progress bars do not show how far along the goal is (the deliverable:
+     "Each says exactly what counts and how far along it is"). "The caps let go" and "First water"
+     report the planet's absolute temperature as their progress (`src/sim/objectives.ts:278-281`,
+     `:298-302`). The panel fills the bar and sets the meter's `aria-valuenow` as now / target
+     from 0 K (`src/web/onboarding.ts:322`, `:325`). Measured on a new Standard world with a city
+     founded:
+     - "The caps let go": 213.18 of 216 K, so the bar is **98.7% full at the start**, for a goal the
+       scripted runs reach at 78.5 min to 1.65 h;
+     - "First water": 213.18 of 273.15 K, 78.0% full at the start, for a goal 28 h away.
+
+     A player reads the bar as nearly done. Needed: a bar measured from a meaningful start (the
+     temperature the world began at, or the phase's own measure), and a test that a new world's
+     planet bars start near empty, with its injection recorded.
+  3. Minor: `src/sim/objectives.test.ts:11-13` says the scripted playthroughs are in
+     `src/harness/first-hour.test.ts`. That file does not exist; they are in
+     `src/web/first-hour.test.ts`.
+
+  Checked and sound:
+  - Typecheck, `build` and `build:web` (496.10 kB JS, 169.62 kB gzip) are green.
+  - Full suite (`--maxWorkers=2 --minWorkers=1`): 105 files, 1,235 tests, 1,234 passed (593 s).
+    The one failure is the Known-red metropolis opening test (423 ms against 400). The batch's own
+    files pass: objectives 18, first-hour 7, onboarding 12, and vehicles 15 since the harness fix.
+  - Two injections, one at a time, each caught as the note records, and the tree was clean after
+    each:
+    - the guide latched once a call, after the substep loop (`integrate.ts`): "latched every
+      substep", 0 against 2;
+    - an objective announced on every look (`milestones.ts`): "once each", and the assembled
+      game's "nothing announced on opening the world".
+  - The latch is in `advance`, every substep, and chunk-independent (tested). `GUIDE_ENABLED`,
+    `OBJECTIVES_ENABLED` and every `GOAL_*` / `REWARD_*` are 0 or inert by default, set only by
+    `MODE_OVERRIDES.standard`, and listed in `tuning.ts` and §10. The metropolis gate and
+    `extraRovers` change nothing with objectives off.
+  - Save v16 has a v15 migration and a test that loads a v15 save; a corrupt record is refused by
+    name.
+  - `src/sim/` imports nothing from `src/web/` or `src/render/`.
+  - Milestones and the chime only read the state. Skip and Claim go through simulation actions.
+  - The 42-minute guide (against the plan's 10-20) is recorded as missed, with its measurement and
+    reason (claiming land waits for 200 people).
+  - Three manual statements match the code:
+    - a milestone card stays about six seconds (`CARD_MS` 6,500);
+    - rewarded rovers sit on top of the Headquarters' 3 and its Rover Posts (`roverCount`);
+    - the Objectives button sits just above Menu in orbit and just under it in a city (the CSS).
+  - No decision deletes or overwrites player data. Older worlds keep their recorded tuning, with
+    both features off.
