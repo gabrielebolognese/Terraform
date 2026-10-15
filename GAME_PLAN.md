@@ -47,7 +47,7 @@ What is missing, in the user's words (2026-10-11):
 | 26 | Procedural structures (finish) | **COMPLETE** - [note](docs/balance/batch26-structures.md) - seeded signatures and greebles on the shape pipeline; +4-5% shapes up close, next frame +1 ms |
 | 27 | The front door: title screen and worlds | **COMPLETE** - [note](docs/balance/batch27-worlds.md) - title screen, worlds with their own saves and seeds, Standard / Sandbox / Terraformed start; a world that will not load is kept, never saved over |
 | 28 | Time that means something: real build and upgrade times | **COMPLETE** - [note](docs/balance/batch28-build-times.md) - the curve (20 s to 8 h), a build queue, a Standard pace (planet 8x slower, cities on their own clock) beside Classic; first upgrade misses 4-8 min |
-| 29 | Vehicles that use the city: rovers on the ground, trains on the line | NOT STARTED |
+| 29 | Vehicles that use the city: rovers on the ground, trains on the line | **COMPLETE** - [note](docs/balance/batch29-vehicles.md) - rovers drive routes round the city (new worlds; their length sets the trip), trains ride car by car on a track each way and stop at stations; every vehicle drawn behind what stands in front of it; no vehicle inside a building, measured |
 | 30 | The first hour: onboarding and objectives | NOT STARTED |
 | 31 | Knowing what is happening: alerts, notifications and statistics | NOT STARTED |
 | 32 | People, not a number: needs, services and happiness | NOT STARTED |
@@ -346,6 +346,43 @@ their cars, nothing through anything.
 1. **Rovers on open ground or only on corridors.** Corridors only is cleaner, and gives the player
    a reason to build roads; open ground is more forgiving.
 2. **Do routes change trip times on old saves?** A job already under way keeps its old time.
+
+**Done** - see [the note](docs/balance/batch29-vehicles.md). Built unattended (`/next-batch auto`), in two
+sessions: the first was cut off after its main commit, the second ran the injections (38 of 41
+caught, the other 3 change nothing), fixed what they found and wrote the manual.
+
+**Decisions taken:**
+1. **Both, corridors first.** Rovers drive corridors and open ground the city holds, and a corridor
+   is twice as quick (`ROVER_CORRIDOR_SPEEDUP`). Corridors only would leave a new headquarters'
+   rovers nowhere to go: it is founded with none.
+2. **No.** A world keeps the tuning it was made with: routes are `ROVER_ROUTES_ENABLED`, on in every
+   new world and off in the worlds before, whose trips stay the straight line. A job under way
+   keeps its time (a v14 job loads without a route). Every rover in every world is still drawn
+   round the buildings, on a route found for it.
+
+**What changed from the plan, and why:**
+- **The trains' fault was the draw order, not their geometry.** A car's footprint was in a
+  building 17 times in 268,800, but the browser drew each chunk's moving layer over its still
+  picture: 17% of cars were painted over a building in front of them. The moving layer now draws
+  again, clipped to each vehicle's own outlines, what stands in front of it. (Clipped to a box, the
+  first version blended a dome's glass twice round a train: 786 pixels, worse than nothing. The
+  injections found it in the second session, after the depth test was shown to look at a moment
+  where nothing covered the car.)
+- **Three placement rules the plan did not have**, because with routes the scripted player walled in
+  its own garage after 13 buildings:
+  - a building that would wall others in is refused;
+  - the garage door is kept clear;
+  - nothing goes up where a rover is driving.
+- **Each way of a line has its own track,** drawn double and curved at bends. On one track, trains
+  each way ran through each other. Cars are 0.56 tiles long, five a train: the longest that pass on
+  every shape a line takes.
+- **Freight runs on lines past no station, maglevs on the rest.**
+- **Trains of different lines still cross through each other at junctions** (no signals). Left open.
+- **Pacing:** in the scripted city, packed without streets, rovers drive 4x the straight line. The
+  city of 1,000 comes at 2.02 h at Standard (1.79 before), still inside 1-3 h.
+- **Found on the way:** the frame's visibility loop over a metropolis's 13,000 chunks, and
+  `rocksOf`'s half-million-key set, both slowed by this batch's code around them, were rewritten. A
+  frame and a metropolis's opening are back at or under their old times.
 
 ---
 

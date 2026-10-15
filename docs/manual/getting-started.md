@@ -61,6 +61,11 @@ Press **Create world**, and you are dropped straight into orbit above your new p
    Your Headquarters already makes a little oxygen and water. Use **Corridor** and **Power cable**
    (top right) to connect buildings that do not touch: a building only runs when it is connected
    to everything it needs.
+
+   Leave gaps between buildings, and keep clear of the garage door at the front of the
+   Headquarters. Rovers drive round buildings to reach the next site, so a tightly packed city
+   builds slowly, and a building no rover can reach is refused. Corridors double as roads, twice as
+   fast to drive.
 5. **Watch the people arrive.** Once there is housing and enough power, water, oxygen and food,
    the first settlers move in and the city starts to grow.
 6. **Send rovers to rocks.** Click a rock and press **Send rover** to break it up for materials,

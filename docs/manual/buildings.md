@@ -1,8 +1,9 @@
 # Buildings
 
 Every structure you can build in a settlement. Costs are in materials. Times are at the Standard
-pace and normal speed (1x), for the first level and the top level; the rover's drive adds a
-little. "Per year" means a city year, about half a minute at 1x. Each level adds 10% to what a
+pace and normal speed (1x), for the first level and the top level; the rover's drive there and
+back adds to them, about half a second a tile of open ground (see [Cities](cities.md#how-rovers-drive)).
+"Per year" means a city year, about half a minute at 1x. Each level adds 10% to what a
 building makes, houses or stores.
 
 *Cities only* buildings cannot go in an outpost.

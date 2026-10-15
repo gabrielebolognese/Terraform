@@ -49,14 +49,18 @@ Click any building to select it. The panel that opens says what it is doing, and
    *not enough materials* or with a requirement ("at 1,000 people", "at 300 mbar",
    "when terraformed") cannot be placed yet.
 2. **Materials are paid at once.** A building needs ground your city holds, fairly flat ground,
-   and no rock or corridor in the way.
+   no rock or corridor in the way, and a way for a rover to get to it (see below).
 3. **A rover drives out and builds it.** A worksite shows a countdown floating above it. The
    building does nothing until it is finished.
 
+While a card is picked, the footprint under the cursor is red where the building cannot go.
+Clicking there says why, for example "Cannot build: Habitat Dome: no rover can get there from the
+garage".
+
 Build times at the Standard pace start small and grow with size: about 20 seconds for a Storage
 Depot, 30 seconds for a Solar Array, 2 minutes for a Habitat Dome, 15 minutes for a Spaceport, an
-hour for a Mega Mall. The rover's drive to the site adds a little. See [Buildings](buildings.md)
-for every structure.
+hour for a Mega Mall. The rover's drive there and back adds to it (see below). See
+[Buildings](buildings.md) for every structure.
 
 **Removing** a building is free but gives no materials back.
 
@@ -78,6 +82,35 @@ Rovers do other work too:
 - **Rocks.** Click a rock and press **Send rover**. Loose rocks break in a few seconds for 1
   material; a crag (a big outcrop that blocks building) takes longer and gives 5.
 - **Level ground** (top right) sends a rover to flatten ground for tidier building.
+
+## How rovers drive
+
+A rover leaves by the garage door at the front of the Headquarters and drives to its job. It
+drives over corridors and over open ground your city holds, turning where its way turns. It never
+goes under a building, over a crag, or up ground too steep to build on, and it never squeezes
+between two buildings that only touch at a corner. When two rovers drive the same stretch, the
+second keeps behind the first. At the site the rover stops beside the work, its drill arm
+hammering, then drives home.
+
+**The route sets the time.** Over open ground a rover takes about half a second a tile at 1x;
+along a corridor, twice as fast. That is each way, on top of the work itself. In a city packed edge
+to edge, rovers drive long ways round, so leave streets between your buildings or lay corridors
+where they drive most.
+
+**Keeping the way open.** So that every building stays one a rover can reach:
+
+- a building no rover can get to is refused: "no rover can get there from the garage -
+  buildings, hard rock or ground too steep are in the way";
+- a building that would wall other buildings in is refused, and the message says how many:
+  "it would wall in 2 buildings no rover could get to then - leave a way through";
+- the garage door, and the tile just in front of it, stay clear;
+- nothing can go up on a rover's way until that rover is home again: "a rover is driving through
+  there - wait for it to pass".
+
+A rock, ground to level, or an upgrade that no rover can get to is refused the same way.
+
+In a world made before Update 29, trips keep their old times and these rules do not apply, but
+its rovers are still drawn driving round the buildings.
 
 ## Upgrades
 
@@ -151,6 +184,13 @@ its railways.
 
 Inside a city, the **Railway** tool (2 materials a tile) lays track, and a **Station** joins
 districts of a large city into one network.
+
+Trains run on the railways inside a city. Each way along a line has its own track, so the track
+is drawn double and curves round bends. A train goes straight on where two lines cross and turns
+back at the end of a line. It slows down for bends, and stands for about 4 seconds at a Station's
+platform and at the end of a line. A line that passes a Station carries white maglevs, which float
+over the track. A line that passes none carries freight: an orange locomotive pulling wagons
+stacked with containers.
 
 ## Example cities
 

@@ -4,6 +4,49 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 29 - Vehicles that use the city
+
+Rovers and trains no longer pass through buildings. Rovers drive real routes round your city, and
+the route sets how long a job takes. Trains run on a track each way and stop at stations.
+
+**New**
+- **Rovers drive round the city.** A rover leaves by the Headquarters' garage door and drives
+  over corridors and open ground to its job. It never goes under a building, over a crag or up
+  ground too steep to build on. It turns where its way turns and keeps behind another rover on the
+  same stretch.
+- **Corridors are roads.** A rover drives along a corridor twice as fast as over open ground.
+- **The route sets the trip.** Each tile of open ground on the way takes a rover about half a
+  second at 1x, out and again home, on top of the work itself.
+- **A track each way.** Each way of a city railway has its own track, drawn as a double track
+  that curves round bends. Trains ride the curve car by car and slow down for bends. They stop for
+  about 4 seconds at a Station's platform and at the end of a line, then run back.
+- **Maglevs and freight.** A railway that runs past a Station carries white maglevs. One that runs
+  past none carries freight: an orange locomotive pulling wagons stacked with containers.
+
+**Changed**
+- **New rules for placing buildings,** in worlds made from this update on:
+  - a building no rover can get to is refused ("no rover can get there from the garage");
+  - so is one that would wall other buildings in, and the message says how many;
+  - the ground just in front of the garage door is kept clear;
+  - nothing can go up on a rover's way until that rover is home again.
+- A rock, a patch of ground to level, or an upgrade that no rover can get to is refused the same
+  way.
+- In a city packed edge to edge, rovers drive long ways round, so builds there take longer than
+  before. Leave gaps between buildings, or lay corridors.
+- Worlds made before this update keep their old trip times and placing rules, but their rovers are
+  drawn driving round the buildings too.
+
+**Fixed**
+- Rovers and trains no longer drive through buildings.
+- A rover or train passing behind a building is now hidden by it, not drawn over it.
+- Trains going opposite ways along a line no longer pass through each other.
+
+**Known issues**
+- Trains on different lines still pass through each other where the lines cross.
+- A rover driving past another one at work beside its site can pass through it.
+
+---
+
 ## Update 28 - Time that means something
 
 Building now takes real time. Small structures still go up in seconds, but bigger ones and higher
@@ -79,3 +122,5 @@ and railways between settlements; and the Example planet.
 - The ocean cover bar's minimum mark says "0.3%" when it means 30%.
 - **Settings** are not available yet.
 - There is no ending yet: the game carries on after the planet becomes a Living world.
+- In a city, trains on different lines pass through each other where the lines cross.
+- A rover driving past another one at work beside its site can pass through it.

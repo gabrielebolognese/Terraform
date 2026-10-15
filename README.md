@@ -47,6 +47,7 @@ that state.
 | [`docs/balance/batch26-structures.md`](docs/balance/batch26-structures.md) | Procedural structures: each building's signature varied by a seed from where it stands, and greebles that multiply with its level - all 28 types on a reference sheet, for 4-5% more drawing up close. |
 | [`docs/balance/batch27-worlds.md`](docs/balance/batch27-worlds.md) | The front door: a title screen, any number of worlds each with its own save and seed (the seed turns the terrain), Standard / Sandbox / Terraformed start, export and import - and a world that will not load is kept, never saved over. |
 | [`docs/balance/batch28-build-times.md`](docs/balance/batch28-build-times.md) | Real build times: a curve from 20 seconds to 8 hours, a build queue, and a Standard pace where the planet runs 8x slower while the cities keep their rhythm - measured on a scripted playthrough, with the one target it misses and why. |
+| [`docs/balance/batch29-vehicles.md`](docs/balance/batch29-vehicles.md) | Vehicles that use the city: rovers on routes round the buildings (their length sets the trip), trains car by car on a track each way with stations and freight, every vehicle drawn behind what stands in front of it, glass too - no vehicle inside a building over a scripted day and a metropolis, measured; about 1 ms more a frame at medium detail. |
 | [`docs/balance/detail-pass-buildings.md`](docs/balance/detail-pass-buildings.md) | The ten buildings rebuilt with far more detail; a close-up of all ten is `docs/frames/city-buildings.png`. |
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
@@ -91,6 +92,15 @@ eight times slower than before and the cities at the rhythm they had. Builds que
 count down in real time over the worksite and in the city's Builds list, and keep going while you
 are away. Speeds are pause, 1x, 2x and 3x (every speed in a Sandbox, or with `?debug`). **Classic**
 is the fast game from before, and every world made before it.
+
+**Vehicles that use the city** (Batch 29). A rover leaves by the headquarters' garage door and drives
+round the city - over corridors (twice as quick: build them) and open ground, never under a building,
+over hard rock or up a cliff - and its route sets how long the trip takes. A building no rover can get
+to is refused with the reason, and so is one that would wall others in, cover the garage door or go
+up where a rover is driving. Trains run a track each way, ride the curve of the line car by car, slow
+for bends and stand at station platforms and at the end of a line; a line past no station carries
+freight. Every vehicle is drawn behind whatever stands in front of it. A world made before keeps its
+straight-line trip times, but its rovers are drawn round the buildings too.
 
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
