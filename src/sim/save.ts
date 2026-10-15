@@ -65,7 +65,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 16;
+export const SAVE_SCHEMA_VERSION = 17;
 
 export interface SavedFacility {
   readonly type: string;
@@ -112,6 +112,12 @@ export interface SaveFile {
    * that is derived from the rest of the save on load.
    */
   readonly goals?: { readonly guide: number; readonly guide_skipped: boolean; readonly claimed: readonly string[] };
+  /**
+   * Added in v17 (Batch 31, statistics): the planet's record - a sample every
+   * `every` substeps, oldest first. A world saved before it starts recording
+   * on load.
+   */
+  readonly history?: { readonly every: number; readonly samples: readonly Record<string, number>[] };
 }
 
 export interface SavedSettlement {
@@ -263,10 +269,28 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       build_queue: s.buildQueue.map((q) => ({ tile: q.tile, upgrade: q.upgrade, paid: q.paid })),
       extra_rovers: s.extraRovers,
       planned: s.planned.map((p) => ({ layer: p.layer, tile: p.tile })),
-      history: { acc: { ...s.history.acc, short: [...s.history.acc.short], net: [...s.history.acc.net] }, taken: s.history.taken, samples: s.history.samples.map((x) => ({ ...x, short: [...x.short], stores: [...x.stores], net: [...x.net] })) },
+      history: {
+        acc: {
+          ...s.history.acc,
+          short: [...s.history.acc.short],
+          net: [...s.history.acc.net],
+          made: s.history.acc.made === null ? null : [...s.history.acc.made],
+          drawn: s.history.acc.drawn === null ? null : [...s.history.acc.drawn],
+        },
+        taken: s.history.taken,
+        samples: s.history.samples.map((x) => ({
+          ...x,
+          short: [...x.short],
+          stores: [...x.stores],
+          net: [...x.net],
+          ...(x.made === undefined ? {} : { made: [...x.made] }),
+          ...(x.drawn === undefined ? {} : { drawn: [...x.drawn] }),
+        })),
+      },
     })),
     routes: state.routes.map((r) => ({ a: r.a, b: r.b, km: r.km })),
     goals: { guide: state.goals.guide, guide_skipped: state.goals.guideSkipped, claimed: [...state.goals.claimed] },
+    history: { every: state.history.every, samples: state.history.samples.map((x) => ({ ...x })) },
   };
 }
 
@@ -319,6 +343,7 @@ export function fromSave(raw: unknown, t: Tuning): SimState {
     settlements,
     routes: readRoutes(save, settlements),
     goals: readGoals(save),
+    history: readPlanetHistory(save, steps),
   };
 
   assertFiniteState(state, "fromSave");
@@ -360,7 +385,52 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   // v15 -> v16: the first hour (Batch 30). Nothing of it was done: a world made before it has the guide and the
   // objectives off in its recorded tuning, so this is what it keeps.
   if (version < 16) current = migrateV15toV16(current);
+  // v16 -> v17: statistics (Batch 31). The planet's record starts empty, and a city's record keeps what it has.
+  if (version < 17) current = migrateV16toV17(current, t);
   return current;
+}
+
+/**
+ * v16 -> v17: the planet had no record, so it starts one now. A city's
+ * samples keep what they recorded and nothing is made up for them: made and
+ * drawn are absent from them, and a sample already gathering goes without.
+ */
+function migrateV16toV17(save: Record<string, unknown>, t: Tuning): Record<string, unknown> {
+  const list = save["settlements"];
+  const settlements = Array.isArray(list)
+    ? list.map((raw) => {
+        if (typeof raw !== "object" || raw === null) return raw;
+        const s = raw as Record<string, unknown>;
+        const h = s["history"];
+        if (typeof h !== "object" || h === null) return s;
+        const acc = (h as Record<string, unknown>)["acc"];
+        if (typeof acc !== "object" || acc === null) return s;
+        const fresh = (acc as Record<string, unknown>)["substeps"] === 0;
+        const kept = fresh ? [0, 0, 0, 0, 0] : null;
+        return { ...s, history: { ...(h as Record<string, unknown>), acc: { ...(acc as Record<string, unknown>), made: kept, drawn: kept === null ? null : [...kept] } } };
+      })
+    : list;
+  return { ...save, schema_version: 17, settlements, history: { every: Math.max(1, t.PLANET_HISTORY_EVERY), samples: [] } };
+}
+
+const PLANET_SAMPLE_KEYS = ["steps", "T", "P", "o2", "ocean", "biomass", "co2", "progress", "credits", "people"] as const;
+
+/** v17: the planet's record - a whole-number gap, and samples in order, none from after the world's own time. */
+function readPlanetHistory(save: Record<string, unknown>, steps: number): SimState["history"] {
+  const raw = asRecord(save["history"], "history");
+  const every = numberAt(raw, "every", "history.every");
+  if (!Number.isInteger(every) || every < 1) throw new SaveError(`history.every must be a whole number >= 1, got ${every}`);
+  let last = -1;
+  const samples = asArray(raw["samples"], "history.samples").map((item, i) => {
+    const at = `history.samples[${i}]`;
+    const x = asRecord(item, at);
+    const out = {} as Record<(typeof PLANET_SAMPLE_KEYS)[number], number>;
+    for (const key of PLANET_SAMPLE_KEYS) out[key] = numberAt(x, key, `${at}.${key}`);
+    if (!Number.isInteger(out.steps) || out.steps <= last || out.steps > steps) throw new SaveError(`${at}.steps must be a whole number after the sample before and not after the world's own time, got ${out.steps}`);
+    last = out.steps;
+    return out;
+  });
+  return { every, samples };
 }
 
 /** v15 -> v16: nothing of the first hour done - no guided step, no claim, no rover landed as a reward. */
@@ -895,10 +965,23 @@ function readPlanner(s: Record<string, unknown>, where: string): Pick<Settlement
         short: five(x["short"], `${at}.short`),
         stores: five(x["stores"], `${at}.stores`),
         net: five(x["net"], `${at}.net`),
+        // v17: absent from a sample taken before made and drawn were kept.
+        ...(x["made"] === undefined ? {} : { made: five(x["made"], `${at}.made`) }),
+        ...(x["drawn"] === undefined ? {} : { drawn: five(x["drawn"], `${at}.drawn`) }),
       };
     });
+    // v17: made and drawn so far - five numbers, or null for a sample begun before they were kept.
+    const fiveOrNull = (v: unknown, at: string): number[] | null => (v === null ? null : five(v, at));
     history = {
-      acc: { substeps: numberAt(acc, "substeps", `${where}.history.acc.substeps`), births: numberAt(acc, "births", `${where}.history.acc.births`), deaths: numberAt(acc, "deaths", `${where}.history.acc.deaths`), short: five(acc["short"], `${where}.history.acc.short`), net: five(acc["net"], `${where}.history.acc.net`) },
+      acc: {
+        substeps: numberAt(acc, "substeps", `${where}.history.acc.substeps`),
+        births: numberAt(acc, "births", `${where}.history.acc.births`),
+        deaths: numberAt(acc, "deaths", `${where}.history.acc.deaths`),
+        short: five(acc["short"], `${where}.history.acc.short`),
+        net: five(acc["net"], `${where}.history.acc.net`),
+        made: fiveOrNull(acc["made"], `${where}.history.acc.made`),
+        drawn: fiveOrNull(acc["drawn"], `${where}.history.acc.drawn`),
+      },
       taken,
       samples,
     };
