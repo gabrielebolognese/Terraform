@@ -815,7 +815,9 @@ export class CityScreen {
         : "An outpost: no residents. ";
     const need =
       view.shortages.length === 0
-        ? "Every need is met."
+        ? (view.needs ?? null) !== null
+          ? "Life support is met: power, water, oxygen and food."
+          : "Every need is met."
         : `Short of ${view.shortages.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")} - buildings that use it are browned out.`;
     this.status.textContent = people + need;
     this.status.dataset["state"] = view.shortages.length === 0 ? "ok" : "short";

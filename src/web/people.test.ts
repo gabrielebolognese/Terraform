@@ -109,6 +109,31 @@ describe("the city's People section", () => {
   });
 });
 
+describe("a service that is not running", () => {
+  /** The town with no power at all: the station (and the towers) dark. */
+  const dark = (): SimState => {
+    const s = town();
+    return { ...s, settlements: s.settlements.map((c) => ({ ...c, stores: { ...c.stores, power: 0 } })) };
+  };
+
+  it("reaches no one: the inspector says so, no crowd waits, and the planner shows every home a gap", () => {
+    const state = dark();
+    const s = state.settlements[0]!;
+    const view = cityView(s, envOf(state, ON), ON);
+    expect(view.shortages).toContain("power");
+    expect(view.buildings[STATION]!.operable).toBe(false);
+    expect(view.buildings[STATION]!.reaches).toBe(0);
+    expect(figuresAt(view.buildings[STATION]!)).toBe(0);
+    const { host, screen, frame } = mountCity(state, ON);
+    screen.select(STATION);
+    frame();
+    expect(host.querySelector(".city-inspector-flows")!.textContent).toContain("Reaches no one while it is not running.");
+    const n = view.tiles;
+    const px = plannerPixels(view, s, coverageOf(s, view, "transport", ON));
+    expect([...px.slice((1 * n + 1) * 4, (1 * n + 1) * 4 + 3)]).toEqual([...COVERAGE_COLOURS.gap]);
+  });
+});
+
 describe("the words", () => {
   it("calls a city too small to ask for anything content, and says what growth and work gain", () => {
     const content = { needs: [], mood: 0, growth: 1, output: 1 };
