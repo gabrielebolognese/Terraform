@@ -257,7 +257,8 @@ Each taken in the run, where a bare "Go" would have accepted it.
 9. **The example rebuilt, its rules kept** (streets, 16 to 50 a chunk, zones, stations on the
    railway), transport met in part for it.
 10. **The scripted pacing player unchanged** (it builds no services): the instrument measures what
-    the needs cost a player who ignores them. A `needs` script option measures one who does not.
+    the needs cost a player who ignores them. A `needs` script option measures one who meets them (corrected after review 2: it read "one who does
+    not").
 11. **The crowd is display:** 2% of the people a station or park reaches, a figure per 5, at most
     16 (render constants, not simulation tuning).
 12. **Towers lit by occupancy with needs on only,** so worlds before, and the golden frames, are
