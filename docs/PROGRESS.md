@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 30
-in_progress_batch: 31
+last_completed_batch: 31
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -372,5 +372,57 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     deletes or overwrites player data.
 
 ### Batch 31 - Knowing what is happening: alerts, notifications and statistics
-- status: in progress
-- sessions: 1 (started 2026-10-15)
+- status: complete
+- note: docs/balance/batch31-alerts.md
+- manual: docs/manual/alerts-and-statistics.md (new: alerts, pop-ups, the Alerts button,
+  statistics, each city at a glance), docs/manual/update-notes.md (Update 31, known issues),
+  docs/manual/controls.md (Alerts, Statistics, dismissing a pop-up), docs/manual/the-planet.md
+  (the Settlements line), docs/manual/cities.md (the planner's charts, the world map's line),
+  docs/manual/README.md (contents, the game in one minute)
+- commits: 281d523 (started), 82410d1, 3310b7c, 256c57c, 6a77255, c8d102b, 1637c2d, bef0403,
+  6e7abce, 2af1638, 25a3b8a, c4e8bba, b017d63, and the completing commit
+- sessions: 1
+- found: the first alert look took 2.8 s over the example planet (42 settlements, 246,095
+  buildings); the look's budget and kept conditions bring it to 4-24 ms after a step and 0.1-1.6 ms
+  between steps. The budget's first version starved (nothing worked out after the first look with
+  no time to spare); its test found it.
+- decisions:
+  - The planet's record is in the simulation (`SimState.history`, save v17), sampled in `advance`
+    every 4 substeps and halved when it holds 240, so it spans the whole game in a bounded size.
+    It only records, so it is on in every world; old worlds start recording on their next load.
+  - A city's record adds made and drawn per resource; samples from before are left without them,
+    nothing made up.
+  - Alerts are derived in the browser, two looks a second, never saved; the record of what
+    happened lasts the session; the first look on opening a world takes its bearings.
+  - Priorities: urgent (blackout; water, oxygen or food short; flood), notice (offline for its own
+    reason; materials short; a storm coming), record only (built, upgraded, objective done - the
+    milestone card already interrupts for an objective).
+  - A storm is forecast from the seeded weather two real minutes ahead; a condition back within a
+    minute of ending is not announced again.
+  - An alert names a building by its corner on the ground as founded, which a claim west or north
+    does not move.
+  - The planner's charts and the statistics are one module; the planner gains the made and used
+    charts.
+  - A look works out new steps for 4 ms at most, settlements in turn, at least one a look; the
+    overview cards read the alerts' shortages rather than stepping each city again.
+  - The flood alert is built and tested with flooding on (Batch 24's fixture); the browser leaves
+    flooding off until Batch 38, so the manual does not mention it.
+- verification: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 109 files, 1,277 tests, all passed (460 s) (an earlier
+  run of the batch, before the last two small edits: 109 files, 1,277 tests, all passed, 454 s;
+  the Known-red opening test passed both runs); build:web green (519.9 kB JS, 177.1 kB gzip - past
+  Vite's 500 kB warning, recorded as Open); build green; the built page, its script and its styles
+  served and fetched over HTTP
+- injections: 47, one at a time, the tree checked clean after each: 43 caught at once; 4 only after
+  a new or stronger test (the planet's sample without the weather; buildings dark for a shortage
+  also listed offline; a blackout pointing at no building; the round never moving on under fast
+  play).
+- review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch31-alerts.md
+  docs/design/macro-world.md docs/manual/README.md docs/manual/alerts-and-statistics.md
+  docs/manual/cities.md docs/manual/controls.md docs/manual/the-planet.md
+  docs/manual/update-notes.md src/sim/history.test.ts src/sim/history.ts src/sim/index.ts
+  src/sim/integrate.ts src/sim/micro/settlement.ts src/sim/planets/mars.ts src/sim/save.ts
+  src/sim/tuning.ts src/sim/types.ts src/web/alert-centre.test.ts src/web/alert-centre.ts
+  src/web/alerts.test.ts src/web/alerts.ts src/web/charts.ts src/web/city-overview.test.ts
+  src/web/city-overview.ts src/web/city.ts src/web/config.ts src/web/game.ts src/web/hud.ts
+  src/web/offline-words.ts src/web/planner.ts src/web/statistics.ts src/web/style.css
+  src/web/world-map.ts
