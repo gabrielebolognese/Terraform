@@ -3998,12 +3998,13 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
   // Batch 29, depth: drawn alone - the live layer the browser lays over a chunk's still picture - what moves would
   // cover everything in the picture, a building standing in front of it too (a train behind a tower was drawn
   // over the tower: 17% of a metropolis's cars, measured). So each vehicle's patch of the picture is drawn again
-  // from the vehicle on: everything later in the order that overlaps it, clipped to the patch - outside it the
-  // picture is already right. (Drawn again whole, unclipped, it covered what stood in front of it in turn, and
-  // making that right too drew three times the shapes a frame: measured.)
+  // from the vehicle on: everything later in the order that overlaps it, clipped to the vehicle's own outline -
+  // outside it the picture is already right. (Drawn again whole, unclipped, it covered what stood in front of it
+  // in turn, and making that right too drew three times the shapes a frame: measured. Clipped to the vehicle's box,
+  // a dome's glass in front of a train was blended twice over the picture round it: 786 pixels, measured.)
   const liveAlone = !drawStatic;
-  /** The vehicles' patches of the picture so far, merged where they touch (a train's cars are one). */
-  const patches: ClipBox[] = [];
+  /** The vehicles' patches of the picture so far, merged where they touch (a train's cars are one): a box round them, and their outlines. */
+  const patches: { box: ClipBox; outlines: (readonly number[])[] }[] = [];
   const touching = (a: ClipBox, b: ClipBox): boolean => a.maxX > b.minX && a.minX < b.maxX && a.maxY > b.minY && a.minY < b.maxY;
   const imageOf = (o: Occupant): ClipBox => {
     // The occupant's image: its columns across, and from the floor up to
@@ -4011,22 +4012,36 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
     const top = (o.building >= 0 ? (view.buildings[o.building]?.baseZ ?? 0) + buildingTop(view.buildings[o.building]!.type) + 1.5 : view.groundZ[o.ty * n + o.tx] ?? 0) + 0.6;
     return { minX: ((o.tx - o.ty - o.h) * TILE_W) / 2, maxX: ((o.tx + o.w - o.ty) * TILE_W) / 2, minY: ((o.tx + o.ty) * TILE_H) / 2 - top * Z_PX, maxY: ((o.tx + o.w + o.ty + o.h) * TILE_H) / 2 - floor * Z_PX };
   };
-  /** A vehicle's patch: its body on the ground and up to `height` over it, on screen. */
-  const remember = (f: Footprint & { readonly z: number }, height: number): void => {
+  /** Vehicles' patch: their bodies on the ground and up to `height` over them, on screen, and the outlines of the shapes they were drawn with. */
+  const remember = (vehicles: readonly (Footprint & { readonly z: number })[], height: number, drawn: readonly Shape[]): void => {
+    if (vehicles.length === 0) return;
     let box: ClipBox = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
-    for (const [x, y] of cornersOf(f)) {
-      const sx = ((x - y) * TILE_W) / 2;
-      const sy = ((x + y) * TILE_H) / 2;
-      box = { minX: Math.min(box.minX, sx - 1), maxX: Math.max(box.maxX, sx + 1), minY: Math.min(box.minY, sy - (f.z + height) * Z_PX - 1), maxY: Math.max(box.maxY, sy - f.z * Z_PX + 1) };
+    for (const f of vehicles) {
+      for (const [x, y] of cornersOf(f)) {
+        const sx = ((x - y) * TILE_W) / 2;
+        const sy = ((x + y) * TILE_H) / 2;
+        box = { minX: Math.min(box.minX, sx - 1), maxX: Math.max(box.maxX, sx + 1), minY: Math.min(box.minY, sy - (f.z + height) * Z_PX - 1), maxY: Math.max(box.maxY, sy - f.z * Z_PX + 1) };
+      }
+    }
+    const outlines: (readonly number[])[] = [];
+    for (const shape of drawn) {
+      for (const ring of shape.rings) {
+        outlines.push(ring);
+        // The box holds every outline: a plume or an arm reaches past the body.
+        for (let k = 0; k + 1 < ring.length; k += 2) {
+          box = { minX: Math.min(box.minX, ring[k]! - 1), maxX: Math.max(box.maxX, ring[k]! + 1), minY: Math.min(box.minY, ring[k + 1]! - 1), maxY: Math.max(box.maxY, ring[k + 1]! + 1) };
+        }
+      }
     }
     for (let k = patches.length - 1; k >= 0; k -= 1) {
       const p = patches[k]!;
-      if (!touching(p, box)) continue;
-      box = { minX: Math.min(p.minX, box.minX), maxX: Math.max(p.maxX, box.maxX), minY: Math.min(p.minY, box.minY), maxY: Math.max(p.maxY, box.maxY) };
+      if (!touching(p.box, box)) continue;
+      box = { minX: Math.min(p.box.minX, box.minX), maxX: Math.max(p.box.maxX, box.maxX), minY: Math.min(p.box.minY, box.minY), maxY: Math.max(p.box.maxY, box.maxY) };
+      outlines.push(...p.outlines);
       patches.splice(k, 1);
       k = patches.length;
     }
-    patches.push(box);
+    patches.push({ box, outlines });
   };
   /** The rovers and trains drawn with the tiles of an occupant. */
   const vehiclesOn = (o: Occupant): void => {
@@ -4034,11 +4049,13 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
       for (let x = o.tx; x < o.tx + o.w; x += 1) {
         const r = rovers?.get(y * n + x);
         const c = trains?.get(y * n + x);
+        const from = out.length;
         drawRovers(r, options.time, out);
+        const mid = out.length;
         drawTrains(c, options.time, out);
         if (liveAlone) {
-          for (const v of r ?? []) remember(v, 0.32);
-          for (const v of c ?? []) remember(v, 0.36);
+          remember(r ?? [], 0.32, out.slice(from, mid));
+          remember(c ?? [], 0.36, out.slice(mid));
         }
       }
     }
@@ -4123,11 +4140,11 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
       if (patches.length > 0) {
         const im = imageOf(o);
         for (const patch of patches) {
-          if (!touching(patch, im)) continue;
+          if (!touching(patch.box, im)) continue;
           const from = out.length;
           if (b !== null) buildingShapes(b, "all");
           else for (const shape of groundShapes(i, o)) out.push(shape);
-          for (let k = from; k < out.length; k += 1) out[k] = { ...out[k]!, clip: patch };
+          for (let k = from; k < out.length; k += 1) out[k] = { ...out[k]!, clip: patch.box, clipTo: patch.outlines };
         }
       }
       vehiclesOn(o);

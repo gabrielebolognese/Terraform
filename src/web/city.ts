@@ -1403,13 +1403,36 @@ export class CityScreen {
 
 /** Fill a shape list with the browser's 2D API: the same list the golden render rasterises. */
 export function fillShapes(ctx: CanvasRenderingContext2D, shapes: readonly Shape[]): void {
-  // A run of shapes clipped to one box (Batch 29: drawn again over a moving vehicle) is filled inside it, once set.
+  // A run of shapes clipped to one vehicle's outlines (Batch 29: drawn again over it), or to a box, is filled inside
+  // them, once set.
   let clipped: Shape["clip"] = undefined;
+  let outlines: Shape["clipTo"] = undefined;
   for (const shape of shapes) {
-    if (shape.clip !== clipped) {
-      if (clipped !== undefined) ctx.restore();
+    if (shape.clip !== clipped || shape.clipTo !== outlines) {
+      if (clipped !== undefined || outlines !== undefined) ctx.restore();
       clipped = shape.clip;
-      if (clipped !== undefined) {
+      outlines = shape.clipTo;
+      if (outlines !== undefined) {
+        // Inside any one outline: each traced the same way round, so with the non-zero rule none cuts a hole in another.
+        ctx.save();
+        ctx.beginPath();
+        for (const ring of outlines) {
+          if (ring.length < 6) continue;
+          let twice = 0;
+          for (let k = 0; k < ring.length; k += 2) {
+            const next = (k + 2) % ring.length;
+            twice += ring[k]! * ring[next + 1]! - ring[next]! * ring[k + 1]!;
+          }
+          const count = ring.length / 2;
+          for (let j = 0; j < count; j += 1) {
+            const k = 2 * (twice >= 0 ? j : count - 1 - j);
+            if (j === 0) ctx.moveTo(ring[k]!, ring[k + 1]!);
+            else ctx.lineTo(ring[k]!, ring[k + 1]!);
+          }
+          ctx.closePath();
+        }
+        ctx.clip("nonzero");
+      } else if (clipped !== undefined) {
         ctx.save();
         ctx.beginPath();
         ctx.rect(clipped.minX, clipped.minY, clipped.maxX - clipped.minX, clipped.maxY - clipped.minY);
@@ -1427,5 +1450,5 @@ export function fillShapes(ctx: CanvasRenderingContext2D, shapes: readonly Shape
     ctx.fillStyle = `rgba(${Math.round(f.r * 255)}, ${Math.round(f.g * 255)}, ${Math.round(f.b * 255)}, ${f.a})`;
     ctx.fill("evenodd");
   }
-  if (clipped !== undefined) ctx.restore();
+  if (clipped !== undefined || outlines !== undefined) ctx.restore();
 }
