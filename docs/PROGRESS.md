@@ -529,10 +529,12 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   page, its script and its styles served and fetched over HTTP (the script holds the People
   section, the coverage row and the needs' words). With needs off: the golden run, the golden
   frames, the Batch 3 score, visuals and offline, 8 files, 111 tests, all passed.
-- injections: 40 faults, one at a time, the file checked against its copy after each:
-  - the simulation, 13: 11 caught at once; research credits not scaled was missed until every test
-    city earned research (now caught); the fallback after the brownout passes changes nothing
-    (unreachable: the passes always settle);
+- injections: 43 faults (40 in the batch, 3 in review 1's fixes), one at a time, the file checked
+  against its copy after each:
+  - the simulation, 16: 13 caught at once; research credits not scaled was missed until every test
+    city earned research (now caught); the mood held for a whole call was missed by the chunk test
+    until its city's mood moved during the run (now caught); the fallback after the brownout
+    passes changes nothing (unreachable: the passes always settle);
   - the browser, 16: all caught at once;
   - the example's services, 11: 10 caught by a named test (8 by the example's own, 2 by the quick
     services test); with the replace-the-port fault the example's run died twice before any test
@@ -624,4 +626,34 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - The decisions are ones a bare "Go" would accept, including leaving out space per person, for
     the reason given. None deletes or overwrites player data. Saved Terraformed-start worlds keep
     their layout; only new ones are rebuilt.
-
+- fix 1: done (session 2, 2026-10-16)
+  1. Waiting times: measured again, one process each - the Example planet 34.9-49.7 s with the
+     services pass (102.4 s on a cold first run), 21.0-25.9 s without; a Terraformed start 40.9 s
+     (seed 12345) and 47.8 s (seed 7). The New world hint, both "Making..." / "Building..." lines
+     (`src/web/app.ts`), the comments repeating them (`app.ts`, `worlds.ts`, `game.ts`,
+     `app.test.ts`) and the manual (`getting-started.md`, both entries) now say about forty
+     seconds; Update 32's known issue and the current list name the Example planet too, and
+     Update 32's "Changed" says the Example planet's cities have the services as well.
+  2. `docs/manual/cities.md`: medical care and research from 2,000, transport from 5,000, shops
+     from 10,000 (checked against `needAskedFrom` and its test).
+  3. Injections, one at a time, `git diff` clean after each:
+     - `needsOn` not reading `NEEDS_ENABLED`: fails "reports no needs with them off, nor for an
+       outpost" and the seven exit-gate tests (as the review probed);
+     - outposts asked like cities (both guards; either alone changes nothing): fails that test
+       alone;
+     - the mood found on a call's first substep and held for the rest of the call: the chunk
+       test **passed** it - its city of 11,000 asked every need from the first substep, with
+       bottomless stores and nothing going up, so its mood was one value all run. The test's city
+       is now 1,990 people (about 40 more a substep, measured): its mood goes 0.25, -0.10, -0.30
+       during the run. With the fault it fails (5,541 people in 16 calls against 6,325 in one);
+       it compares the city first, so the failure names what moved, and checks the mood moved
+       (put back at 11,000 people, that check fails: -0.5, not 0.25). The note's table has the
+       three rows; the count is 43 (the simulation 16).
+  4. The note leads with "What went wrong, and what it cost", with review 1's findings as its
+     ninth item; the timings table and "Open" updated.
+  - checks: typecheck green; the touched tests (needs, app, worlds) 3 files, 43 tests, passed;
+    npx vitest run --maxWorkers=2 --minWorkers=1: 112 files, 1,310 tests, all passed (672 s; the
+    Known-red opening test passed); build:web green (538.83 kB JS, 184.18 kB gzip, past Vite's
+    500 kB warning as recorded); build green; the built script holds "about forty seconds" three
+    times and "twenty seconds" none.
+  - commits: 4ee3158, and the commit recording this
