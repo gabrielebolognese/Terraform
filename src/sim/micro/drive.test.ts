@@ -183,6 +183,59 @@ describe("a rover's route", () => {
     expect(routed, "vacuity: ways past hard rock").toBeGreaterThan(5);
   });
 
+  it("never drives up ground too steep - where levelling has left steep ground with no crag on it", () => {
+    // Crags lie where nature's ground is steep, but levelling a tile judges the tiles round it again (their shared
+    // corners moved), and some turn steep with no crag on them: there, only the steepness keeps a rover off.
+    // Levelled as a player would, a rover at a time: a row across the slope south of the garage, off the landing
+    // zone (levelling on it, where the ground is already flat, turns nothing steep - measured).
+    let s = city(ROUGH, 1e6, 3000);
+    const id = sid(s);
+    const door = garageDoor(first(s))!;
+    const cfg = { tuning: ROUGH, env: NEUTRAL_ENV, forcing: null };
+    for (let x = door.tx - 3; x <= door.tx + 3; x += 1) {
+      const o = levelGround(s, id, x, door.ty + 6, ROUGH);
+      expect(o.ok, `levelling ${x},${door.ty + 6}: ${o.reason}`).toBe(true);
+      s = o.state;
+      for (let k = 0; k < 400 && first(s).jobs.length > 0; k += 1) s = advance(s, 1, cfg);
+    }
+    const c = first(s);
+    expect(c.grades, "the rovers came home and the ground is levelled").toHaveLength(7);
+    const ground = siteGround(c, ROUGH);
+    const rocks = rocksOf(c, ROUGH);
+    const n = ground.tiles;
+    // Steep ground a rover could otherwise drive: on the land, no building, no crag.
+    const bare: number[] = [];
+    for (let i = 0; i < n * n; i += 1) {
+      const x = i % n;
+      const y = (i - x) / n;
+      if (ground.steep[i] === true && rocks[i] !== "crag" && claimTest(c, ROUGH)(x, y) && !c.buildings.some((b) => x >= b.tx && y >= b.ty && x < b.tx + BUILDING_DEFS[b.type].footprint && y < b.ty + BUILDING_DEFS[b.type].depth)) bare.push(i);
+    }
+    expect(bare.length, "vacuity: levelling left steep ground with no crag on it").toBeGreaterThan(5);
+    // Every way to the tiles round it, one and two tiles off in each of the eight directions.
+    let routes = 0;
+    for (const i of bare) {
+      const x = i % n;
+      const y = (i - x) / n;
+      for (let d = 0; d < 8; d += 1) {
+        for (const k of [1, 2]) {
+          const tx = x + [1, -1, 0, 0, 1, -1, 1, -1][d]! * k;
+          const ty = y + [0, 0, 1, -1, 1, 1, -1, -1][d]! * k;
+          if (!driveable(c, tx, ty, ROUGH)) continue;
+          const way = roverRoute(c, tileSite(tx, ty), ROUGH);
+          if (way === null) continue;
+          routes += 1;
+          for (const key of expandRoute(way.points)) {
+            const p = keyTile(key);
+            expect(ground.steep[p.ty * n + p.tx], `the way to ${tx},${ty} drives up steep ground at ${p.tx},${p.ty}`).not.toBe(true);
+          }
+        }
+      }
+    }
+    // Measured: 14 such tiles and 164 ways round them, none up steep ground; with steep ground driveable, 97 of
+    // the 164 drove up it.
+    expect(routes, "vacuity: ways past it").toBeGreaterThan(100);
+  });
+
   it("sets the trip: twice its drive at the tuned speeds, and the work", () => {
     let s = city(ON);
     const door = garageDoor(first(s))!;
@@ -221,12 +274,20 @@ describe("a rover's route", () => {
   });
 
   it("is the same every time it is asked, and on a copy of the city", () => {
-    const s = city(ROUGH, 1e6, 3000);
-    const door = garageDoor(first(s))!;
-    const site = tileSite(door.tx + 20, door.ty + 18);
-    const a = roverRoute(first(s), site, ROUGH);
-    const copy = JSON.parse(JSON.stringify(first(s))) as Settlement;
-    expect(roverRoute(copy, site, ROUGH)).toEqual(a);
+    // Every fifth tile round the garage, on flat ground (where many ways tie) and rough: asked in one order, again,
+    // and on a copy in the other order - so each search follows different ones before it. With ties broken at
+    // random, 7 of the 81 flat routes and 3 of the 81 rough came out different (measured).
+    for (const t of [ON, ROUGH]) {
+      const s = city(t, 1e6, 3000);
+      const door = garageDoor(first(s))!;
+      const sites: { tx: number; ty: number; w: number; h: number }[] = [];
+      for (let dy = -20; dy <= 20; dy += 5) for (let dx = -20; dx <= 20; dx += 5) sites.push(tileSite(door.tx + dx, door.ty + dy));
+      const a = sites.map((site) => roverRoute(first(s), site, t));
+      expect(a.filter((r) => r !== null).length, "vacuity: routes to compare").toBeGreaterThan(50);
+      expect(sites.map((site) => roverRoute(first(s), site, t))).toEqual(a);
+      const copy = JSON.parse(JSON.stringify(first(s))) as Settlement;
+      expect([...sites].reverse().map((site) => roverRoute(copy, site, t)).reverse()).toEqual(a);
+    }
   });
 });
 

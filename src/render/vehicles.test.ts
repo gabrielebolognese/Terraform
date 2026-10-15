@@ -128,24 +128,44 @@ describe("a scripted day in the reference city: two hours of the scripted player
     expect(old).toBeGreaterThan(5000);
   });
 
-  it("keeps two rovers on one stretch apart", () => {
-    let near = 0;
-    let touching = 0;
-    for (const s of day.days) {
-      if (s.jobs.length < 2) continue;
-      const view = cityView(s, day.env, T);
-      for (const f of [0, 0.25, 0.5, 0.75]) {
-        const rs = roversOf(view, f * SUBSTEP).filter((r) => r.working === null);
+  it("keeps two rovers on one stretch apart - all day here, and in a metropolis with every rover out at once", () => {
+    // The scripted day sends its rovers at different moments, so none follow each other there (measured) and the
+    // wait behind another is never needed: taken out, still none touched. The metropolis sends every rover out of
+    // the one garage at once, and there they follow each other: 23 touching without the wait, measured.
+    const count = (frames: Iterable<[CityView, number]>) => {
+      let near = 0;
+      let following = 0;
+      let touching = 0;
+      for (const [view, since] of frames) {
+        const rs = roversOf(view, since).filter((r) => r.working === null);
         for (let i = 0; i < rs.length; i += 1) {
           for (let j = i + 1; j < rs.length; j += 1) {
-            if (Math.hypot(rs[i]!.x - rs[j]!.x, rs[i]!.y - rs[j]!.y) < 1.5) near += 1;
+            const d = Math.hypot(rs[i]!.x - rs[j]!.x, rs[i]!.y - rs[j]!.y);
+            if (d < 1.5) near += 1;
+            // One close behind the other, the same way.
+            if (d < 2 * ROVER_HALF_L + 0.3 && Math.cos(rs[i]!.angle - rs[j]!.angle) > 0.99) following += 1;
             if (footprintsOverlap(rs[i]!, rs[j]!)) touching += 1;
           }
         }
       }
+      return { near, following, touching };
+    };
+    function* dayFrames(): Generator<[CityView, number]> {
+      for (const s of day.days) {
+        if (s.jobs.length < 2) continue;
+        const view = cityView(s, day.env, T);
+        for (const f of [0, 0.25, 0.5, 0.75]) yield [view, f * SUBSTEP];
+      }
     }
-    expect(near, "vacuity: rovers drive close together (14 times, measured)").toBeGreaterThan(5);
-    expect(touching).toBe(0);
+    function* metroFrames(): Generator<[CityView, number]> {
+      for (let q = 0; q <= 1; q += 0.004) yield [{ ...metroView, jobs: metroView.jobs.map((j) => ({ ...j, remaining: Math.max(1e-9, j.total * (1 - q)) })) }, 0];
+    }
+    const here = count(dayFrames());
+    const there = count(metroFrames());
+    expect(here.near, "vacuity: rovers pass close by each other (14 times, measured)").toBeGreaterThan(5);
+    expect(there.following, "vacuity: rovers close behind each other (38 times, measured)").toBeGreaterThan(10);
+    expect(here.touching, "rovers touching on the scripted day").toBe(0);
+    expect(there.touching, "rovers touching in the metropolis").toBe(0);
   });
 
   it("never has a train car inside a building or off its rails, on a railway laid round the city", () => {
@@ -361,6 +381,28 @@ describe("a rover", () => {
       expect(Math.hypot(rs[0]!.x - rs[1]!.x, rs[0]!.y - rs[1]!.y)).toBeLessThan(2 * ROVER_HALF_L + 0.3);
     }
     expect(seen).toBeGreaterThan(5);
+  });
+
+  it("passes one coming the other way, each on its own side of the way, neither waiting", () => {
+    // The same way out and home, at moments the two are at the same point of it: each keeps to its right, so they
+    // pass, and the later is drawn just where it would be alone. (Driven down the middle, the one coming home was
+    // held back behind the other - and no other test saw it: measured.)
+    const job = metroView.jobs.find((j) => j.kind === "rover" && (j.path?.length ?? 0) > 3)!;
+    const drive = (job.total - job.work) / 2;
+    let passing = 0;
+    for (let q = 0.05; q < 0.95; q += 0.05) {
+      const out = { ...job, remaining: job.total - q * drive };
+      const home = { ...job, remaining: job.total - (drive + job.work + (1 - q) * drive) };
+      const rs = roversOf({ ...metroView, jobs: [out, home] }, 0);
+      if (rs.length < 2) continue;
+      const alone = roversOf({ ...metroView, jobs: [home] }, 0)[0]!;
+      expect(Math.hypot(rs[0]!.x - rs[1]!.x, rs[0]!.y - rs[1]!.y), `at ${q.toFixed(2)} of the way`).toBeLessThan(1);
+      expect([rs[1]!.x, rs[1]!.y, rs[1]!.angle], `at ${q.toFixed(2)} of the way`).toEqual([alone.x, alone.y, alone.angle]);
+      passing += 1;
+    }
+    // Measured: 15 moments with both out of the garage, the later drawn where it is alone at each; down the middle, held
+    // back 0.45 tiles.
+    expect(passing, "vacuity: the two seen passing").toBeGreaterThan(10);
   });
 });
 
