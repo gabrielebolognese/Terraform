@@ -282,8 +282,9 @@ export function serveCity(s0: Settlement, env: HabitatChannels, t: Tuning, log?:
   for (const id of ORDER) {
     const need = NEED_BY_ID[id];
     if (people < needAskedFrom(need, t)) continue;
-    const began = Date.now();
-    const type = PROVIDER[id];
+    const began = log === undefined ? 0 : Date.now();
+    // Green space is a park on a world with open air; before that, a biosphere.
+    const type = id === "green" && !BUILDING_DEFS.park.canOperate(env, t) ? "biosphere" : PROVIDER[id];
     const w = BUILDING_DEFS[type].footprint;
     const d = BUILDING_DEFS[type].depth;
     const half = reachSide(1, t) / 2;
@@ -367,7 +368,7 @@ export function serveCity(s0: Settlement, env: HabitatChannels, t: Tuning, log?:
   // People as the homes left allow, in the same share; stores no fuller than their room.
   const home = housing(s, t);
   s = { ...s, population: Math.min(Math.floor(home * 0.9), Math.floor((people * home) / Math.max(1, homeTotal))) };
-  const goodAt = Date.now();
+  const goodAt = log === undefined ? 0 : Date.now();
   const made = makeGood(s, env, t);
   log?.(`${s.id} made good: ${made.swapped} swapped, ${Date.now() - goodAt} ms`);
   s = made.settlement;
