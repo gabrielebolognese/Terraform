@@ -4003,8 +4003,12 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
   // in turn, and making that right too drew three times the shapes a frame: measured. Clipped to the vehicle's box,
   // a dome's glass in front of a train was blended twice over the picture round it: 786 pixels, measured.)
   const liveAlone = !drawStatic;
-  /** The vehicles' patches of the picture so far, merged where they touch (a train's cars are one): a box round them, and their outlines. */
-  const patches: { box: ClipBox; outlines: (readonly number[])[] }[] = [];
+  /**
+   * The vehicles' patches of the picture so far, merged where they touch (a train's cars are one): a box round
+   * them, and their outlines - each group's kept as it was drawn, made one list only when a patch is drawn over.
+   */
+  const patches: { box: ClipBox; groups: (readonly (readonly number[])[])[]; outlines?: readonly (readonly number[])[] }[] = [];
+  const outlinesOf = (p: (typeof patches)[number]): readonly (readonly number[])[] => (p.outlines ??= p.groups.flat());
   const touching = (a: ClipBox, b: ClipBox): boolean => a.maxX > b.minX && a.minX < b.maxX && a.maxY > b.minY && a.minY < b.maxY;
   const imageOf = (o: Occupant): ClipBox => {
     // The occupant's image: its columns across, and from the floor up to
@@ -4013,35 +4017,46 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
     return { minX: ((o.tx - o.ty - o.h) * TILE_W) / 2, maxX: ((o.tx + o.w - o.ty) * TILE_W) / 2, minY: ((o.tx + o.ty) * TILE_H) / 2 - top * Z_PX, maxY: ((o.tx + o.w + o.ty + o.h) * TILE_H) / 2 - floor * Z_PX };
   };
   /** Vehicles' patch: their bodies on the ground and up to `height` over them, on screen, and the outlines of the shapes they were drawn with. */
-  const remember = (vehicles: readonly (Footprint & { readonly z: number })[], height: number, drawn: readonly Shape[]): void => {
+  const remember = (vehicles: readonly (Footprint & { readonly z: number })[], height: number, from: number, to: number): void => {
     if (vehicles.length === 0) return;
-    let box: ClipBox = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
     for (const f of vehicles) {
       for (const [x, y] of cornersOf(f)) {
         const sx = ((x - y) * TILE_W) / 2;
         const sy = ((x + y) * TILE_H) / 2;
-        box = { minX: Math.min(box.minX, sx - 1), maxX: Math.max(box.maxX, sx + 1), minY: Math.min(box.minY, sy - (f.z + height) * Z_PX - 1), maxY: Math.max(box.maxY, sy - f.z * Z_PX + 1) };
+        minX = Math.min(minX, sx - 1);
+        maxX = Math.max(maxX, sx + 1);
+        minY = Math.min(minY, sy - (f.z + height) * Z_PX - 1);
+        maxY = Math.max(maxY, sy - f.z * Z_PX + 1);
       }
     }
     const outlines: (readonly number[])[] = [];
-    for (const shape of drawn) {
-      for (const ring of shape.rings) {
+    for (let q = from; q < to; q += 1) {
+      for (const ring of out[q]!.rings) {
         outlines.push(ring);
         // The box holds every outline: a plume or an arm reaches past the body.
         for (let k = 0; k + 1 < ring.length; k += 2) {
-          box = { minX: Math.min(box.minX, ring[k]! - 1), maxX: Math.max(box.maxX, ring[k]! + 1), minY: Math.min(box.minY, ring[k + 1]! - 1), maxY: Math.max(box.maxY, ring[k + 1]! + 1) };
+          if (ring[k]! - 1 < minX) minX = ring[k]! - 1;
+          if (ring[k]! + 1 > maxX) maxX = ring[k]! + 1;
+          if (ring[k + 1]! - 1 < minY) minY = ring[k + 1]! - 1;
+          if (ring[k + 1]! + 1 > maxY) maxY = ring[k + 1]! + 1;
         }
       }
     }
+    let box: ClipBox = { minX, maxX, minY, maxY };
+    const groups: (readonly (readonly number[])[])[] = [outlines];
     for (let k = patches.length - 1; k >= 0; k -= 1) {
       const p = patches[k]!;
       if (!touching(p.box, box)) continue;
       box = { minX: Math.min(p.box.minX, box.minX), maxX: Math.max(p.box.maxX, box.maxX), minY: Math.min(p.box.minY, box.minY), maxY: Math.max(p.box.maxY, box.maxY) };
-      outlines.push(...p.outlines);
+      for (const g of p.groups) groups.push(g);
       patches.splice(k, 1);
       k = patches.length;
     }
-    patches.push({ box, outlines });
+    patches.push({ box, groups });
   };
   /** The rovers and trains drawn with the tiles of an occupant. */
   const vehiclesOn = (o: Occupant): void => {
@@ -4054,8 +4069,8 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
         const mid = out.length;
         drawTrains(c, options.time, out);
         if (liveAlone) {
-          remember(r ?? [], 0.32, out.slice(from, mid));
-          remember(c ?? [], 0.36, out.slice(mid));
+          remember(r ?? [], 0.32, from, mid);
+          remember(c ?? [], 0.36, mid, out.length);
         }
       }
     }
@@ -4144,7 +4159,8 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
           const from = out.length;
           if (b !== null) buildingShapes(b, "all");
           else for (const shape of groundShapes(i, o)) out.push(shape);
-          for (let k = from; k < out.length; k += 1) out[k] = { ...out[k]!, clip: patch.box, clipTo: patch.outlines };
+          const clipTo = outlinesOf(patch);
+          for (let k = from; k < out.length; k += 1) out[k] = { ...out[k]!, clip: patch.box, clipTo };
         }
       }
       vehiclesOn(o);
