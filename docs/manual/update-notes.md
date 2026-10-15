@@ -4,6 +4,41 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 30 - Your first hour
+
+A new Standard world now teaches you to play by doing, one step at a time, and there is always a
+next goal to reach, with a reward worth having when you get there.
+
+**New**
+- **The guide.** In a new Standard world, a card at the top of the screen takes you through seven
+  first steps: found a city, place power, place a dome, connect them, raise a building a level,
+  claim land, and lay a railway to a second settlement. The button or card to press glows. The
+  guide follows what is really in your world, so however you do a step, it counts. **Skip the
+  guide** puts it away for good.
+- **Objectives.** Press **Objectives** for three lists of goals - your city, the planet and the
+  network - each showing exactly what counts, how far along you are, and the reward. Press
+  **Claim** when a goal is done, and the next one opens.
+- **Rewards:** settlers from Earth, rovers that stay for good, materials, credits, gold markers for
+  your cities, and the right to found a **metropolis**, which you could not do before.
+- **Milestones.** A new phase, a new city, a great structure finished or an objective done brings
+  up a card, a moment of light round the screen and a short chime.
+
+**Changed**
+- **Found a metropolis** appears in **Settlements** once "A city of 1,000" is claimed, and in every
+  Sandbox world.
+- Worlds made before this update, Sandbox worlds and Terraformed starts have no guide and no
+  objectives.
+
+**Known issues**
+- Claiming land, the guide's sixth step, waits for 200 people, so the guide takes about 40 minutes
+  to an hour to finish.
+- The chime plays at a fixed, quiet volume; there is no way to turn it off until sound settings
+  arrive.
+- A reward of settlers or materials is lost in part when the city has no empty homes or no room in
+  its stores. Claim when there is space.
+
+---
+
 ## Update 29 - Vehicles that use the city
 
 Rovers and trains no longer pass through buildings. Rovers drive real routes round your city, and
@@ -130,3 +165,8 @@ and railways between settlements; and the Example planet.
 - Levelling ground can leave the tiles beside it too steep to build on, with no rock on them.
   Laying a corridor, cable or railway there tells you to send a rover to break the crag, but there
   is none: use **Level ground** on that tile instead.
+- The guide's sixth step, claiming land, waits for 200 people: the guide takes about 40 minutes to
+  an hour to finish.
+- The milestone chime cannot be turned down or off yet.
+- A reward of settlers or materials is partly lost when the city has no empty homes or no room in
+  its stores.

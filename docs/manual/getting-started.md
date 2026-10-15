@@ -40,6 +40,15 @@ Press **New world** and choose:
 
 Press **Create world**, and you are dropped straight into orbit above your new planet.
 
+## The guide
+
+In a new Standard world, a card at the top of the screen takes you through your first seven
+steps - found a city, place power, place a dome, connect them, raise a building a level, claim
+land, and lay a railway to a second settlement - and the button or card to press glows. It moves
+on by itself as soon as your world shows the step done. **Skip the guide** puts it away for good.
+Alongside it, **Objectives** holds goals with rewards: settlers, rovers, materials, credits and
+more. See [Goals](goals.md).
+
 ## Your first half hour
 
 1. **Look at "What the planet needs next"** on the left. At the start it asks for warmth: press

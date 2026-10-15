@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 29
-in_progress_batch: 30
+last_completed_batch: 30
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -187,5 +187,54 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
       job ends.
 
 ### Batch 30 - The first hour: onboarding and objectives
-- status: in progress
-- sessions: 1 (this one, started 2026-10-15)
+- status: complete
+- note: docs/balance/batch30-first-hour.md
+- manual: docs/manual/goals.md (new: the guide, objectives and rewards, milestones),
+  docs/manual/update-notes.md (Update 30, known issues), docs/manual/getting-started.md (the guide),
+  docs/manual/cities.md (found a metropolis, rewarded rovers), docs/manual/controls.md (Objectives,
+  Skip the guide), docs/manual/the-planet.md (Found a metropolis), docs/manual/README.md (contents)
+- commits: a6788ed (started), 91e7adc, c94de37, 7f8b532, 21f5f24, and the completing commit
+- found: the metropolis gate broke the vehicles harness's metropolis scene (founding refused,
+  unchecked); the scene's world now holds the claim and the harness throws on a refusal
+- sessions: 1
+- decisions:
+  - The objective list, written out before building and tuned by measurement: city (100 people:
+    50 settlers; 20 clean city-years at 200+ people: 75 settlers; 500 people: 2 rovers; 1,000
+    people: 2,000 credits and the metropolis), planet (Phase 2: 1,000; 100 mbar: 2,000; Phase 3:
+    3,000 credits), network (a railway: 200 materials; three cities joined: 2,000 credits and gold
+    markers). Each opens when the one before it in its chain is claimed.
+  - "A week without a shortage" is 20 city-years in a row (about 11 min at 1x): the city's record
+    is kept a year a sample; a week is no unit the game has.
+  - City goals pay settlers and rovers, not materials: measured, a growing city's materials store is
+    full from about 15 min in (the first claims landed 9 of 150).
+  - The guide's progress is a latch in the world, set in `advance` every substep from the state;
+    the shell may not write the world, and a step's condition can stop holding.
+  - On in new Standard worlds only: off by default, in a sandbox (the spec), a Terraformed start
+    (every goal already met) and every world made before.
+  - Claims are the player's (a Claim button); rewards go to the largest city, as far as it has homes
+    and room.
+  - The unlock is founding a metropolis (the browser never offered one); the cosmetic is gold
+    markers; the sound is a procedural Web Audio chime (no files; Batch 35 brings sound proper).
+  - The guided steps' measured time (42 min) is recorded as it is, not met: claiming land waits for
+    200 people, the user's own rule; shortening it is the user's call.
+- verification: typecheck green; build green; build:web green (496.1 kB JS, 169.6 kB gzip);
+  npx vitest run --maxWorkers=2 --minWorkers=1: 105 files, 1,235 tests, 1,220 passed, one file
+  (src/render/vehicles.test.ts, 15 tests) failed to start - the vehicles harness founded a
+  metropolis in a Standard world without the unlock; fixed, and that file then passed 15 of 15
+  (373 s for the run; the Known-red opening test passed); the built page served and its bundle
+  fetched over HTTP
+- injections: 45, one at a time, the tree checked clean after each: 44 caught at once; the guide
+  latched once a call (not every substep) was missed, and is caught since a test drowns a city
+  within one call.
+- review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch30-first-hour.md
+  docs/design/macro-world.md docs/manual/README.md docs/manual/cities.md docs/manual/controls.md
+  docs/manual/getting-started.md docs/manual/goals.md docs/manual/the-planet.md
+  docs/manual/update-notes.md src/harness/pacing.ts src/harness/vehicles.ts src/sim/index.ts
+  src/sim/integrate.ts
+  src/sim/micro/registry.ts src/sim/micro/rocks.ts src/sim/micro/settlement-save.test.ts
+  src/sim/micro/settlement.ts src/sim/objectives.test.ts src/sim/objectives.ts
+  src/sim/planets/mars.ts src/sim/save.ts src/sim/tuning.ts src/sim/types.ts src/web/chime.ts
+  src/web/city.ts src/web/first-hour.test.ts src/web/game-tuning.ts src/web/game.ts
+  src/web/globe.ts src/web/hud.ts src/web/milestones.ts src/web/onboarding.test.ts
+  src/web/onboarding.ts src/web/pace.test.ts src/web/style.css src/web/world-map.ts
+  src/web/worlds.test.ts

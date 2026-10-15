@@ -94,8 +94,12 @@ export interface MetropolisScene {
 export function metropolisScene(t: Tuning): MetropolisScene {
   let state: SimState = terraformedMars(DEFAULT_TUNING);
   const env = envOf(state, t);
-  state = foundSettlement(state, "metropolis", 0.4, -1.0, t, "Olympus").state;
-  const id = state.settlements[state.settlements.length - 1]!.id;
+  // A new world founds a metropolis once "A city of 1,000" is claimed (Batch 30): this one has earned it.
+  state = { ...state, goals: { ...state.goals, claimed: ["city_first", "city_steady", "city_town", "city_thousand"] } };
+  const founded = foundSettlement(state, "metropolis", 0.4, -1.0, t, "Olympus");
+  if (!founded.ok) throw new Error(`the scene's metropolis could not be founded: ${founded.reason}`);
+  state = founded.state;
+  const id = founded.settlement!.id;
   let seed = 7;
   const rnd = (): number => {
     seed = (seed * 1103515245 + 12345) % 2147483648;

@@ -11,6 +11,9 @@ In orbit, open the **Settlements** section. Type a name if you like, then press:
   **Spaceport**.
 - **Found an outpost** - a smaller working base with no residents. It lands with a Headquarters
   only, and some buildings (homes, farms, the largest structures) are for cities only.
+- **Found a metropolis** - a city with three times a city's ground each way. The button appears
+  once you claim the objective "A city of 1,000" (see [Goals](goals.md)), and in every Sandbox
+  world.
 
 Then click the planet where it should stand; the line under the cursor shows the place and its
 height. **Esc** or **Cancel** stops founding. Founding is free, and you can have as many
@@ -67,7 +70,8 @@ hour for a Mega Mall. The rover's drive there and back adds to it (see below). S
 ## Rovers and the build queue
 
 Your Headquarters keeps **3 rovers**. Each **Rover Post** adds one more; you may have one Rover
-Post for every 100 people.
+Post for every 100 people. The objective "A town of 500" gives your largest city **2 more rovers**
+for good.
 
 When every rover is busy, a new build or upgrade is not refused: it **waits in the queue**,
 already paid for, and a rover takes it as soon as one comes home. In the **Builds** list:
@@ -195,4 +199,5 @@ stacked with containers.
 ## Example cities
 
 The Example planet and a Terraformed start come with cities already built, including
-metropolises - huge cities spread over many districts. You cannot found a metropolis yourself yet.
+metropolises - huge cities spread over many districts. You can found a metropolis yourself once
+you claim the objective "A city of 1,000", or in a Sandbox world.
