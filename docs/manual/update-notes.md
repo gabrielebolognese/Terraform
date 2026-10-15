@@ -17,7 +17,8 @@ next goal to reach, with a reward worth having when you get there.
   guide** puts it away for good.
 - **Objectives.** Press **Objectives** for three lists of goals - your city, the planet and the
   network - each showing exactly what counts, how far along you are, and the reward. Press
-  **Claim** when a goal is done, and the next one opens.
+  **Claim** when a goal is done, and the next one opens. The planet's warming goals count from
+  where your planet started, so their bars begin nearly empty.
 - **Rewards:** settlers from Earth, rovers that stay for good, materials, credits, gold markers for
   your cities, and the right to found a **metropolis**, which you could not do before.
 - **Milestones.** A new phase, a new city, a great structure finished or an objective done brings
@@ -36,6 +37,8 @@ next goal to reach, with a reward worth having when you get there.
   arrive.
 - A reward of settlers or materials is lost in part when the city has no empty homes or no room in
   its stores. Claim when there is space.
+- The bar for "The caps let go" moves with the weather: the goal is only 3 K from the start, and
+  a dust storm can take the bar back for a while.
 
 ---
 
@@ -170,3 +173,5 @@ and railways between settlements; and the Example planet.
 - The milestone chime cannot be turned down or off yet.
 - A reward of settlers or materials is partly lost when the city has no empty homes or no room in
   its stores.
+- The bar for "The caps let go" moves with the weather, and a dust storm can take it back for a
+  while.
