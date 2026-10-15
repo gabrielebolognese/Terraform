@@ -31,14 +31,15 @@ and they are happier: a happy city fills its homes faster and every building in 
   are all supplied, since there is now more to need.
 - Skyscraper windows light up as the city's homes fill, as a Habitat Dome's do.
 - The planner's **Overview** lists the city's happiness and each need.
-- **Terraformed start:** the ready-made cities now have parks, medical centers, laboratories,
-  stations and malls among their homes, and somewhat fewer people for it.
+- **Terraformed start** and the **Example planet**: the ready-made cities now have parks, medical
+  centers, laboratories, stations and malls among their homes, and somewhat fewer people for it.
 - Worlds made before this update play as they always have: their people need only life support.
 
 **Known issues**
 - In a Terraformed start, Stations reach only some of a city's homes: a Station stands beside the
   railway, and the ready-made cities have only a few lines.
-- Making a Terraformed start takes longer than before: about 45 seconds, where it took about 20.
+- Making a Terraformed start, and building the Example planet, take longer than before: about
+  40 seconds each, where they took about 20.
 - Happiness is not yet shown on the world map's city cards, in the Settlements list, in Alerts or
   in Statistics.
 
@@ -258,6 +259,7 @@ and railways between settlements; and the Example planet.
   pointer.
 - A new city shows "Spaceport offline" until power reaches it.
 - In a Terraformed start, Stations reach only some of a city's homes.
-- Making a Terraformed start takes longer than before: about 45 seconds, where it took about 20.
+- Making a Terraformed start, and building the Example planet, take longer than before: about
+  40 seconds each, where they took about 20.
 - Happiness is not yet shown on the world map's city cards, in the Settlements list, in Alerts or
   in Statistics.

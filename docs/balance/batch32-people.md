@@ -1,46 +1,7 @@
 # Batch 32 - People, not a number: needs, services and happiness
 
-Built unattended (`/next-batch auto`), one session, 2026-10-15.
-
-## What was built
-
-- **Needs in tiers** (`src/sim/micro/needs.ts`). Life support stays section 7.3's. Above it, six
-  needs:
-
-  | Need | Tier | Met by | Asked from | Weight |
-  |---|---|---|---|---|
-  | Green space | comfort | Park, Biosphere | 500 | 0.15 |
-  | Food variety | comfort | kinds grown: Greenhouse, Biosphere, Mega Mall (2 for full) | 500 | 0.10 |
-  | Medical care | services | Medical Center | 2,000 | 0.20 |
-  | Research | services | Laboratory, Observatory, Research Forum | 2,000 | 0.15 |
-  | Transport | services | Station | 5,000 (a station's people) | 0.20 |
-  | Shops | services | Mega Mall | 10,000 (a mall's people) | 0.20 |
-
-  A need is asked from its tier's people, never before one of its buildings may be built. A running
-  provider reaches the homes whose middle is in the square `NEED_REACH_TILES` (33) a side about its
-  own, `NEED_REACH_PER_LEVEL` (6) more a level, and - with the network on - on the same corridors
-  (rails join stations' districts, as they join everything else). A need is met by the share of
-  the city's homes, by the people they house, that a running provider reaches; food variety is the
-  city's (food is hauled). Homes still going up house no one and count for nothing.
-- **Happiness.** The mood is the sum over asked needs of `weight x (2 x met - 1)`: -1 to 1, 0 for a
-  city asking nothing. Growth runs x(1 + `HAPPINESS_GROWTH` x mood) = x0.5 to x1.5, and every
-  building makes x(1 + `HAPPINESS_OUTPUT` x mood) = x0.9 to x1.1 - resources and research credits,
-  not the planet's CO2 draw (as the Industrial Command Center's boost). Shown to the player as
-  50% + 50% x mood.
-- **In the step.** The mood is found inside `settlementStep`'s brownout passes, after the network,
-  on every pass: a pass only switches buildings off, so the mood only falls and the passes still
-  settle. Derived every substep, never stored: no save change. Behind `NEEDS_ENABLED` (0); every
-  new world turns it on (`NEW_WORLD_OVERRIDES`), every world made before keeps its recorded tuning.
-- **The city panel's People section**, the inspector's "Reaches the homes of N people" and the
-  crowd at a station or park, the planner's **Coverage** row (Off, Green space, Medical care,
-  Research, Transport, Shops: the ground a running provider reaches washed green, the provider
-  white, homes reached green, homes not reached red) and the Overview's needs
-  (`src/web/needs-words.ts`, `city.ts`, `planner.ts`).
-- **People in the view** (`src/render/people.ts`): at a running station or park, 2% of the people
-  it reaches are there, drawn a figure for every 5, at most 16, along the platforms or paths, live.
-  Skyscrapers' windows light by occupancy, as a dome's always did - with needs on only, so the
-  golden frames keep their towers.
-- **The example rebuilt** (`src/harness/services.ts`): see below.
+Built unattended (`/next-batch auto`), one session, 2026-10-15; review 1's fixes in a second,
+2026-10-16.
 
 ## What went wrong, and what it cost
 
@@ -92,6 +53,65 @@ Built unattended (`/next-batch auto`), one session, 2026-10-15.
    manual's tips; whether to cheapen green space early (a smaller park before open air) is the
    user's call.
 
+9. **Review 1 rejected the batch, for four things**, fixed in a second session (2026-10-16). It
+   cost a review round and a session:
+   - **The game gave the wrong waiting time.** The services pass runs for the Example planet as
+     well as for a Terraformed start, and the screen still said "about twenty seconds" for both,
+     while the manual said 45 for one and 20 for the other. Measured again (see Measurements),
+     both take 35 to 50 s: the screen, the comments that repeat it and the manual now say about
+     forty seconds for both, and the known issue names both.
+   - **The Cities page asked for transport and shops from 2,000 people**; they are asked from
+     5,000 and 10,000, as the People page said.
+   - **The chunk test could not fail for a per-call fault.** Its city of 11,000 asked for every
+     need from the first substep, with bottomless stores and nothing going up, so its mood was the
+     same on all 64 substeps: the mood found on a call's first substep and held for the rest of
+     the call passed it. Its city now has 1,990 people, whose mood moves during the run (0.25;
+     -0.10 from the first substep; -0.30 from about the 55th). With that fault in it fails (5,541
+     people in 16 calls against 6,325 in one), and the test checks the mood did move.
+   - **Two tests had no injection on record, and this note did not lead with what went wrong.**
+     Both tests now have rows in the table (three faults, run in the fix session), and the note
+     is in the order the rule asks.
+
+## What was built
+
+- **Needs in tiers** (`src/sim/micro/needs.ts`). Life support stays section 7.3's. Above it, six
+  needs:
+
+  | Need | Tier | Met by | Asked from | Weight |
+  |---|---|---|---|---|
+  | Green space | comfort | Park, Biosphere | 500 | 0.15 |
+  | Food variety | comfort | kinds grown: Greenhouse, Biosphere, Mega Mall (2 for full) | 500 | 0.10 |
+  | Medical care | services | Medical Center | 2,000 | 0.20 |
+  | Research | services | Laboratory, Observatory, Research Forum | 2,000 | 0.15 |
+  | Transport | services | Station | 5,000 (a station's people) | 0.20 |
+  | Shops | services | Mega Mall | 10,000 (a mall's people) | 0.20 |
+
+  A need is asked from its tier's people, never before one of its buildings may be built. A running
+  provider reaches the homes whose middle is in the square `NEED_REACH_TILES` (33) a side about its
+  own, `NEED_REACH_PER_LEVEL` (6) more a level, and - with the network on - on the same corridors
+  (rails join stations' districts, as they join everything else). A need is met by the share of
+  the city's homes, by the people they house, that a running provider reaches; food variety is the
+  city's (food is hauled). Homes still going up house no one and count for nothing.
+- **Happiness.** The mood is the sum over asked needs of `weight x (2 x met - 1)`: -1 to 1, 0 for a
+  city asking nothing. Growth runs x(1 + `HAPPINESS_GROWTH` x mood) = x0.5 to x1.5, and every
+  building makes x(1 + `HAPPINESS_OUTPUT` x mood) = x0.9 to x1.1 - resources and research credits,
+  not the planet's CO2 draw (as the Industrial Command Center's boost). Shown to the player as
+  50% + 50% x mood.
+- **In the step.** The mood is found inside `settlementStep`'s brownout passes, after the network,
+  on every pass: a pass only switches buildings off, so the mood only falls and the passes still
+  settle. Derived every substep, never stored: no save change. Behind `NEEDS_ENABLED` (0); every
+  new world turns it on (`NEW_WORLD_OVERRIDES`), every world made before keeps its recorded tuning.
+- **The city panel's People section**, the inspector's "Reaches the homes of N people" and the
+  crowd at a station or park, the planner's **Coverage** row (Off, Green space, Medical care,
+  Research, Transport, Shops: the ground a running provider reaches washed green, the provider
+  white, homes reached green, homes not reached red) and the Overview's needs
+  (`src/web/needs-words.ts`, `city.ts`, `planner.ts`).
+- **People in the view** (`src/render/people.ts`): at a running station or park, 2% of the people
+  it reaches are there, drawn a figure for every 5, at most 16, along the platforms or paths, live.
+  Skyscrapers' windows light by occupancy, as a dome's always did - with needs on only, so the
+  golden frames keep their towers.
+- **The example rebuilt** (`src/harness/services.ts`): see below.
+
 ## Measurements
 
 **The exit gate** (`src/sim/micro/needs.test.ts`): 70 towers (11,200 homes), 11,000 people, a mine
@@ -111,7 +131,8 @@ research credits) by `2 x weight x HAPPINESS_OUTPUT`, to nine decimals:
 
 Every need met: growth x1.5, output x1.1; none: x0.5, x0.9. A city of 400 (asking nothing) with
 needs on takes exactly the state it takes with them off, over 8 substeps (`toEqual`). 64 substeps
-at once equal 16 calls of 4.
+at once equal 16 calls of 4, for a city of 1,990 whose mood moves during the run (0.25, -0.10,
+-0.30: it grows about 40 people a substep, through 2,000 and 5,000).
 
 **Off, nothing moved:** the golden run, the golden frames (planet, city, structures), the Batch 3
 score, the visual continuity and offline tests: 8 files, 111 tests, all passed.
@@ -128,8 +149,17 @@ score, the visual continuity and offline tests: 8 files, 111 tests, all passed.
 | People in its cities | 1,912,752 | 1,710,360 (-10.6%; a city at most -14.2%) |
 
 The pass: 16.7 s for the 27 cities on this machine (shared with other sessions), the metropolises
-about 3 s each. Built whole, the example took 45.0 s with the pass and 21.9 s without
-(one process, this machine): a Terraformed start is made about twice as slowly.
+about 3 s each. Built whole, one process each, this machine:
+
+| Built | With the pass | Without it |
+|---|---|---|
+| Example planet (the batch) | 45.0 s | 21.9 s |
+| Example planet (review 1) | 34.9 s | 20.0 s |
+| Example planet (the fix session) | 102.4 s (the first, cold), 49.7 s, 37.5 s | 25.9 s, 21.0 s |
+| Terraformed start (review 1, seed 12345) | 39.1 s | - |
+| Terraformed start (the fix session, seeds 12345 and 7) | 40.9 s, 47.8 s | - |
+
+Both are made about twice as slowly as before; the game and the manual say about forty seconds.
 
 **Pacing** (`src/web/pace.test.ts`, the plain script, which builds no services):
 
@@ -167,6 +197,9 @@ One fault at a time, the file restored after each and checked against its copy.
 | Unmet costs nothing (mood from met alone) | the exit-gate tests |
 | Research credits not multiplied by the mood | first missed: no test read research. Every test city now has an observatory out of reach; caught by the exit-gate tests |
 | The fallback after the passes without the mood found again | changes nothing: unreachable (the passes always settle before running out) |
+| Needs on in every world (`needsOn` not reading `NEEDS_ENABLED`; review 1's probe, run again) | no needs with them off, nor for an outpost; the six exit-gate tests, every-need-met |
+| Outposts asked like cities (both guards gone: either alone changes nothing, the other holds) | no needs with them off, nor for an outpost (alone) |
+| The mood found on a call's first substep and held for the rest of the call | first missed: the chunk test's city had one mood all run. Its city now grows through two thresholds; caught by the chunk test (alone) |
 | Happiness words: the sign flipped | People section; the words |
 | People section never shown / shown with needs off | the People section's two tests |
 | The inspector's reach line dropped | a station's reach; a dark station |
@@ -235,8 +268,8 @@ Each taken in the run, where a bare "Go" would have accepted it.
 - **Transport in the example** reaches 0.9% to 65% of a city's homes: its stations must board a
   railway, and it has a few lines. Rail spurs to new stations would serve the rest (recorded for
   later in `GAME_PLAN.md`).
-- **The Terraformed start takes longer to make** (the services pass). For Batch 40's performance
-  pass, with the example's own 19 s.
+- **The Example planet and a Terraformed start take about forty seconds to make**, twice as long
+  as before (the services pass). For Batch 40's performance pass, with the example's own 20 s.
 - **The comfort tier's first need is dear:** a Biosphere (800 materials, 45 minutes) at 500 people,
   or a Park only on a terraformed world. A cheaper early green space is the user's call.
 - **Happiness is not on the overview cards, in Alerts or in Statistics.** An alert for an unhappy

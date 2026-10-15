@@ -10,7 +10,7 @@ When the game opens you see Mars turning slowly behind the menu:
   See [Worlds and saving](worlds-and-saving.md).
 - **New world** makes a new planet to play.
 - **Example planet** shows a fully terraformed Mars with cities and metropolises already built,
-  to look around. It takes about twenty seconds to build, and nothing you do there is saved.
+  to look around. It takes about forty seconds to build, and nothing you do there is saved.
 - **Settings** is not available yet; sound, graphics and control settings arrive in a later
   update.
 - **Credits** says who made the game.
@@ -29,7 +29,7 @@ Press **New world** and choose:
   - **Sandbox** gives unlimited materials and credits, unlocks everything, and nothing is ever
     lost. Every game speed is available. Use it to experiment.
   - **Terraformed start** puts you on a living planet with cities already built, laid out from
-    your seed. It takes about 45 seconds to make, and unlike the Example planet it is yours and
+    your seed. It takes about forty seconds to make, and unlike the Example planet it is yours and
     is saved.
 - **Pace.**
   - **Standard - real build times** (recommended). Buildings take real time: seconds for the

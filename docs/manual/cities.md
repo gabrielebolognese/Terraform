@@ -154,9 +154,9 @@ If any of the four runs short, buildings that use it brown out and stop, and peo
 leave or die. Keep a margin, and build storage so a short gap does not hurt.
 
 In a world made from Update 32 on, a growing city also wants green space and varied food from 500
-people, and medical care, research, transport and shops from 2,000 on. Services in reach of the
-homes make people happier, and a happy city grows faster and works better. See
-[People and their needs](people.md).
+people, medical care and research from 2,000, transport from 5,000 and shops from 10,000.
+Services in reach of the homes make people happier, and a happy city grows faster and works
+better. See [People and their needs](people.md).
 
 ## Land
 
