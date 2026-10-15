@@ -44,6 +44,9 @@ the route sets how long a job takes. Trains run on a track each way and stop at 
 **Known issues**
 - Trains on different lines still pass through each other where the lines cross.
 - A rover driving past another one at work beside its site can pass through it.
+- Levelling ground can leave the tiles beside it too steep to build on, with no rock on them.
+  Laying a corridor, cable or railway there tells you to send a rover to break the crag, but there
+  is none: use **Level ground** on that tile instead.
 
 ---
 
@@ -124,3 +127,6 @@ and railways between settlements; and the Example planet.
 - There is no ending yet: the game carries on after the planet becomes a Living world.
 - In a city, trains on different lines pass through each other where the lines cross.
 - A rover driving past another one at work beside its site can pass through it.
+- Levelling ground can leave the tiles beside it too steep to build on, with no rock on them.
+  Laying a corridor, cable or railway there tells you to send a rover to break the crag, but there
+  is none: use **Level ground** on that tile instead.

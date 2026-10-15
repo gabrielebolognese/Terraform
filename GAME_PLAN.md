@@ -311,24 +311,24 @@ one would: rovers on corridors and open ground around buildings, trains along th
 their cars, nothing through anything.
 
 **Deliverables:**
-- [ ] **Rover routes.** A path from the garage to the job:
+- [x] **Rover routes.** A path from the garage to the job:
   - over corridors first, then open buildable ground, never under a building, never over hard rock
     or steep ground;
   - turning where the path turns.
 
   The route is computed once per job, in the simulation (it sets the trip time Batch 28 uses), and
   deterministic. No reachable path means the job is refused, with the reason.
-- [ ] **Rover motion.** The rover follows its route at a steady speed, faces where it drives, and
+- [x] **Rover motion.** The rover follows its route at a steady speed, faces where it drives, and
   works at the site with its arm animated. More than one rover on a stretch keep apart.
-- [ ] **Trains.**
+- [x] **Trains.**
   - Diagnose where cars cross buildings: turns, car length, the order they are drawn in.
   - Fix it: cars follow the rail's curve car by car; slow for turns; stop at stations and dwell;
     never leave the rail.
   - Junctions are taken by the existing permutation rule.
   - Maglev and freight look different.
-- [ ] **Depth.** Vehicles are sorted with the buildings, so one passing behind a building is hidden
+- [x] **Depth.** Vehicles are sorted with the buildings, so one passing behind a building is hidden
   by it.
-- [ ] **The cost is measured.** Pathfinding for every job in a metropolis, and drawing hundreds of
+- [x] **The cost is measured.** Pathfinding for every job in a metropolis, and drawing hundreds of
   vehicles, inside the frame budget.
 
 **Exit gate:**
@@ -348,8 +348,11 @@ their cars, nothing through anything.
 2. **Do routes change trip times on old saves?** A job already under way keeps its old time.
 
 **Done** - see [the note](docs/balance/batch29-vehicles.md). Built unattended (`/next-batch auto`), in two
-sessions: the first was cut off after its main commit, the second ran the injections (38 of 41
-caught, the other 3 change nothing), fixed what they found and wrote the manual.
+sessions: the first was cut off after its main commit, the second ran the injections, fixed what they
+found and wrote the manual. The first review rejected it: the steep-ground rule had been called
+untestable, wrongly (levelling leaves steep ground with no crag), and seven tests had never been broken
+by a fault. A fix session tested both, and strengthened three tests that could not fail: 46 of 48
+faults caught, the other 2 change nothing.
 
 **Decisions taken:**
 1. **Both, corridors first.** Rovers drive corridors and open ground the city holds, and a corridor

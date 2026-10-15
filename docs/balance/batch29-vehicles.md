@@ -175,13 +175,52 @@ rest, and ran 36 faults. Five were missed. Each miss is a gap in the tests, and 
 - **Refusing a rock or ground to level that no rover can reach was untested.** The test called
   "a building, an upgrade, a rock" never sent a rover to a rock. A test now walls in three rocks
   on rough ground.
-- **Two faults no test can catch, because nothing changes.**
-  - Letting rovers drive up steep ground changes nothing: every tile too steep to build on
-    carries a crag. Over 15 rough sites, 0 steep tiles lacked one. The check stays as a guard.
-  - The v14 to v15 migration only stamps the version, and nothing reads it after.
+- **One fault no test can catch, because nothing changes:** the v14 to v15 migration only stamps
+  the version, and nothing reads it after.
+  - Letting rovers drive up steep ground was put here too, as changing nothing: every steep tile
+    was said to carry a crag (0 of 15 rough sites without one). That was wrong. Levelling makes
+    steep tiles with no crag on them, and the first review found it (below).
 - **The browser's own fill of clipped shapes had no test.** A fake canvas now works out the
   canvas's clip rules for itself, and a test checks that what is drawn again is filled inside the
   box or the outlines and nowhere else.
+
+### The first review: the steep-ground rule was called untestable, and three tests could not fail
+
+The first review rejected the batch. It cost a review round and a fix session. Its findings:
+
+- **"Every steep tile carries a crag" was wrong.**
+  - Crags are laid from nature's ground alone. But levelling a tile judges the tiles round it
+    again, because their shared corners moved, and some turn steep with no crag on them. There,
+    only the steepness check keeps a rover off.
+  - The claim was measured on 15 rough sites where nothing had been levelled. There it holds.
+  - The review measured it on the drive tests' rough ground: levelling 60 tiles made such tiles,
+    and with the check removed 445 of 1,344 routes to the tiles beside them drove up steep ground.
+  - The test written for it levels a row of seven tiles six tiles south of the garage, a rover at
+    a time, as a player would. That leaves 14 steep tiles with no crag. 164 ways run to the tiles
+    round them. With steep ground driveable, 97 of them drive up it; as built, none.
+  - Its first try levelled the tiles nearest the garage, on the landing zone. That ground is flat
+    already, so levelling it turned nothing steep, and the test found nothing.
+- **Seven tests had never been broken by a fault.** Each was broken once, and three of them could
+  not see the fault they exist for:
+  - *The same route every time it is asked.* It asked for one route, once on the city and once on
+    a copy. With ties in the search broken at random it still passed: exact ties are rare, and
+    that route had none that mattered. It now asks for 81 routes round the garage, on flat ground
+    and on rough, in one order, again, and in the other order on a copy. With random ties, 7 of
+    the 81 flat routes and 3 of the 81 rough come out different.
+  - *Two rovers on one stretch kept apart (the scripted day).* It passed with the wait behind
+    another taken out. The scripted player sends its rovers out at different moments, so no two
+    ever follow each other there (0 times, measured), and there was nothing to see. It now also
+    runs over the metropolis with every rover out of one garage at once. There a rover is close
+    behind another 38 times, and without the wait 23 frames have two touching.
+  - *The chunked drawing is the whole scene and nothing else.* It bounded what is drawn again at
+    1% of the whole scene: 12,690 shapes at high detail. Drawing again everything after a vehicle
+    in its chunk, whether it overlaps the vehicle or not, doubled the count and still passed:
+    902 to 1,885 at high, 233 to 448 at medium. The bound is now the measured count plus a quarter.
+- **And a fault no test caught at all.** Probing the spacing test, rovers driven down the middle
+  of their way (no lane) passed every test. Two rovers meeting then wait for each other instead
+  of passing: the wait does not ask which way the other is going. A new test sends a rover out
+  and home along one way, at the moments the two are at the same point of it. It checks that the
+  one coming home is drawn where it would be alone. Down the middle, it is held back 0.45 tiles.
 
 ## What was built
 
@@ -270,26 +309,41 @@ draws the same random numbers as before.
 
 ## Injections
 
-41 faults, one at a time, each against the tests meant to catch it, after two no-fault baselines
-that pass. The runner restores each file and checks it byte for byte before the next fault.
+48 faults, one at a time, each against the tests meant to catch it: 41 in the batch's own two
+passes, after two no-fault baselines that pass, and 7 more in the first review's round. The runner
+restores each file and checks it byte for byte before the next fault.
 
 The first pass ran 36: **31 caught, 5 missed**.
 - Three misses were gaps, closed with new tests: a rock no rover reaches, the redraw over a
   vehicle, and the tile a vehicle is drawn with. The second was the depth defect described above.
-- Two misses change nothing a test can see: steep ground, which always carries a crag, and the
-  v15 migration, which only stamps the version.
+- Two misses were taken to change nothing a test can see: steep ground, said always to carry a
+  crag, and the v15 migration, which only stamps the version. The first was wrong (the first
+  review, above).
 
 The second pass re-ran the three gaps against their new tests and added five faults in the outline
 clip and in levelling. All were caught, except that ignoring the clip box is now also invisible:
-the outlines decide which pixels are filled, and the box only bounds the work.
+the outlines decide which pixels are filled, and the box only bounds the work. That pass counted
+38 of 41 caught and 3 changing no behaviour. One of the three, steep ground, was wrong.
 
-**Final: 38 of 41 caught; the other 3 change no behaviour.**
+The first review's round ran 12 faults one at a time, against the tests the review named. It ran
+after a no-fault baseline of the three test files (41 tests passing), and the tree was checked
+clean after each fault:
+- 5 re-runs: steep ground, the wait behind another, the rover's lane 0.3 out, cars 0.88 long, and
+  nothing drawn again over a vehicle;
+- 7 new faults.
+
+Four were missed, and each now has a test that catches it: steep ground, random ties, the wait
+behind another on the scripted day, and drawing everything again. A fifth, rovers down the middle
+of the way, was missed by every test (above).
+
+**Final: 46 of 48 caught; the other 2 change no behaviour** (the v15 version stamp, and the clip
+box now that the outlines decide).
 
 | Fault | Caught by |
 |---|---|
 | The corner rule gone (a diagonal step between two buildings) | goes round a building; stays on open ground (rough city); never squeezes between two buildings |
 | Hard rock driveable | never squeezes ... nor crosses hard rock |
-| Steep ground driveable | *no behaviour: every steep tile carries a crag (0 of 15 rough sites without)* |
+| Steep ground driveable | first said to change nothing (every steep tile carrying a crag); review 1 found levelling makes steep tiles without one. Now: never drives up ground too steep, where levelling has left steep ground with no crag (97 of 164 ways up it) |
 | Buildings not in the way | 7 tests: the route, refusals, walling in, the queue |
 | A corridor no quicker | sets the trip; takes the corridors first |
 | The trip leaves out the drive through the headquarters | sets the trip |
@@ -303,23 +357,30 @@ the outlines decide which pixels are filled, and the box only bounds the work.
 | The garage door not kept clear | keeps the garage door clear |
 | A building goes up on a rover's way | keeps a building off the way a rover is driving |
 | A walled-in queued build loses its place | keeps its place in the queue |
+| Ties in the route search broken at random | missed, then: the same every time it is asked, and on a copy (7 of 81 flat routes and 3 of 81 rough differ) |
+| Rovers sent out of the queue once a call, not every substep | chunk-independent |
 | The preview skips the reachability check | the placement preview |
 | A route left behind when a claim moves the frame | move with the land |
 | The save drops the route | survive the save exactly |
 | No v14 -> v15 migration | *no behaviour: it only stamps the version* |
 | New worlds without routes | the paces' tuning; the routes' cost on the scripted playthrough |
 | An old save's rover drawn the straight line | a world made before routes: drawn round the buildings |
-| A rover's lane 0.3 out | never has a rover inside a building (the scripted day); faces, works, waits |
+| A rover's lane 0.3 out | never has a rover inside a building (the scripted day, and the metropolis); faces, works, waits |
+| Rovers driving down the middle of the way (no lane) | missed by every test, then: passes one coming the other way (held back 0.45 tiles) |
+| A rover stopping 0.6 past the middle of its tile, into its site | never has a rover inside a building (the scripted day, the metropolis); a world made before routes |
 | A rover facing across its way | faces where it drives |
-| Rovers on one stretch drive through each other | waits behind another |
+| Rovers on one stretch drive through each other | waits behind another; keeps two rovers on one stretch apart - missed on the scripted day (no two follow each other there), then caught in the metropolis (23 frames touching) |
 | The arm still at work | works at its site, the arm hammering |
 | No dwell at a stop | stops each passing train at a platform for the tuned dwell |
 | One track for both ways | two trains passing never touch |
-| Cars 0.88 long (Batch 28's) | two trains passing never touch |
+| Cars 0.88 long (Batch 28's) | two trains passing never touch (the two tests of cars inside a building or off their rails do not see it: the cars stay on their rails) |
+| Each way's track 0.45 out, not 0.22 | never has a train car inside a building or off its rails, the scripted day's railway and the metropolis (both as off the rails) |
 | Freight on every line | maglevs past a station, freight on the rest |
 | No slowing for bends | trains run ... and move along it (a lap longer than at full speed) |
 | A bend's rails drawn as two straight halves | ride on the rails drawn (0.079 against 0.05) |
-| Nothing drawn again over a vehicle | missed, then: the chunked drawing as the whole scene (104 and 131 pixels) |
+| Nothing drawn again over a vehicle | missed, then: the chunked drawing as the whole scene (104 and 131 pixels); the scene in chunks, whole and nothing else (its vacuity check, high and medium) |
+| Vehicles left out of the moving layer | the scene in chunks, whole and nothing else (231 shapes missing, high and medium) |
+| Everything after a vehicle in its chunk drawn again, overlapping it or not | missed at a bound of 1%, then: the scene in chunks, whole and nothing else (1,885 drawn again against at most 1,128 at high; 448 against 292 at medium) |
 | The redraw clipped to the box alone | the chunked drawing as the whole scene (786 and 735) |
 | The rasteriser ignores the outlines | the chunked drawing as the whole scene (786 and 735) |
 | The rasteriser ignores the clip box | *no behaviour now: the outlines decide (caught in the first pass, before them)* |
@@ -345,4 +406,10 @@ the outlines decide which pixels are filled, and the box only bounds the work.
 - **The metropolis opening timing test** stays red on this machine, as recorded. It is no worse
   after this batch, once `rocksOf` was rewritten.
 - **The first upgrade at 4-8 minutes** (Batch 28's miss) is unchanged in kind: 21.5 min.
+- **Steep ground with no crag, and a message that names one.** Found with the first review's
+  finding: levelling a tile can leave the tiles beside it too steep, with no crag on them. Laying a
+  corridor, cable or railway there is refused with "send a rover to break the crag", and sending
+  one is refused with "there is no rock there to break". Levelling that tile does make it no
+  longer steep (checked). The message predates this batch. For Batch 40, or the next batch that
+  touches levelling.
 - **Batch 28's open item, rover trips along the real route,** is closed.
