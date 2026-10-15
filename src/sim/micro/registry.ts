@@ -12,6 +12,7 @@
 import type { Tuning } from "../tuning.js";
 import { DEFAULT_TUNING } from "../tuning.js";
 import type { Settlement, SettlementKind, SimState } from "../types.js";
+import { metropolisAllowed } from "../objectives.js";
 import { NAME_MAX, foundingBuildings, newSettlement } from "./settlement.js";
 import { wrapLongitude } from "./space.js";
 
@@ -65,6 +66,8 @@ export function foundSettlement(
   if (kind !== "city" && kind !== "outpost" && kind !== "metropolis") return refuse(`"${String(kind)}" is not a kind of settlement.`);
   if (!Number.isFinite(lat) || !Number.isFinite(lon)) return refuse("That is not a place on the planet.");
   if (Math.abs(lat) > Math.PI / 2) return refuse("That latitude is past a pole.");
+  // Batch 30: with objectives on, a metropolis is the reward of "A city of 1,000".
+  if (kind === "metropolis" && !metropolisAllowed(state, t)) return refuse("A metropolis is unlocked by the objective \"A city of 1,000\".");
 
   // Founding builds nothing, but it does land the section 2.3 step 2 stock.
   // With the headquarters on, a settlement lands with it (and a city with one spaceport).

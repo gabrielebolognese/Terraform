@@ -60,6 +60,7 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     buildQueue: [],
     planned: [],
     history: EMPTY_HISTORY,
+    extraRovers: 0,
   };
 }
 

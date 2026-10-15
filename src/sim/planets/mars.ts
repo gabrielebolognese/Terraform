@@ -76,7 +76,7 @@ export const MARS_RADIUS_M = 3_389_500;
 /** A fresh, unplayed Mars. */
 export function marsStart(seed = 123456, t: Tuning = DEFAULT_TUNING): SimState {
   return {
-    schemaVersion: 15,
+    schemaVersion: 16,
     planetId: "mars",
     seed,
     steps: 0,
@@ -97,5 +97,9 @@ export function marsStart(seed = 123456, t: Tuning = DEFAULT_TUNING): SimState {
     economy: startingEconomy(t),
     settlements: [],
     routes: [],
+    goals: NO_GOALS,
   };
 }
+
+/** Nothing of the first hour done yet: no guided step, nothing claimed (Batch 30). */
+export const NO_GOALS = Object.freeze({ guide: 0, guideSkipped: false, claimed: Object.freeze([]) as readonly string[] });
