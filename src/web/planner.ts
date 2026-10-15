@@ -16,9 +16,10 @@
  * hooks, to change anything.
  */
 
-import type { BuildingType, CityView, HabitatChannels, HistorySample, PlannedLink, Settlement, Tuning } from "../sim/index.js";
-import { BUILDING_DEFS, MICRO_RESOURCES, NAME_MAX, cityView, keyTile, roverCount, tileKey } from "../sim/index.js";
+import type { BuildingType, CityView, HabitatChannels, PlannedLink, Settlement, Tuning } from "../sim/index.js";
+import { BUILDING_DEFS, NAME_MAX, cityView, keyTile, roverCount, tileKey } from "../sim/index.js";
 import { settlementLabel } from "./settlement-label.js";
+import { chartFigure, cityCharts, fmt } from "./charts.js";
 
 export interface PlannerHooks {
   readonly onRename: (id: string, name: string) => { ok: boolean; reason: string | null };
@@ -159,35 +160,9 @@ export function lineTiles(a: { tx: number; ty: number }, b: { tx: number; ty: nu
   return out;
 }
 
-/** A chart's lines from the record: one value a sample. */
-export interface Series {
-  readonly label: string;
-  readonly colour: string;
-  readonly values: readonly number[];
-}
-
-/** The charts the planner shows, from a settlement's record. */
-export function charts(samples: readonly HistorySample[]): { title: string; unit: string; series: Series[]; bars?: boolean }[] {
-  const pick = (f: (x: HistorySample) => number): number[] => samples.map(f);
-  return [
-    { title: "Population", unit: "people", series: [
-      { label: "People", colour: "#7cc4ff", values: pick((x) => x.population) },
-      { label: "Homes", colour: "#8a8f98", values: pick((x) => x.housing) },
-    ] },
-    { title: "Growth and deaths", unit: "people a year", series: [
-      { label: "Born", colour: "#6fd08c", values: pick((x) => x.births) },
-      { label: "Lost", colour: "#ef6b6b", values: pick((x) => x.deaths) },
-    ] },
-    { title: "Shortages - blackouts, hunger, thirst, suffocation", unit: "share of the year", bars: true, series: [
-      { label: "Blackout (power)", colour: "#f2c94c", values: pick((x) => x.short[0] ?? 0) },
-      { label: "Water", colour: "#56a8f5", values: pick((x) => x.short[1] ?? 0) },
-      { label: "Oxygen", colour: "#9be3f0", values: pick((x) => x.short[2] ?? 0) },
-      { label: "Food", colour: "#e38b4f", values: pick((x) => x.short[3] ?? 0) },
-    ] },
-    { title: "Stores", unit: "units", series: MICRO_RESOURCES.map((r, i) => ({ label: r[0]!.toUpperCase() + r.slice(1), colour: ["#f2c94c", "#56a8f5", "#9be3f0", "#e38b4f", "#b8a48c"][i]!, values: pick((x) => x.stores[i] ?? 0) })) },
-    { title: "Made less drawn", unit: "a year", series: MICRO_RESOURCES.map((r, i) => ({ label: r[0]!.toUpperCase() + r.slice(1), colour: ["#f2c94c", "#56a8f5", "#9be3f0", "#e38b4f", "#b8a48c"][i]!, values: pick((x) => x.net[i] ?? 0) })) },
-  ];
-}
+/** The planner's charts are the statistics' (Batch 31): one set, `charts.ts`. */
+export { cityCharts as charts } from "./charts.js";
+export type { Series } from "./charts.js";
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -203,7 +178,6 @@ function button(className: string, text: string, onClick: () => void): HTMLButto
   return b;
 }
 
-const fmt = (v: number): string => (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString("en") : Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(1));
 
 const TOOLS: readonly { tool: PlannerTool; label: string; hint: string }[] = [
   { tool: "pan", label: "Move", hint: "Drag to move the map; the wheel zooms." },
@@ -587,27 +561,7 @@ export class PlannerScreen {
       this.chartBox.replaceChildren(el("p", "planner-empty", "The record fills in as the years pass: a sample every year the city stands."));
       return;
     }
-    const figures = charts(samples).map((c) => {
-      const fig = el("figure", "planner-chart");
-      const canvas = el("canvas", "planner-chart-canvas");
-      canvas.width = 340;
-      canvas.height = 120;
-      canvas.setAttribute("role", "img");
-      const last = c.series.map((x) => `${x.label} ${fmt(x.values[x.values.length - 1] ?? 0)}`).join(", ");
-      canvas.setAttribute("aria-label", `${c.title}: now ${last}`);
-      drawChart(canvas, c.series, c.bars === true);
-      const cap = el("figcaption", "planner-chart-title", `${c.title} (${c.unit})`);
-      const keys = el("div", "planner-chart-keys");
-      for (const x of c.series) {
-        const k = el("span", "planner-chart-key", `${x.label}: ${fmt(x.values[x.values.length - 1] ?? 0)}`);
-        const sw = el("span", "planner-swatch");
-        sw.style.background = x.colour;
-        k.prepend(sw);
-        keys.append(k);
-      }
-      fig.append(cap, canvas, keys);
-      return fig;
-    });
+    const figures = cityCharts(samples).map(chartFigure);
     this.chartBox.replaceChildren(el("p", "planner-chart-span", `The last ${samples.length} years.`), ...figures);
   }
 
@@ -631,47 +585,5 @@ export class PlannerScreen {
     const types = el("ul", "planner-types");
     for (const [name, c] of [...counts.entries()].sort((a, b) => b[1] - a[1])) types.append(el("li", "", `${name}: ${c}`));
     this.overview.replaceChildren(table, el("h3", "planner-subtitle", "By kind"), types);
-  }
-}
-
-/** A small line chart (or bars, for shares of the year) into a canvas: every series on one scale from zero. */
-export function drawChart(canvas: HTMLCanvasElement, series: readonly Series[], bars: boolean): void {
-  const ctx = canvas.getContext("2d");
-  if (ctx === null) return;
-  const w = canvas.width;
-  const h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
-  let lo = 0;
-  let hi = bars ? 1 : 0;
-  for (const s of series) for (const v of s.values) {
-    lo = Math.min(lo, v);
-    hi = Math.max(hi, v);
-  }
-  if (hi - lo < 1e-9) hi = lo + 1;
-  const count = Math.max(...series.map((s) => s.values.length));
-  const x = (i: number): number => 4 + ((w - 8) * i) / Math.max(1, count - 1);
-  const y = (v: number): number => h - 4 - ((h - 8) * (v - lo)) / (hi - lo);
-  ctx.strokeStyle = "rgba(255,255,255,0.12)";
-  ctx.beginPath();
-  ctx.moveTo(0, y(0));
-  ctx.lineTo(w, y(0));
-  ctx.stroke();
-  if (bars) {
-    const bw = (w - 8) / Math.max(1, count) / Math.max(1, series.length);
-    series.forEach((s, k) => {
-      ctx.fillStyle = s.colour;
-      s.values.forEach((v, i) => {
-        if (v <= 0) return;
-        ctx.fillRect(4 + ((w - 8) * i) / count + k * bw, y(v), Math.max(1, bw - 0.5), y(0) - y(v));
-      });
-    });
-    return;
-  }
-  for (const s of series) {
-    ctx.strokeStyle = s.colour;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    s.values.forEach((v, i) => (i === 0 ? ctx.moveTo(x(i), y(v)) : ctx.lineTo(x(i), y(v))));
-    ctx.stroke();
   }
 }

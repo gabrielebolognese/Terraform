@@ -179,7 +179,7 @@ export type { History, HistorySample, PlannedLink, QueuedBuild, Route, Settlemen
 export { ROUTE_RESOURCES, connectSettlements, crossingLine, disconnectSettlements, flowRoutes, routeAxis, routeCost, routeKm } from "./micro/routes.js";
 export type { Axis, RouteOutcome } from "./micro/routes.js";
 export { sizeClass } from "./micro/registry.js";
-export { floodAlert, floodForecast, floodReading } from "./micro/flood.js";
+export { floodAlert, floodForecast, floodReading, submerged } from "./micro/flood.js";
 export type { FloodForecast, FloodReading, FloodState } from "./micro/flood.js";
 export type { SizeClass } from "./micro/registry.js";
 export { BUILD_TIER, BUILDING_DEFS, buildGrowth, buildSeconds, buildYears, citySecondsPerYear, levelFactor, maxLevel } from "./micro/buildings.js";
