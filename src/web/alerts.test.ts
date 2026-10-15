@@ -359,6 +359,13 @@ describe("alerts are derived, never stored", () => {
     expect(look(stepped)).toHaveLength(1);
     expect(look(stepped)).toEqual([]);
     expect(look(stepped), "and stays fresh").toEqual([]);
+    // Every look a new step (a fast speed): the round still goes round, rather than one settlement every time.
+    const again = new AlertWatch();
+    const fast = (state: SimState) => offline(again.observe({ state: { ...state, settlements: state.settlements.map((c) => ({ ...c })) }, env: envOf(state, T), liquidRatePerYear: 0, tuning: T, now: (tick += 500), budgetMs: 0, clock: () => (tick += 1) }).now);
+    for (let k = 0; k < 3; k += 1) fast(s);
+    expect(fast(lit)).toHaveLength(2);
+    expect(fast(lit)).toHaveLength(1);
+    expect(fast(lit), "each in its turn, though every look is new").toEqual([]);
   });
 
   it("a quiet, healthy city says nothing at all, for a long while", () => {
