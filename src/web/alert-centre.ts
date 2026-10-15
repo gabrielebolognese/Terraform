@@ -85,7 +85,8 @@ export class AlertCentre {
     this.now = now;
     for (const a of fresh) {
       const top = this.lines[0];
-      if (top !== undefined && top.alert.key === a.key) this.lines[0] = { alert: a, times: top.times + 1, year };
+      // The same alert in the same words: a Solar Array then a Dome finished in one city are two lines, not one.
+      if (top !== undefined && top.alert.key === a.key && top.alert.title === a.title) this.lines[0] = { alert: a, times: top.times + 1, year };
       else this.lines.unshift({ alert: a, times: 1, year });
     }
     if (this.lines.length > ALERT_LOG) this.lines.length = ALERT_LOG;
