@@ -156,3 +156,32 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - changed: src/sim/micro/drive.test.ts src/render/vehicles.test.ts
     src/render/city-chunks.test.ts docs/balance/batch29-vehicles.md GAME_PLAN.md
     docs/manual/update-notes.md docs/PROGRESS.md
+- review 2: accepted
+  Review 1's three problems are fixed. The fix changed tests and documents only (`git diff 897a162`:
+  no game code).
+  1. Steep ground is tested at `src/sim/micro/drive.test.ts:186`. The wrong claim is corrected in
+     the note, its injection table and total, GAME_PLAN, and this entry.
+  2. Every test review 1 listed has a row in the note's injection table, and so does the new
+     two-ways test (`src/render/vehicles.test.ts`, "passes one coming the other way"). The three
+     strengthened bounds each carry their measured value.
+  3. GAME_PLAN's five Batch 29 deliverables are ticked.
+
+  Checked in this round:
+  - Typecheck, `build:web` (471.72 kB JS, 162.10 kB gzip) and `build` are green.
+  - Full suite (`--maxWorkers=2 --minWorkers=1`): 102 files, 1,198 tests, all passed (344 s).
+  - Three injections, one at a time, each caught as the note records, and the tree was clean
+    after each:
+    - steep ground driveable (`drive.ts:116`): the new steep test, "the way to 42,56 drives up
+      steep ground at 44,56";
+    - `ROVER_LANE` set to 0: "passes one coming the other way", held back 0.45 tiles (463.45
+      against 463.90);
+    - the wait behind another removed: the spacing test, "rovers touching in the metropolis:
+      expected 23 to be 0", and "waits behind another".
+  - The new known issue matches the code:
+    - steep ground refuses a corridor, cable or railway with "send a rover to break the crag";
+    - sending a rover there is refused with "there is no rock there to break";
+    - **Level ground** is the card's name on screen.
+  - Two more manual statements match the code:
+    - a corridor is twice as quick (`ROVER_CORRIDOR_SPEEDUP` 2);
+    - nothing goes up on a rover's way until it is home, because a job's route is kept until the
+      job ends.
