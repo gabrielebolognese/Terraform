@@ -336,3 +336,37 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - changed: src/sim/objectives.ts src/sim/objectives.test.ts src/web/onboarding.ts
     src/web/onboarding.test.ts docs/balance/batch30-first-hour.md GAME_PLAN.md
     docs/manual/goals.md docs/manual/update-notes.md docs/PROGRESS.md
+- review 2: accepted
+  Review 1's three problems are fixed. The fix changed the planet bars' code and tests, and
+  documents (`git diff 24ea708`: `src/sim/objectives.ts`, `src/web/onboarding.ts` and their tests).
+  1. The first upgrade is recorded as still missed, with the measurement and the reason (taught
+     108 s, too early; untaught 21.5 min, too late), in `GAME_PLAN.md`'s Batch 30 changes and the
+     note's measurements and Open.
+  2. The planet's temperature goals carry where their bar starts (`Progress.from`, Mars's start
+     temperature, 213.04 K). The panel's fill, the meter's minimum and the words all count from
+     there. Two new tests in `src/web/onboarding.test.ts`: the bars start near empty on a new world,
+     and they fill as the planet warms. The six injections are in the note's table.
+  3. `src/sim/objectives.test.ts`'s header names `src/web/first-hour.test.ts`.
+
+  Checked in this round:
+  - Typecheck, `build` and `build:web` (496.42 kB JS, 169.74 kB gzip) are green.
+  - Full suite (`--maxWorkers=2 --minWorkers=1`): 105 files, 1,237 tests, all passed (388 s).
+  - Two of the fix round's injections, one at a time, each caught as the note records, and the
+    tree was clean after each:
+    - the panel's fill ignoring where the bar starts (`barFraction`): "start near empty on a new
+      world", 98.69 against less than 10;
+    - the bar standing at its start until the phase is reached (`warmedTo`): "fill as the planet
+      warms", 0 against more than 50, and the words check ("0 of 3.0 K ...").
+  - A new world's start does not depend on its seed or tuning (`marsStart` copies
+    `MARS_START_RESERVOIRS`), so one start temperature serves every Standard world.
+  - `from` is derived, never saved: no save change in this round.
+  - Three manual statements match the code:
+    - "0.1 of 3.0 K up from the start (213.2 now, 216 needed)" is the panel's exact text on a new
+      world (tested);
+    - the bars start nearly empty (4.7% and 0.2%, measured);
+    - the bars follow the weather, and a dust storm cools the planet: the goal reads the
+      temperature through `eventEnv`, where a dust storm raises the albedo, and the browser turns
+      events on (`EVENTS_ENABLED` 1).
+  - The fix's three decisions (the bar keeps the weather; both temperature goals count from the
+    world's start; Thicker air stays counted from 0 mbar) are ones a bare "Go" would accept. None
+    deletes or overwrites player data.
