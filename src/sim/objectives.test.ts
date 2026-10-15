@@ -23,6 +23,7 @@ import type { BuildingType, Settlement, SimState } from "./types.js";
 import { NEUTRAL_ENV } from "./types.js";
 import { foundSettlement } from "./micro/registry.js";
 import { roverCount } from "./micro/rocks.js";
+import * as flood from "../testkit/flood.js";
 import { capacities, claimLand, claimableChunks, connectAll, housing, placeBuilding, removeBuilding, upgradeBuilding } from "./micro/settlement.js";
 import { connectSettlements } from "./micro/routes.js";
 import {
@@ -149,6 +150,20 @@ describe("the guided first steps", () => {
     expect(DEFAULT_TUNING.GUIDE_ENABLED + DEFAULT_TUNING.OBJECTIVES_ENABLED).toBe(0);
     expect(guideActive(s, t)).toBe(false);
     expect(latchGuide(s, t)).toBe(s);
+  });
+
+  it("is latched every substep, not once a call: a city lost to the sea within one call has its steps counted", () => {
+    // Batch 24's drowning city alone (its high neighbour left out), with a geothermal plant: two steps done the
+    // moment it is seen, and lost to the rising sea 37 substeps later (measured). Judged only at the end of the
+    // call, there would be no city to count.
+    const g = makeTuning({ ...flood.t, GUIDE_ENABLED: 1 });
+    const fx = flood.fixture(g);
+    const s = { ...fx, settlements: fx.settlements.filter((c) => c.id === "settlement-1") };
+    expect(s.goals.guide).toBe(0);
+    const whole = advance(s, 40, { ...flood.rising, tuning: g });
+    expect(first(whole).lostAtSeaLevelM, "vacuity: the city is lost within the call").not.toBeNull();
+    expect(GUIDE_STEPS[0]!.done(whole, g), "and no city stands at its end").toBe(false);
+    expect(whole.goals.guide).toBe(2);
   });
 
   it("is chunk-independent: one call over a step's latch equals a call a substep", () => {
