@@ -134,6 +134,12 @@ describe("each alert fires in a run that causes it, and not in one that does not
     expect(blackout!.priority).toBe("urgent");
     expect(blackout!.text).toMatch(/^Power is short\. \d+ buildings? (is|are) off for it\. Build a power plant, or lay a power cable to one\.$/);
     expect(blackout!.target).toMatchObject({ kind: "city", id: ID });
+    // It clicks through to a building dark for it (the spaceport or a dome; the array and headquarters run) - not to the city alone.
+    const at = blackout!.target.kind === "city" ? blackout!.target.at : null;
+    expect(at, "a building to show").not.toBeNull();
+    expect(["spaceport", "habitat_dome"]).toContain(city(short).buildings[buildingAt(city(short), at!, T)]!.type);
+    // The buildings dark for it are the blackout's to count, not each an "offline" line of its own.
+    expect([...dark.seen.values()].filter((a) => a.kind === "offline").map((a) => a.text)).toEqual([]);
     expect([...lit.seen.values()].map((a) => a.kind)).not.toContain("blackout");
     expect(kinds(lit.fresh)).not.toContain("blackout");
   });
