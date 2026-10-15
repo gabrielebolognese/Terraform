@@ -1,0 +1,57 @@
+# Worlds and saving
+
+## Several worlds
+
+You can keep as many worlds as you like, each with its own planet, cities and save. **Worlds** on
+the title screen lists them, most recently played first. Each shows a picture of the planet, its
+mode and pace, its phase and year, how long you have played it, when you last played, and its
+seed.
+
+| Button | What it does |
+|---|---|
+| **Play** | Opens the world |
+| **Rename** | Gives it a new name |
+| **Duplicate** | Makes a copy, "*name* (copy)", so you can try something without risking the original |
+| **Export** | Saves the world to a file on your computer, as a backup or to share |
+| **Delete** | Deletes the world for good, once you type its name to confirm |
+| **Import a world** | Loads a world from a file made with Export |
+
+## Saving
+
+The game saves for you:
+- every 15 seconds while you play,
+- when you go down to a city or come back up,
+- when you switch to another tab or close the page,
+- when you press **Save** in the game menu, or **Save and quit to title**.
+
+Saves are kept in your web browser. Clearing your browser's site data deletes them, and a private
+window does not keep them; the title screen warns you if this browser cannot keep worlds. Use
+**Export** to keep a copy that is safe from that.
+
+Each world has one save. To keep an earlier state, **Duplicate** the world first, or **Export** it.
+
+## A world that will not load
+
+If a world's save cannot be read, its entry says "Will not load", with the reason. The game never
+plays it or saves over it, so nothing more is lost. It is kept exactly as it is.
+
+## While you are away
+
+When you come back to a world, the time you were away is played for you, so your builds finish and
+the planet moves on:
+
+- **Standard pace:** up to 10 hours of absence count in full. Builds that would finish within that
+  time are done when you return.
+- **Classic pace:** up to 8 hours count, at a reduced rate.
+
+The **While you were away** summary says how much time passed, what changed on the planet, and
+what your cities built ("In the cities, the reactor reached level 5, the spaceport is half
+built"). It appears in the **Instruments** drawer.
+
+A world left open in a background tab pauses until you come back to it.
+
+## The Example planet
+
+**Example planet** on the title screen builds a fully terraformed Mars with many cities to look
+around. Nothing you do there is saved. To keep a living planet of your own, make a new world with
+the **Terraformed start** mode.

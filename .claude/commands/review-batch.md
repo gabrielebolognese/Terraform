@@ -4,24 +4,25 @@ description: Independent review of the last completed batch against its exit gat
 
 # Review the last batch
 
-You are reviewing code you did not write. Nobody is watching; do not ask questions.
+You are reviewing code you did not write. Nobody is watching; do not ask questions. The argument
+(`$ARGUMENTS`) names the review round R, e.g. `round 3 (batch 29)`; no round means round 1.
 
 1. Read `docs/PROGRESS.md`; let NN = `last_completed_batch`. Read Batch NN's section in
    `GAME_PLAN.md` (goal, deliverables, exit gate, decisions), `GAME_PLAN.md`'s "How every batch here
    is held", `BUILD_PLAN.md`'s **Cross-batch invariants**, and the working rules in
    `.claude/commands/next-batch.md` (Phase 2).
-2. Read the batch's entry in `docs/PROGRESS.md` (its `decisions:` and `review request:` lines) and
+2. Read the batch's entry in `docs/PROGRESS.md` (its `decisions:`, `review request:`, and any
+   earlier `review N:` and `fix N: done` lines - an earlier round's problems must now be fixed) and
    its note `docs/balance/batchNN-*.md`. Inspect the batch's commits (`git log --oneline`,
    `git show` on each, or `git diff` from the commit before `Batch NN: started`).
-3. Run `npm run typecheck`, `npx vitest run` (if it is killed for low memory, rerun with
-   `--maxWorkers=2`), `npm run build:web` and `npm run build`. Never open a browser and do not start
-   the dev server.
+3. Run `npm run typecheck`, `npx vitest run --maxWorkers=2`, `npm run build:web` and
+   `npm run build`. Never open a browser, never start the dev server or any watcher.
 
 Verify, in order:
 
 1. Every deliverable is built, and the exit gate is met by a test or by a measurement recorded in
    the note. A target missed is acceptable only if the note says so, with the measurement and the
-   reason.
+   reason. A batch marked "COMPLETE (partial)" lists what was not built.
 2. No failure outside `## Known red` in `docs/PROGRESS.md`; typecheck and both builds green.
 3. The note leads with what went wrong, carries measurements, and has an injection table: every new
    test was broken once by a fault and caught it. Spot-check two injections yourself, one fault at a
@@ -36,10 +37,17 @@ Verify, in order:
    change has a migration and a test loading the previous schema.
 6. `GAME_PLAN.md`'s row is COMPLETE with the note linked and changes from the plan recorded;
    `README.md` has the batch's row.
-7. Every decision under `decisions:` is one a bare "Go" would have accepted, and none deletes or
+7. **The player documentation** in `docs/manual/`: `update-notes.md` has this batch's entry at the
+   top (New / Changed / Fixed / Known issues), the pages the batch touches describe the game as it
+   now is, and the writing is for players - plain English, names as they appear on screen, real
+   times, no file names, code names, tuning constants or "sim-years", nothing the browser does not
+   actually do. Check three statements against the code.
+8. Every decision under `decisions:` is one a bare "Go" would have accepted, and none deletes or
    overwrites player data.
 
-Write the verdict into the batch's entry in `docs/PROGRESS.md`: `review: accepted`, or
-`review: rejected` followed by a numbered list of concrete problems with file paths and line
-numbers. Commit `Batch NN: review` and push the current branch (`git push -u origin HEAD`). The very
-last line of your output must be exactly `REVIEW: ACCEPTED` or `REVIEW: REJECTED`.
+Do not fix anything yourself: a review only judges. Write the verdict into the batch's entry in
+`docs/PROGRESS.md` as `review R: accepted`, or `review R: rejected` followed by a numbered list of
+concrete problems with file paths and line numbers (only real problems; style preferences are not
+grounds for rejection). Commit `Batch NN: review R` and push the current branch
+(`git push -u origin HEAD`; a failed push does not matter). The very last line of your output must
+be exactly `REVIEW: ACCEPTED` or `REVIEW: REJECTED`.
