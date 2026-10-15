@@ -147,6 +147,42 @@ describe("a rover's route", () => {
     void n;
   });
 
+  it("never squeezes between two buildings that meet at a corner, nor crosses hard rock", () => {
+    // A staircase of depots, corner to corner, across the way to a target beyond it: a diagonal step between two
+    // of them would take the rover's body through both their corners.
+    let s = city(OFF);
+    const door = garageDoor(first(s))!;
+    for (let k = -8; k <= 8; k += 1) s = place(s, "storage_depot", door.tx + k, door.ty + 6 + k, OFF);
+    const target = tileSite(door.tx + 2, door.ty + 12);
+    const route = roverRoute(first(s), target, ON)!;
+    expect(route).not.toBeNull();
+    for (const k of expandRoute(route.points)) {
+      const { tx, ty } = keyTile(k);
+      expect(driveable(first(s), tx, ty, ON), `the way crosses ${tx},${ty}`).toBe(true);
+    }
+    // Hard rock: on the rough ground, a way to the far side of each rock cluster near enough goes round it.
+    const r = city(ROUGH, 1e6, 3000);
+    const c = first(r);
+    const ground = siteGround(c, ROUGH);
+    const n = ground.tiles;
+    const rocks = rocksOf(c, ROUGH);
+    let routed = 0;
+    for (let i = 0; i < n * n && routed < 25; i += 1) {
+      if (rocks[i] !== "crag" || ground.steep[i] === true) continue;
+      const x = i % n;
+      const y = (i - x) / n;
+      const len = Math.hypot(x - door.tx, y - door.ty);
+      const fx = Math.round(x + ((x - door.tx) / len) * 3);
+      const fy = Math.round(y + ((y - door.ty) / len) * 3);
+      if (!driveable(c, fx, fy, ROUGH)) continue;
+      const way = roverRoute(c, tileSite(fx, fy), ROUGH);
+      if (way === null) continue;
+      routed += 1;
+      for (const k of expandRoute(way.points)) expect(rocks[keyTile(k).ty * n + keyTile(k).tx], `the way to ${fx},${fy} crosses hard rock at ${keyTile(k).tx},${keyTile(k).ty}`).not.toBe("crag");
+    }
+    expect(routed, "vacuity: ways past hard rock").toBeGreaterThan(5);
+  });
+
   it("sets the trip: twice its drive at the tuned speeds, and the work", () => {
     let s = city(ON);
     const door = garageDoor(first(s))!;
