@@ -22,6 +22,7 @@ import { DEFAULT_TUNING, makeTuning } from "./tuning.js";
 import type { BuildingType, Settlement, SimState } from "./types.js";
 import { NEUTRAL_ENV } from "./types.js";
 import { foundSettlement } from "./micro/registry.js";
+import { roverCount } from "./micro/rocks.js";
 import { capacities, claimLand, claimableChunks, connectAll, housing, placeBuilding, removeBuilding, upgradeBuilding } from "./micro/settlement.js";
 import { connectSettlements } from "./micro/routes.js";
 import {
@@ -229,6 +230,16 @@ describe("objectives", () => {
     expect(first(cap.state).stores.materials).toBe(full);
   });
 
+  it("land rovers for good at the largest city's headquarters: more builds at once", () => {
+    const s = { ...withCity(founded(), { population: 500 }), goals: { ...NO_GOALS, claimed: ["city_first", "city_steady"] } };
+    const before = roverCount(first(s), T);
+    const o = claimObjective(s, "city_town", T);
+    expect(o.ok, o.reason ?? "").toBe(true);
+    expect(o.rovers).toBe(T.REWARD_TOWN_ROVERS);
+    expect(T.REWARD_TOWN_ROVERS).toBe(2);
+    expect(roverCount(first(o.state), T)).toBe(before + 2);
+  });
+
   it("unlock the metropolis with a city of 1,000, and gold markers with three cities joined", () => {
     let s = withCity(founded(), { population: 1000 });
     const refusedMetro = foundSettlement(s, "metropolis", -0.3, 0.5, T);
@@ -278,7 +289,7 @@ describe("objectives", () => {
 describe("the first hour in the save", () => {
   it("survives the save exactly: the guide's latch, a skip, the claims - and nothing derived", () => {
     let s = advance(place(founded(), "solar_array", 10, 10), 2, cfg);
-    s = skipGuide({ ...s, goals: { ...s.goals, claimed: ["city_first"] } });
+    s = skipGuide({ ...withCity(s, { extraRovers: 2 }), goals: { ...s.goals, claimed: ["city_first"] } });
     const saved = toSave(s, T, AT);
     expect(saved.goals).toEqual({ guide: s.goals.guide, guide_skipped: true, claimed: ["city_first"] });
     const back = deserialize(serialize(s, T, AT), T);
