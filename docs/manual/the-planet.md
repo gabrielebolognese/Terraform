@@ -111,6 +111,10 @@ outpost** (and **Found a metropolis**, once unlocked) start a new one: type a na
 like, then click the planet. **Open** takes you down to one, and **World map** shows the whole
 planet. See [Cities](cities.md).
 
+Each city's line in the list also says how it is doing: its people against its homes, anything
+running short, and what is being built, for example "120 of 160 people - short of water - 2 going
+up, 1 waiting for a rover". See [Alerts and statistics](alerts-and-statistics.md).
+
 ## Instruments
 
 The **Instruments** button (top right) opens a detailed drawer for the curious: every number the

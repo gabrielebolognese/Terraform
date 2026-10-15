@@ -12,6 +12,10 @@ The game is played with the mouse. The one key is **Esc**.
 | Choose where to found a settlement | After **Found a city** or **Found an outpost**, click the planet |
 | Open the game menu | **Menu** (bottom right) or **Esc** |
 | Open the objectives | **Objectives** (bottom right, above **Menu**) |
+| See what needs you | **Alerts** (bottom right, beside **Menu**) |
+| See the charts of the planet and each city | **Statistics** (bottom right, beside **Alerts**) |
+| Go to where an alert happened | Click the alert, in **Alerts** or as it pops up |
+| Dismiss a pop-up alert | **x** on it |
 | Put the guide away | **Skip the guide** on its card |
 | Cancel founding | **Esc** or **Cancel** |
 
@@ -30,6 +34,7 @@ Left alone for a few seconds, the planet turns slowly by itself.
 | Scroll the build bar | Mouse wheel over it, or drag its scrollbar |
 | Open the game menu | **Menu** (top right) |
 | Open the objectives | **Objectives** (top right, under **Menu**) |
+| See what needs you, or the charts | **Alerts** and **Statistics** (top right, beside **Menu**) |
 
 ## In the city planner
 

@@ -49,7 +49,7 @@ What is missing, in the user's words (2026-10-11):
 | 28 | Time that means something: real build and upgrade times | **COMPLETE** - [note](docs/balance/batch28-build-times.md) - the curve (20 s to 8 h), a build queue, a Standard pace (planet 8x slower, cities on their own clock) beside Classic; first upgrade misses 4-8 min |
 | 29 | Vehicles that use the city: rovers on the ground, trains on the line | **COMPLETE** - [note](docs/balance/batch29-vehicles.md) - rovers drive routes round the city (new worlds; their length sets the trip), trains ride car by car on a track each way and stop at stations; every vehicle drawn behind what stands in front of it; no vehicle inside a building, measured |
 | 30 | The first hour: onboarding and objectives | **COMPLETE** - [note](docs/balance/batch30-first-hour.md) - a guide through seven first steps, driven by the state; nine objectives in three chains with rewards (settlers, rovers, materials, credits, the metropolis, gold markers); milestone cards and a chime; the guide takes 42 min (claiming land waits for 200 people) |
-| 31 | Knowing what is happening: alerts, notifications and statistics | NOT STARTED |
+| 31 | Knowing what is happening: alerts, notifications and statistics | **COMPLETE** - [note](docs/balance/batch31-alerts.md) - alerts derived at the readout, each type fired by a run that causes it and not by one beside it; toasts by priority and the alert centre, each clicking through to its city and building; the planet's record in the save, bounded by halving (125 samples, 25 kB after 1,000 sim-years); statistics; each city at a glance |
 | 32 | People, not a number: needs, services and happiness | NOT STARTED |
 | 33 | Events that ask for decisions | NOT STARTED |
 | 34 | Earth: shipments, contracts and the market | NOT STARTED |
@@ -488,7 +488,7 @@ meeting Batch 28's 4-8 minutes at 1.8 minutes. Both are fixed, with six more inj
 **Goal.** The player is told what needs them, when it needs them, without hunting for it.
 
 **Deliverables:**
-- [ ] **An alert centre:**
+- [x] **An alert centre:**
   - shortages and blackouts;
   - a building offline and why;
   - builds and upgrades finished;
@@ -498,13 +498,13 @@ meeting Batch 28's 4-8 minutes at 1.8 minutes. Both are fixed, with six more inj
 
   Each clicks through to where it happened (the city, the building, the planet). Grouped, so a
   hundred offline depots are one line.
-- [ ] **Toasts** for the moment, the centre for the record. Priority decides which interrupt.
-- [ ] **Statistics:**
+- [x] **Toasts** for the moment, the centre for the record. Priority decides which interrupt.
+- [x] **Statistics:**
   - per city and per planet, over time: population, each resource's production and use, power
     balance, credits, the planet's axes;
   - charts from the planner's existing ones, unified;
   - the history kept as samples in the save, bounded.
-- [ ] **A city overview card on the world map and the HUD:** people, shortages, builds in progress.
+- [x] **A city overview card on the world map and the HUD:** people, shortages, builds in progress.
 
 **Exit gate:**
 - Every alert type fires in a scripted run that causes it, and does not fire in one that does not
@@ -513,6 +513,37 @@ meeting Batch 28's 4-8 minutes at 1.8 minutes. Both are fixed, with six more inj
   charts show survives the save and is bounded (measured size after 1,000 sim-years).
 - Through the real components: an alert clicked opens the right city with the right building
   selected.
+
+**Done** - see [the note](docs/balance/batch31-alerts.md). Built unattended (`/next-batch auto`) in
+one session. Every alert type fires in a scripted Standard run that causes it and not in one beside
+it. The flood warning fires on Batch 24's drowning-city fixture with flooding on, which the browser
+leaves off until Batch 38. The planet's record measured 125 samples and 25.2-26.3 kB of JSON after
+1,000 sim-years, and can never pass 239 samples. In the assembled game, an alert clicked from orbit
+opens Ares with the offline Greenhouse selected, and one clicked from inside the city selects the
+Water Extractor. 46 injected faults: 42 caught at once, 4 only after a new or stronger test.
+
+**Decisions taken** (none were set for Phase 1; each recorded with its reason in the note):
+1. **The planet's record lives in the simulation,** sampled in `advance` every 4 substeps, halved
+   when full (240), so it spans the whole game in a bounded size. It records and is never read back,
+   so it is on in every world, old ones from their next load. Save v17.
+2. **A city's record adds made and drawn** per resource; older samples are left without.
+3. **Alerts are derived in the browser** two looks a second; the record of what happened lasts the
+   session; the first look on opening takes its bearings.
+4. **Priorities:** urgent (blackout, water, oxygen or food short, flood); notice (offline, materials
+   short, a storm coming); record only (built, upgraded, objective done - the milestone card already
+   interrupts for an objective).
+5. **A storm is forecast** two real minutes ahead from the seeded weather; a condition back within a
+   minute of ending is not announced again.
+
+**What changed from the plan, and why:**
+- **A look had to be given a budget.** Over the example planet (42 settlements, 246,095 buildings)
+  the first version took 2.8 s a look; with each settlement's conditions kept per step it still cost
+  a second step of every settlement after each step (160 ms). A look now works out new steps for
+  4 ms at most, settlements in turn, and the overview cards read the alerts' shortages: 4-24 ms a
+  look for about 5 s after a step, then 0.1-0.5 ms.
+- **Flood warnings are built but not seen in the browser,** where flooding is off until Batch 38.
+- **The planner's charts and the statistics became one module,** so the planner gains the made and
+  used charts too.
 
 ---
 

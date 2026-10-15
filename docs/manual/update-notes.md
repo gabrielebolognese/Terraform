@@ -4,6 +4,41 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 31 - Knowing what is happening
+
+The game now tells you when something needs you and takes you straight there, and keeps charts of
+how your planet and every city have done.
+
+**New**
+- **Alerts.** A blackout, a city short of water, oxygen, food or materials, buildings that cannot
+  run (and why), and a dust storm on its way pop up at the top right as they happen. Urgent ones
+  (a blackout, people going without) come first and stay longer. Click one to go there: down to
+  the city, with the building selected and in the middle of the view.
+- **The Alerts button**, beside **Menu**, counts what needs you now and turns red while something
+  is urgent. It lists everything that holds now, and everything that happened since you opened the
+  world: builds and upgrades finished, objectives done. Click any line to go there.
+- **Grouped:** many buildings offline for one reason in one city are one line, for example
+  "12 Greenhouses offline in Ares".
+- **Statistics**, beside **Alerts**: charts of the planet (temperature, pressure, oxygen, ocean,
+  biomass, carbon dioxide, progress, credits and people) over the whole game, and of each city
+  over its last 150 years, including what it made and used of each resource and its power balance.
+- **Each city at a glance.** The Settlements list and the world map show each city's people
+  against its homes, anything running short, and what is being built.
+
+**Changed**
+- The city planner's **Charts** tab adds what the city made and used of each resource.
+- The planet now keeps its own record in your save. A world made before this update starts its
+  record the first time you open it.
+
+**Known issues**
+- What happened is kept only until you leave the world: it starts fresh each time you open it.
+- Alerts make no sound yet.
+- On a very large world, with dozens of cities, an alert can come a few seconds late.
+- In a city, the pop-up messages can cover the Objectives panel while it is open.
+- A new city shows "Spaceport offline" until power reaches it.
+
+---
+
 ## Update 30 - Your first hour
 
 A new Standard world now teaches you to play by doing, one step at a time, and there is always a
@@ -175,3 +210,9 @@ and railways between settlements; and the Example planet.
   its stores.
 - The bar for "The caps let go" moves with the weather, and a dust storm can take it back for a
   while.
+- The **What happened** list in **Alerts** starts fresh each time you open a world.
+- Alerts make no sound yet.
+- On a very large world, with dozens of cities, an alert can come a few seconds late.
+- In a city, the pop-up messages can cover the Objectives panel while it is open.
+- The statistics' charts show each line's latest value in their key; there is no reading under the
+  pointer.
