@@ -126,6 +126,39 @@ describe("a contract met, against the same run failed (Batch 34's exit gate)", (
   });
 });
 
+describe("the pace with Earth (Batch 34, measured)", () => {
+  /** The scripted player to the end of its moments, events off, trading with Earth or not. */
+  const run = (pace: "standard" | "classic", trade: boolean) => {
+    const T = worldTuning("standard", 0, pace);
+    return playPacing(makeTuning({ ...tuningRecord(T), DECISIONS_ENABLED: 0 }), 8 * 3600, true, undefined, { trade });
+  };
+
+  it("at Standard, a player who trades has the city of 1,000 sooner and the planet's Phase 2 sooner, and fails no contract", () => {
+    const plain = run("standard", false);
+    const trader = run("standard", true);
+    // The first ten minutes are Earth's to come: the first building and upgrade are the same.
+    expect(trader.moments.firstBuilding).toBe(plain.moments.firstBuilding);
+    expect(trader.moments.firstUpgrade).toBe(plain.moments.firstUpgrade);
+    // Measured: the city of 1,000 at 2.05 h against 2.16 h; Phase 2 at 78.5 min against 99.2 min (the
+    // credits from Earth buy the planet's levers sooner); 3 contracts met, none failed, by 2.05 h.
+    expect(trader.moments.city1000!).toBeLessThan(plain.moments.city1000!);
+    expect(trader.moments.phase2!).toBeLessThan(plain.moments.phase2!);
+    expect(trader.state.earth.fulfilled).toBeGreaterThanOrEqual(1);
+    expect(trader.state.earth.failed).toBe(0);
+    expect(trader.state.earth.earned + trader.state.earth.rewards).toBeGreaterThan(0);
+  });
+
+  it("at Classic, trading does not hold the city back: the city of 1,000 within 1%", () => {
+    const plain = run("classic", false);
+    const trader = run("classic", true);
+    // Measured: 1.743 h against 1.736 h (25 s later: the materials sold); Phase 2 at 12.4 min both ways
+    // (before the first sale); 14 contracts met, 1 failed.
+    expect(trader.moments.city1000!).toBeLessThan(plain.moments.city1000! * 1.01);
+    expect(trader.moments.phase2).toBe(plain.moments.phase2);
+    expect(trader.state.earth.fulfilled).toBeGreaterThan(trader.state.earth.failed);
+  });
+});
+
 describe("Earth is behind a constant at 0 (Batch 34's exit gate)", () => {
   it("is off by default and in every world made before it; new Standard and Terraformed worlds turn it on, a sandbox does not", () => {
     expect(DEFAULT_TUNING.EARTH_ENABLED).toBe(0);

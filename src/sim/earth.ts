@@ -379,11 +379,27 @@ export function contractPay(kind: ContractKind, t: Tuning): number {
 
 const roundTen = (x: number): number => Math.max(10, Math.round(x / 10) * 10);
 
+/**
+ * A window's span in a city's years: what a city makes between two windows.
+ * The cities' clock runs the same in real time at both paces, the planet's
+ * eight times faster at Classic - so its windows are eight times as close,
+ * and a contract asks for as much as a city makes in a window's span (Batch
+ * 34: sized in materials alone, Classic's contracts failed 23 in an hour).
+ */
+export function windowCityYears(t: Tuning): number {
+  return t.EARTH_SYNODIC_YEARS * t.CITY_CLOCK;
+}
+
 /** Contract `kind` as window k would offer it: its amount (x1 to x2, drawn from the seed), its pay and its window. */
 export function contractFor(s: SimState, k: number, kind: ContractKind, t: Tuning): EarthContract {
   const size = 1 + rand01(s.seed, k, SALT.size);
+  const span = windowCityYears(t);
   const amount =
-    kind === "materials" ? roundTen(t.EARTH_CONTRACT_MATERIALS * size) : kind === "water" ? roundTen(t.EARTH_CONTRACT_WATER * size) : roundTen(researchRate(s, t) * t.EARTH_CONTRACT_RESEARCH_YEARS * size);
+    kind === "materials"
+      ? roundTen(t.EARTH_CONTRACT_MATERIALS_YEAR * span * size)
+      : kind === "water"
+        ? roundTen(t.EARTH_CONTRACT_WATER_YEAR * span * size)
+        : roundTen(researchRate(s, t) * t.EARTH_CONTRACT_RESEARCH_YEARS * size);
   return { id: k, kind, amount, delivered: 0, reward: Math.ceil(amount * contractPay(kind, t)), due: k + t.EARTH_CONTRACT_WINDOWS, accepted: false };
 }
 

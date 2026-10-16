@@ -163,7 +163,7 @@ describe("Earth in the alerts", () => {
   const env = (s: SimState) => habitat(s.reservoirs, derive(s.reservoirs, worldEnv(s, NEUTRAL_ENV, T), T), T, 0);
   const look = (w: AlertWatch, s: SimState, now: number) => w.observe({ state: s, env: env(s), liquidRatePerYear: 0, tuning: T, now });
 
-  it("announces a rocket home, a window missed, a contract met or failed, and a new offer - not a rocket going up", () => {
+  it("announces a rocket home, a window missed, a contract met or failed - not a rocket going up, nor an offer", () => {
     let s = orderFromEarth(ares(), "settlement-1", "food", "buy", 5, T).state;
     const deal = { ...contractFor(s, 0, "water", T), amount: 10_000, due: 1, accepted: true };
     s = { ...s, earth: { ...s.earth, contracts: [deal] } };
@@ -182,10 +182,9 @@ describe("Earth in the alerts", () => {
     expect(home[0]!.text).toBe(recordWords(s.earth.log.at(-1)!, s).text);
     // Nothing new: nothing announced.
     expect(look(w, s, 3000).fresh.filter((a) => a.kind === "earth")).toEqual([]);
-    // An offer (a city with no homes has no people, so it is set here): announced once.
+    // An offer (one comes every window) is the Earth button's to say, not the alerts'.
     s = { ...s, earth: { ...s.earth, offer: contractFor(s, 1, "materials", T) } };
-    expect(look(w, s, 4000).fresh.filter((a) => a.kind === "earth").map((a) => a.title)).toEqual([expect.stringMatching(/^Earth offers a contract: \d+ materials$/)]);
-    expect(look(w, s, 5000).fresh.filter((a) => a.kind === "earth")).toEqual([]);
+    expect(look(w, s, 4000).fresh.filter((a) => a.kind === "earth")).toEqual([]);
   });
 
   it("takes its bearings on opening a world: what already passed is not announced again", () => {

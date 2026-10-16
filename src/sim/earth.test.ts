@@ -289,6 +289,26 @@ describe("orders and the market (Batch 34)", () => {
     expect(worst.sell / now.sell).toBeCloseTo(1 - T.EARTH_REP_PRICE, 12);
   });
 
+  it("never pays more than it asks: a tuning that would let buying and selling back make credits is refused", () => {
+    // As tuned, Earth's best price for what it buys meets its cheapest asking exactly (0.6 of the base price).
+    const best = (1 + T.EARTH_SUPPLY_SWING) * T.EARTH_SELL_SHARE * (1 + T.EARTH_REP_PRICE);
+    const cheapest = (1 - T.EARTH_SUPPLY_SWING) * (1 - T.EARTH_REP_PRICE);
+    expect(best).toBeCloseTo(cheapest, 12);
+    expect(() => validateTuning(makeTuning({ ...T, EARTH_SELL_SHARE: 0.41 }))).toThrow(/pay more than it asks/);
+    expect(() => validateTuning(makeTuning({ ...T, EARTH_SUPPLY_SWING: 0.21 }))).toThrow(/pay more than it asks/);
+    // And, measured on the prices themselves: at full reputation, the dearest window's offer against the cheapest's asking.
+    let at = withEarth(town(), { reputation: 100 });
+    let dearest = 0;
+    let cheapestAsk = Infinity;
+    for (let k = 1; k <= 60; k += 1) {
+      at = upTo(at, windowStep(k, T));
+      const p = earthPrices(at, T).materials;
+      dearest = Math.max(dearest, p.sell);
+      cheapestAsk = Math.min(cheapestAsk, p.buy);
+    }
+    expect(dearest).toBeLessThanOrEqual(cheapestAsk);
+  });
+
   it("forgets EARTH_MARKET_RECOVERY of the trade it remembers at each window", () => {
     const s = order(town(), "materials", "buy", 200);
     const remembered = s.earth.bought.materials;

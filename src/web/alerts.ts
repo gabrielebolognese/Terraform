@@ -25,7 +25,7 @@
 import type { BuildingType, HabitatChannels, MicroResource, Settlement, SettlementStep, SimState, Tuning } from "../sim/index.js";
 import { BUILDING_DEFS, MICRO_RESOURCES, constructionOf, decisionText, eventsBeginningIn, frameOf, objectiveStatus, settlementStep, simYear, submerged, tileKey } from "../sim/index.js";
 import { decisionHeadline, deadlineWords, outcomeWords } from "./decision-words.js";
-import { contractAmount, credits, recordWords } from "./earth-words.js";
+import { recordWords } from "./earth-words.js";
 import { formatDuration } from "./build-time.js";
 import { ALERT_QUIET_MS, STORM_WARN_SECONDS } from "./config.js";
 import { floodWarnings } from "./flood-warning.js";
@@ -384,9 +384,8 @@ export class AlertWatch {
   private ready = new Set<string>();
   /** Batch 33: the events whose resolution has been announced (or was already past on the first look). */
   private resolved = new Set<number>();
-  /** Batch 34: Earth's records announced (or already past on the first look), and the offer last seen. */
+  /** Batch 34: Earth's records announced (or already past on the first look). */
   private earthSeen = new Set<number>();
-  private offerSeen: number | null = null;
   private slice: Slice = { budgetMs: Infinity, clock: () => 0, kept: new Map(), cursor: 0, unseen: new Set(), arrived: new Set() };
 
   observe(input: AlertInput): AlertLook {
@@ -476,8 +475,9 @@ export class AlertWatch {
     if (this.resolved.size > 4 * t.DECISION_LOG) this.resolved = new Set(state.decisions.log.map((r) => r.id));
 
     // Batch 34: what passed between the planet and Earth since the last look - a rocket home, a window missed, a
-    // contract met or failed - and a new offer. A rocket going up is only the Earth panel's record. Each opens
-    // the Earth panel; the first look takes its bearings.
+    // contract met or failed. A rocket going up is only the Earth panel's record, and an offer (one comes every
+    // window) is said by the Earth button, not here: a quiet city says nothing. Each opens the Earth panel; the
+    // first look takes its bearings.
     if (t.EARTH_ENABLED) {
       for (const r of state.earth.log) {
         if (this.earthSeen.has(r.id)) continue;
@@ -487,11 +487,6 @@ export class AlertWatch {
         fresh.push({ key: `earth:${r.id}`, kind: "earth", priority: r.kind === "missed" || r.kind === "failed" ? "notice" : "record", title: words.title, text: words.text, count: 1, target: { kind: "earth" } });
       }
       if (this.earthSeen.size > 4 * t.EARTH_LOG) this.earthSeen = new Set(state.earth.log.map((r) => r.id));
-      const offer = state.earth.offer;
-      if (offer !== null && offer.id !== this.offerSeen && !first) {
-        fresh.push({ key: `earth-offer:${offer.id}`, kind: "earth", priority: "record", title: `Earth offers a contract: ${contractAmount(offer.kind, offer.amount)}`, text: `It pays ${credits(offer.reward)}. Accept it in Earth before the next launch window.`, count: 1, target: { kind: "earth" } });
-      }
-      this.offerSeen = offer?.id ?? this.offerSeen;
     }
 
     for (const o of objectiveStatus(state, t)) {
@@ -518,7 +513,6 @@ export class AlertWatch {
     this.ready.clear();
     this.resolved.clear();
     this.earthSeen.clear();
-    this.offerSeen = null;
     this.slice = { budgetMs: Infinity, clock: () => 0, kept: new Map(), cursor: 0, unseen: new Set(), arrived: new Set() };
   }
 }

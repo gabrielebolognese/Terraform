@@ -702,7 +702,7 @@ EARTH_PRICE_MATERIALS = 4    EARTH_PRICE_WATER = 6         EARTH_PRICE_FOOD = 6 
 EARTH_PRICE_SETTLERS = 30    EARTH_PRICE_ROVERS = 1500     EARTH_SELL_SHARE = 0.4    # settlers and rovers (unlocked by contracts); Earth pays this share of its price
 EARTH_SUPPLY_SWING = 0.2     EARTH_MARKET_DEPTH = 2000     EARTH_MARKET_RECOVERY = 0.5   # supply, either way, per window from the seed; +100% per credits' worth traded; kept per window
 EARTH_REP_START = 50         EARTH_REP_PRICE = 0.25        EARTH_REP_FULFIL = 10     EARTH_REP_FAIL = 20   # reputation 0-100: start; prices at 100 or 0; a contract met; failed
-EARTH_CONTRACT_WINDOWS = 3   EARTH_CONTRACT_MATERIALS = 150  EARTH_CONTRACT_WATER = 40  EARTH_CONTRACT_RESEARCH_YEARS = 3   # due windows on; amounts x1-x2 (research: years of the planet's)
+EARTH_CONTRACT_WINDOWS = 3   EARTH_CONTRACT_MATERIALS_YEAR = 9  EARTH_CONTRACT_WATER_YEAR = 2.4  EARTH_CONTRACT_RESEARCH_YEARS = 3   # due windows on; amounts x1-x2 a city-year of a window's span (Standard 17.1, Classic 2.1); research: the planet's years of it
 EARTH_CONTRACT_PAY_MATERIALS = 4  EARTH_CONTRACT_PAY_WATER = 6  EARTH_CONTRACT_PAY_RESEARCH = 2   # credits a unit, paid when met
 EARTH_WEIGHT_MATERIALS = 1   EARTH_WEIGHT_WATER = 1        EARTH_WEIGHT_RESEARCH = 1
 EARTH_UNLOCK_SETTLERS = 1    EARTH_UNLOCK_ROVERS = 3       EARTH_LOG = 40            # contracts met before Earth sends settlers, rovers; records kept
