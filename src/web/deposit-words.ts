@@ -17,6 +17,14 @@ export const DEPOSIT_NAMES: Readonly<Record<DepositKind, string>> = {
   sun: "Sunny high flat",
 };
 
+/** Many of each, as the placement hint names them: "Ice lenses are marked with ...". */
+const DEPOSIT_PLURALS: Readonly<Record<DepositKind, string>> = {
+  ore: "Ore veins",
+  ice: "Ice lenses",
+  vent: "Geothermal vents",
+  sun: "Sunny high flats",
+};
+
 /** The colour each mark is drawn in, in words, beside its shape. */
 const MARK_COLOURS: Readonly<Record<DepositKind, string>> = {
   ore: "copper",
@@ -38,6 +46,12 @@ export function markWords(kind: DepositKind): string {
   return `a ${MARK_COLOURS[kind]} ${DEPOSIT_MARKS[kind].shape}`;
 }
 
+/** How a deposit's marks are drawn, many of them: "copper diamonds". */
+export function marksWords(kind: DepositKind): string {
+  const shape = DEPOSIT_MARKS[kind].shape;
+  return `${MARK_COLOURS[kind]} ${shape === "cross" ? "crosses" : `${shape}s`}`;
+}
+
 /** One line for a deposit: its name, its mark, and what it gives the building on it as the planet stands. */
 export function depositLine(kind: DepositKind, env: HabitatChannels | null, t: Tuning): string {
   const type = DEPOSIT_BOOSTS[kind];
@@ -54,7 +68,7 @@ export function depositOfType(type: BuildingType): DepositKind | null {
 /** The placement hint's words for a building about to go down: how much of it would stand on its deposit, and what it would make. */
 export function sitingWords(p: { readonly kind: DepositKind; readonly on: number; readonly of: number; readonly factor: number }): string {
   const name = DEPOSIT_NAMES[p.kind].toLowerCase();
-  if (p.on === 0) return ` No ${name} under it: it would make ${factorWords(1)}. ${DEPOSIT_NAMES[p.kind]}s are marked with ${markWords(p.kind)}s.`;
+  if (p.on === 0) return ` No ${name} under it: it would make ${factorWords(1)}. ${DEPOSIT_PLURALS[p.kind]} are marked with ${marksWords(p.kind)}.`;
   const share = p.on === p.of ? `all ${p.of} of its tiles` : `${p.on} of its ${p.of} tiles`;
   return ` On ${name}, ${share}: it would make ${factorWords(p.factor)} ${MAKES[p.kind]}.`;
 }
