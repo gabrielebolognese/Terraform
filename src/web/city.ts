@@ -20,7 +20,7 @@ import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import type { Layer, LinkLayer } from "../sim/index.js";
 import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, NO_ROUTE, buildSeconds, buildYears, cityView, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
-import { isoProject } from "../render/iso.js";
+import { TILE_W, isoProject, isoToGround } from "../render/iso.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, isoToScreen, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
 import type { BuildState } from "./build-time.js";
@@ -384,6 +384,20 @@ export class CityScreen {
 
   get openId(): string | null {
     return this.settlementId;
+  }
+
+  /**
+   * Where the city is heard from (Batch 35): the ground under the middle of
+   * the view, and how far the camera hears - the distance to the side of the
+   * screen, in tiles. Null while the city is not on screen (the planner over
+   * it, the ground still being made).
+   */
+  ear(): { readonly settlement: string; readonly view: CityView; readonly x: number; readonly y: number; readonly radius: number; readonly zoom: number } | null {
+    if (this.camera === null || this.view === null || this.settlementId === null || this.root.hidden || this.preparing !== null) return null;
+    const size = this.viewSize();
+    const g = isoToGround(this.camera.cx, this.camera.cy);
+    const halfW = size.w / 2 / this.camera.zoom;
+    return { settlement: this.settlementId, view: this.view, x: g.x, y: g.y, radius: Math.max(4, halfW / (TILE_W / 2) / Math.SQRT2), zoom: this.camera.zoom };
   }
 
   /** A building is selected, its panel open (the guide's upgrade step asks for one). */

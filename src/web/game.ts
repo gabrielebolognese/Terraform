@@ -28,6 +28,7 @@ import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.
 import { floodWarnings } from "./flood-warning.js";
 import type { FacilityType, HabitatChannels, MicroResource, SettlementKind, SimConfig, SimState, Tuning, VisualChannels } from "../sim/index.js";
 import {
+  BUILDING_DEFS,
   DEFAULT_TUNING,
   FACILITY_LIST,
   NEUTRAL_ENV,
@@ -101,6 +102,9 @@ import { EarthPanel } from "./earth.js";
 import { historyLines } from "./decision-words.js";
 import { StatisticsScreen } from "./statistics.js";
 import { cityOverview, overviewWords } from "./city-overview.js";
+import { SoundDirector } from "./sound-director.js";
+import { SoundEngine } from "./sound-engine.js";
+import { trainCars } from "../render/city.js";
 
 export interface GameOptions {
   readonly state: SimState;
@@ -115,6 +119,8 @@ export interface GameOptions {
   readonly fresh: () => SimState;
   /** The debug setting: every speed, whatever the world's pace (Batch 28). */
   readonly debugSpeeds?: boolean;
+  /** The session's sound (Batch 35). Absent, the world is silent. */
+  readonly sound?: SoundEngine;
 }
 
 export interface GameHooks {
@@ -297,6 +303,13 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   const events = new EventLog();
 
   /**
+   * Sound (Batch 35): the music by the phase, the planet's and the city's
+   * beds, and every action answered. It only reads the world; the engine is
+   * the session's, and silent until the player's first gesture.
+   */
+  const sound = new SoundDirector(options.sound ?? new SoundEngine(() => null), tuning);
+
+  /**
    * The player-facing shell goes first in the DOM; the debug inspector stays
    * below it. Batch 7's gate is that a new player can tell what to do next, and
    * a reservoir table is not that - but the instruments are still how the
@@ -377,6 +390,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       onPlace: (id: string, type: BuildingType, tx: number, ty: number) => {
         const outcome = placeBuilding(state, id, type, tx, ty, tuning, cityEnv ?? undefined);
         state = outcome.state;
+        if (outcome.ok) sound.placed(id, tx, ty, BUILDING_DEFS[type].footprint, BUILDING_DEFS[type].depth);
         return outcome;
       },
       // A dry run of the same call: the returned state is dropped.
@@ -577,7 +591,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     return { ok: outcome.ok, reason: outcome.reason, words: words === "" ? "the reward" : words };
   });
   const milestones = new MilestoneWatch();
-  const cards = new MilestoneCards(root);
+  const cards = new MilestoneCards(root, (m) => sound.milestone(m.kind));
   /**
    * Events that ask for decisions (Batch 33): the card of those waiting, a
    * choice taken through the simulation like a claim. The history goes in
@@ -689,6 +703,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
 
   function freshViews(): void {
     milestones.reset();
+    sound.reset();
     cards.clear();
     decisions.clear();
     earth.clear();
@@ -764,6 +779,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
         alertWatch.reset();
         alertCentre.clear();
         toasts.clear();
+        sound.reset();
         pendingShow = null;
         clock.resync();
       },
@@ -875,6 +891,11 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       else city.frame(here, habitat(state.reservoirs, d, tuning, liquidRate), timestamp, clock.pendingYears * tuning.CITY_CLOCK);
     }
     if (worldMap.isOpen) worldMap.frame(state, habitat(state.reservoirs, d, tuning, liquidRate), timestamp);
+    // Sound (Batch 35): in the city view the camera hears the city; anywhere else, the planet from afar.
+    const ear = resident !== null && planner.openId !== resident ? city.ear() : null;
+    if (ear !== null) sound.city(ear, timestamp, () => trainCars(ear.view, timestamp / 1000));
+    else sound.orbit();
+    sound.engine.frame();
 
     if (timestamp - lastSample >= 1000 / SPARK_HZ) {
       lastSample = timestamp;
@@ -905,6 +926,8 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       // §9's dust channel carries the weather as well as the outgassing.
       const storm = stormIntensity(state.seed, year, tuning);
       visuals = deriveVisuals(state.reservoirs, d, flows, tuning, storm);
+      // The music by the phase, the planet's beds, and what the world did - nothing of it while the example shows.
+      sound.readout({ state, derived: d, storm, seaLevelM: hab.seaLevelM, cues: !example.active });
 
       // The shell's two derived views. Both are pure functions of the world, so
       // neither can drift from it and neither needs a place in the save.
@@ -1012,6 +1035,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
           alertCentre.setHistory(historyLines(state, tuning));
         }
         toasts.push(look.fresh);
+        sound.alerts(look.fresh);
         shortBy = shortagesOf(look.now);
         worldMap.shortages = shortBy;
       }
@@ -1113,6 +1137,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       listening.abort();
       resizeObserver?.disconnect();
       journey.abort();
+      sound.stop();
       globe.dispose();
       city.dispose();
       worldMap.dispose();

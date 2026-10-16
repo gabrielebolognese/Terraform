@@ -13,7 +13,6 @@
 
 import type { BuildingType, Settlement, SimState, Tuning } from "../sim/index.js";
 import { BUILDING_DEFS, BUILD_TIER, PHASE_INFO, constructionOf, objectiveStatus, tileKey } from "../sim/index.js";
-import { chime } from "./chime.js";
 import { settlementLabel } from "./settlement-label.js";
 
 export type MilestoneKind = "phase" | "founded" | "great" | "objective";
@@ -116,7 +115,8 @@ export class MilestoneCards {
   private readonly queue: Milestone[] = [];
   private showingUntil = 0;
 
-  constructor(host: HTMLElement, private readonly sound: (grand: boolean) => void = chime) {
+  /** `sound` is the card's chime (Batch 35: the sound engine's, through the director); none by default. */
+  constructor(host: HTMLElement, private readonly sound: (milestone: Milestone) => void = () => undefined) {
     this.flash = document.createElement("div");
     this.flash.className = "milestone-flash";
     this.flash.setAttribute("aria-hidden", "true");
@@ -167,7 +167,7 @@ export class MilestoneCards {
       void node.offsetWidth;
       node.classList.add("milestone-on");
     }
-    this.sound(next.grand);
+    this.sound(next);
   }
 
   get showing(): string | null {

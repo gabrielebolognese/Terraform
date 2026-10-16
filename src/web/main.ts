@@ -12,6 +12,7 @@ import { App } from "./app.js";
 import { startGame } from "./game.js";
 import { BROWSER_TUNING } from "./game-tuning.js";
 import { openSaveStore } from "./storage.js";
+import { SoundEngine } from "./sound-engine.js";
 import "./style.css";
 
 const root = document.getElementById("app");
@@ -38,6 +39,9 @@ function download(filename: string, text: string): void {
 
 async function start(app: HTMLElement): Promise<void> {
   const store = await openSaveStore();
+  // Batch 35: one sound engine for the session, silent until the player's first click or key.
+  const sound = new SoundEngine();
+  sound.listen(window);
   const front = new App({
     root: app,
     store,
@@ -47,6 +51,7 @@ async function start(app: HTMLElement): Promise<void> {
     buildExample: () => ({ state: examplePlanet(DEFAULT_TUNING, BROWSER_TUNING).state, tuning: BROWSER_TUNING }),
     download,
     debugSpeeds: new URLSearchParams(location.search).has("debug"),
+    sound,
   });
   await front.start();
 }
