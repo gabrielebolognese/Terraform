@@ -19,6 +19,9 @@ import type { HabitatChannels, MicroResource, Route, Settlement, SimState, Tunin
 import { MARS_RADIUS_M, hasCosmetic, keyChunk, routeCost, routeKm, siteElevation } from "../sim/index.js";
 import { settlementLabel, sizeLabel } from "./settlement-label.js";
 import { cityOverview, overviewWords } from "./city-overview.js";
+import type { Settings } from "./settings.js";
+import { DEFAULT_SETTINGS } from "./settings.js";
+import { Pinch, wheelIntent } from "./gestures.js";
 
 /** The world, in world tiles: 2,048 round, 1,024 pole to pole. */
 export const WORLD_TILES_X = 2048;
@@ -136,6 +139,13 @@ export class WorldMapScreen {
   private notice: string | null = null;
   private drag: { x: number; y: number; moved: boolean } | null = null;
   private panelKey = "";
+
+  /** The player's settings (Batch 36): the wheel's way, two fingers. Read as it is used. */
+  prefs: () => Settings = () => DEFAULT_SETTINGS;
+  /** Whether a key press is the menu key (Esc, unless the player moved it). */
+  isMenuKey: (e: KeyboardEvent) => boolean = (e) => e.key === "Escape";
+  /** Two fingers on the map: a pinch zooms. */
+  private readonly pinch = new Pinch();
 
   constructor(
     host: HTMLElement,
@@ -263,10 +273,21 @@ export class WorldMapScreen {
       return { x: e.clientX - r.left, y: e.clientY - r.top };
     };
     c.addEventListener("pointerdown", (e) => {
+      if (this.pinch.down(e)) {
+        this.drag = null;
+        return;
+      }
       const p = local(e);
       this.drag = { x: p.x, y: p.y, moved: false };
     });
     c.addEventListener("pointermove", (e) => {
+      const two = this.pinch.move(e);
+      if (two !== null) {
+        const p = local({ clientX: two.x, clientY: two.y });
+        this.zoomAt(two.factor, p.x, p.y);
+        this.nudge(-two.dx, -two.dy);
+        return;
+      }
       const d = this.drag;
       if (d === null || this.cam === null) return;
       const p = local(e);
@@ -278,7 +299,17 @@ export class WorldMapScreen {
       d.x = p.x;
       d.y = p.y;
     });
+    c.addEventListener("pointercancel", (e) => {
+      this.pinch.up(e);
+      this.drag = null;
+    });
     c.addEventListener("pointerup", (e) => {
+      const pinching = this.pinch.active;
+      this.pinch.up(e);
+      if (pinching) {
+        this.drag = null;
+        return;
+      }
       const d = this.drag;
       this.drag = null;
       if (d !== null && !d.moved) {
@@ -291,7 +322,10 @@ export class WorldMapScreen {
       (e) => {
         e.preventDefault();
         const p = local(e);
-        this.zoomAt(Math.exp(-e.deltaY * 0.0015), p.x, p.y);
+        // Batch 36: the wheel's way, a trackpad's pinch, or two fingers moving the map.
+        const intent = wheelIntent(e, this.prefs().controls);
+        if ("pan" in intent) this.nudge(-intent.pan.dx, -intent.pan.dy);
+        else this.zoomAt(Math.exp(-intent.zoom * 0.0015), p.x, p.y);
       },
       { passive: false },
     );
@@ -299,7 +333,7 @@ export class WorldMapScreen {
   }
 
   private readonly onKey = (e: KeyboardEvent): void => {
-    if (e.key === "Escape" && this.opened && this.joining) {
+    if (this.isMenuKey(e) && this.opened && this.joining) {
       this.joining = false;
       this.panelKey = "";
       this.hint.textContent = "";
@@ -315,6 +349,25 @@ export class WorldMapScreen {
   dispose(): void {
     window.removeEventListener("keydown", this.onKey);
     this.root.remove();
+  }
+
+  /** The keys (Batch 36): move the view by screen pixels - positive is right and down - or zoom about its middle. */
+  nudge(dx: number, dy: number): void {
+    if (this.cam === null) return;
+    this.cam.x += dx / this.cam.scale;
+    this.cam.y += dy / this.cam.scale;
+    this.clampCam();
+  }
+
+  zoomStep(factor: number): void {
+    if (this.cam === null) return;
+    const { w, h } = this.view();
+    this.zoomAt(factor, w / 2, h / 2);
+  }
+
+  /** Where the map's camera stands, for a test to read. */
+  get camera(): { readonly x: number; readonly y: number; readonly scale: number } | null {
+    return this.cam === null ? null : { ...this.cam };
   }
 
   /** Zoom by `factor` about a screen point: from the whole world to a city's chunks, 256 pixels a world tile. */

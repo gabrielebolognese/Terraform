@@ -33,6 +33,11 @@ import { RESOURCE_NAMES, offlineWords } from "./offline-words.js";
 import { formatLatLon, settlementLabel, sizeLabel } from "./settlement-label.js";
 import { happinessWords, needLines } from "./needs-words.js";
 import { crowdAt } from "../render/people.js";
+import type { CityQuality } from "../render/city.js";
+import type { Settings } from "./settings.js";
+import { CHUNK_PIXELS, DEFAULT_SETTINGS } from "./settings.js";
+import type { FrameCosts } from "./frame-costs.js";
+import { Pinch, wheelIntent } from "./gestures.js";
 
 export interface ActionOutcome {
   readonly ok: boolean;
@@ -85,6 +90,9 @@ function linkAt(view: CityView, layer: LinkLayer, i: number): boolean {
 /** How often the panel's numbers are rewritten. The picture animates every frame; text need not. */
 const PANEL_HZ = 4;
 const DRAG_THRESHOLD_PX = 4;
+/** Edge scrolling (Batch 36): how near the side of the view the pointer must rest, and how fast the view then moves at 1x. */
+export const EDGE_PX = 24;
+export const EDGE_SPEED_PX = 700;
 /** How often the city view is re-derived from the settlement, ms. */
 const VIEW_MS = 200;
 /** Milliseconds a frame for making a new city's ground, while it is made. */
@@ -272,11 +280,24 @@ export class CityScreen {
   private viewAt = -Infinity;
   private viewBuildings: Settlement["buildings"] | null = null;
   private viewLinks: readonly unknown[] = [];
+  /** Two fingers on the city (Batch 36): a pinch zooms, and moves the view with it. */
+  private readonly pinch = new Pinch();
+  /** Where the pointer rests over the view, for edge scrolling; null off it. */
+  private pointerAt: { x: number; y: number } | null = null;
+  private lastFrameAt: number | null = null;
+  /** The level of detail the last frame was drawn at. */
+  private drawnQuality: CityQuality | null = null;
 
   constructor(
     host: HTMLElement,
     private readonly hooks: CityHooks,
     private readonly tuning: Tuning,
+    /** The player's settings (Batch 36), read every frame: graphics, the wheel, the edge. Absent, the defaults. */
+    private readonly prefs: () => Settings = () => DEFAULT_SETTINGS,
+    /** Where each frame's cost is kept, for the graphics settings to show. */
+    private readonly costs: FrameCosts | null = null,
+    /** Whether a key press is the menu key (Esc, unless the player moved it). */
+    private readonly isMenuKey: (e: KeyboardEvent) => boolean = (e) => e.key === "Escape",
   ) {
     this.root = el("div", "city");
     this.root.hidden = true;
@@ -618,6 +639,7 @@ export class CityScreen {
       this.hover = null;
     }
     this.origin = view.origin;
+    this.edgeScroll(now);
     this.draw(view, now, size);
     if (now - this.lastPanel >= 1000 / PANEL_HZ) {
       this.lastPanel = now;
@@ -738,7 +760,15 @@ export class CityScreen {
       },
       now: () => performance.now(),
     });
-    this.chunks.draw(view, { ...this.sceneOptions(now), quality: qualityFor(cam, size.w, size.h, view.world.size) }, viewport, k);
+    // Batch 36: the player's detail (or Auto, by what is on screen), their moving details, and how many pictures are kept.
+    const graphics = this.prefs().graphics;
+    const quality = graphics.detail === "auto" ? qualityFor(cam, size.w, size.h, view.world.size) : graphics.detail;
+    this.drawnQuality = quality;
+    const budget = CHUNK_PIXELS[graphics.chunks];
+    if (this.chunks.budget !== budget) this.chunks.budget = budget;
+    const started = performance.now();
+    this.chunks.draw(view, { ...this.sceneOptions(now), quality, effects: graphics.effects }, viewport, k);
+    this.costs?.record(quality, graphics.effects, performance.now() - started);
     this.placeCountdowns(view, cam, size);
   }
 
@@ -1293,6 +1323,12 @@ export class CityScreen {
     const c = this.canvas;
     c.addEventListener("pointerdown", (e) => {
       c.setPointerCapture?.(e.pointerId);
+      // A second finger: a pinch, not a drag, a click or a stroke of the corridor tool.
+      if (this.pinch.down(e)) {
+        this.drag = null;
+        this.painting = null;
+        return;
+      }
       // With a corridor or cable armed, the main button paints; any other still pans.
       if (this.paving !== null && e.button === 0) {
         this.startPainting(this.local(e));
@@ -1302,6 +1338,17 @@ export class CityScreen {
     });
     c.addEventListener("pointermove", (e) => {
       const local = this.local(e);
+      this.pointerAt = local;
+      const two = this.pinch.move(e);
+      if (two !== null) {
+        if (this.camera === null || this.view === null) return;
+        const size = this.viewSize();
+        const rect = this.canvas.getBoundingClientRect();
+        this.camera = zoomAt(this.camera, two.factor, two.x - rect.left, two.y - rect.top, size.w, size.h, this.view.tiles, this.view.world.margin);
+        this.camera = pan(this.camera, two.dx, two.dy, this.view.tiles, this.view.world.margin);
+        return;
+      }
+      if (this.pinch.active) return;
       if (this.painting !== null) this.paint(local);
       if (this.view !== null && this.camera !== null) {
         const size = this.viewSize();
@@ -1322,7 +1369,18 @@ export class CityScreen {
       d.x = e.clientX;
       d.y = e.clientY;
     });
+    c.addEventListener("pointercancel", (e) => {
+      this.pinch.up(e);
+      this.drag = null;
+      this.painting = null;
+    });
     c.addEventListener("pointerup", (e) => {
+      const pinching = this.pinch.active;
+      this.pinch.up(e);
+      if (pinching) {
+        this.drag = null;
+        return;
+      }
       if (this.painting !== null) {
         this.painting = null;
         return;
@@ -1333,6 +1391,7 @@ export class CityScreen {
     });
     c.addEventListener("pointerleave", () => {
       this.hover = null;
+      this.pointerAt = null;
     });
     c.addEventListener(
       "wheel",
@@ -1340,8 +1399,13 @@ export class CityScreen {
         e.preventDefault();
         if (this.camera === null || this.view === null) return;
         const size = this.viewSize();
-        const local = this.local(e);
-        this.camera = zoomAt(this.camera, Math.exp(-e.deltaY * 0.0015), local.x, local.y, size.w, size.h, this.view.tiles, this.view.world.margin);
+        const at = this.local(e);
+        // A wheel that says nothing of where it is zooms about the middle: never a camera lost to NaN.
+        const local = Number.isFinite(at.x) && Number.isFinite(at.y) ? at : { x: size.w / 2, y: size.h / 2 };
+        // Batch 36: the wheel's way, a trackpad's pinch, or two fingers moving the view.
+        const intent = wheelIntent(e, this.prefs().controls);
+        if ("pan" in intent) this.camera = pan(this.camera, intent.pan.dx, intent.pan.dy, this.view.tiles, this.view.world.margin);
+        else this.camera = zoomAt(this.camera, Math.exp(-intent.zoom * 0.0015), local.x, local.y, size.w, size.h, this.view.tiles, this.view.world.margin);
       },
       { passive: false },
     );
@@ -1349,13 +1413,69 @@ export class CityScreen {
   }
 
   private readonly onKey = (e: KeyboardEvent): void => {
-    if (this.settlementId === null || e.key !== "Escape") return;
+    if (this.settlementId === null || !this.isMenuKey(e)) return;
+    this.escape();
+  };
+
+  /** The menu key in a city: put down the tool in hand, or let go of the selection. */
+  escape(): void {
     if (this.claiming) this.armClaim(false);
     else if (this.levelling) this.armLevel(false);
     else if (this.paving !== null) this.armLink(null);
     else if (this.placing !== null) this.arm(null);
     else this.select(null);
-  };
+  }
+
+  /** The keys (Batch 36): move the view by screen pixels - positive is right and down - or zoom about its middle. */
+  nudge(dx: number, dy: number): void {
+    if (this.camera === null || this.view === null) return;
+    this.camera = pan(this.camera, -dx, -dy, this.view.tiles, this.view.world.margin);
+  }
+
+  zoomStep(factor: number): void {
+    if (this.camera === null || this.view === null) return;
+    const size = this.viewSize();
+    this.camera = zoomAt(this.camera, factor, size.w / 2, size.h / 2, size.w, size.h, this.view.tiles, this.view.world.margin);
+  }
+
+  /** The Upgrade key: the selected building, as its Upgrade button does. */
+  upgradeSelection(): void {
+    if (this.selected !== null && !this.upgradeButton.hidden && !this.upgradeButton.disabled) this.upgradeSelected();
+  }
+
+  /** The camera, for a test to read. */
+  get cameraNow(): CityCamera | null {
+    return this.camera;
+  }
+
+  /** The level of detail the last frame was drawn at. */
+  get quality(): CityQuality | null {
+    return this.drawnQuality;
+  }
+
+  /** The pictures' budget, in pixels. */
+  get pictureBudget(): number | null {
+    return this.chunks?.budget ?? null;
+  }
+
+  /**
+   * Edge scrolling (Batch 36): with the pointer resting within EDGE_PX of the
+   * view's side, the view moves that way, at the player's camera speed.
+   */
+  private edgeScroll(now: number): void {
+    const last = this.lastFrameAt;
+    this.lastFrameAt = now;
+    const controls = this.prefs().controls;
+    const at = this.pointerAt;
+    if (!controls.edgeScroll || at === null || last === null || this.drag !== null || this.painting !== null || this.pinch.active) return;
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    const size = this.viewSize();
+    const dx = at.x < EDGE_PX ? -1 : at.x > size.w - EDGE_PX ? 1 : 0;
+    const dy = at.y < EDGE_PX ? -1 : at.y > size.h - EDGE_PX ? 1 : 0;
+    if (dx === 0 && dy === 0) return;
+    const step = EDGE_SPEED_PX * controls.cameraSpeed * dt;
+    this.nudge(dx * step, dy * step);
+  }
 
   /** Leaving the world (Batch 27): the window listener goes, so nothing holds this screen or its caches. */
   dispose(): void {

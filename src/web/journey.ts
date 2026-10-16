@@ -10,6 +10,7 @@
 import type { Pose, Travel } from "./travel.js";
 import { IN_ORBIT, goTo, goToOrbit, residentCity, step, travelPose } from "./travel.js";
 import type { Transition } from "./travel.js";
+import { TRAVEL_MS } from "./config.js";
 
 export interface JourneyHost {
   /** Load a settlement's scene and show it; the orbit view steps aside. */
@@ -31,6 +32,8 @@ export class Journey {
   constructor(
     private readonly host: JourneyHost,
     private readonly siteOf: (id: string) => { lat: number; lon: number } | null,
+    /** Each camera move's length, ms (Batch 36: 0 with reduced motion - a cut, not a flight). */
+    private readonly duration: () => number = () => TRAVEL_MS,
   ) {}
 
   get phase(): Travel["phase"] {
@@ -60,9 +63,10 @@ export class Journey {
 
   /** Once per animation frame: finish whatever finished, and pose the camera. */
   frame(now: number): void {
-    this.apply(step(this.travel, now));
+    const ms = this.duration();
+    this.apply(step(this.travel, now, ms));
     if (this.home === null) return;
-    const pose = travelPose(this.travel, now, this.home, this.siteOf);
+    const pose = travelPose(this.travel, now, this.home, this.siteOf, ms);
     if (pose !== null) this.host.pose(pose);
     else if (this.travel.phase === "orbit") {
       // Back where the player left it: the globe is theirs again.

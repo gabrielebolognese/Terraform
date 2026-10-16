@@ -108,6 +108,21 @@ import { trainCars } from "../render/city.js";
 import type { Settings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import type { FrameCosts } from "./frame-costs.js";
+import type { ActionId } from "./keys.js";
+import { actionFor, baseCode, chordOf, isWaitingForKey, typing } from "./keys.js";
+import { reducedMotion } from "./interface.js";
+import { TRAVEL_MS } from "./config.js";
+
+/**
+ * The keys' camera (Batch 36), at a camera speed of 1x: screen pixels a
+ * second in a city, the planner and the map; radians a second in orbit; and
+ * a zoom key's step.
+ */
+export const KEY_PAN_PX = 600;
+export const KEY_TURN_RAD = 1.2;
+export const KEY_ZOOM_STEP = 1.25;
+/** How long "Saved." stays after the Save key, ms. */
+const SAVED_NOTE_MS = 2500;
 
 export interface GameOptions {
   readonly state: SimState;
@@ -159,12 +174,25 @@ export interface GameHandle {
   /** Hold the world still behind the menu, and let it go again at the speed it had. */
   setPaused(paused: boolean): void;
   stop(): void;
+  /** The views, read-only, for a test to look at (Batch 36): the city, the planner, the map, the planet. */
+  readonly views: { readonly city: CityScreen; readonly planner: PlannerScreen; readonly worldMap: WorldMapScreen; readonly globe: Globe };
 }
 
 export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHooks): GameHandle {
   const tuning = options.tuning;
   let state: SimState = options.state;
   let speed: Speed = 1;
+  /** The player's settings, as they are now (Batch 36): every view reads them as it goes. */
+  const prefs = (): Settings => options.settings?.current ?? DEFAULT_SETTINGS;
+  /** The menu key: Esc, unless the player moved it - never while typing. */
+  const isMenuKey = (e: KeyboardEvent): boolean => {
+    const chord = chordOf(e);
+    return actionFor(prefs().controls.keys, chord) === "menu" && !typing(e.target, chord) && !isWaitingForKey();
+  };
+  /** The speed the menu held the world from: non-null while the menu is open. */
+  let pausedFrom: Speed | null = null;
+  /** The speed the Pause key goes back to. */
+  let resumeSpeed: Speed = 1;
   /** What this world offers (Batch 28): a Standard world's are slow, a sandbox's all. */
   const speeds = speedsFor(tuning, options.debugSpeeds === true);
   let droppedYears = 0;
@@ -246,6 +274,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   const stage = document.createElement("div");
   stage.className = "stage";
   const globe = new Globe(stage);
+  globe.prefs = prefs;
   globe.setTerrain(tuning.TERRAIN_SEED);
   const instrumentsToggle = document.createElement("button");
   instrumentsToggle.type = "button";
@@ -354,19 +383,174 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
    * it bring up the world's menu (Batch 27). In a city, Escape is the city's
    * (it clears a selection); the Menu button is there for the menu.
    */
+  /** The camera keys held down (Batch 36): each frame moves the view while they are. */
+  const held = new Set<ActionId>();
+  /** The bound key each held action came from, so its release lets go. */
+  const heldBy = new Map<ActionId, string>();
+  const CAMERA_KEYS: readonly ActionId[] = ["panUp", "panLeft", "panDown", "panRight"];
   window.addEventListener(
     "keydown",
     (e) => {
-      if (e.key !== "Escape") return;
-      if (founding !== null) {
-        cancelFounding();
+      const chord = chordOf(e);
+      const action = actionFor(prefs().controls.keys, chord);
+      // The Settings panel waiting for a key to bind takes this one.
+      if (action === null || typing(e.target, chord) || isWaitingForKey()) return;
+      // The menu over the world takes no shortcut but its own key and Save.
+      if (pausedFrom !== null && action !== "menu" && action !== "save") return;
+      if (action === "menu") {
+        if (founding !== null) {
+          cancelFounding();
+          return;
+        }
+        const idle = !travelPrompt.open && journey.phase === "orbit" && journey.resident === null && !worldMap.busy;
+        if (idle) hooks.onMenu();
         return;
       }
-      const idle = !travelPrompt.open && journey.phase === "orbit" && journey.resident === null && !worldMap.busy;
-      if (idle) hooks.onMenu();
+      e.preventDefault();
+      if (CAMERA_KEYS.includes(action)) {
+        held.add(action);
+        heldBy.set(action, baseCode(chord!));
+        return;
+      }
+      if (action === "zoomIn" || action === "zoomOut") {
+        zoomKey(action === "zoomIn" ? KEY_ZOOM_STEP : 1 / KEY_ZOOM_STEP);
+        return;
+      }
+      if (e.repeat) return;
+      command(action);
     },
     { signal, capture: true },
   );
+  window.addEventListener(
+    "keyup",
+    (e) => {
+      for (const [action, code] of heldBy) {
+        if (code === e.code) {
+          held.delete(action);
+          heldBy.delete(action);
+        }
+      }
+    },
+    { signal },
+  );
+  // A key let go while the page was elsewhere is never heard: nothing stays held.
+  window.addEventListener(
+    "blur",
+    () => {
+      held.clear();
+      heldBy.clear();
+    },
+    { signal },
+  );
+
+  /** Where the camera keys go: the city, the planner, the map, or the planet. */
+  function cameraTarget(): { nudge(dx: number, dy: number): void; zoomStep(f: number): void } | "globe" | null {
+    const resident = journey.resident;
+    if (resident !== null) return planner.openId === resident ? planner : city;
+    if (worldMap.isOpen) return worldMap;
+    return journey.phase === "orbit" ? "globe" : null;
+  }
+
+  function zoomKey(factor: number): void {
+    const target = cameraTarget();
+    if (target === "globe") globe.zoomStep(factor);
+    else target?.zoomStep(factor);
+  }
+
+  /** Each frame: the held camera keys move the view, at the player's camera speed. */
+  let lastCameraAt: number | null = null;
+  function cameraKeys(now: number): void {
+    const last = lastCameraAt;
+    lastCameraAt = now;
+    if (held.size === 0 || last === null || pausedFrom !== null) return;
+    const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
+    const x = (held.has("panRight") ? 1 : 0) - (held.has("panLeft") ? 1 : 0);
+    const y = (held.has("panDown") ? 1 : 0) - (held.has("panUp") ? 1 : 0);
+    if (x === 0 && y === 0) return;
+    const k = prefs().controls.cameraSpeed * dt;
+    const target = cameraTarget();
+    if (target === "globe") globe.turnBy(x * KEY_TURN_RAD * k, y * KEY_TURN_RAD * k);
+    else target?.nudge(x * KEY_PAN_PX * k, y * KEY_PAN_PX * k);
+  }
+
+  /** A key's action, as its button would do it. */
+  function command(action: ActionId): void {
+    const resident = journey.resident;
+    const moving = journey.phase !== "orbit" && resident === null;
+    switch (action) {
+      case "pause":
+        if (speed !== 0) {
+          resumeSpeed = speed;
+          setSpeed(0);
+        } else setSpeed(speeds.includes(resumeSpeed) && resumeSpeed !== 0 ? resumeSpeed : speeds.find((s) => s !== 0) ?? 1);
+        return;
+      case "speed1":
+      case "speed2":
+      case "speed3":
+      case "speed4": {
+        const next = speeds.filter((s) => s !== 0)[Number(action.slice(5)) - 1];
+        if (next !== undefined) setSpeed(next);
+        return;
+      }
+      case "save":
+        void hooks.saveNow?.().then((said) => sayBriefly(said));
+        return;
+      case "objectives":
+        objectives.toggle.click();
+        return;
+      case "alerts":
+        alertCentre.toggle.click();
+        return;
+      case "statistics":
+        statistics.toggle.click();
+        return;
+      case "earth":
+        earth.toggle.click();
+        return;
+      case "worldMap":
+        if (moving) return;
+        if (worldMap.isOpen) worldMap.close();
+        else {
+          if (resident !== null) journey.goToOrbit(performance.now());
+          worldMap.open();
+        }
+        return;
+      case "orbit":
+        if (resident !== null) journey.goToOrbit(performance.now());
+        return;
+      case "planner":
+        if (resident === null) return;
+        if (planner.openId === resident) {
+          planner.close();
+          city.root.hidden = false;
+        } else {
+          planner.open(resident);
+          city.root.hidden = true;
+        }
+        return;
+      case "upgrade":
+        if (resident !== null && planner.openId !== resident) city.upgradeSelection();
+        return;
+      default:
+        return;
+    }
+  }
+
+  /** A word that comes and goes (the Save key's "Saved."). */
+  const savedNote = document.createElement("p");
+  savedNote.className = "game-saved-note";
+  savedNote.setAttribute("role", "status");
+  savedNote.hidden = true;
+  let savedNoteTimer: ReturnType<typeof setTimeout> | null = null;
+  function sayBriefly(words: string): void {
+    if (words === "" || stopped) return;
+    savedNote.textContent = words;
+    savedNote.hidden = false;
+    if (savedNoteTimer !== null) clearTimeout(savedNoteTimer);
+    savedNoteTimer = setTimeout(() => {
+      savedNote.hidden = true;
+    }, SAVED_NOTE_MS);
+  }
 
   const hud: Hud = new Hud(
     hudRoot,
@@ -480,6 +664,9 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       },
     },
     tuning,
+    prefs,
+    options.frameCosts ?? null,
+    isMenuKey,
   );
 
   /**
@@ -502,6 +689,8 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     },
     tuning,
   );
+  worldMap.prefs = prefs;
+  worldMap.isMenuKey = isMenuKey;
 
   /**
    * The city planner (at the user's request), the second mode after the city
@@ -528,6 +717,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     },
     tuning,
   );
+  planner.prefs = prefs;
 
   /**
    * Travel between orbit and a city (micro §1.4, Batch 21). The journey owns
@@ -558,10 +748,13 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       // A settlement lost to the sea is a ruin: there is nothing to go down to.
       return s === undefined || s.lostAtSeaLevelM !== null ? null : { lat: s.lat, lon: s.lon };
     },
+    // Batch 36: with reduced motion, no flight down and up - a cut.
+    () => (reducedMotion(prefs().ui) ? 0 : TRAVEL_MS),
   );
 
   // Micro §1.4: "Player selects a marker and confirms travel."
   const travelPrompt = new TravelPrompt(root);
+  travelPrompt.isMenuKey = isMenuKey;
   globe.onMarker = (id: string) => {
     const s = state.settlements.find((x) => x.id === id);
     if (s === undefined || s.lostAtSeaLevelM !== null || journey.phase !== "orbit" || founding !== null) return;
@@ -1042,8 +1235,11 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
           historyOf = state.decisions.log;
           alertCentre.setHistory(historyLines(state, tuning));
         }
-        toasts.push(look.fresh);
-        sound.alerts(look.fresh);
+        // Batch 36: what pops up (and is heard) is the player's choice; the centre keeps every one.
+        const popups = prefs().ui.popups;
+        const popping = popups === "all" ? look.fresh : popups === "urgent" ? look.fresh.filter((a) => a.priority === "urgent") : [];
+        toasts.push(popping);
+        sound.alerts(popping);
         shortBy = shortagesOf(look.now);
         worldMap.shortages = shortBy;
       }
@@ -1075,6 +1271,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
 
     cards.frame(timestamp);
     toasts.frame(timestamp);
+    cameraKeys(timestamp);
 
     if (example.mayPersist && !options.lookOnly && hooks.saveDue()) {
       hooks.save(state);
@@ -1102,11 +1299,10 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   menuButton.textContent = "Menu";
   menuButton.setAttribute("aria-haspopup", "dialog");
   menuButton.addEventListener("click", () => hooks.onMenu());
-  root.append(menuButton);
+  root.append(menuButton, savedNote);
 
   frameId = requestAnimationFrame(render);
 
-  let pausedFrom: Speed | null = null;
   return {
     get state(): SimState {
       return example.mine(state);
@@ -1129,6 +1325,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     get speed(): Speed {
       return speed;
     },
+    views: { city, planner, worldMap, globe },
     setPaused(paused: boolean): void {
       if (paused && pausedFrom === null) {
         pausedFrom = speed;
@@ -1143,6 +1340,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       stopped = true;
       cancelAnimationFrame(frameId);
       listening.abort();
+      if (savedNoteTimer !== null) clearTimeout(savedNoteTimer);
       resizeObserver?.disconnect();
       journey.abort();
       sound.stop();

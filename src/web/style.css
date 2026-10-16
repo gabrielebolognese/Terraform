@@ -4018,3 +4018,18 @@ button:hover {
 .worldmap canvas {
   touch-action: none;
 }
+
+/* The Save key's word (Batch 36), bottom right above the Menu button, for a moment. */
+.game-saved-note {
+  position: fixed;
+  right: 16px;
+  bottom: 64px;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  z-index: 40;
+}

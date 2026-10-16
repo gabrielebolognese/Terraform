@@ -177,6 +177,8 @@ export class App {
     const stage = el("div", "stage front-stage");
     this.front.prepend(stage);
     this.globe = new Globe(stage);
+    // The player's settings: reduced motion stills it, the wheel zooms their way.
+    this.globe.prefs = () => this.settings.current;
     // Mars as every world begins it, turning slowly.
     this.globe.update(planetLook(marsStart(undefined, BROWSER_TUNING), BROWSER_TUNING));
   }

@@ -16,9 +16,10 @@ import type { ControlSettings } from "./settings.js";
 /** A trackpad pinch's steps are small: this makes one feel like a wheel's notch. */
 export const PINCH_GAIN = 6;
 
-/** A wheel's lines and pages in pixels, for a wheel that counts in them. */
+/** A wheel's lines and pages in pixels, for a wheel that counts in them; a delta that is not a number is none. */
 function pixels(delta: number, mode: number): number {
-  return mode === 1 ? delta * 16 : mode === 2 ? delta * 400 : delta;
+  const d = Number.isFinite(delta) ? delta : 0;
+  return mode === 1 ? d * 16 : mode === 2 ? d * 400 : d;
 }
 
 /**

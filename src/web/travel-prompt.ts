@@ -11,6 +11,9 @@ export class TravelPrompt {
   private readonly go: HTMLButtonElement;
   private pending: (() => void) | null = null;
 
+  /** Whether a key press is the menu key (Batch 36: Esc, unless the player moved it). */
+  isMenuKey: (e: KeyboardEvent) => boolean = (e) => e.key === "Escape";
+
   constructor(host: HTMLElement) {
     this.root = document.createElement("div");
     this.root.className = "travel-prompt";
@@ -38,7 +41,7 @@ export class TravelPrompt {
   }
 
   private readonly onKey = (e: KeyboardEvent): void => {
-    if (e.key === "Escape" && !this.root.hidden) this.close();
+    if (this.isMenuKey(e) && !this.root.hidden) this.close();
   };
 
   /** Leaving the world (Batch 27). */
