@@ -13,6 +13,10 @@ import type { Tuning } from "../tuning.js";
 import { DEFAULT_TUNING } from "../tuning.js";
 import type { Settlement, SettlementKind, SimState } from "../types.js";
 import { metropolisAllowed } from "../objectives.js";
+import { derive } from "../derive.js";
+import { habitat } from "../habitat.js";
+import { siteElevation } from "../hypsometry.js";
+import { NEUTRAL_ENV } from "../types.js";
 import { NAME_MAX, foundingBuildings, newSettlement } from "./settlement.js";
 import { wrapLongitude } from "./space.js";
 
@@ -68,6 +72,11 @@ export function foundSettlement(
   if (Math.abs(lat) > Math.PI / 2) return refuse("That latitude is past a pole.");
   // Batch 30: with objectives on, a metropolis is the reward of "A city of 1,000".
   if (kind === "metropolis" && !metropolisAllowed(state, t)) return refuse("A metropolis is unlocked by the objective \"A city of 1,000\".");
+  // Batch 38: in a world the sea floods, no city is founded under it - it would be lost on its first day.
+  if (t.FLOODING_ENABLED && !t.SANDBOX_ENABLED) {
+    const env = habitat(state.reservoirs, derive(state.reservoirs, NEUTRAL_ENV, t), t, 0);
+    if (env.oceanFraction > 0 && siteElevation(lat, lon, t) < env.seaLevelM) return refuse("The sea covers that place.");
+  }
 
   // Founding builds nothing, but it does land the section 2.3 step 2 stock.
   // With the headquarters on, a settlement lands with it (and a city with one spaceport).

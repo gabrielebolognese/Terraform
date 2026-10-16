@@ -1,8 +1,13 @@
 /**
  * Detail doc §4.2 and §4.3 - the flood model (Batch 24).
  *
- *   flood_depth = sea_level_m - effective_base        (no dikes yet: Batch 28)
- *   tile_flooded(tx, ty) = sea_level_m > base_elev_m + local_height[tx][ty]
+ *   effective_base = base_elev_m + dike_height        (Batch 38: a city's Seawall)
+ *   flood_depth = sea_level_m - effective_base
+ *   tile_flooded(tx, ty) = sea_level_m > effective_base + local_height[tx][ty]
+ *
+ * §4.2 writes the tile rule against the bare base, but a dike that kept no
+ * tile dry would hold nothing back: "dikes raise the datum", so every rule
+ * here - tiles, states, losses, the forecast - reads the effective base.
  *
  * Four states by `flood_depth`: dry, warning (within FLOOD_WARN_MARGIN_M
  * below the base), partial (0 to FLOOD_THRESHOLD_M above it) and flooded -
@@ -29,6 +34,7 @@ import type { Tuning } from "../tuning.js";
 import type { PlacedBuilding, Reservoirs, Settlement } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { siteGround } from "./rocks.js";
+import { tileKey } from "./space.js";
 
 export type FloodState = "dry" | "warning" | "partial" | "flooded";
 
@@ -36,6 +42,8 @@ export interface FloodReading {
   readonly state: FloodState;
   /** The settlement's base elevation on the planet, metres (detail §1.1). */
   readonly baseM: number;
+  /** §4.2's `dike_height`, metres (Batch 38): the effective base is `baseM + dikeM`. */
+  readonly dikeM: number;
   /** The waterline, metres, or null when there is no sea. */
   readonly seaM: number | null;
   /** `seaM - baseM`, or null when there is no sea. */
@@ -48,21 +56,39 @@ export interface FloodReading {
   readonly wet: readonly boolean[] | null;
 }
 
-const DRY_FAR: Omit<FloodReading, "baseM"> = { state: "dry", seaM: null, depthM: null, wet: null };
+const DRY_FAR: Omit<FloodReading, "baseM" | "dikeM"> = { state: "dry", seaM: null, depthM: null, wet: null };
+
+/**
+ * §4.2's `dike_height` (Batch 38): DIKE_M_PER_LEVEL for each level of the
+ * city's Seawall, standing and built - a worksite holds nothing back yet, and
+ * an upgrade counts once its rover is home. One Seawall a city; were there
+ * more, the highest would be the city's.
+ */
+export function dikeHeightM(s: Settlement, t: Tuning): number {
+  let level = 0;
+  for (const b of s.buildings) {
+    if (b.type !== "seawall" || b.level <= level) continue;
+    const key = tileKey(b.tx, b.ty);
+    const rising = s.jobs.some((j) => j.kind === "build" && !j.upgrade && j.tile === key) || s.buildQueue.some((q) => !q.upgrade && q.tile === key);
+    if (!rising) level = b.level;
+  }
+  return level * t.DIKE_M_PER_LEVEL;
+}
 
 /** The flood as it stands for a settlement: derived, never stored. */
 export function floodReading(s: Settlement, env: HabitatChannels, t: Tuning): FloodReading {
   const baseM = siteElevation(s.lat, s.lon, t);
-  if (!t.FLOODING_ENABLED || !(env.oceanFraction > 0)) return { ...DRY_FAR, baseM };
+  if (!t.FLOODING_ENABLED || !(env.oceanFraction > 0)) return { ...DRY_FAR, baseM, dikeM: 0 };
+  const dikeM = dikeHeightM(s, t);
   const seaM = env.seaLevelM;
-  const depthM = seaM - baseM;
+  const depthM = seaM - (baseM + dikeM);
   const state: FloodState =
     depthM >= t.FLOOD_THRESHOLD_M ? "flooded" : depthM >= 0 ? "partial" : depthM >= -t.FLOOD_WARN_MARGIN_M ? "warning" : "dry";
   // Tiles can only be wet if the sea is above the lowest ground the relief allows.
-  if (depthM <= -Math.max(0, t.TERRAIN_RELIEF_M)) return { state, baseM, seaM, depthM, wet: null };
+  if (depthM <= -Math.max(0, t.TERRAIN_RELIEF_M)) return { state, baseM, dikeM, seaM, depthM, wet: null };
   // The ground as the rovers have left it: a levelled tile floods at its level.
   const ground = siteGround(s, t);
-  return { state, baseM, seaM, depthM, wet: ground.heightM.map((h) => seaM > baseM + h) };
+  return { state, baseM, dikeM, seaM, depthM, wet: ground.heightM.map((h) => seaM > baseM + dikeM + h) };
 }
 
 /** The tiles of a building's footprint that lie on the grid, as row-major indices. */
@@ -90,10 +116,11 @@ export function submerged(b: PlacedBuilding, reading: FloodReading): boolean {
  * Apply the flood's consequences: the true state it changes. A settlement
  * declared flooded loses everything and records the sea level it fell at; a
  * building with water FLOOD_BUILDING_LOSS_M over its highest tile is lost.
- * Everything else is left exactly as it was.
+ * Everything else is left exactly as it was - and so is all of it while the
+ * city's grace runs (Batch 38): a city found under the sea is warned first.
  */
 export function applyFlood(s: Settlement, reading: FloodReading, t: Tuning): Settlement {
-  if (s.lostAtSeaLevelM !== null || reading.seaM === null) return s;
+  if (s.lostAtSeaLevelM !== null || reading.seaM === null || s.floodGraceYears > 0) return s;
   if (reading.state === "flooded") {
     return {
       ...s,
@@ -106,11 +133,16 @@ export function applyFlood(s: Settlement, reading: FloodReading, t: Tuning): Set
   if (reading.wet === null) return s;
   const ground = siteGround(s, t);
   const sea = reading.seaM;
+  // Written as Batch 24 wrote it, the dike added in: with none, the same comparison to the bit.
+  const datum = reading.baseM + reading.dikeM;
   const kept = s.buildings.filter((b) => {
+    // The Seawall (Batch 38) is what the water is held against: it stands until the city falls. Taken by the water
+    // over its own ground, a wall on low ground took the dike with it and the city fell at once (measured).
+    if (b.type === "seawall") return true;
     const under = footprintIndices(b, ground.tiles);
     if (under.length === 0) return true;
     const highest = Math.max(...under.map((i) => ground.heightM[i] ?? 0));
-    return !(sea > reading.baseM + highest + t.FLOOD_BUILDING_LOSS_M);
+    return !(sea > datum + highest + t.FLOOD_BUILDING_LOSS_M);
   });
   return kept.length === s.buildings.length ? s : { ...s, buildings: kept };
 }
@@ -134,11 +166,17 @@ export function applyFlood(s: Settlement, reading: FloodReading, t: Tuning): Set
 export interface FloodForecast {
   readonly yearsToBase: number | null;
   readonly yearsToDestroy: number | null;
+  /**
+   * Batch 38: planet sim-years the city's grace still holds the sea off - the
+   * sea takes nothing of it until they are spent - or 0 with none.
+   */
+  readonly graceYears: number;
 }
 
 export function floodForecast(s: Settlement, r: Reservoirs, liquidRatePerYear: number, t: Tuning): FloodForecast | null {
   if (!t.FLOODING_ENABLED || s.lostAtSeaLevelM !== null) return null;
-  const baseM = siteElevation(s.lat, s.lon, t);
+  // The effective base (Batch 38): the Seawall's height is height the sea must climb.
+  const baseM = siteElevation(s.lat, s.lon, t) + dikeHeightM(s, t);
   // The most of the planet the sea can cover: its saturation, and what the ice leaves it.
   const most = Math.min(t.OCEAN_FRAC_MAX, 1 - clamp01(iceFracRaw(r, t)));
   const liquid = Math.max(0, r.h2o_liq);
@@ -150,7 +188,8 @@ export function floodForecast(s: Settlement, r: Reservoirs, liquidRatePerYear: n
     if (!Number.isFinite(need) || !(liquidRatePerYear > 0)) return null;
     return (need - liquid) / liquidRatePerYear;
   };
-  return { yearsToBase: yearsTo(baseM), yearsToDestroy: yearsTo(baseM + t.FLOOD_THRESHOLD_M) };
+  // The grace counts the city's years (CITY_CLOCK of them to the planet's).
+  return { yearsToBase: yearsTo(baseM), yearsToDestroy: yearsTo(baseM + t.FLOOD_THRESHOLD_M), graceYears: s.floodGraceYears / t.CITY_CLOCK };
 }
 
 /**

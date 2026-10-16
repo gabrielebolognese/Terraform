@@ -79,7 +79,7 @@ import { NO_GOODS, SELLABLE, emptyEarth } from "./earth.js";
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 19;
+export const SAVE_SCHEMA_VERSION = 20;
 
 export interface SavedFacility {
   readonly type: string;
@@ -209,6 +209,13 @@ export interface SavedSettlement {
   readonly extra_rovers?: number;
   /** Added in v18 (Batch 33): what answered events leave on the city - sheltering, a quarantine, a fault. */
   readonly effects?: readonly { readonly kind: string; readonly tile: number | null; readonly factor: number; readonly remaining: number; readonly event: number }[];
+  /**
+   * Added in v20 (Batch 38, flood defences): city-years the sea still takes
+   * nothing of it - the grace of a city carried forward from before - and
+   * whether its people were evacuated from the sea.
+   */
+  readonly flood_grace_years?: number;
+  readonly evacuated?: boolean;
 }
 
 /**
@@ -299,6 +306,8 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       build_queue: s.buildQueue.map((q) => ({ tile: q.tile, upgrade: q.upgrade, paid: q.paid })),
       extra_rovers: s.extraRovers,
       effects: s.effects.map((e) => ({ kind: e.kind, tile: e.tile, factor: e.factor, remaining: e.remaining, event: e.event })),
+      flood_grace_years: s.floodGraceYears,
+      evacuated: s.evacuated,
       planned: s.planned.map((p) => ({ layer: p.layer, tile: p.tile })),
       history: {
         acc: {
@@ -446,7 +455,31 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   // v18 -> v19: Earth (Batch 34). Nothing traded, nothing offered: a world made before it has Earth off in its
   // recorded tuning, so this is what it keeps.
   if (version < 19) current = migrateV18toV19(current, t);
+  // v19 -> v20: flood defences (Batch 38). Every city standing in a save made before them is given its grace: it
+  // may stand under the sea already, and is warned before the sea takes anything. None had been evacuated.
+  if (version < 20) current = migrateV19toV20(current, t);
   return current;
+}
+
+/**
+ * v19 -> v20: each settlement standing is given FLOOD_GRACE_YEARS (GAME_PLAN
+ * Batch 38: "A city found already under the sea on loading is given a grace
+ * period, warned, not lost on the first substep"); a ruin, none. Whether the
+ * world floods is its recorded tuning's - a world made before flooding keeps
+ * it off - so the grace guards every path that could bring an old city under
+ * the sea, and counts down harmlessly where none does.
+ */
+function migrateV19toV20(save: Record<string, unknown>, t: Tuning): Record<string, unknown> {
+  const list = save["settlements"];
+  const settlements = Array.isArray(list)
+    ? list.map((raw) => {
+        if (typeof raw !== "object" || raw === null) return raw;
+        const r = raw as Record<string, unknown>;
+        const standing = r["lost_at_sea_level_m"] === null || r["lost_at_sea_level_m"] === undefined;
+        return { ...r, flood_grace_years: standing ? t.FLOOD_GRACE_YEARS : 0, evacuated: false };
+      })
+    : list;
+  return { ...save, schema_version: 20, settlements };
 }
 
 /** v18 -> v19: Earth as a world starts it - the starting reputation, nothing ordered, away, offered or recorded. */
@@ -1164,7 +1197,12 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     const under = underBuildings(buildings);
     const extraRovers = numberAt(s, "extra_rovers", `${where}.extra_rovers`);
     if (!Number.isInteger(extraRovers) || extraRovers < 0) throw new SaveError(`${where}.extra_rovers must be a whole number >= 0, got ${extraRovers}`);
-    let settled: Settlement = { ...standing, cleared, jobs, rails: readKeys(s, "rails", where, "railway", under), ...readPlanner(s, where), extraRovers, effects: readEffects(s, where) };
+    // v20: the grace left (a ruin needs none) and whether its people were evacuated.
+    const floodGraceYears = numberAt(s, "flood_grace_years", `${where}.flood_grace_years`);
+    if (floodGraceYears < 0) throw new SaveError(`${where}.flood_grace_years is negative (${floodGraceYears})`);
+    const evacuated = s["evacuated"];
+    if (typeof evacuated !== "boolean") throw new SaveError(`${where}.evacuated must be true or false, got ${describe(evacuated)}`);
+    let settled: Settlement = { ...standing, cleared, jobs, rails: readKeys(s, "rails", where, "railway", under), ...readPlanner(s, where), extraRovers, effects: readEffects(s, where), floodGraceYears: lostAtSeaLevelM === null ? floodGraceYears : 0, evacuated };
     // v8: corridors and cables; null only for a settlement carried forward from v6.
     for (const layer of LAYERS) {
       settled = { ...settled, [layer]: s[layer] === null ? [] : readKeys(s, layer, where, LINK_WORDS[layer], under) };
@@ -1369,8 +1407,13 @@ function readJobs(s: Record<string, unknown>, where: string): readonly Settlemen
       const work = numberAt(job, "work", `${at}.work`);
       if (materials < 0) throw new SaveError(`${at}.materials is negative (${materials})`);
       if (work < 0 || work > total) throw new SaveError(`${at}.work ${work} is outside its ${total}-year trip`);
-      // v10: a rover levelling its tile carries the level.
-      if (job["levelM"] !== undefined) return { kind, tile, total, remaining, materials, work, levelM: numberAt(job, "levelM", `${at}.levelM`), ...routed };
+      // v10: a rover levelling its tile carries the level; v20, a rover terracing a footprint carries its size too.
+      if (job["levelM"] !== undefined) {
+        const levelM = numberAt(job, "levelM", `${at}.levelM`);
+        if (job["area"] === undefined) return { kind, tile, total, remaining, materials, work, levelM, ...routed };
+        const area = asRecord(job["area"], `${at}.area`);
+        return { kind, tile, total, remaining, materials, work, levelM, area: { w: wholeAt(area, "w", `${at}.area.w`, 1), d: wholeAt(area, "d", `${at}.area.d`, 1) }, ...routed };
+      }
       return { kind, tile, total, remaining, materials, work, ...routed };
     }
     throw new SaveError(`${at}.kind must be "rover", "rocket" or "build", got ${describe(kind)}`);

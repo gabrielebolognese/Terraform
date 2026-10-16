@@ -133,6 +133,7 @@ export const BUILD_TIER: Readonly<Record<BuildingType, BuildTier>> = {
   biosphere: "great",
   mega_mall: "great",
   headquarters: "great",
+  seawall: "great",
 };
 
 /** Level 1's work at the site, real seconds at 1x (Batch 28's curve). */
@@ -166,6 +167,7 @@ export function buildBaseSeconds(type: BuildingType, t: Tuning): number {
     biosphere: t.BUILD_SECONDS_BIOSPHERE,
     mega_mall: t.BUILD_SECONDS_MEGA_MALL,
     headquarters: t.BUILD_SECONDS_SPACEPORT,
+    seawall: t.BUILD_SECONDS_SEAWALL,
   };
   return seconds[type];
 }
@@ -230,6 +232,7 @@ function flatBuildYears(type: BuildingType, t: Tuning): number {
     park: t.BUILD_YEARS_PARK,
     biosphere: t.BUILD_YEARS_BIOSPHERE,
     headquarters: t.BUILD_YEARS_SPACEPORT,
+    seawall: t.BUILD_YEARS_SEAWALL,
   };
   return years[type];
 }
@@ -251,6 +254,8 @@ export const UNLOCKED = (): string | null => null;
 const windLocked = (env: HabitatChannels, t: Tuning): string | null =>
   env.pressure >= t.WIND_MIN_PRESSURE ? null : `the air is too thin to turn a turbine - ${Math.round(env.pressure)} mbar, it needs ${t.WIND_MIN_PRESSURE}`;
 /** Open air over enough of the planet for a park. */
+/** A world whose sea floods nothing has nothing for a seawall to hold back (Batch 38). */
+const seawallLocked = (_env: HabitatChannels, t: Tuning): string | null => (t.FLOODING_ENABLED ? null : "the sea floods nothing in this world");
 const parkLocked = (env: HabitatChannels, t: Tuning): string | null =>
   env.openAirFraction >= t.PARK_MIN_OPEN_AIR
     ? null
@@ -735,6 +740,24 @@ const RAW: Readonly<Record<BuildingType, DefIn>> = {
     planetaryCo2: ZERO,
     canOperate: ALWAYS,
     efficiency: ONE,
+  },
+  seawall: {
+    type: "seawall",
+    name: "Seawall",
+    summary: "A wall against the rising sea: each level raises how high the sea must climb before it floods the city. One a city; upgrade it to raise it.",
+    footprint: 3,
+    depth: 1,
+    buildable: true,
+    kinds: BOTH,
+    cost: (t) => t.COST_SEAWALL,
+    consumes: NONE,
+    produces: NONE,
+    housing: ZERO,
+    capacity: NONE,
+    planetaryCo2: ZERO,
+    canOperate: ALWAYS,
+    efficiency: ONE,
+    locked: seawallLocked,
   },
 };
 

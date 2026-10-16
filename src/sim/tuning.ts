@@ -805,6 +805,31 @@ export const BASE_TUNING = Object.freeze({
    * 20 m in weeks. Measured in the Batch 25 note.
    */
   FLOOD_ALERT_YEARS: 50,
+  /**
+   * §4.5's dike (Batch 38): each level of a city's Seawall raises its datum -
+   * `effective_base = base_elev_m + dike_height` (§4.2) - by this many metres.
+   * Every flood rule reads the effective base: the tiles under water, the
+   * states, the loss of a building and of the city, the forecast. One Seawall
+   * a city; its highest level, built, is its dike.
+   */
+  DIKE_M_PER_LEVEL: 4,
+  COST_SEAWALL: 200,
+  BUILD_YEARS_SEAWALL: 0.4,
+  BUILD_SECONDS_SEAWALL: 240,
+  /**
+   * The guard for a city found under the sea (Batch 38): city-years in which
+   * the sea takes nothing of a settlement carried forward from a save made
+   * before flooding was on. 36 is 20 real minutes at 1x in either pace (a
+   * city-year is 33 s): time to raise a Seawall or evacuate its people.
+   */
+  FLOOD_GRACE_YEARS: 36,
+  /**
+   * §1.3 and §4.5's terracing (Batch 38): a rover raises a building's whole
+   * footprint to this many metres above its highest tile, and is paid
+   * TERRACE_MATERIALS_PER_M materials for each metre it raises each tile.
+   */
+  TERRACE_STEP_M: 2,
+  TERRACE_MATERIALS_PER_M: 4,
 
   // -------------------------------------------------------------------------
   // Worlds (Batch 27): what a world is made with, recorded in the world
@@ -1507,6 +1532,13 @@ export function validateTuning(t: Tuning): void {
   if (!(t.FLOOD_THRESHOLD_M > 0)) fail("FLOOD_THRESHOLD_M must be > 0");
   if (!(t.FLOOD_BUILDING_LOSS_M >= 0)) fail("FLOOD_BUILDING_LOSS_M must be >= 0");
   if (!(t.FLOOD_ALERT_YEARS >= 0)) fail("FLOOD_ALERT_YEARS must be >= 0");
+  if (!(t.DIKE_M_PER_LEVEL >= 0)) fail("DIKE_M_PER_LEVEL must be >= 0");
+  if (!(t.COST_SEAWALL >= 0)) fail("COST_SEAWALL must be >= 0");
+  if (!(t.BUILD_YEARS_SEAWALL > 0)) fail("BUILD_YEARS_SEAWALL must be > 0");
+  if (!(t.BUILD_SECONDS_SEAWALL > 0)) fail("BUILD_SECONDS_SEAWALL must be > 0");
+  if (!(t.FLOOD_GRACE_YEARS >= 0)) fail("FLOOD_GRACE_YEARS must be >= 0");
+  if (!(t.TERRACE_STEP_M > 0)) fail("TERRACE_STEP_M must be > 0");
+  if (!(t.TERRACE_MATERIALS_PER_M >= 0)) fail("TERRACE_MATERIALS_PER_M must be >= 0");
   if (!(t.COST_CORRIDOR >= 0)) fail("COST_CORRIDOR must be >= 0");
   if (!(t.COST_CABLE >= 0)) fail("COST_CABLE must be >= 0");
   if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");

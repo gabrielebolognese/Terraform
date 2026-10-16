@@ -84,7 +84,7 @@ describe("a world with settlements round-trips through the save exactly", () => 
     // chose - and the record, which is history: it cannot be derived again.
     // v14 (Batch 28): the builds waiting for a rover - what the player paid for.
     // v16 (Batch 30): the rovers an objective's reward landed - a gift, not a building to count.
-    expect(Object.keys(saved).sort()).toEqual(["base", "build_queue", "buildings", "cables", "claims", "cleared", "corridors", "effects", "extra_rovers", "grades", "history", "id", "jobs", "kind", "lat", "level_queue", "lon", "lost_at_sea_level_m", "name", "planned", "population", "rails", "stores", "zones"]);
+    expect(Object.keys(saved).sort()).toEqual(["base", "build_queue", "buildings", "cables", "claims", "cleared", "corridors", "effects", "evacuated", "extra_rovers", "flood_grace_years", "grades", "history", "id", "jobs", "kind", "lat", "level_queue", "lon", "lost_at_sea_level_m", "name", "planned", "population", "rails", "stores", "zones"]);
   });
 });
 
@@ -123,7 +123,7 @@ describe("a settlement lost to the sea (v6, Batch 24)", () => {
 });
 
 describe("older saves", () => {
-  it("bring a v4 settlement forward exactly as v4 loaded it: newly founded", () => {
+  it("bring a v4 settlement forward exactly as v4 loaded it: newly founded - and given Batch 38's grace from the sea", () => {
     const founded = foundSettlement(marsStart(), "city", 0.3, 1.0, ON).state;
     const v4 = toSave(founded, ON, AT) as unknown as Record<string, unknown>;
     const legacy = {
@@ -131,7 +131,8 @@ describe("older saves", () => {
       schema_version: 4,
       settlements: [{ id: "settlement-1", kind: "city", lat: 0.3, lon: 1.0 }],
     };
-    expect(fromSave(legacy, ON).settlements).toEqual(founded.settlements);
+    // A city carried from a save made before flooding is held from the sea for FLOOD_GRACE_YEARS (v19 -> v20).
+    expect(fromSave(legacy, ON).settlements).toEqual(founded.settlements.map((s) => ({ ...s, floodGraceYears: ON.FLOOD_GRACE_YEARS })));
   });
 });
 
