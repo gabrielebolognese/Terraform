@@ -1411,3 +1411,43 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   src/web/settings.ts src/web/sound-gate.test.ts src/web/sound-settings.ts src/web/storage.ts
   src/web/style.css src/web/test-frames.ts src/web/travel-prompt.ts src/web/travel.ts
   src/web/world-map.ts
+- review 1: rejected
+  1. The exit gate's second cue is not checked for a railway laid in a city, on the planner's map.
+     The legend says "Railway (striped)" and the manual says a railway is striped, but no test lays
+     one.
+     - `src/web/settings-cues.test.ts:403` is titled "tells a power line, a railway, a plan, a gap
+       and a zone's edge from their neighbours by pattern". Its city (`planned()`, line 390) only
+       *plans* a railway (line 399, `planLinks`); it lays none, so `view.rails` is empty and the
+       stripe is never looked at. `describeTile`'s "railway" (`src/web/planner.ts:449`) is never
+       reached by a test either.
+     - Measured in this review: with `src/web/planner.ts:165` changed to `set(i, RAIL_RGB)` (a
+       railway drawn solid), `settings-cues.test.ts` and `planner.test.ts` pass, 15 of 15. No other
+       test calls `plannerPixels` on a laid railway (`people.test.ts`, `planner.test.ts` checked).
+     - Wanted: lay a railway in the test's city, assert its two lightnesses in every palette and
+       that the line under the map names it "railway"; break each once.
+  2. Nothing tests that a shortcut cannot act under the open game menu. `src/web/game.ts:399`
+     (`if (pausedFrom !== null && action !== "menu" && action !== "save") return;`) is the only thing
+     between a key and a world the menu is holding still: without it, Space or 1-4 call `setSpeed`
+     (`src/web/game.ts:311`) and the world runs behind the open menu, and M, B and P move the view
+     under it. The manual states the rule (`docs/manual/controls.md:32`: "While the game menu is
+     open, only Esc (to close it) and Ctrl+S work").
+     - Measured in this review: with that line removed, `src/web/settings-gate.test.ts` passes, 22
+       of 22.
+     - Wanted: a test that opens the menu (`setPaused(true)`), presses the pause, a speed and a panel
+       key, and finds the world still held and nothing opened; break the guard once.
+  3. The world map's settlements are a colour code the batch did not register or check. On the map
+     a metropolis is yellow, a city blue and an outpost grey (`src/web/world-map.ts:118`, drawn at
+     line 451); their second cue (the mark's size, 5, 3.5 and 2.5 px further out, the land held up
+     close) is in no test, and they are not among the cue test's elements. The exit gate asks for
+     every colour-coded element, checked in the happy-dom harness; the note and README say every
+     colour code has a second cue.
+     - Wanted: register the world map's marks with their cue (or give them one that is checked),
+       and test it.
+  - Otherwise as recorded: typecheck green; `npx vitest run --maxWorkers=2 --minWorkers=1` 123
+    files, 1,473 tests, all passed (464.0 s; the Known-red opening test passed); `build:web` green
+    (655.03 kB JS, 221.53 kB gzip; 52.14 kB CSS); `build` green. Injections 10 (no swap on a taken
+    key) and 36 (the game takes the key the panel waits for) re-run one at a time in a separate
+    worktree: both caught as the table says; tree clean after each. Nothing in `src/sim/` changed;
+    the walls hold; Batch 35's record is moved and never deleted; the manual's statements checked
+    against the code (the pictures' 48/96/144 MB, the speed keys per pace, the line under the
+    planner's map, a landing rocket still moving with moving details off) hold.
