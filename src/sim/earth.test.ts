@@ -145,6 +145,8 @@ describe("the spaceport's rocket (Batch 34)", () => {
     // Still away a substep before it is due; home and unloaded when it is.
     const nearly = upTo(up, W1 + TRIP - 1);
     expect(nearly.earth.flights.length).toBe(1);
+    // Drawn the whole way: the rocket is still away the substep before it lands.
+    expect(city(nearly).jobs.filter((j) => j.kind === "rocket").length).toBe(1);
     const home = upTo(nearly, W1 + TRIP);
     expect(home.earth.flights).toEqual([]);
     expect(city(home).jobs.filter((j) => j.kind === "rocket")).toEqual([]);
@@ -199,6 +201,32 @@ describe("the spaceport's rocket (Batch 34)", () => {
     s = upTo(s, W2);
     expect(s.earth.orders).toEqual([]);
     expect(s.earth.flights[0]!.launched).toBe(W2);
+  });
+
+  it("does not fly from a spaceport still going up", () => {
+    let s = order(town(), "food", "buy", 10);
+    const p = port(s);
+    s = removeBuilding(s, city(s).id, p.tx, p.ty).state;
+    // A new spaceport its rover has years of work on yet: a worksite, not a launch pad.
+    const site = { type: "spaceport" as const, tx: 40, ty: 40, level: 1 };
+    const work = { kind: "build" as const, tile: tileKey(40, 40), work: 100, total: 120, remaining: 120, upgrade: false };
+    s = withCity(s, { buildings: [...city(s).buildings, site], jobs: [...city(s).jobs, work] });
+    expect(rocketPort(city(s))).toBeNull();
+    s = upTo(s, W1);
+    expect(s.earth.log.map((r) => r.kind)).toEqual(["missed"]);
+    // Finished, it flies.
+    expect(rocketPort(city(withCity(s, { jobs: [] })))).toEqual(site);
+  });
+
+  it("refunds the orders of a city lost to the sea at the next window", () => {
+    let s = order(town(), "water", "buy", 10);
+    const paid = s.earth.orders[0]!.paid;
+    s = withCity(s, { lostAtSeaLevelM: 0 });
+    const before = upTo(s, W1 - 1);
+    const at = advance(before, 1, cfg);
+    expect(at.earth.orders).toEqual([]);
+    expect(at.earth.flights).toEqual([]);
+    expect(at.economy.credits - advance(withEarth(before, { orders: [] }), 1, cfg).economy.credits).toBeCloseTo(paid, 9);
   });
 
   it("misses it too with no finished spaceport: the city's orders wait", () => {
@@ -404,6 +432,10 @@ describe("Earth's contracts (Batch 34)", () => {
     const sent = one.earth.contracts[0]!.delivered;
     expect(sent).toBeGreaterThan(0);
     expect(sent).toBeLessThan(400);
+    // It took what was above a quarter of the room, and no more.
+    const cap = capacities(city(one), T).materials;
+    expect(city(one).stores.materials).toBeGreaterThanOrEqual(T.EARTH_KEEP_SHARE * cap);
+    expect(city(one).stores.materials).toBeLessThan(T.EARTH_KEEP_SHARE * cap + 1);
     // The store made up again before the next window, which sends the rest.
     const refilled = withCity(upTo(one, W2 - 1), { stores: { ...city(one).stores, materials: 400 } });
     const two = advance(refilled, 1, cfg);
