@@ -230,6 +230,8 @@ export type { NeedDef, NeedId, NeedReading, NeedsReading, NeedTier } from "./mic
 export { microStep } from "./micro/coupling.js";
 export type { MicroContribution } from "./micro/coupling.js";
 export { groundOf, isSteep, slopeAt, terrainReady, worldOf } from "./micro/terrain.js";
+export { DEPOSIT_BOOSTS, DEPOSIT_KINDS, depositAt, depositBonus, depositFor, depositOfCode, depositsOf, sitingOf, sitingPreview } from "./micro/deposits.js";
+export type { DepositKind, Siting } from "./micro/deposits.js";
 export { elevationAtRank, siteElevation } from "./hypsometry.js";
 export { liquidWaterRate, seaLevel } from "./sea-level.js";
 export { nextSubstepFlows } from "./integrate.js";
