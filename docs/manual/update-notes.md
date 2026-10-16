@@ -28,7 +28,7 @@ matters.
 
 **Changed**
 - The four buildings' cards say which deposit helps them, and by how much.
-- The line under the pointer names the deposit there.
+- While placing, the line above the build bar names the deposit under the pointer, with the height of the ground.
 
 **Fixed**
 - Nothing in this update.

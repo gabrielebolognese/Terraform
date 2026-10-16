@@ -104,8 +104,14 @@ describe("objectives on a scripted run", () => {
     // 75 settlers: the town of 500 at 69.4 min, not 72.6.
     expect(withheld("city_steady")["city_town"]! - all["city_town"]!).toBeGreaterThan(3 * MIN);
     // Two rovers: the city of 1,000 at 1.67 h, 8.3 minutes sooner (about 10 before Batch 32's needs, which slow
-    // both cities past 500 people alike).
-    expect(withheld("city_town")["city_thousand"]! - all["city_thousand"]!).toBeGreaterThan(7 * MIN);
+    // both cities past 500 people alike) - on the world Batch 30 measured, before Batch 37's deposits.
+    const before37 = makeTuning({ ...T, DEPOSITS_ENABLED: 0 });
+    const rovers = (id?: string) => playPacing(before37, RUN, false, undefined, { guided: true, claim: true, ...(id === undefined ? {} : { withhold: id }) }).goals.done["city_thousand"]!;
+    expect(rovers("city_town") - rovers()).toBeGreaterThan(7 * MIN);
+    // With deposits, as new worlds are since Batch 37: 5.1 minutes sooner (1.71 h against 1.79). The other four
+    // rewards are worth what they were, to the tenth of a minute. The greedy script, not the rovers: the deposits
+    // made the rewarded run 2.5 minutes slower and the other 0.7 faster (Batch 37's note).
+    expect(withheld("city_town")["city_thousand"]! - all["city_thousand"]!).toBeGreaterThan(4 * MIN);
     // 200 materials for the first railway: three cities joined at 42.6 min, not 55.7.
     expect(withheld("network_rail")["network_three"]! - all["network_three"]!).toBeGreaterThan(12 * MIN);
     // 2,000 credits for three cities joined: the planet's Phase 2 at 78.5 min, not 1.65 h.
