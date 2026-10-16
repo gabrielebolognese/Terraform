@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 35
-in_progress_batch: none
+in_progress_batch: 36
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -1329,3 +1329,7 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     - the drawer's button named as on screen ("Instruments", "See example planet").
   - Seen, not grounds for rejection: the note's measurements still say `sound-gate.test.ts` has
     10 tests (`docs/balance/batch35-sound.md:199`); it has 12 since fix 1.
+
+### Batch 36 - Settings, controls and accessibility
+- status: in progress
+- sessions: 1 (2026-10-16, started)
