@@ -17,7 +17,9 @@
  * a power line dashed, a railway striped, a plan dotted, a home no service
  * reaches hatched, a zone outlined - in every palette, and names what is
  * under the pointer; the city's land not yet claimable has a dashed edge, a
- * refused placement a cross. And the colour-blind palettes keep their
+ * refused placement a cross; the world map's settlements are told apart by
+ * the shape of their marks - a metropolis, a city, an outpost, a ruin - far
+ * out and up close, in gold too. And the colour-blind palettes keep their
  * meanings apart for the colour blindness each is for, measured.
  */
 
@@ -502,6 +504,144 @@ describe("the city's own marks", () => {
     const blue = MAP_PALETTES["red-green"].claimReady;
     const shapes = cityScene(view, { time: 0, selected: null, ghost: null, layer: "overlay", claimable: [{ tx: 0, ty: 0, size, ready: true, hover: false }], claimReady: blue });
     expect(shapes.some((sh) => sh.fill.r === blue.r && sh.fill.g === blue.g && sh.fill.b === blue.b)).toBe(true);
+  });
+});
+
+describe("the world map's marks", () => {
+  /** A path step as drawn: move, line, close, arc (x, y, r), rect (x, y, w, h). */
+  type Step = readonly [string, ...number[]];
+  /** A shape filled or stroked, its path and its colour; or a block filled straight (`fillRect`: the land a settlement holds, up close). */
+  type Drawn = { readonly how: "fill" | "stroke"; readonly colour: string; readonly path: readonly Step[] } | { readonly how: "block"; readonly x: number; readonly y: number; readonly w: number; readonly h: number };
+
+  /** The map's canvas given a 2D context that records what is drawn on it; every other canvas none. */
+  function recording(): Drawn[] {
+    const drawn: Drawn[] = [];
+    let path: Step[] = [];
+    const ctx: Record<string | symbol, unknown> = {
+      beginPath: () => (path = []),
+      moveTo: (x: number, y: number) => path.push(["M", x, y]),
+      lineTo: (x: number, y: number) => path.push(["L", x, y]),
+      closePath: () => path.push(["Z"]),
+      arc: (x: number, y: number, r: number) => path.push(["A", x, y, r]),
+      rect: (x: number, y: number, w: number, h: number) => path.push(["R", x, y, w, h]),
+      fill: () => drawn.push({ how: "fill", colour: String(ctx["fillStyle"]), path: [...path] }),
+      stroke: () => drawn.push({ how: "stroke", colour: String(ctx["strokeStyle"]), path: [...path] }),
+      fillRect: (x: number, y: number, w: number, h: number) => drawn.push({ how: "block", x, y, w, h }),
+    };
+    const proxy = new Proxy(ctx, {
+      get: (t, k) => (k in t ? t[k] : () => undefined),
+      set: (t, k, v) => {
+        t[k] = v;
+        return true;
+      },
+    });
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string) {
+      return kind === "2d" && this.classList.contains("worldmap-canvas") ? proxy : null;
+    } as typeof HTMLCanvasElement.prototype.getContext;
+    return drawn;
+  }
+
+  /** A path's box: its least and greatest x and y. */
+  function box(path: readonly Step[]): { x0: number; y0: number; x1: number; y1: number } {
+    const b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    const take = (x: number, y: number): void => {
+      b.x0 = Math.min(b.x0, x);
+      b.y0 = Math.min(b.y0, y);
+      b.x1 = Math.max(b.x1, x);
+      b.y1 = Math.max(b.y1, y);
+    };
+    for (const [op, a = 0, c = 0, d = 0, e = 0] of path) {
+      if (op === "M" || op === "L") take(a, c);
+      else if (op === "A") {
+        take(a - d, c - d);
+        take(a + d, c + d);
+      } else if (op === "R") {
+        take(a, c);
+        take(a + d, c + e);
+      }
+    }
+    return b;
+  }
+
+  /**
+   * What is drawn at a screen point: each small shape over it (under 24 px
+   * across - not a railway, not the planet), its path taken about the point
+   * and scaled to the marks' size together, so two marks the same shape and
+   * different sizes read the same. The colour is left out: this is the cue
+   * without it. With the fill colour, and how many blocks of land lie under
+   * the point.
+   */
+  function at(drawn: readonly Drawn[], px: number, py: number): { shape: string; colour: string | null; land: number } {
+    const shapes = drawn.filter((d): d is Extract<Drawn, { path: unknown }> => {
+      if (d.how === "block" || d.path.length === 0) return false;
+      const b = box(d.path);
+      return b.x0 - 0.5 <= px && px <= b.x1 + 0.5 && b.y0 - 0.5 <= py && py <= b.y1 + 0.5 && b.x1 - b.x0 < 24 && b.y1 - b.y0 < 24;
+    });
+    const all = box(shapes.flatMap((d) => d.path));
+    const scale = Math.max(1e-9, all.x1 - px, px - all.x0, all.y1 - py, py - all.y0);
+    const r = (v: number): number => Math.round(v * 100) / 100;
+    const shape = JSON.stringify(
+      shapes.map((d) => [d.how, ...d.path.map(([op, ...v]) => [op, ...v.map((n, i) => r(op === "A" && i === 2 ? n / scale : op === "R" && i >= 2 ? n / scale : (n - (i % 2 === 0 ? px : py)) / scale))])]),
+    );
+    const land = drawn.filter((d) => d.how === "block" && d.x <= px && px <= d.x + d.w && d.y <= py && py <= d.y + d.h && d.w < 24).length;
+    return { shape, colour: shapes.find((d) => d.how === "fill")?.colour ?? null, land };
+  }
+
+  it("a metropolis, a city, an outpost and a settlement lost to the sea are told apart by shape alone - far out and up close, in their colours and in gold", () => {
+    const base = ares();
+    const c = base.settlements[0]!;
+    // Four settlements far apart, no railway between them: a city, a metropolis, an outpost and a city the sea took.
+    const world = (gold: boolean): SimState => ({
+      ...base,
+      routes: [],
+      goals: gold ? { ...base.goals, claimed: [...base.goals.claimed, "network_three"] } : base.goals,
+      settlements: [
+        c,
+        { ...c, id: "settlement-2", name: "Tharsis", kind: "metropolis", lat: 0.1, lon: 0.5 },
+        { ...c, id: "settlement-3", name: "Camp", kind: "outpost", lat: -0.4, lon: 2.2 },
+        { ...c, id: "settlement-4", name: "Drowned", lat: -0.3, lon: -2.5, lostAtSeaLevelM: -1500 },
+      ],
+    });
+    const drawn = recording();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const map = new WorldMapScreen(host, { onOpen: () => {}, onConnect: () => ({ ok: false, reason: "no", cost: 0 }) as never, onClose: () => {} }, T, () => 0);
+    map.open();
+    const env = habitat(base.reservoirs, derive(base.reservoirs, worldEnv(base, NEUTRAL_ENV, T), T), T, 0);
+    let now = 0;
+    for (let i = 0; i < 400 && /Drawing the map|^$/.test(host.querySelector(".worldmap-hint")!.textContent ?? ""); i += 1) map.frame(world(false), env, (now += 16));
+    const NAMES = ["city", "metropolis", "outpost", "lost"] as const;
+    /** Each settlement's mark: far out, the whole planet in view; up close, zoomed in on it as far as the map goes. */
+    const marks = (gold: boolean, close: boolean): Record<(typeof NAMES)[number], ReturnType<typeof at>> => {
+      const s = world(gold);
+      const out = {} as Record<(typeof NAMES)[number], ReturnType<typeof at>>;
+      s.settlements.forEach((x, k) => {
+        map.zoomAt(1e-9, 600, 350);
+        if (close) {
+          const p = map.screenOf(x);
+          map.zoomAt(1e9, p.px, p.py);
+        }
+        drawn.length = 0;
+        map.frame(s, env, (now += 16));
+        const p = map.screenOf(x);
+        out[NAMES[k]!] = at(drawn, p.px, p.py);
+      });
+      return out;
+    };
+    for (const gold of [false, true]) {
+      for (const close of [false, true]) {
+        const where = `${close ? "up close" : "far out"}${gold ? ", gold" : ""}`;
+        const m = marks(gold, close);
+        for (const name of NAMES) expect(m[name].colour, `${where}: ${name} has a mark`).not.toBeNull();
+        if (close) for (const name of NAMES) expect(m[name].land, `${where}: ${name}'s land drawn under its mark`).toBeGreaterThan(0);
+        // A colour code: the kinds in their own colours - or, in gold, a city and a metropolis in one.
+        if (gold) expect(m.metropolis.colour, `${where}: one colour`).toBe(m.city.colour);
+        else expect(new Set([m.metropolis.colour, m.city.colour, m.outpost.colour]).size, `${where}: three colours`).toBe(3);
+        // Told apart without it.
+        expect(new Set([m.metropolis.shape, m.city.shape, m.outpost.shape]).size, `${where}: the kinds' shapes`).toBe(3);
+        expect(m.lost.shape, `${where}: a ruin and a city`).not.toBe(m.city.shape);
+      }
+    }
   });
 });
 
