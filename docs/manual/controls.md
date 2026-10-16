@@ -14,6 +14,7 @@ The game is played with the mouse. The one key is **Esc**.
 | Open the objectives | **Objectives** (bottom right, above **Menu**) |
 | See what needs you | **Alerts** (bottom right, beside **Menu**) |
 | See the charts of the planet and each city | **Statistics** (bottom right, beside **Alerts**) |
+| Trade with Earth, and see its contracts | **Earth** (bottom right, beside **Alerts**) |
 | Go to where an alert happened | Click the alert, in **Alerts** or as it pops up |
 | Dismiss a pop-up alert | **x** on it |
 | Put the guide away | **Skip the guide** on its card |
@@ -35,6 +36,7 @@ Left alone for a few seconds, the planet turns slowly by itself.
 | Open the game menu | **Menu** (top right) |
 | Open the objectives | **Objectives** (top right, under **Menu**) |
 | See what needs you, or the charts | **Alerts** and **Statistics** (top right, beside **Menu**) |
+| Trade with Earth | **Earth** (top right, beside **Alerts**) |
 
 ## In the city planner
 

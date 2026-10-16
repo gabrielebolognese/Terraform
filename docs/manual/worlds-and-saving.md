@@ -53,6 +53,10 @@ worst; one you decided before you left still happens as you chose. The summary s
 and how many went unanswered ("3 events came to a head, 2 unanswered"), and **Event history** in
 **Alerts** lists them. See [Events and decisions](events.md).
 
+Launch windows keep opening too: orders go up and come back, and Earth's contracts are met or fail,
+as they would with you watching. The summary says how many contracts were met and failed. See
+[Earth](earth.md).
+
 A world left open in a background tab pauses until you come back to it.
 
 ## The Example planet

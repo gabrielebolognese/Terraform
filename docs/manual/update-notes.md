@@ -4,6 +4,52 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 34 - Earth: trade, shipments and contracts
+
+Earth is part of the game now. Every time Mars and Earth line up, your Spaceports' rockets fly
+there with what you sell and come back with what you ordered, and Earth offers contracts that pay
+well if you deliver on time.
+
+**New**
+- **The Earth button**, beside Statistics and Alerts: your standing with Earth, the next launch
+  window, Earth's prices, your orders, the rockets away, contracts, and a record of it all. See
+  [Earth: trade, shipments and contracts](earth.md).
+- **Launch windows**, about every 9 and a half minutes at 1x (Standard pace; about every 71 seconds
+  at Classic). At each one, every city with something to send or fetch flies its Spaceport's
+  rocket, the one you see on the pad, and it lands about 3 minutes later. A city whose rocket is
+  away on a supply run misses the window, and its orders wait for the next.
+- **Buying from Earth**: materials, water, food and oxygen, paid when you order and cancellable
+  for a full refund until the rocket goes. Settlers go on sale once you have met a contract, and
+  rovers after three.
+- **Selling to Earth**: put materials, water, food or oxygen up for sale, and the rocket takes
+  them at the next window. A rocket never takes a store below a quarter of its room.
+- **A market**: prices move each window with Earth's supply, rise as you buy and fall as you sell,
+  and recover between windows. Your reputation makes them better or worse.
+- **Contracts**: at each window Earth asks for materials, water or research, due by the third
+  window on. Met, it pays well and your reputation rises by 10. Failed, your reputation falls by
+  20.
+- **Alerts** for a missed window and a failed contract (these pop up), a rocket home and a
+  contract met.
+
+**Changed**
+- Earth comes to new **Standard** and **Terraformed start** worlds. A **Sandbox** has none, and
+  worlds made before this update play as they always have.
+- Select a Spaceport to see what its rocket is doing: at home, flying at each launch window, or
+  away to Earth.
+- The **While you were away** summary says how many of Earth's contracts were met and failed.
+- Earth changes nothing if you leave it alone: its offers wait for you to accept them.
+
+**Known issues**
+- A contract's materials and water go from whichever cities' rockets fly, in the order the cities
+  were founded: you cannot choose which city sends them.
+- A city's rocket flies from its first free Spaceport; a second Spaceport only helps when the first
+  one's rocket is away.
+- At Classic pace a window, and an offer, come about every 71 seconds.
+- The statistics do not chart your trade with Earth or your reputation.
+- Earth makes no sound yet.
+
+---
+
 ## Update 33 - Events that ask for decisions
 
 Mars now throws problems at your cities, and the odd piece of luck: a meteor shower, a machine
@@ -309,5 +355,11 @@ and railways between settlements; and the Example planet.
   in Statistics.
 - Events keep coming while the game is closed, and nobody answers them: each comes to its worst.
 - A supply ship's materials are lost when the city's stores are full; only its settlers land.
-- Earth does not yet ask anything of you.
+- A contract's materials and water go from whichever cities' rockets fly; you cannot choose which
+  city sends them.
+- A city's rocket flies from its first free Spaceport; a second Spaceport only helps when the first
+  one's rocket is away.
+- At Classic pace a launch window, and an offer from Earth, come about every 71 seconds.
+- The statistics do not chart your trade with Earth or your reputation.
+- Earth makes no sound yet.
 - Events make no sound yet.

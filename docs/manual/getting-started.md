@@ -83,6 +83,12 @@ more. See [Goals](goals.md).
 7. **Go back to orbit** with **Back to orbit** to keep an eye on the planet. Everything keeps
    running while you are away from a view.
 
+About 9 and a half minutes in (at the Standard pace; about a minute at Classic), the first launch
+window opens: from then on your Spaceport's rocket
+can fly to Earth at each window, with what you sell, and come back with what you ordered. Once your
+city has people, Earth offers a contract at each window. Press **Earth** to trade. See
+[Earth](earth.md).
+
 From about half an hour in, events start to come: a meteor shower, a machine about to fail, a
 ship from Earth. A card at the top left gives you the choices and about three minutes to pick
 one. See [Events and decisions](events.md).

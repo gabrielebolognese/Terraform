@@ -51,7 +51,7 @@ building makes, houses or stores.
 
 | Building | Cost | Size | What it does | Build time | Notes |
 |---|---|---|---|---|---|
-| Spaceport | 80 | 3×3 | Brings in a trickle of materials, water, oxygen and food, and launches supply rockets. Uses power | 15 min, up to 2 h | A city's first one comes free |
+| Spaceport | 80 | 3×3 | Brings in a trickle of materials, water, oxygen and food, and launches supply rockets. Its rocket flies to Earth at each launch window (see [Earth](earth.md)). Uses power | 15 min, up to 2 h | A city's first one comes free |
 | Rover Post | 300 | 5×5 | One more rover | 1 min, up to 61 min | Cities only, one per 100 people |
 | Station | 600 | 4×6 | Joins a large city's districts by rail into one network. Transport for the homes in reach* | 30 min, up to 4.1 h | Cities only, at 5,000 people |
 | Industrial Command Center | 450 | 6×4 | Every building within 15 tiles makes 10% more (more at higher levels) | 30 min, up to 4.1 h | |

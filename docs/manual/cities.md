@@ -172,6 +172,11 @@ Select a Spaceport and press **Launch rocket**: a supply rocket flies off and co
 a minute with 20 materials, or as many as you have room for. Each Spaceport flies one rocket at a
 time. A Spaceport also brings in a trickle of materials, water, oxygen and food on its own.
 
+In a world that trades with Earth, a city's rocket also flies to Earth at each launch window, about
+every 9 and a half minutes at 1x, with what you sell and back with what you ordered. A supply run
+away when a window opens makes the city miss it, and its orders wait for the next. See
+[Earth](earth.md).
+
 ## The city planner
 
 **City planner** opens a map of the city for planning ahead:
