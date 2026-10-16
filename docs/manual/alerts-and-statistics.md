@@ -18,6 +18,8 @@ names its place, and clicking it takes you there.
 | *Building* **finished in** *city* | A new building is up | Kept in **Alerts** only |
 | *Building* **raised to level** *N* **in** *city* | An upgrade is done | Kept in **Alerts** only |
 | **Objective done:** *name* | Its reward is waiting in **Objectives** | Kept in **Alerts** only (the milestone card already shows it) |
+| *Event* **in** *city*, waiting | An event needs your decision: a meteor shower, a machine failing, an outbreak, a supply ship, a discovery. It says how long you have | Urgent: a pop-up message, and under **Now** until you choose |
+| *Event* **in** *city*, happened | What you chose and what it did, for example "Kept working: 3 buildings hit, 2 wrecked" | Kept in **Alerts**; a pop-up message if you chose nothing |
 
 Many of the same thing in one place are one alert: a hundred greenhouses offline for the same
 reason in one city are a single line, "100 Greenhouses offline in Ares". Buildings dark because power or
@@ -42,6 +44,9 @@ is urgent. Press it to see:
 - **What happened**: everything since you opened the world, newest first, with the year it
   happened. The same thing again in one place, one after another, counts up on one line: "Habitat
   Dome finished in Ares (3 times)".
+- **Event history**: every event your world has had (the latest 40), newest first, each marked
+  **Decided** or **Missed**, with the year and what it did. Unlike **What happened**, it is kept
+  with your world and is still there after you reopen it. See [Events and decisions](events.md).
 
 Click any line to go there:
 
@@ -49,6 +54,7 @@ Click any line to go there:
   of the view. If you are already in that city, it selects the building at once.
 - **A storm** takes you back up to the planet.
 - **An objective** opens **Objectives**.
+- **An event** takes you down to its city; for a failing machine, with the machine selected.
 
 When you open a world, anything already wrong is listed under **Now** but does not pop up.
 **What happened** starts fresh each time you open a world.

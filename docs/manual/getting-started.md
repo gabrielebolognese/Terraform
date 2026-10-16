@@ -83,6 +83,10 @@ more. See [Goals](goals.md).
 7. **Go back to orbit** with **Back to orbit** to keep an eye on the planet. Everything keeps
    running while you are away from a view.
 
+From about half an hour in, events start to come: a meteor shower, a machine about to fail, a
+ship from Earth. A card at the top left gives you the choices and about three minutes to pick
+one. See [Events and decisions](events.md).
+
 ## What to aim for
 
 - **On the planet:** pass the phases one by one: Warming, Runaway thickening, First water,

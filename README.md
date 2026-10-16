@@ -133,6 +133,18 @@ derived every substep inside `advance`, never stored, behind `NEEDS_ENABLED`. Th
 crowds gather at stations and parks, and towers light as their homes fill. The example planet was
 rebuilt with its services among its homes, and every one of its cities stays perfect with needs on.
 
+**Events that ask for decisions** (Batch 33). From half an hour into a new world, a deck dealt from
+the world's seed (as the storms are) brings an event to one of the player's cities about every 25
+minutes at 1x: a meteor shower, a machine failing, an outbreak (the Medical Centers shelter people
+from it), Earth's supply ship early, late or lost, a discovery. Each offers two or three choices,
+paid for when chosen, and lands at its deadline, three minutes on, inside `advance`; left alone, its
+default - always the worst choice made worse - lands instead. What lasts (people under cover, a
+quarantine, a faulty building) is counted down in the city's own substep. The open events, the
+choices and a record of the last 40 are world state (save v18); the deck is the same live, offline
+or chunked any way. A card shows what is waiting; an event is an urgent alert until answered, and
+the **Alerts** centre keeps the world's event history. Behind `DECISIONS_ENABLED`; new Standard and
+Terraformed worlds have it, a sandbox and the worlds before do not.
+
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved
