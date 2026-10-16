@@ -1482,3 +1482,47 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch36-settings.md
     docs/manual/cities.md docs/manual/update-notes.md src/web/settings-cues.test.ts
     src/web/settings-gate.test.ts src/web/world-map.ts
+- review 2: rejected
+  1. The charts (Statistics and the planner's Charts tab) tell their lines apart by colour alone.
+     They are a colour code that is not registered, not covered by the colour-blind palettes and not
+     checked. The exit gate asks for a second, non-colour cue on every colour-coded element, checked
+     in the happy-dom harness. The player's notes say "Colour is never the only way the game tells
+     you something" (`docs/manual/update-notes.md:11`). README.md:186 and GAME_PLAN.md:867 say
+     every colour code has a second cue.
+     - `src/web/charts.ts:175` strokes every series as a solid 1.5 px line, differing only in
+       colour. The key (`charts.ts:128-135`) links a name to its line only by a colour swatch
+       (`:132`). The charts with more than one series are: Population (People and Homes, `:47-50`),
+       Growth and deaths (Born `#6fd08c` and Lost `#ef6b6b`, `:52-53`), Shortages (four bars side
+       by side, each under a pixel wide, `:55-59`), Stores and Made less drawn (five lines each,
+       `:61-62`), and the five "made and used" charts (Made in the resource's colour, Used always
+       `#ef6b6b`, `:71-72`). The key's latest values do not say which line is which, and they
+       cannot help when the two values are close, as made and used are in a balanced city.
+     - Measured in this review with the cue test's own simulation (Machado et al.,
+       `settings-cues.test.ts:653-680`): Food made `#e38b4f` and used `#ef6b6b` are 44.2 apart for
+       normal sight, 30.1 for deuteranopes and 40.7 for tritanopes. Materials made and used are
+       38.0 apart for deuteranopes, and Born and Lost 52.5. The batch's own tests treat anything
+       under 45 as a failure for a palette's closest kinds (`settings-cues.test.ts:721-722`). No
+       palette changes these colours: `src/web/palette.ts` has no chart colours. The cue test
+       never draws a chart, and its register has no entry for one, either with a cue or with a
+       reason it needs none.
+     - Wanted: give every series of a chart with more than one a cue besides its colour, for
+       example a dash pattern repeated in its key swatch, or its name at the end of its line.
+       Register the charts among the canvases' colour codes, test from what the chart's canvas
+       draws that the series differ without their colours, and break that test once.
+  - Review 1's three problems are fixed. A railway is now laid in the cue test, striped in every
+    palette and named under the pointer. A test holds every shortcut back under the open game menu,
+    in orbit and in a city, a held camera key included. The world map's settlements have shapes by
+    kind at every zoom, tested from what the map draws (scaled to one size), in gold as well.
+    Injections 59 (the menu guard at `game.ts:399` commented out: "the world is still held:
+    expected 10 to be +0") and 63 (a ruin not crossed out: "far out: a ruin and a city") were
+    re-run one at a time in a separate worktree. Both were caught as the table says, and the tree
+    was clean after each.
+  - Otherwise as recorded: typecheck green; `npx vitest run --maxWorkers=2 --minWorkers=1` 123
+    files, 1,475 tests, all passed (510.0 s; the Known-red opening test passed); `build:web` green
+    (655.42 kB JS, 221.67 kB gzip; 52.14 kB CSS); `build` green. Nothing in `src/sim/` changed
+    across the batch, and the walls hold.
+  - Manual checked against the code, all true: the world map's marks (an outpost a grey square, a
+    city a blue disc, a metropolis a larger yellow diamond, `world-map.ts:118-157`); a settlement
+    lost to the sea grey and crossed out; gold for cities and metropolises but not outposts
+    (`:488`); up close, the mark in the middle of the land held; under the open menu only Esc and
+    Ctrl+S (`game.ts:399`).
