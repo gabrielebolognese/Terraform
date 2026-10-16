@@ -223,6 +223,14 @@ describe("deposits in the city view, before placing (Batch 37's third deliverabl
     page.q('.city-card[data-type="regolith_mine"]').click();
     page.hoverTile(half!.tx, half!.ty);
     expect(page.q(".city-hint").textContent).toContain("On ore vein, 2 of its 4 tiles: it would make x1.5 materials.");
+    // Placed there, the view and the inspector say the same: half of it on ore, x1.5.
+    page.clickTile(half!.tx, half!.ty);
+    const view = cityView(page.state().settlements[0]!, page.env(), ON);
+    const index = view.buildings.findIndex((b) => b.type === "regolith_mine");
+    expect(view.buildings[index]?.deposit).toEqual({ kind: "ore", share: 0.5, factor: 1.5 });
+    page.q('.city-card[data-type="regolith_mine"]').click(); // disarm
+    page.clickTile(half!.tx, half!.ty);
+    expect(page.q(".city-inspector").textContent).toContain("On ore vein (2 of its 4 tiles): x1.5 output.");
   });
 
   it("the words' factor is what a real advance pays: the mine on the vein makes twice the one off it", () => {
