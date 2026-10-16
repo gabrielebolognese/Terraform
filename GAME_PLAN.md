@@ -55,7 +55,7 @@ What is missing, in the user's words (2026-10-11):
 | 34 | Earth: shipments, contracts and the market | **COMPLETE** - [note](docs/balance/batch34-earth.md) - launch windows every 2.135 planet-years from the window's number (50 measured, at most a substep late, no drift); each city's spaceport rocket flies at a window with sales and contract goods and lands a third of a window later with the order, a rocket away missing the window; a market by supply (seeded), trade and reputation that never pays more than it asks; contracts for materials, water or research, met for credits and reputation, failed for reputation; settlers and rovers unlocked; the Earth panel; save v19 |
 | 35 | Sound: music, ambience and effects | **COMPLETE** - [note](docs/balance/batch35-sound.md) - one Web Audio engine, four channels and the player's volumes, no context before the first gesture; every sound made by the game: music written as it plays by the phase reached, crossfaded over 8 s; wind by pressure and storm, rain, sea, the machinery near the city camera; effects as crossings in the state, placed in the city view; the same world to the bit heard or not; settings kept per player; licences in docs/credits.md |
 | 36 | Settings, controls and accessibility | **COMPLETE** - [note](docs/balance/batch36-settings.md) - every setting in one panel, kept per player in a store of their own (Batch 35's record moved, never deleted); detail held or Auto, pictures kept, moving details off, each level's frame time measured on the player's machine; 21 shortcuts by physical key, two rebindable slots each; camera speed, edge scrolling, invert zoom, trackpad and touch in every view; panel size, colour-blind palettes measured under simulated colour blindness, reduced motion, high contrast, pop-ups; autosave interval, Ctrl+S, where the worlds are kept; a second cue for every colour code, held to a register of the stylesheet's rules; the same world to the bit whatever the settings |
-| 37 | Terrain resource deposits (was `BUILD_PLAN` 27) | NOT STARTED |
+| 37 | Terrain resource deposits (was `BUILD_PLAN` 27) | **COMPLETE** - [note](docs/balance/batch37-deposits.md) - ore on ridges and rims, ice in hollows (more poleward), vents along the canyons' fault, sunny high flats: derived at site coordinates, never stored; a mine, extractor, geothermal plant or solar array on its own deposit makes x2, x2 (fading with water), x2, x1.5 by the share of its footprint, through `advance`, in new worlds only; marked by shape when placing and by a Deposits tool, the hint giving the factor; Batch 18's bootstrap done 13 years sooner, the scripted pacing within 4%, far deposits a trap |
 | 38 | Flood defences and the rising water; flooding on (was `BUILD_PLAN` 28) | NOT STARTED |
 | 39 | The ending: victory, scores and achievements | NOT STARTED |
 | 40 | Playtest pass: performance, polish and an adversarial review | NOT STARTED |
@@ -915,6 +915,60 @@ and each shortage a strip with its name on it, all 19 charts registered.
 **Goal and exit gate:** `BUILD_PLAN.md` §Batch 27, unchanged: ore on ridges, ice in basins, vents on
 faults, high flats for solar; siting bonuses through `efficiency`; deposits visible before placing.
 Re-measure the bootstrap, and Batch 28's pacing targets, with them on.
+
+**Deliverables** (`BUILD_PLAN.md` §Batch 27's):
+- [x] Deposits derived from the terrain (§3.1): ore on ridges, ice in basins, vents on faults, and
+  high flats for solar.
+- [x] Siting bonuses through each building's `efficiency`, behind a switch (conflict 9).
+- [x] Deposits visible in the city view before placing.
+
+**Done** - see [the note](docs/balance/batch37-deposits.md). Built unattended (`/next-batch auto`)
+in one session. Four deposits, each a pure function of the site's natural terrain at site
+coordinates, judged against a ring of ground five tiles round each tile: ore 6 m above the ring
+(5.8% of the ground), ice 7 m x cos(latitude) below it (7.5%, 3.9% at the equator to 14.6-18.0% at
+63 degrees), vents along the 0.5 contour of the canyons' own course field (2.7%, in lines), sun on
+flat ground 3 m above the base with nothing in its ring above it (1.5%). Every one of 100 city
+sites has a buildable 2 x 2 wholly on each kind, a median 11-17 tiles from the middle. A building
+on its own deposit makes x(1 + bonus x share) in `settlementStep`: x2 for a mine on ore, an
+extractor on ice (fading as water comes in reach) and a geothermal plant on a vent, x1.5 for a
+solar array on sun - exact through a real `advance`. Behind `DEPOSITS_ENABLED`, on in
+`NEW_WORLD_OVERRIDES` only. Shown in the city view: the boosted building's deposit marked while it
+is placed, a **Deposits** tool for all four, a mark by shape for each kind (a diamond, a disc, a
+ring, a cross) registered in the cue test, the hint and the panels saying the share and the factor.
+
+**Measured:**
+- **Batch 18's bootstrap, on the browser's ground:** with deposits off, its years exactly (the last
+  building at year 48); with the mine, extractor, geothermal plants and solar array on their
+  deposits, the last at year 35. 80 people at year 150 both ways.
+- **Batch 28's targets:** with the script placing by its spiral, deposits move the city of 1,000
+  by 4% or less (Standard 2.11 h against 2.03 h, Classic 1.80 h against 1.82 h). They leave the
+  first building (33 s, 8 s), the first upgrade (21.5 min, 19.9 min, still missing the plan's
+  4-8 min) and the phases where they were. Siting within 8 tiles moves it by a tenth either way;
+  chasing deposits 16 tiles out costs the Standard city 1.65 hours.
+
+**Decisions taken** (none were set for Phase 1; each recorded with its reason in the note):
+1. **Its own switch** (`DEPOSITS_ENABLED`), not `SETTLEMENTS_ENABLED` as conflict 9 had it:
+   settlements are on in every browser world, and the old worlds' mines would have changed.
+2. **A bonus only**, so bare ground keeps today's output and the bootstrap cannot get slower.
+3. **By the share of the footprint** on the building's own deposit.
+4. **The natural ground at site coordinates**: a claim never moves a deposit, levelling keeps it.
+5. **The ice's bonus fades with water access** (§3.2: extractors "no longer need a deposit").
+6. **No depletion**, so nothing is stored and the save is unchanged.
+7. **"Unshadowed" read as nothing near standing over it**: the city has no sun direction.
+8. **Marks as an overlay**, while placing or with the Deposits tool, never in the ground's colours.
+9. **No keyboard shortcut** for the Deposits tool.
+
+**What changed from the plan:**
+- **The scripted player's `siting` has a reach**: unbounded, it starved its city (its far
+  buildings' corridors and cables took the founding stock), and never reached 1,000 people in four
+  hours.
+- **Batch 34's trade test is pinned to the world it measured** (deposits off). With deposits on,
+  the greedy script's chaos put the trader's city of 1,000 83 s later. A deposits-on check beside
+  it holds that trading still brings Phase 2 20.7 minutes sooner.
+- **The pace test's batch-by-batch comparisons** gained a Batch 36 world (deposits off), so each
+  feature is still measured alone.
+- **A Terraformed start's first step is 1.3 s slower once**, after the siting was made 3x faster
+  (6.2 s to 1.9 s against 0.6 s): recorded for Batch 40's budget.
 
 ---
 

@@ -189,6 +189,18 @@ each kind of settlement, on a chart a pattern for each line and a named strip fo
 and a test holds the stylesheet's colour rules, and every chart, to a register of them. No setting changes the simulation: the same
 frames with every setting moved come out the same.
 
+**Terrain resource deposits** (Batch 37). In a new world the ground holds ore on ridges and crater
+rims, ice in hollows (more of it poleward), geothermal vents along the fault the canyons follow, and
+sunny high flats - each derived from the site's natural terrain at site coordinates, never stored,
+so a claim never moves one and levelling keeps it. A Regolith Mine, Water Extractor, Geothermal
+Plant or Solar Array on its own deposit makes x(1 + bonus x the share of its footprint on it),
+through its efficiency in `advance` (x2, x2 fading with water access, x2, x1.5), behind
+`DEPOSITS_ENABLED` (on in new worlds only). Choosing one of the four marks its deposit on the
+ground, each kind by a shape of its own; a **Deposits** tool marks all four; the hint says what the
+building would make there, from the simulation's own rule. Batch 18's bootstrap, re-measured, is
+done 13 years sooner with the four on their deposits; the scripted pacing moves by 4% or less, and
+chasing far deposits starves a city (its corridors and cables cost what it needs).
+
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved
