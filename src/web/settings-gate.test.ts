@@ -318,6 +318,64 @@ describe("the keys, in a world", () => {
     }
   });
 
+  it("under the open game menu no shortcut acts but its own key and Save: the world stays held, nothing opens, the view stays", () => {
+    drawCities();
+    frames.install();
+    const { root, handle, saves } = play(ares(), settingsOf());
+    try {
+      frames.step(3);
+      const open = (sel: string) => !root.querySelector<HTMLElement>(sel)!.hidden;
+      const PANELS = [".alerts-panel", ".statistics-panel", ".earth-panel", ".objectives-panel"];
+      // In orbit, the menu open (the App holds the world still behind it): the pause, every speed, every panel and the map.
+      handle.setPaused(true);
+      expect(handle.speed).toBe(0);
+      const steps = handle.state.steps;
+      for (const code of ["Space", "Digit1", "Digit2", "Digit3", "Digit4", "KeyN", "KeyC", "KeyE", "KeyO", "KeyM"]) press(code);
+      frames.step(20);
+      expect(handle.speed, "the world is still held").toBe(0);
+      expect(handle.state.steps, "and has not moved").toBe(steps);
+      for (const p of PANELS) expect(open(p), `${p} under the menu`).toBe(false);
+      expect(handle.views.worldMap.isOpen, "the map under the menu").toBe(false);
+      // Save is let through.
+      press("KeyS", { ctrlKey: true });
+      expect(saves.n).toBe(1);
+      // The menu closed: the speed it had, and the keys act again - the ones held back above were live keys.
+      handle.setPaused(false);
+      expect(handle.speed).toBe(1);
+      press("Digit3");
+      expect(handle.speed).toBe(3);
+      press("KeyN");
+      expect(open(".alerts-panel")).toBe(true);
+      press("KeyN");
+      press("Digit1");
+
+      // In a city, the menu open: back to orbit, the planner, an upgrade and the zoom change nothing; nor does a camera key
+      // still held from before it opened.
+      goDown(root, handle);
+      const city = handle.views.city;
+      city.show(0);
+      // The camera brought to the building first, the frame after.
+      frames.step(2);
+      const camera = city.cameraNow!;
+      key("KeyD");
+      handle.setPaused(true);
+      for (const code of ["KeyB", "KeyP", "KeyU", "Equal", "Minus"]) press(code);
+      frames.step(10);
+      key("KeyD", {}, "keyup");
+      frames.step(100);
+      expect(city.root.hidden, "still in the city").toBe(false);
+      expect(handle.views.planner.openId, "no planner under the menu").toBeNull();
+      expect(city.cameraNow, "the view stays").toEqual(camera);
+      expect(handle.speed).toBe(0);
+      handle.setPaused(false);
+      // Closed, they act: P opens the planner.
+      press("KeyP");
+      expect(handle.views.planner.openId).not.toBeNull();
+    } finally {
+      handle.stop();
+    }
+  });
+
   it("a key the player moved works at once, and the old one no longer does", () => {
     frames.install();
     const settings = settingsOf();
