@@ -31,6 +31,7 @@ import {
 } from "../sim/index.js";
 import { centreCamera, isoToScreen } from "./city-camera.js";
 import { CityScreen } from "./city.js";
+import { sitingWords } from "./deposit-words.js";
 
 /** The browser's ground on a city's founding square of 32 tiles, with deposits on - and off. */
 const ON = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, DEPOSITS_ENABLED: 1 });
@@ -195,7 +196,7 @@ describe("deposits in the city view, before placing (Batch 37's third deliverabl
     expect(on).toContain("Ore vein here.");
     expect(on).toContain("On ore vein, all 4 of its tiles: it would make x2 materials.");
     page.hoverTile(bare.tx, bare.ty);
-    expect(page.q(".city-hint").textContent).toContain("No ore vein under it: it would make x1.");
+    expect(page.q(".city-hint").textContent).toContain("No ore vein under it: it would make x1. Ore veins are marked with copper diamonds.");
     // Placed on the vein: the inspector says so, and the simulation pays it.
     page.hoverTile(vein.tx, vein.ty);
     page.clickTile(vein.tx, vein.ty);
@@ -209,6 +210,56 @@ describe("deposits in the city view, before placing (Batch 37's third deliverabl
     page.frame();
     const ore = [...depositsOf(HERE, ON)].filter((c) => c === ORE).length;
     expect(marks(page.overlay(), "ore")).toBe(ore - 4);
+  });
+
+  it("the hint's words are whole sentences for each of the four, off its deposit and on it", () => {
+    // The first form added an "s" to the name and to "a copper diamond": "Ice lenss are marked with a pale blue discs."
+    const off = Object.fromEntries(DEPOSIT_KINDS.map((kind) => [kind, sitingWords({ kind, on: 0, of: 4, factor: 1 })]));
+    expect(off).toEqual({
+      ore: " No ore vein under it: it would make x1. Ore veins are marked with copper diamonds.",
+      ice: " No ice lens under it: it would make x1. Ice lenses are marked with pale blue discs.",
+      vent: " No geothermal vent under it: it would make x1. Geothermal vents are marked with red rings.",
+      sun: " No sunny high flat under it: it would make x1. Sunny high flats are marked with yellow crosses.",
+    });
+    const on = Object.fromEntries(DEPOSIT_KINDS.map((kind) => [kind, [sitingWords({ kind, on: 4, of: 4, factor: 2 }), sitingWords({ kind, on: 2, of: 4, factor: 1.5 })]]));
+    expect(on).toEqual({
+      ore: [" On ore vein, all 4 of its tiles: it would make x2 materials.", " On ore vein, 2 of its 4 tiles: it would make x1.5 materials."],
+      ice: [" On ice lens, all 4 of its tiles: it would make x2 water.", " On ice lens, 2 of its 4 tiles: it would make x1.5 water."],
+      vent: [" On geothermal vent, all 4 of its tiles: it would make x2 power.", " On geothermal vent, 2 of its 4 tiles: it would make x1.5 power."],
+      sun: [" On sunny high flat, all 4 of its tiles: it would make x2 power.", " On sunny high flat, 2 of its 4 tiles: it would make x1.5 power."],
+    });
+  });
+
+  it("the ore's mark is a diamond on the screen, as a tile is: its points straight above, below and either side of its middle", () => {
+    /** Where each point of an outline lies from its middle on the screen, and its width over its height. */
+    const lie = (pts: readonly { sx: number; sy: number }[]) => {
+      const mx = pts.reduce((a, p) => a + p.sx, 0) / pts.length;
+      const my = pts.reduce((a, p) => a + p.sy, 0) / pts.length;
+      const at = pts.map((p) => (Math.abs(p.sx - mx) < 1e-6 ? (p.sy < my ? "above" : "below") : Math.abs(p.sy - my) < 1e-6 ? (p.sx < mx ? "left" : "right") : "off")).sort();
+      const width = Math.max(...pts.map((p) => p.sx)) - Math.min(...pts.map((p) => p.sx));
+      const height = Math.max(...pts.map((p) => p.sy)) - Math.min(...pts.map((p) => p.sy));
+      return { at, aspect: Math.round((width / height) * 1000) / 1000, middle: { sx: mx, sy: my } };
+    };
+    const points = (ring: readonly number[]) => Array.from({ length: ring.length / 2 }, (_, i) => ({ sx: ring[2 * i]!, sy: ring[2 * i + 1]! }));
+    // A tile's corners on the screen: the diamond the mark is to be.
+    const tile = lie([[0, 0], [1, 0], [1, 1], [0, 1]].map(([x, y]) => isoProject(x!, y!)));
+    expect({ at: tile.at, aspect: tile.aspect }).toEqual({ at: ["above", "below", "left", "right"], aspect: 2 });
+    // Every ore mark the city draws while a mine is being placed.
+    const page = mount(ON);
+    page.q('.city-card[data-type="regolith_mine"]').click();
+    page.frame();
+    const drawn = page.overlay().filter((s) => s.fill === DEPOSIT_MARKS.ore.fill);
+    expect(drawn.length).toBeGreaterThan(10);
+    for (const s of drawn) {
+      expect(s.rings.length).toBe(1);
+      const mark = lie(points(s.rings[0]!));
+      expect({ at: mark.at, aspect: mark.aspect }).toEqual({ at: tile.at, aspect: tile.aspect });
+    }
+    // Its middle the tile's middle: one at tile (7, 3) on level ground.
+    const one = lie(points(depositMark("ore", 7, 3, 0).find((s) => s.fill === DEPOSIT_MARKS.ore.fill)!.rings[0]!));
+    const middle = isoProject(7.5, 3.5, 0);
+    expect(one.middle.sx).toBeCloseTo(middle.sx, 9);
+    expect(one.middle.sy).toBeCloseTo(middle.sy, 9);
   });
 
   it("partly on the vein, the hint gives the share and its factor: two of four tiles, x1.5", () => {
