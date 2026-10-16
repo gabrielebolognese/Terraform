@@ -76,50 +76,58 @@ function clean(v: number): number {
 /** The salt of the noise that picks the fault's stretches with vents. */
 const VENT_SALT = 0x7e47;
 
+/** The diagonal ring's reach, tiles: the ring's radius along a diagonal. */
+function diagonal(t: Tuning): number {
+  return Math.max(1, Math.round(t.DEPOSIT_RING_TILES * Math.SQRT1_2));
+}
+
 /**
- * The deposit code of site tile (sx, sy), given the height at any site corner.
- * The one rule, read by both the whole-frame map and the single tile, so what
- * the city view shows is what the simulation pays.
+ * The twelve ring corners of site tile (sx, sy) as offsets from its own
+ * corner (sx, sy), in the order they are summed - a pair either side along
+ * each axis, and the four diagonals, symmetric about the tile's centre.
+ * Both readers sum them in this order, so their floating point agrees.
  */
-function classify(corner: (x: number, y: number) => number, seed: number, sx: number, sy: number, lat: number, t: Tuning): number {
+function ringOffsets(t: Tuning): readonly (readonly [number, number])[] {
+  const r = t.DEPOSIT_RING_TILES;
+  const q = diagonal(t);
+  return [
+    [-r, 0], [-r, 1], [1 + r, 0], [1 + r, 1],
+    [0, -r], [1, -r], [0, 1 + r], [1, 1 + r],
+    [-q, -q], [1 + q, -q], [-q, 1 + q], [1 + q, 1 + q],
+  ];
+}
+
+/**
+ * The deposit code of site tile (sx, sy), from its four corners (a at
+ * (sx, sy), b east of it, c south, d south-east) and its ring's sum and
+ * highest corner. The one rule, read by both the whole-frame map and the
+ * single tile, so what the city view shows is what the simulation pays.
+ */
+function judge(seed: number, sx: number, sy: number, a: number, b: number, c: number, d: number, ringSum: number, ringTop: number, lat: number, t: Tuning): number {
   // A vent: on the fault line, on a stretch of it with vents. Not height: the fault runs under hills and plains alike.
   const cx = sx + 0.5;
   const cy = sy + 0.5;
   if (Math.abs(faultCourse(seed, cx, cy) - 0.5) < t.VENT_FAULT_WIDTH && featureNoise(seed, VENT_SALT, cx, cy, 12) > t.VENT_STRETCH_MIN) return 3;
-  const a = corner(sx, sy);
-  const b = corner(sx + 1, sy);
-  const c = corner(sx, sy + 1);
-  const d = corner(sx + 1, sy + 1);
   // As the ground has them: the mean of the corners, and the steepest rise along an edge.
   const h = clean((a + b + c + d) / 4);
   const slope = Math.max(Math.abs(a - b), Math.abs(c - d), Math.abs(a - c), Math.abs(b - d)) / t.TILE_METRES;
-  const r = t.DEPOSIT_RING_TILES;
-  const q = Math.max(1, Math.round(r * Math.SQRT1_2));
-  // Twelve corners about the tile's centre: a pair either side along each axis, and the four diagonals.
-  let sum = 0;
-  let top = -Infinity;
-  const ring = (x: number, y: number): void => {
-    const v = corner(x, y);
-    sum += v;
-    if (v > top) top = v;
-  };
-  ring(sx - r, sy);
-  ring(sx - r, sy + 1);
-  ring(sx + 1 + r, sy);
-  ring(sx + 1 + r, sy + 1);
-  ring(sx, sy - r);
-  ring(sx + 1, sy - r);
-  ring(sx, sy + 1 + r);
-  ring(sx + 1, sy + 1 + r);
-  ring(sx - q, sy - q);
-  ring(sx + 1 + q, sy - q);
-  ring(sx - q, sy + 1 + q);
-  ring(sx + 1 + q, sy + 1 + q);
-  const rel = h - sum / 12;
+  const rel = h - ringSum / 12;
   if (rel >= t.ORE_RISE_M) return 1;
   if (rel <= -t.ICE_DIP_M * Math.cos(lat)) return 2;
-  if (slope <= t.SUN_FLAT_SLOPE && h >= t.SUN_HIGH_M && top <= h) return 4;
+  if (slope <= t.SUN_FLAT_SLOPE && h >= t.SUN_HIGH_M && ringTop <= h) return 4;
   return 0;
+}
+
+/** The deposit code of site tile (sx, sy), given the height at any site corner. */
+function classify(corner: (x: number, y: number) => number, seed: number, sx: number, sy: number, lat: number, t: Tuning): number {
+  let sum = 0;
+  let top = -Infinity;
+  for (const [dx, dy] of ringOffsets(t)) {
+    const v = corner(sx + dx, sy + dy);
+    sum += v;
+    if (v > top) top = v;
+  }
+  return judge(seed, sx, sy, corner(sx, sy), corner(sx + 1, sy), corner(sx, sy + 1), corner(sx + 1, sy + 1), sum, top, lat, t);
 }
 
 /** The kind for a code, or null. */
@@ -154,37 +162,88 @@ const NONE = new Uint8Array(0);
  */
 export function depositsOf(place: Place, t: Tuning): Uint8Array {
   if (!t.DEPOSITS_ENABLED) return NONE;
-  const f = frameOf(place, t);
-  const key = [place.lat, place.lon, place.kind, f.base, f.x0, f.y0, f.n, ...DEPOSIT_TUNING.map((k) => t[k])].join("|");
+  const key = mapKey(place, t);
   const kept = maps.get(key);
   if (kept !== undefined) {
     maps.delete(key);
     maps.set(key, kept);
     return kept;
   }
+  const steps = depositSteps(place, t);
+  for (;;) {
+    const r = steps.next();
+    if (r.done === true) return keep(key, r.value);
+  }
+}
+
+function mapKey(place: Place, t: Tuning): string {
+  const f = frameOf(place, t);
+  return [place.lat, place.lon, place.kind, f.base, f.x0, f.y0, f.n, ...DEPOSIT_TUNING.map((k) => t[k])].join("|");
+}
+
+function keep(key: string, map: Uint8Array): Uint8Array {
+  maps.set(key, map);
+  while (maps.size > KEEP_MAPS) maps.delete(maps.keys().next().value as string);
+  return map;
+}
+
+/**
+ * Make a place's deposit map a little at a time, yielding how far through it
+ * is, 0 to 1, and keep it where `depositsOf` looks (a metropolis's took
+ * 120 ms in one go, measured). Nothing to do with deposits off, or kept.
+ */
+export function* prepareDeposits(place: Place, t: Tuning): Generator<number, void> {
+  if (!t.DEPOSITS_ENABLED) return;
+  const key = mapKey(place, t);
+  if (maps.has(key)) return;
+  const steps = depositSteps(place, t);
+  for (;;) {
+    const r = steps.next();
+    if (r.done === true) {
+      keep(key, r.value);
+      return;
+    }
+    yield r.value;
+  }
+}
+
+/**
+ * The map, a band of rows at a time. Corners are read from the ground where
+ * the frame has them and made from the terrain function in a band round it
+ * (the ring reaches past the frame's edge), into one padded grid.
+ */
+function* depositSteps(place: Place, t: Tuning): Generator<number, Uint8Array> {
+  const f = frameOf(place, t);
   const { cornersM } = groundOf(place, t);
   const seed = placeSeed(place.lat, place.lon);
   const n = f.n;
   const m = n + 1;
-  const pad = t.DEPOSIT_RING_TILES + 1;
-  // Corners beyond the frame, made once each: the ring reaches past the frame's edge.
-  const outside = new Map<number, number>();
-  const corner = (sx: number, sy: number): number => {
-    const x = sx - f.x0;
-    const y = sy - f.y0;
-    if (x >= 0 && y >= 0 && x < m && y < m) return cornersM[y * m + x]!;
-    const k = (y + pad) * (m + 2 * pad) + (x + pad);
-    let v = outside.get(k);
-    if (v === undefined) {
-      v = clean(terrainHeight(seed, f.base, sx, sy, t));
-      outside.set(k, v);
+  const pad = Math.max(t.DEPOSIT_RING_TILES, diagonal(t)) + 1;
+  const w = m + 2 * pad;
+  const grid = new Float64Array(w * w);
+  for (let y = 0; y < w; y += 1) {
+    for (let x = 0; x < w; x += 1) {
+      const gx = x - pad;
+      const gy = y - pad;
+      grid[y * w + x] = gx >= 0 && gy >= 0 && gx < m && gy < m ? cornersM[gy * m + gx]! : clean(terrainHeight(seed, f.base, gx + f.x0, gy + f.y0, t));
     }
-    return v;
-  };
+  }
+  const ring = ringOffsets(t).map(([dx, dy]) => dy * w + dx);
   const out = new Uint8Array(n * n);
-  for (let ty = 0; ty < n; ty += 1) for (let tx = 0; tx < n; tx += 1) out[ty * n + tx] = classify(corner, seed, tx + f.x0, ty + f.y0, place.lat, t);
-  maps.set(key, out);
-  while (maps.size > KEEP_MAPS) maps.delete(maps.keys().next().value as string);
+  for (let ty = 0; ty < n; ty += 1) {
+    for (let tx = 0; tx < n; tx += 1) {
+      const at = (ty + pad) * w + tx + pad;
+      let sum = 0;
+      let top = -Infinity;
+      for (const o of ring) {
+        const v = grid[at + o]!;
+        sum += v;
+        if (v > top) top = v;
+      }
+      out[ty * n + tx] = judge(seed, tx + f.x0, ty + f.y0, grid[at]!, grid[at + 1]!, grid[at + w]!, grid[at + w + 1]!, sum, top, place.lat, t);
+    }
+    if (ty % 32 === 31) yield (ty + 1) / n;
+  }
   return out;
 }
 

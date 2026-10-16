@@ -60,6 +60,8 @@ export const NEW_WORLD_OVERRIDES: TuningOverrides = {
   ROVER_ROUTES_ENABLED: 1,
   // People need more than life support as a city grows, and how happy they are moves growth and output (Batch 32).
   NEEDS_ENABLED: 1,
+  // Deposits on the ground - ore, ice, vents, sunny flats - and more from the building sited on its own (Batch 37).
+  DEPOSITS_ENABLED: 1,
 };
 
 /**

@@ -17,13 +17,17 @@ import { BROWSER_OVERRIDES, BROWSER_TUNING, MODE_OVERRIDES, NEW_WORLD_OVERRIDES,
 
 /**
  * What a new world plays at each pace (since Batch 29, with the rovers' routes; since Batch 32, with the people's
- * needs; since Batch 33, with events that ask for decisions - which the script never answers, unless told to).
+ * needs; since Batch 33, with events that ask for decisions - which the script never answers, unless told to;
+ * since Batch 37, with deposits on the ground).
  */
 const STANDARD = worldTuning("standard", 0, "standard");
 const CLASSIC = worldTuning("standard", 0, "classic");
+/** Without the deposits: Batch 36's new world, to measure the deposits and the events each alone. */
+const STANDARD_36 = makeTuning({ ...STANDARD, DEPOSITS_ENABLED: 0 });
+const CLASSIC_36 = makeTuning({ ...CLASSIC, DEPOSITS_ENABLED: 0 });
 /** Without the events: Batch 32's new world, to measure the needs and the events each alone. */
-const STANDARD_32 = makeTuning({ ...STANDARD, DECISIONS_ENABLED: 0 });
-const CLASSIC_32 = makeTuning({ ...CLASSIC, DECISIONS_ENABLED: 0 });
+const STANDARD_32 = makeTuning({ ...STANDARD_36, DECISIONS_ENABLED: 0 });
+const CLASSIC_32 = makeTuning({ ...CLASSIC_36, DECISIONS_ENABLED: 0 });
 /** Without the needs as well: Batch 29's new world, to measure the routes and the needs each alone. */
 const STANDARD_29 = makeTuning({ ...STANDARD_32, NEEDS_ENABLED: 0 });
 const CLASSIC_29 = makeTuning({ ...CLASSIC_32, NEEDS_ENABLED: 0 });
@@ -44,11 +48,18 @@ describe("the scripted playthrough, in real time at 1x", () => {
   // Standard 33 s / 21.5 min / 2.16 h / 8 s / 1.65 h.
   // Measured (Batch 33, events on too, never answered): Classic 8 s / 19.9 min / 1.82 h / 8 s / 12.4 min;
   // Standard 33 s / 21.5 min / 2.04 h / 8 s / 1.65 h. Answered: Classic 1.81 h, Standard 1.98 h.
+  // Measured (Batch 37, deposits on too, the script placing by its spiral): Classic 8 s / 19.9 min / 1.80 h / 8 s /
+  // 12.4 min; Standard 33 s / 21.5 min / 2.11 h / 8 s / 1.65 h.
   const classic = playPacing(CLASSIC, 4 * HOUR).moments;
   const standard = playPacing(STANDARD, 4 * HOUR).moments;
+  const classic36 = playPacing(CLASSIC_36, 4 * HOUR).moments;
+  const standard36 = playPacing(STANDARD_36, 4 * HOUR).moments;
+  /** Batch 37: a player who goes up to 8 tiles further for a building's deposit, and one who goes 16. */
+  const sited = { standard: playPacing(STANDARD, 4 * HOUR, true, undefined, { siting: 8 }).moments, classic: playPacing(CLASSIC, 4 * HOUR, true, undefined, { siting: 8 }).moments };
+  const far = playPacing(STANDARD, 4 * HOUR, true, undefined, { siting: 16 }).moments;
   const classic32 = playPacing(CLASSIC_32, 4 * HOUR).moments;
   const standard32 = playPacing(STANDARD_32, 4 * HOUR).moments;
-  const answered = { standard: playPacing(STANDARD, 4 * HOUR, true, undefined, { answer: true }).moments, classic: playPacing(CLASSIC, 4 * HOUR, true, undefined, { answer: true }).moments };
+  const answered = { standard: playPacing(STANDARD_36, 4 * HOUR, true, undefined, { answer: true }).moments, classic: playPacing(CLASSIC_36, 4 * HOUR, true, undefined, { answer: true }).moments };
   const classic29 = playPacing(CLASSIC_29, 4 * HOUR).moments;
   const standard29 = playPacing(STANDARD_29, 4 * HOUR).moments;
   const classic28 = playPacing(CLASSIC_28, 4 * HOUR).moments;
@@ -59,7 +70,7 @@ describe("the scripted playthrough, in real time at 1x", () => {
     expect(standard.firstBuilding!).toBeLessThan(MIN);
   });
 
-  it("Standard: a city of 1,000 at 1-3 h (2.04 h; 2.16 h before Batch 33's events)", () => {
+  it("Standard: a city of 1,000 at 1-3 h (2.11 h; 2.04 h before Batch 37's deposits, 2.16 h before Batch 33's events)", () => {
     expect(standard.city1000! / HOUR).toBeGreaterThanOrEqual(1);
     expect(standard.city1000! / HOUR).toBeLessThanOrEqual(3);
   });
@@ -116,7 +127,7 @@ describe("the scripted playthrough, in real time at 1x", () => {
 
   // Batch 33: the first card is dealt at 30 minutes or later, so the first half hour is the same to the second.
   it("events leave the first half hour as it was: the first building, the first upgrade and the phases to the second", () => {
-    for (const [a, b] of [[standard, standard32], [classic, classic32], [answered.standard, standard32], [answered.classic, classic32]] as const) {
+    for (const [a, b] of [[standard36, standard32], [classic36, classic32], [answered.standard, standard32], [answered.classic, classic32]] as const) {
       expect(a.firstBuilding).toBe(b.firstBuilding);
       expect(a.firstUpgrade).toBe(b.firstUpgrade);
       expect(a.phase1).toBe(b.phase1);
@@ -130,15 +141,46 @@ describe("the scripted playthrough, in real time at 1x", () => {
     // Classic 1.81 h (1.041). Each kind alone, Standard: meteor 2.19 h, failure 2.11, outbreak 2.29, ship 2.14,
     // discovery 2.16 - the scripted city is an instrument that answers a shock by building what is short, so a
     // loss can bring the 1,000 sooner. Bounded at an eighth either way.
-    for (const [a, b] of [[standard, standard32], [classic, classic32], [answered.standard, standard32], [answered.classic, classic32]] as const) {
+    for (const [a, b] of [[standard36, standard32], [classic36, classic32], [answered.standard, standard32], [answered.classic, classic32]] as const) {
       expect(a.city1000! / b.city1000!).toBeGreaterThan(0.88);
       expect(a.city1000! / b.city1000!).toBeLessThan(1.12);
       expect(a.city1000! / HOUR).toBeGreaterThanOrEqual(1);
       expect(a.city1000! / HOUR).toBeLessThanOrEqual(3);
     }
     // Vacuity: the events did move it.
-    expect(standard.city1000).not.toBe(standard32.city1000);
-    expect(classic.city1000).not.toBe(classic32.city1000);
+    expect(standard36.city1000).not.toBe(standard32.city1000);
+    expect(classic36.city1000).not.toBe(classic32.city1000);
+  });
+
+  it("deposits, the script placing by its spiral, leave the first half hour and the phases as they were and move the city of 1,000 by a twentieth or less", () => {
+    // Batch 37, measured: the spiral puts 2 or 3 of its 50-62 mines, extractors, power plants and arrays on a
+    // deposit, by chance - the city of 1,000 at 2.11 h against 2.03 at Standard (1.039), 1.80 h against 1.82 at
+    // Classic (0.985). The scripted city of 1,000 waits on its people's growth and its builds, not on what it makes.
+    for (const [a, b] of [[standard, standard36], [classic, classic36]] as const) {
+      expect(a.firstBuilding).toBe(b.firstBuilding);
+      expect(a.firstUpgrade).toBe(b.firstUpgrade);
+      expect(a.phase1).toBe(b.phase1);
+      expect(a.phase2).toBe(b.phase2);
+      expect(a.city1000! / b.city1000!).toBeGreaterThan(0.95);
+      expect(a.city1000! / b.city1000!).toBeLessThan(1.05);
+    }
+    // Vacuity: the deposits did move it.
+    expect(standard.city1000).not.toBe(standard36.city1000);
+    expect(classic.city1000).not.toBe(classic36.city1000);
+  });
+
+  it("siting within 8 tiles keeps the city of 1,000 at 1-3 h; chasing deposits 16 tiles out costs the Standard city an hour and more", () => {
+    // Batch 37, measured: going up to 8 tiles further for a deposit, 9-10 of the city's 54 boostable buildings stand
+    // on one, and the city of 1,000 comes at 2.17 h (Standard) and 1.80 h (Classic) - the deposits' gain given back
+    // to the longer drives and the corridors and cables to them. Going 16 tiles further, the first solar array is
+    // sited 30 tiles out, its cable and corridor take the founding stock, the first upgrade waits 2 hours and the city
+    // of 1,000 comes at 3.76 h. Recorded in the note and the manual's advice: a deposit near the city, not any deposit.
+    for (const m of [sited.standard, sited.classic]) {
+      expect(m.city1000! / HOUR).toBeGreaterThanOrEqual(1);
+      expect(m.city1000! / HOUR).toBeLessThanOrEqual(3);
+    }
+    expect(sited.standard.city1000! / standard.city1000!).toBeLessThan(1.1);
+    expect(far.city1000 === null || far.city1000 > standard.city1000! + HOUR).toBe(true);
   });
 });
 
@@ -194,10 +236,11 @@ describe("a world's pace is its tuning", () => {
     expect(MODE_OVERRIDES.sandbox).toEqual({});
     expect(BROWSER_TUNING.DECISIONS_ENABLED).toBe(0);
     expect(BROWSER_TUNING.EARTH_ENABLED).toBe(0);
-    // What every new world has since: the rovers' routes (Batch 29) and the people's needs (Batch 32). The worlds before worlds never had them.
-    expect(NEW_WORLD_OVERRIDES).toEqual({ ROVER_ROUTES_ENABLED: 1, NEEDS_ENABLED: 1 });
+    // What every new world has since: the rovers' routes (Batch 29), the people's needs (Batch 32) and the deposits (Batch 37). The worlds before worlds never had them.
+    expect(NEW_WORLD_OVERRIDES).toEqual({ ROVER_ROUTES_ENABLED: 1, NEEDS_ENABLED: 1, DEPOSITS_ENABLED: 1 });
     expect(BROWSER_TUNING.ROVER_ROUTES_ENABLED).toBe(0);
     expect(BROWSER_TUNING.NEEDS_ENABLED).toBe(0);
+    expect(BROWSER_TUNING.DEPOSITS_ENABLED).toBe(0);
   });
 
   it("offers a Standard world slow speeds, a sandbox and the debug setting every speed, a Classic world its own", () => {

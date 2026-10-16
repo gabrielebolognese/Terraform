@@ -122,7 +122,27 @@ export interface CitySceneOptions {
    * edge dashed - the second cue, whatever the colours.
    */
   readonly claimReady?: { readonly r: number; readonly g: number; readonly b: number };
+  /**
+   * Batch 37: the deposits to mark on the ground (detail §3.1), each kind by
+   * its own shape as well as its colour - ore a diamond, ice a disc, a vent a
+   * ring, sun a cross - so they read without colour. Absent or empty, none.
+   */
+  readonly deposits?: readonly DepositKind[];
 }
+
+/** A deposit's kind, as the city's view names it (the wall: only the view crosses). */
+type DepositKind = NonNullable<CityBuildingView["deposit"]>["kind"];
+
+/** The deposits in the view's code order (`CityView.deposits`: 0 none, 1 + index here); the simulation's DEPOSIT_KINDS, checked by test. */
+export const DEPOSIT_CODES: readonly DepositKind[] = ["ore", "ice", "vent", "sun"];
+
+/** Each deposit's mark: its colour, and the shape that tells it without colour. */
+export const DEPOSIT_MARKS: Readonly<Record<DepositKind, { readonly shape: "diamond" | "disc" | "ring" | "cross"; readonly fill: Rgba }>> = {
+  ore: { shape: "diamond", fill: { r: 0.86, g: 0.52, b: 0.22, a: 0.95 } },
+  ice: { shape: "disc", fill: { r: 0.78, g: 0.93, b: 1, a: 0.95 } },
+  vent: { shape: "ring", fill: { r: 0.96, g: 0.33, b: 0.2, a: 0.95 } },
+  sun: { shape: "cross", fill: { r: 1, g: 0.86, b: 0.22, a: 0.95 } },
+};
 
 /** How opaque a building is drawn in building mode. */
 export const SEE_THROUGH_ALPHA = 0.3;
@@ -4328,8 +4348,61 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       out.push({ rings: [groundStrip(mx, g.ty + 0.2, mx, g.ty + gd - 0.2, 0.05, z)], fill: cross });
     }
   }
+  // Batch 37: the deposits, under the ghost's words but over the ground and the buildings - visible before placing.
+  if (options.deposits !== undefined && options.deposits.length > 0) out.push(...depositOverlay(view, options.deposits, options.viewport));
   if (options.claimable !== undefined && options.claimable.length > 0) out.push(...claimOverlay(view, options.claimable, options.claimReady === undefined ? undefined : rgb(options.claimReady.r, options.claimReady.g, options.claimReady.b)));
   out.push(...badges);
+  return out;
+}
+
+/** A ring of `sides` points round (cx, cy) on the ground at height z, radius r tiles. */
+function groundPolygon(cx: number, cy: number, r: number, sides: number, z: number, turn = 0): number[] {
+  const pts: V3[] = [];
+  for (let k = 0; k < sides; k += 1) {
+    const a = turn + (k / sides) * 2 * Math.PI;
+    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a), z]);
+  }
+  return ringOf(pts);
+}
+
+/** One deposit's mark at tile (tx, ty): a dark backing a little larger, then the mark - its shape the cue without colour. */
+export function depositMark(kind: DepositKind, tx: number, ty: number, z: number): Shape[] {
+  const cx = tx + 0.5;
+  const cy = ty + 0.5;
+  const mark = DEPOSIT_MARKS[kind];
+  const back: Rgba = { r: 0.08, g: 0.07, b: 0.06, a: 0.55 };
+  const of = (k: number): (readonly number[])[] => {
+    if (mark.shape === "diamond") return [groundPolygon(cx, cy, 0.34 * k, 4, z)];
+    if (mark.shape === "disc") return [groundPolygon(cx, cy, 0.27 * k, 10, z)];
+    // A ring: two outlines, even-odd, so its middle is the ground.
+    if (mark.shape === "ring") return [groundPolygon(cx, cy, 0.32 * k, 12, z), groundPolygon(cx, cy, 0.32 - 0.13 * k, 12, z)];
+    return [groundStrip(cx - 0.33 * k, cy, cx + 0.33 * k, cy, 0.07 * k, z), groundStrip(cx, cy - 0.33 * k, cx, cy + 0.33 * k, 0.07 * k, z)];
+  };
+  return mark.shape === "cross"
+    ? [...of(1.3).map((r) => ({ rings: [r], fill: back })), ...of(1).map((r) => ({ rings: [r], fill: mark.fill }))]
+    : [{ rings: of(1.25), fill: back }, { rings: of(1), fill: mark.fill }];
+}
+
+/** The deposits of the kinds asked for, a mark a tile, in the view (and the viewport, if given). */
+function depositOverlay(view: CityView, kinds: readonly DepositKind[], viewport: CitySceneOptions["viewport"]): Shape[] {
+  const codes = view.deposits;
+  if (codes === undefined || kinds.length === 0) return [];
+  const want = new Set(kinds);
+  const z = heightAt(view, false);
+  const n = view.tiles;
+  const out: Shape[] = [];
+  for (let ty = 0; ty < n; ty += 1) {
+    for (let tx = 0; tx < n; tx += 1) {
+      const kind = DEPOSIT_CODES[(codes[ty * n + tx] ?? 0) - 1];
+      if (kind === undefined || !want.has(kind)) continue;
+      const h = z(tx + 0.5, ty + 0.5) + 0.06;
+      if (viewport !== undefined) {
+        const p = isoProject(tx + 0.5, ty + 0.5, h);
+        if (p.sx < viewport.minX - TILE_W || p.sx > viewport.maxX + TILE_W || p.sy < viewport.minY - TILE_H || p.sy > viewport.maxY + TILE_H) continue;
+      }
+      out.push(...depositMark(kind, tx, ty, h));
+    }
+  }
   return out;
 }
 

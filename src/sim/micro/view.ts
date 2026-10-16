@@ -31,6 +31,8 @@ import type { World } from "./terrain.js";
 import { worldOf } from "./terrain.js";
 import type { NeedsReading } from "./needs.js";
 import { NEEDS, peopleReached, walkNetwork } from "./needs.js";
+import type { DepositKind } from "./deposits.js";
+import { DEPOSIT_KINDS, depositBonus, depositsOf, prepareDeposits, sitingOf } from "./deposits.js";
 
 /** The buildings that meet a need in reach of homes. */
 const PROVIDERS: ReadonlySet<BuildingType> = new Set<BuildingType>(NEEDS.flatMap((n) => (n.reach ? n.providers : [])));
@@ -76,6 +78,12 @@ export interface CityBuildingView {
    * Absent for a building without one.
    */
   readonly fault?: { readonly factor: number; readonly remaining: number };
+  /**
+   * Batch 37: the deposit under it that it is boosted by - which, the share of
+   * its footprint on it, and what it makes for it now (x1.5 for half of a
+   * mine on ore). Absent on bare ground and with deposits off.
+   */
+  readonly deposit?: { readonly kind: DepositKind; readonly share: number; readonly factor: number };
 }
 
 export interface CityView {
@@ -159,6 +167,12 @@ export interface CityView {
   readonly jobs: readonly CityJobView[];
   /** Batch 32: the people's needs this substep and the mood they make; null (or absent, in a hand-made view) with needs off and for an outpost. */
   readonly needs?: NeedsReading | null;
+  /**
+   * Batch 37 - detail §3.1: row-major, each tile's deposit as a code - 0 for
+   * none, else 1 + its index in DEPOSIT_KINDS (ore, ice, vent, sun). Absent
+   * with deposits off.
+   */
+  readonly deposits?: ArrayLike<number>;
 }
 
 export interface CityClaimsView {
@@ -269,7 +283,9 @@ const dry = new Map<number, readonly boolean[]>();
  * metropolis's froze the browser for seconds as it opened, measured.)
  */
 export function* prepareCity(s: Settlement, t: Tuning): Generator<number, void> {
-  for (const f of prepareRocks(s, t)) yield 0.75 * f;
+  for (const f of prepareRocks(s, t)) yield 0.72 * f;
+  // Batch 37: the deposits, a band of rows at a time (a metropolis's are 50 ms of sums).
+  for (const f of prepareDeposits(s, t)) yield 0.72 + 0.03 * f;
   const world = worldOf(s, t);
   const had = worldsInTiles.get(world);
   if (had === undefined || had.corners.length !== world.cornersM.length) {
@@ -357,6 +373,9 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
   const building = constructionOf(s);
   // Batch 32: the people each service reaches - a crowd at a station or a park.
   const reached = step.needs === null ? null : peopleReached(s, step.operable, new Set(building.keys()), walkNetwork(s, t), t);
+  // Batch 37: what each building's deposit gives it now, as the step pays it.
+  const siting = sitingOf(s, t);
+  const depositNow = siting === null ? null : DEPOSIT_KINDS.map((k) => depositBonus(k, env, t));
   // Where each building stands: the highest corner under it - kept per building list and ground.
   const bases = kept(s.buildings, n, t, ground, () =>
     s.buildings.map((b) => {
@@ -408,7 +427,9 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
       const baseZ = bases[index]!;
       const drowned = step.flood !== null && submerged(b, step.flood);
       const reaches = reached !== null && PROVIDERS.has(b.type) ? reached[index]! : undefined;
-      return { index, type: b.type, tx: b.tx, ty: b.ty, size, ...(depth === size ? {} : { depth }), operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null, ...(reaches === undefined ? {} : { reaches }), ...(fault === undefined ? {} : { fault }) };
+      const share = siting === null ? 0 : siting.shares[index]!;
+      const deposit = share > 0 ? { kind: DEPOSIT_KINDS[siting!.kinds[index]!]!, share, factor: 1 + depositNow![siting!.kinds[index]!]! * share } : undefined;
+      return { index, type: b.type, tx: b.tx, ty: b.ty, size, ...(depth === size ? {} : { depth }), operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null, ...(reaches === undefined ? {} : { reaches }), ...(fault === undefined ? {} : { fault }), ...(deposit === undefined ? {} : { deposit }) };
     }),
     population: s.population,
     housing: home,
@@ -429,6 +450,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     // A rover building is drawn as any rover at work: out, at the site, and back.
     jobs: s.jobs.map((j) => jobView(s, j, t)),
     needs: step.needs,
+    ...(t.DEPOSITS_ENABLED ? { deposits: depositsOf(s, t) } : {}),
   };
 }
 

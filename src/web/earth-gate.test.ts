@@ -174,10 +174,13 @@ describe("a contract met, against the same run failed (Batch 34's exit gate)", (
 });
 
 describe("the pace with Earth (Batch 34, measured)", () => {
-  /** The scripted player to the end of its moments, events off, trading with Earth or not. */
-  const run = (pace: "standard" | "classic", trade: boolean) => {
+  /**
+   * The scripted player to the end of its moments, events off, trading with Earth or not - on the world Batch 34
+   * measured, before deposits (Batch 37), unless asked for the world as it now ships.
+   */
+  const run = (pace: "standard" | "classic", trade: boolean, deposits = 0) => {
     const T = worldTuning("standard", 0, pace);
-    return playPacing(makeTuning({ ...tuningRecord(T), DECISIONS_ENABLED: 0 }), 8 * 3600, true, undefined, { trade });
+    return playPacing(makeTuning({ ...tuningRecord(T), DECISIONS_ENABLED: 0, DEPOSITS_ENABLED: deposits }), 8 * 3600, true, undefined, { trade });
   };
 
   it("at Standard, a player who trades has the city of 1,000 sooner and the planet's Phase 2 sooner, and fails no contract", () => {
@@ -193,6 +196,18 @@ describe("the pace with Earth (Batch 34, measured)", () => {
     expect(trader.state.earth.fulfilled).toBeGreaterThanOrEqual(1);
     expect(trader.state.earth.failed).toBe(0);
     expect(trader.state.earth.earned + trader.state.earth.rewards).toBeGreaterThan(0);
+  });
+
+  it("at Standard with deposits on, as new worlds now are, a trader still has Phase 2 far sooner and the city of 1,000 within 2%", () => {
+    // Batch 37, measured: with deposits on, one of the script's water extractors lands on ice at 4,800 s and every
+    // placement after it changes; the trader's city of 1,000 came at 7,650 s against 7,567 s (1.1% later; it was
+    // 7,383 against 7,767 without deposits), Phase 2 at 4,708 s against 5,950 as before. The greedy script, not
+    // trading: the same deposits brought the city of 1,000 200 s sooner to the player who does not trade.
+    const plain = run("standard", false, 1);
+    const trader = run("standard", true, 1);
+    expect(trader.moments.phase2!).toBeLessThan(plain.moments.phase2! - 600);
+    expect(trader.moments.city1000!).toBeLessThan(plain.moments.city1000! * 1.02);
+    expect(trader.state.earth.failed).toBe(0);
   });
 
   it("at Classic, trading does not hold the city back: the city of 1,000 within 1%", () => {
