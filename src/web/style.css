@@ -2074,6 +2074,12 @@ button:hover {
   border-radius: 3px;
 }
 
+/* A chart key's sample of its line, in its pattern. */
+.planner-chart-swatch {
+  display: inline-block;
+  flex: none;
+}
+
 .planner-side {
   grid-area: side;
   min-height: 0;
