@@ -68,7 +68,16 @@ Batch 28's pacing targets are re-measured with deposits on.
      diamond, as a tile does.
    - **Marks were drawn over the buildings standing on them.** A vent's rings covered its
      geothermal plant. A building's own tiles now carry no mark; its panel says what is under it.
-     Both are tested, and both injections are caught (31, 32).
+
+   The marks over buildings were tested (31). **The flat bar was not**, though this note and its
+   commit (93748bc, "both tested and injected") said so. Injection 32 (the diamond drawn as a disc)
+   is a different fault. The cue register compares each mark's points about its middle, and the
+   flat bar and the diamond both have four, so it tells them from the other kinds but not from
+   each other. Review 1 removed the turn and ran the three files that draw the marks: 24 of 24
+   passed. A test now takes every ore mark the city draws while a mine is placed and holds it to a
+   tile's shape on the screen: its four points straight above, below and either side of its
+   middle, twice as wide as tall, and its middle the tile's. The turn removed, all four points
+   lie off those lines (40); the mark moved a tenth of a tile, its middle is 3.2 pixels out (41).
 8. **The injection run found six tests weaker than they looked**, each strengthened:
    - The siting was kept per building list whatever the tuning (15). A balance sweep runs
      variants on the same state, so a variant with no ore would have been paid for the first
@@ -92,6 +101,13 @@ Batch 28's pacing targets are re-measured with deposits on.
    - A one-to-one shift of the batch's corner memo (33): every corner still has its own slot.
 
    Keeping a whole row in one slot (33') is caught.
+
+10. **The placement hint was broken English off a deposit, which is most of the time** (found by
+    review 1). "Ice lenss are marked with a pale blue discs", "a yellow crosss": the plural was
+    made by adding an "s" to the name and to "a copper diamond". The test read only the first
+    sentence. The plurals are now written out ("Ice lenses are marked with pale blue discs",
+    "yellow crosses"), and a test holds the whole sentence, off the deposit and on it, for all
+    four kinds. The old form fails it and the mine's hint test (42).
 
 ## What was built
 
@@ -250,6 +266,10 @@ Read across:
 - 5 missed at first and caught once their test was strengthened (15, 28, 34, 35, 38);
 - 2 change nothing a test can see (29, and 33's first form; its second form is caught).
 
+Review 1's fixes added three (40-42), one at a time, the tree clean after each: one (40) missed
+until its test was written, then all three caught. 41's first run changed the line in four
+functions that share it; it was run again on the mark's alone, with the same result.
+
 One injection run left a fault in the tree: the runner restored two edits to the same file in the
 wrong order, putting fault 38 back. `git diff` after the run showed the one changed line; the file
 was restored from the commit and the runner fixed before any other work.
@@ -287,7 +307,7 @@ was restored from the commit and the runner fixed before any other work.
 | 29 | the map's ring summed in reverse order | not caught: the sums differ in the last bit only |
 | 30 | the ore boosts a storage depot, not the mine | five, the bootstrap among them |
 | 31 | marks drawn over the buildings standing on them | the hint test: 56 marks against 52 |
-| 32 | the ore's diamond drawn as a disc | the cue register |
+| 32 | the ore's diamond drawn as a disc | the cue register (not the flat bar: see 40) |
 | 33 | the batch's corner memo shifted a column / kept a row to one slot | the shift not caught (one-to-one); the row: the siting-against-map test, 402 differ |
 | 34 | the siting's codes in local tiles | missed by the unclaimed city; the claimed one: 521 differ |
 | 35 | the siting's codes kept across a claim | missed; asked before and after the claim: 548 differ |
@@ -295,6 +315,9 @@ was restored from the commit and the runner fixed before any other work.
 | 37 | the scripted player never sites | the siting pace test: the far player no longer an hour later |
 | 39 | the town's reward gives no rovers | the reward test: 0 against more than 7 minutes |
 | 38 | the map read from the levelled ground, not the natural | missed: the place's map was already made and kept; the test now makes a fresh place's map with 40 ore tiles levelled first: all 40 lost |
+| 40 | (review 1) the ore's diamond unturned: the flat bar | missed by every test (review 1: 24 of 24 passed); the screen-diamond test added: four points off the middle's lines |
+| 41 | (review 1) the mark a tenth of a tile off its tile's middle | the screen-diamond test: 124.8 against 128 pixels |
+| 42 | (review 1) the hint's plurals by an added "s" | the whole-sentence test (all four kinds) and the mine's hint test |
 
 ## Verification
 
@@ -313,6 +336,9 @@ was restored from the commit and the runner fixed before any other work.
   `src/sim/micro/deposits.test.ts` holds chunk-independence with deposits on.
 - **The marks, looked at**: rendered by the software rasteriser to PNG (a 48-tile city with every
   kind, whole and up close), and read.
+- **After review 1's fixes**: typecheck, build and build:web green (667.79 kB JS, 226.22 kB gzip,
+  52.19 kB CSS; the built script holds "Ice lenses" and "crosses"); the full suite 125 files, 1,512
+  tests, all passed (426 s; the Known-red opening test passed).
 
 ## Open
 
