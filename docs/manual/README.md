@@ -23,6 +23,7 @@ This manual describes the game as it is today. What changed in each update is in
 | [Cities](cities.md) | Founding a settlement, building, how rovers drive, the build queue, upgrades, people, land, railways and trains |
 | [People and their needs](people.md) | What a growing city's people want beyond life support, how far each service reaches, happiness and what it does |
 | [Events and decisions](events.md) | Meteor showers, failing machines, outbreaks, supply ships and discoveries: the choices each gives you, and what happens if you do nothing |
+| [Earth](earth.md) | Launch windows, buying from and selling to Earth, prices, contracts and your reputation |
 | [Buildings](buildings.md) | Every structure: what it costs, what it does, how long it takes |
 | [Controls](controls.md) | Mouse, keyboard and game speed in every view |
 | [Worlds and saving](worlds-and-saving.md) | Keeping several worlds, saving, backups, and what happens while you are away |
@@ -47,6 +48,9 @@ This manual describes the game as it is today. What changed in each update is in
 6. **Answer events.** From about half an hour in, a meteor shower, a failing machine, a sickness
    or a ship from Earth asks you to choose, with about three minutes to do it. Do nothing, and the
    worst happens.
+7. **Trade with Earth.** Every 9 and a half minutes or so a launch window opens: your Spaceports'
+   rockets fly to Earth with what you sell and come back with what you ordered. Earth offers
+   contracts that pay well if you deliver on time. Press **Earth** to trade.
 
 A full terraforming is a long game: several days of play at normal speed. Cities move faster,
 with buildings that go up in seconds or minutes at first and take hours at their highest levels.

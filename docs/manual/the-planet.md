@@ -9,7 +9,8 @@ The panel on the left holds everything you need, from top to bottom.
   the current year. At the Standard pace a planet year passes in about four and a half minutes at
   1x.
 - **Credits.** Your bank, and how much it grows each year: income minus the upkeep of your
-  machines. Research in your cities adds more on top.
+  machines. Research in your cities adds more on top, and so does trade with Earth: what it buys
+  from your cities and the contracts you meet (see [Earth](earth.md)).
 - **Speed.** **pause**, **1x**, **2x** and **3x** at the Standard pace; **pause**, **1x**,
   **10x**, **100x** and **1000x** at the Classic pace; every speed in Sandbox.
 

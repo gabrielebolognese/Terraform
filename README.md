@@ -145,6 +145,20 @@ or chunked any way. A card shows what is waiting; an event is an urgent alert un
 the **Alerts** centre keeps the world's event history. Behind `DECISIONS_ENABLED`; new Standard and
 Terraformed worlds have it, a sandbox and the worlds before do not.
 
+**Earth: shipments, contracts and the market** (Batch 34). Launch windows open on the planet's
+calendar, every 2.135 years (the synodic period: about 9.5 minutes at 1x at the Standard pace),
+worked out from the window's number so fifty on they still fall on their dates. At each one a city's
+own spaceport rocket - the one the view draws - lifts off with what is sold and what Earth's
+contracts take (never a store below a quarter of its room) and lands a third of a window later with
+what was ordered; a rocket away on a supply run misses the window and the orders wait. Earth's
+market prices each good by its supply that window (from the seed), the player's trade (remembered,
+half forgotten each window) and their reputation, and never pays more than it asks. Each window
+Earth offers a contract for materials, water or research (research earned goes to Earth instead of
+the bank until it is met): met, it pays and reputation rises; failed, it falls. Settlers and rovers
+go on sale as contracts are met. All of it inside `advance`, every substep; save v19. An **Earth**
+panel trades, and Earth's news comes in the alerts. Behind `EARTH_ENABLED`; new Standard and
+Terraformed worlds have it, a sandbox and the worlds before do not.
+
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved

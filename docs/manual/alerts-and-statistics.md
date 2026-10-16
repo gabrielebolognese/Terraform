@@ -20,6 +20,10 @@ names its place, and clicking it takes you there.
 | **Objective done:** *name* | Its reward is waiting in **Objectives** | Kept in **Alerts** only (the milestone card already shows it) |
 | *Event* **in** *city*, waiting | An event needs your decision: a meteor shower, a machine failing, an outbreak, a supply ship, a discovery. It says how long you have | Urgent: a pop-up message, and under **Now** until you choose |
 | *Event* **in** *city*, happened | What you chose and what it did, for example "Kept working: 3 buildings hit, 2 wrecked" | Kept in **Alerts**; a pop-up message if you chose nothing |
+| **Launch window missed in** *city* | Its rocket was away, or it has no finished Spaceport: its orders for Earth wait for the next window | A pop-up message |
+| **Earth's** *materials* **contract failed** | A contract was not met by its launch window: your reputation with Earth falls | A pop-up message |
+| **Rocket home in** *city* | Earth's rocket landed, and what it brought | Kept in **Alerts** only |
+| **Earth's** *materials* **contract met** | What Earth paid, and the reputation gained | Kept in **Alerts** only |
 
 Many of the same thing in one place are one alert: a hundred greenhouses offline for the same
 reason in one city are a single line, "100 Greenhouses offline in Ares". Buildings dark because power or
@@ -55,6 +59,7 @@ Click any line to go there:
 - **A storm** takes you back up to the planet.
 - **An objective** opens **Objectives**.
 - **An event** takes you down to its city; for a failing machine, with the machine selected.
+- **Earth's** alerts open **Earth**. See [Earth](earth.md).
 
 When you open a world, anything already wrong is listed under **Now** but does not pop up.
 **What happened** starts fresh each time you open a world.
