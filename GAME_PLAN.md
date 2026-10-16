@@ -53,7 +53,7 @@ What is missing, in the user's words (2026-10-11):
 | 32 | People, not a number: needs, services and happiness | **COMPLETE** - [note](docs/balance/batch32-people.md) - six needs above life support in two tiers, met by running services in reach of the homes over the corridors; happiness from them moves growth (x0.5 to x1.5) and output (x0.9 to x1.1), each need by its tuned factor through a real `advance`; coverage overlays, crowds, towers lit by occupancy; the example rebuilt with its services among the homes, every city perfect with needs on |
 | 33 | Events that ask for decisions | **COMPLETE** - [note](docs/balance/batch33-events.md) - a deck dealt from the seed brings an event about every 25 min from 30 min in: meteor shower, equipment failure, outbreak, supply ship early/late/lost, discovery; choices paid when made, outcomes at the deadline inside `advance`, the default the worst choice made worse; identical live, chunked and offline; the card, alerts and an event history kept in the world (save v18); Earth's request left to Batch 34 |
 | 34 | Earth: shipments, contracts and the market | **COMPLETE** - [note](docs/balance/batch34-earth.md) - launch windows every 2.135 planet-years from the window's number (50 measured, at most a substep late, no drift); each city's spaceport rocket flies at a window with sales and contract goods and lands a third of a window later with the order, a rocket away missing the window; a market by supply (seeded), trade and reputation that never pays more than it asks; contracts for materials, water or research, met for credits and reputation, failed for reputation; settlers and rovers unlocked; the Earth panel; save v19 |
-| 35 | Sound: music, ambience and effects | NOT STARTED |
+| 35 | Sound: music, ambience and effects | **COMPLETE** - [note](docs/balance/batch35-sound.md) - one Web Audio engine, four channels and the player's volumes, no context before the first gesture; every sound made by the game: music written as it plays by the phase reached, crossfaded over 8 s; wind by pressure and storm, rain, sea, the machinery near the city camera; effects as crossings in the state, placed in the city view; the same world to the bit heard or not; settings kept per player; licences in docs/credits.md |
 | 36 | Settings, controls and accessibility | NOT STARTED |
 | 37 | Terrain resource deposits (was `BUILD_PLAN` 27) | NOT STARTED |
 | 38 | Flood defences and the rising water; flooding on (was `BUILD_PLAN` 28) | NOT STARTED |
@@ -763,15 +763,15 @@ who does not trade plays the same to the bit.
 action answered.
 
 **Deliverables:**
-- [ ] **An audio engine** over the Web Audio API: channels for music, ambience, effects and
+- [x] **An audio engine** over the Web Audio API: channels for music, ambience, effects and
   interface; volumes; muted until the first user gesture (as browsers require).
-- [ ] **Music by phase:** sparse and cold at the start, warmer as the planet greens. Crossfaded,
+- [x] **Music by phase:** sparse and cold at the start, warmer as the planet greens. Crossfaded,
   never cut. CC0 or self-made, with the licence recorded.
-- [ ] **Ambience:** wind by pressure; the city's machinery by what runs nearby; rain once there is
+- [x] **Ambience:** wind by pressure; the city's machinery by what runs nearby; rain once there is
   weather; the sea once there is a sea.
-- [ ] **Effects:** place, build done, upgrade done, a train passing, a rocket launch, an alert, an
+- [x] **Effects:** place, build done, upgrade done, a train passing, a rocket launch, an alert, an
   objective done. Positional in the city view (louder near the camera).
-- [ ] **Settings:** a volume per channel, saved per player rather than per world.
+- [x] **Settings:** a volume per channel, saved per player rather than per world.
 
 **Exit gate:**
 - The audio layer reads the state and never writes it. The simulation is identical with sound on
@@ -780,6 +780,47 @@ action answered.
   follows its driver, music changes with the phase.
 - No audio starts before a user gesture, checked.
 - The asset licences are listed in `docs/credits.md`.
+
+**Done** - see [the note](docs/balance/batch35-sound.md). Built unattended (`/next-batch auto`) in
+one session. One Web Audio engine for the session (`src/web/sound-engine.ts`), four channels into a
+master, each with the player's volume; no `AudioContext` is made before the first click, key or
+touch, and what is asked for before then is dropped, never saved up. Every sound is made by the
+game: the music is written as it plays from a piece per phase reached (Cold Ground, 40 beats a
+minute in a minor mode with glassy glints, to Living World, 68 in a major key with a bass;
+tempo, brightness and notes rise every phase), crossfaded over 8 s from wherever the old piece
+stood; the wind follows the pressure and the dust storms, rain the clouds over open water above
+freezing, the sea the ocean and how near a city is to its shore, the machinery what runs near the
+city camera. Effects are crossings seen between two looks at the state (built, upgraded, a rocket
+up), a train coming near the camera, a building placed, an alert that pops up and a milestone
+card; in the city view they are placed by where they happen. Tested against a fake `AudioContext`
+that writes everything down: no context before a gesture (the engine, the title, the assembled
+game); each effect once per event; each bed following its driver; the music changing with the
+phase and never cut; and a scripted run heard every substep, its states frozen, the same to the bit
+as the run not heard. The settings are kept per player in the store's index beside the worlds list
+and survive a reload through the real title screen. Licences in `docs/credits.md`.
+
+**Decisions taken** (none were set for Phase 1; each recorded with its reason in the note):
+1. **Every sound made by the game**, no files: "self-made", nothing to license or download.
+2. **No context at all before the first gesture**, rather than one left suspended.
+3. **The music follows the phase reached**, which only goes forward, so it never flips at a
+   boundary.
+4. **Rain is derived** (clouds over open water above freezing): the simulation has no rain. A dust
+   storm blows the wind harder.
+5. **Alerts, objectives, milestones and buttons on the interface channel**; the world's effects
+   on the effects channel.
+6. **The example planet's happenings are not heard**; its music and beds are.
+7. **Sound constants are browser constants in `src/web/`**: they change nothing the simulation
+   computes.
+8. **The settings record in the store's index**, the player's own until Batch 36 decides its home.
+9. **At most three of one effect a look**.
+
+**What changed from the plan:**
+- **A master volume and mute** beside the four channels.
+- **The title's Settings screen has its sound section** ahead of Batch 36, and the world menu's
+  **Settings** opens the same sliders.
+- **A tick for every button** on the interface channel.
+- **Not listened to**: an unattended run cannot hear; the levels are set by reasoning, and Batch 40's
+  polish pass should listen.
 
 ---
 
