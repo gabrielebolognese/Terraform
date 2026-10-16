@@ -386,7 +386,7 @@ const pixel = (px: Uint8ClampedArray, n: number, tx: number, ty: number): [numbe
 const light = (c: readonly number[]): number => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
 
 describe("the planner's map", () => {
-  /** Ares with a zone, a corridor, a power line, a railway planned, and its homes - one reached by nothing. */
+  /** Ares with a zone, a corridor, a power line, a railway laid and one planned, and its homes - one reached by nothing. */
   function planned(): SimState {
     let s = ares();
     const id = "settlement-1";
@@ -395,6 +395,7 @@ describe("the planner's map", () => {
     for (let x = hq.tx - 8; x < hq.tx - 2; x += 1) {
       s = placeLink(s, id, "corridors", x, hq.ty - 4, T).state;
       s = placeLink(s, id, "cables", x, hq.ty - 6, T).state;
+      s = placeLink(s, id, "rails", x + 12, hq.ty - 10, T).state;
     }
     s = planLinks(s, id, "rails", Array.from({ length: 6 }, (_, k) => tileKey(hq.tx + 4 + k, hq.ty - 8)), T).state;
     return s;
@@ -409,6 +410,7 @@ describe("the planner's map", () => {
     const all = [...Array(n * n).keys()];
     const cables = all.filter((i) => view.cables[i] === true && view.corridors[i] !== true);
     const corridors = all.filter((i) => view.corridors[i] === true && view.cables[i] !== true);
+    const rails = all.filter((i) => view.rails?.[i] === true && view.corridors[i] !== true && view.cables[i] !== true);
     const at = (k: number): number => { const t = keyTile(k); return t.ty * n + t.tx; };
     const plans = c.planned.map((p) => p.tile);
     const zone = new Set(c.zones[0]!.tiles);
@@ -416,6 +418,7 @@ describe("the planner's map", () => {
     const inside = [...zone].filter((k) => !edge.includes(k));
     expect(cables.length, "a power line was laid").toBeGreaterThan(3);
     expect(corridors.length, "a corridor was laid").toBeGreaterThan(3);
+    expect(rails.length, "a railway was laid").toBeGreaterThan(3);
     expect(plans.length, "a railway was planned").toBeGreaterThan(3);
     expect(inside.length, "a zone with an inside").toBeGreaterThan(3);
     // Two homes: one a service misses, one it reaches.
@@ -436,6 +439,8 @@ describe("the planner's map", () => {
       // A corridor is one lightness along its length; a power line two - dashed.
       expect(lights(corridors).size, `${palette}: corridor solid`).toBe(1);
       expect(lights(cables).size, `${palette}: power line dashed`).toBe(2);
+      // A railway, striped: two lightnesses along it, the stripes the length of a tile.
+      expect(lights(rails).size, `${palette}: railway striped`).toBe(2);
       // A plan, dotted: every other tile marked strongly, the rest faintly - by how far each moved from the ground.
       const moved = (i: number): number => Math.abs(light(px(p, i)) - light(px(bare, i)));
       const strong = plans.map(at).filter((i) => ((i % n) + Math.floor(i / n)) % 2 === 0).map(moved);
@@ -471,6 +476,10 @@ describe("the planner's map", () => {
     expect(planner.describeTile(cable % n, Math.floor(cable / n))).toMatch(/power line/);
     const corridor = [...Array(n * n).keys()].find((i) => view.corridors[i] === true)!;
     expect(planner.describeTile(corridor % n, Math.floor(corridor / n))).toMatch(/corridor/);
+    // A railway laid is named so - not as a plan.
+    const rail = [...Array(n * n).keys()].find((i) => view.rails?.[i] === true);
+    expect(rail, "a railway was laid").toBeDefined();
+    expect(planner.describeTile(rail! % n, Math.floor(rail! / n))).toMatch(/\brailway\b(?! planned)/);
     const plan = c.planned[0]!.tile;
     expect(planner.describeTile(keyTile(plan).tx, keyTile(plan).ty)).toMatch(/railway planned/);
     // The legend names each pattern.
