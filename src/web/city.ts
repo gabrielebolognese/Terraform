@@ -110,6 +110,21 @@ function button(className: string, text: string, onClick: () => void): HTMLButto
 const BUILDS_SHOWN = 24;
 
 /** A settlement's sim-years as the real time they take at 1x, in words. */
+/**
+ * Batch 33: what answered events have left on the city, in words - people
+ * under cover from a meteor shower, a quarantine - each with its time left.
+ * Empty with none.
+ */
+export function effectWords(s: Settlement, t: Tuning): string {
+  const words: string[] = [];
+  const longest = (kind: "shelter" | "quarantine"): number => s.effects.filter((e) => e.kind === kind).reduce((a, e) => Math.max(a, e.remaining), 0);
+  const shelter = longest("shelter");
+  if (shelter > 0) words.push(` Its people are under cover: no materials made or research earned for ${seconds(shelter, t)}.`);
+  const quarantine = longest("quarantine");
+  if (quarantine > 0) words.push(` In quarantine: no growth for ${seconds(quarantine, t)}.`);
+  return words.join("");
+}
+
 function seconds(years: number, t: Tuning): string {
   // "About": to the nearest second (a countdown rounds up instead, so it never shows 0 early).
   return `about ${formatDuration(Math.max(1, Math.round(realSeconds(years, t, 1))))} at 1x`;
@@ -819,7 +834,7 @@ export class CityScreen {
           ? "Life support is met: power, water, oxygen and food."
           : "Every need is met."
         : `Short of ${view.shortages.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")} - buildings that use it are browned out.`;
-    this.status.textContent = people + need;
+    this.status.textContent = people + need + effectWords(s, this.tuning);
     this.status.dataset["state"] = view.shortages.length === 0 ? "ok" : "short";
     this.renderPeople(view);
     this.renderBuilds(s);
@@ -886,6 +901,8 @@ export class CityScreen {
       const k = levelFactor(level, this.tuning);
       const made = Object.fromEntries(Object.entries(def.produces(this.tuning)).map(([r, v]) => [r, (v ?? 0) * k]));
       if (level > 1) extra.push(`Level ${level}: x${k.toFixed(2)} output.`);
+      // Batch 33: a fault from an equipment failure, and how long it has to run.
+      if (b.fault !== undefined) extra.push(b.fault.factor === 0 ? `Broken down: back in ${seconds(b.fault.remaining, this.tuning)}.` : `A fault: it makes ${Math.round(b.fault.factor * 100)}% of its output for ${seconds(b.fault.remaining, this.tuning)} more.`);
       // Batch 32: a service's reach, and the crowd at a station or a park.
       if (b.reaches !== undefined) {
         extra.push(b.operable ? `Reaches the homes of ${Math.round(b.reaches).toLocaleString("en")} people.` : "Reaches no one while it is not running.");

@@ -70,6 +70,7 @@ import {
   levelZone,
   planLinks,
   cancelPlans,
+  chooseDecision,
   claimObjective,
   hasCosmetic,
   hasUnlock,
@@ -92,6 +93,8 @@ import { MilestoneCards, MilestoneWatch } from "./milestones.js";
 import { AlertWatch, buildingAt, shortagesOf } from "./alerts.js";
 import type { AlertTarget } from "./alerts.js";
 import { AlertCentre, AlertToasts } from "./alert-centre.js";
+import { DecisionPanel } from "./decisions.js";
+import { historyLines } from "./decision-words.js";
 import { StatisticsScreen } from "./statistics.js";
 import { cityOverview, overviewWords } from "./city-overview.js";
 
@@ -572,6 +575,17 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   const milestones = new MilestoneWatch();
   const cards = new MilestoneCards(root);
   /**
+   * Events that ask for decisions (Batch 33): the card of those waiting, a
+   * choice taken through the simulation like a claim. The history goes in
+   * the alert centre, from the world's own record.
+   */
+  const decisions = new DecisionPanel(root, tuning, (id, choice) => {
+    const outcome = chooseDecision(state, id, choice, tuning);
+    state = outcome.state;
+    return { ok: outcome.ok, reason: outcome.reason };
+  }, (target) => goToAlert(target));
+  let historyOf: SimState["decisions"]["log"] | null = null;
+  /**
    * Knowing what is happening (Batch 31): the alerts, worked out from the
    * state at the readout; the toasts that interrupt; the centre that keeps
    * the record; and the statistics. Each clicks through to where it happened.
@@ -626,6 +640,8 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   function freshViews(): void {
     milestones.reset();
     cards.clear();
+    decisions.clear();
+    historyOf = null;
     alertWatch.reset();
     alertCentre.clear();
     toasts.clear();
@@ -932,12 +948,17 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       guide.update(mine ? guideHint({ state, tuning, context: guideContext(), founding: founding !== null, selected: city.hasSelection }) : null);
       objectives.update(mine ? objectiveStatus(state, tuning) : []);
       if (mine) cards.push(milestones.observe(state, tuning));
+      decisions.update(mine ? state : null, speed);
       statistics.update(state);
       // The alerts, a couple of times a second (`ALERT_HZ`); none while the example planet shows.
       if (mine && timestamp - lastAlerts >= 1000 / ALERT_HZ) {
         lastAlerts = timestamp;
         const look = alertWatch.observe({ state, env: hab, liquidRatePerYear: liquidRate, tuning, now: timestamp, speed, budgetMs: ALERT_BUDGET_MS, clock: () => performance.now() });
         alertCentre.update(look.now, look.fresh, year);
+        if (historyOf !== state.decisions.log) {
+          historyOf = state.decisions.log;
+          alertCentre.setHistory(historyLines(state, tuning));
+        }
         toasts.push(look.fresh);
         shortBy = shortagesOf(look.now);
         worldMap.shortages = shortBy;
