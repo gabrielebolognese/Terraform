@@ -171,6 +171,18 @@ describe("the alerts and the history", () => {
     expect(look(w, done, 4000).fresh.filter((a) => a.kind === "resolved")).toEqual([]);
   });
 
+  it("takes its bearings on opening a world: events already past are not announced again, the next one is", () => {
+    let s = ares();
+    const e = cardFor(s, 5, "discovery", "ice", s.settlements[0]!, s.steps, T)!;
+    s = advance({ ...s, decisions: { open: [e], log: [] } }, e.deadline - e.opened, cfg);
+    expect(s.decisions.log.length).toBe(1);
+    const w = new AlertWatch();
+    expect(look(w, s, 0).fresh.filter((a) => a.kind === "resolved")).toEqual([]);
+    const next = cardFor(s, 6, "discovery", "ice", s.settlements[0]!, s.steps, T)!;
+    const later = advance({ ...s, decisions: { ...s.decisions, open: [next] } }, next.deadline - next.opened, cfg);
+    expect(look(w, later, 1000).fresh.filter((a) => a.kind === "resolved").map((a) => a.key)).toEqual(["resolved:6"]);
+  });
+
   it("says, as a notice, when nothing was chosen", () => {
     const base = ares();
     const w = new AlertWatch();
