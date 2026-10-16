@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 17;
+  readonly schemaVersion: 18;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -360,6 +360,75 @@ export interface SimState {
   readonly goals: Goals;
   /** The planet's record (v17, Batch 31): what the statistics chart. A record, never read back into the simulation. */
   readonly history: PlanetHistory;
+  /** Events that ask for decisions (v18, Batch 33): those open now, and the record of those resolved. */
+  readonly decisions: Decisions;
+}
+
+/** Batch 33: the events that ask the player to decide. */
+export type DecisionKind = "meteor" | "failure" | "outbreak" | "ship" | "discovery";
+/** A supply ship comes early, late or is lost; a discovery is ice, a meteorite or traces of something. */
+export type DecisionVariant = "early" | "late" | "lost" | "ice" | "meteorite" | "traces";
+
+/**
+ * An event waiting on the player. When it opens and what it is are dealt
+ * from the world's seed and the state as it stood (`decisions.ts`); the
+ * choice is the player's; it resolves at `deadline`, inside `advance`.
+ */
+export interface OpenDecision {
+  /** Its card's number in the deck: unique in a world, and what its draws are keyed on. */
+  readonly id: number;
+  readonly kind: DecisionKind;
+  readonly variant: DecisionVariant | null;
+  /** The settlement it happens to. */
+  readonly settlement: string;
+  /**
+   * The building it is about (an equipment failure's), by its corner on the
+   * ground as founded - tile plus the frame's corner, which a claim west or
+   * north does not move - or null.
+   */
+  readonly at: { readonly x: number; readonly y: number } | null;
+  /** That building's type, as it opened (for the words, even once it is gone), or null. */
+  readonly building: BuildingType | null;
+  /** Substeps: when it opened, and when it resolves. */
+  readonly opened: number;
+  readonly deadline: number;
+  /**
+   * The one number it was dealt with, fixed as it opened so the card's
+   * figures are the ones that land: an outbreak's people at risk, a failure's
+   * repair in materials. 0 for the others.
+   */
+  readonly stake: number;
+  /** The player's choice, by id, paid for when made; null until then (and, at the deadline, the default). */
+  readonly chosen: string | null;
+}
+
+/** What an event did when it resolved: people lost (negative) or landed, materials and credits gained (or paid, negative), buildings hit and wrecked. */
+export interface DecisionOutcome {
+  readonly people: number;
+  readonly materials: number;
+  readonly credits: number;
+  readonly hit: number;
+  readonly wrecked: number;
+}
+
+/** A resolved event, for the record: what it was, what was chosen (null: nothing, the default), and what it did. */
+export interface DecisionRecord {
+  readonly id: number;
+  readonly kind: DecisionKind;
+  readonly variant: DecisionVariant | null;
+  readonly settlement: string;
+  readonly building: BuildingType | null;
+  readonly opened: number;
+  readonly resolved: number;
+  readonly chosen: string | null;
+  readonly outcome: DecisionOutcome;
+}
+
+export interface Decisions {
+  /** Waiting on the player, in the order they opened. */
+  readonly open: readonly OpenDecision[];
+  /** Resolved, oldest first: the latest DECISION_LOG of them. */
+  readonly log: readonly DecisionRecord[];
 }
 
 /**
@@ -502,6 +571,30 @@ export interface Settlement {
   readonly history: History;
   /** Rovers landed from Earth as an objective's reward (v16, Batch 30), on top of the headquarters' and the posts'. */
   readonly extraRovers: number;
+  /**
+   * What an answered event leaves on the city for a while (v18, Batch 33):
+   * people sheltering, a quarantine, a building with a fault. Each counts
+   * down in the settlement's own substep, as a job does, so the city view and
+   * the alerts - which take the same substep - see it too.
+   */
+  readonly effects: readonly SettlementEffect[];
+}
+
+/**
+ * Batch 33: what an event's outcome leaves on a city.
+ *   shelter:    people under cover - the city makes `factor` of its materials and earns `factor` of its research;
+ *   quarantine: the city grows at `factor` of its rate;
+ *   fault:      the building whose corner is `tile` makes `factor` of its output; at 0 it is broken down, offline.
+ */
+export interface SettlementEffect {
+  readonly kind: "shelter" | "quarantine" | "fault";
+  /** A fault's building, by its corner's tile key; null for the whole city. */
+  readonly tile: number | null;
+  readonly factor: number;
+  /** City-years left: counted down a substep at a time, gone once it runs out. */
+  readonly remaining: number;
+  /** The event it came from (its card's number). */
+  readonly event: number;
 }
 
 export interface Zone {

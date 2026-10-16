@@ -1183,6 +1183,79 @@ export const BASE_TUNING = Object.freeze({
   FOOD_VARIETY_KINDS: 2,
   HAPPINESS_GROWTH: 0.5,
   HAPPINESS_OUTPUT: 0.1,
+  /**
+   * Events that ask for decisions (Batch 33). From DECISION_FIRST_SECONDS of
+   * real time at 1x, a card slot every DECISION_EVERY_SECONDS; a slot's card
+   * is dealt with chance DECISION_CHANCE, at a moment in it drawn from the
+   * world's seed (as storms are), to one of the player's cities, its kind by
+   * the DECISION_WEIGHT_* among those that can happen there. Each gives two or
+   * three choices - paid for when made - and its outcome lands at its
+   * deadline, DECISION_DEADLINE_SECONDS after it opens, inside `advance`;
+   * with nothing chosen, its default does, always the worst choice made
+   * worse. The latest DECISION_LOG are kept for the record. OFF (0) by
+   * default and in every world made before it; new Standard and Terraformed
+   * worlds turn it on (a sandbox has no losses).
+   *
+   * Meteor shower: shelter (no materials or research for
+   * METEOR_SHELTER_SECONDS), shields (METEOR_SHIELD_CREDITS), or keep working
+   * (METEOR_HITS buildings hit, each a level down, wrecked at level 1); the
+   * default, twice the hits. Equipment failure (a life-support producer):
+   * repair (FAILURE_REPAIR_SHARE of its cost x its level, materials) or run
+   * it at FAILURE_DEGRADED for FAILURE_SECONDS; the default, broken down
+   * (offline) as long. Outbreak (cities of OUTBREAK_MIN_PEOPLE): at risk,
+   * OUTBREAK_SHARE of the people beyond what the city's Medical Centers
+   * shelter (MEDICAL_SHELTER each a level); treat (OUTBREAK_TREAT_CREDITS a
+   * person at risk; OUTBREAK_TREATED of them lost) or quarantine
+   * (OUTBREAK_QUARANTINED lost, no growth for OUTBREAK_QUARANTINE_SECONDS);
+   * the default, all at risk lost and the quarantine's stop. Supply ship
+   * (SHIP_MATERIALS and SHIP_SETTLERS, as the city has room): early (share
+   * SHIP_EARLY_SHARE), late (SHIP_LATE_SHARE) or lost (the rest), each with
+   * its choices below. Discovery: study (DISCOVERY_STUDY_CREDITS now,
+   * DISCOVERY_RESEARCH_CREDITS at the deadline) or sell the samples
+   * (DISCOVERY_SELL_CREDITS); the default, nothing.
+   */
+  DECISIONS_ENABLED: 0,
+  DECISION_FIRST_SECONDS: 1800,
+  DECISION_EVERY_SECONDS: 1200,
+  DECISION_CHANCE: 0.75,
+  DECISION_DEADLINE_SECONDS: 180,
+  DECISION_LOG: 40,
+  DECISION_WEIGHT_METEOR: 1,
+  DECISION_WEIGHT_FAILURE: 1,
+  DECISION_WEIGHT_OUTBREAK: 1,
+  DECISION_WEIGHT_SHIP: 1,
+  DECISION_WEIGHT_DISCOVERY: 1,
+  METEOR_HITS: 3,
+  METEOR_SHELTER_SECONDS: 60,
+  METEOR_SHIELD_CREDITS: 150,
+  FAILURE_REPAIR_SHARE: 0.5,
+  FAILURE_DEGRADED: 0.5,
+  FAILURE_SECONDS: 600,
+  OUTBREAK_MIN_PEOPLE: 200,
+  OUTBREAK_SHARE: 0.1,
+  OUTBREAK_TREAT_CREDITS: 5,
+  OUTBREAK_TREATED: 0.2,
+  OUTBREAK_QUARANTINED: 0.5,
+  OUTBREAK_QUARANTINE_SECONDS: 300,
+  SHIP_MATERIALS: 150,
+  SHIP_SETTLERS: 20,
+  SHIP_EARLY_SHARE: 0.4,
+  SHIP_LATE_SHARE: 0.4,
+  /** Early: land it rough (SHIP_ROUGH of the cargo) or clear the pad (SHIP_PAD_MATERIALS, all of it); left alone, SHIP_UNATTENDED_EARLY. */
+  SHIP_ROUGH: 0.75,
+  SHIP_PAD_MATERIALS: 30,
+  SHIP_UNATTENDED_EARLY: 0.5,
+  /** Late: rush it (SHIP_RUSH_CREDITS, all of it) or wait (SHIP_WAIT of it, the rest spoiled); left alone, SHIP_UNATTENDED_LATE. */
+  SHIP_RUSH_CREDITS: 100,
+  SHIP_WAIT: 0.5,
+  SHIP_UNATTENDED_LATE: 0.25,
+  /** Lost: search (SHIP_SEARCH_CREDITS, SHIP_FOUND of it found) or write it off (SHIP_INSURANCE_CREDITS from Earth); left alone, nothing. */
+  SHIP_SEARCH_CREDITS: 100,
+  SHIP_FOUND: 0.5,
+  SHIP_INSURANCE_CREDITS: 60,
+  DISCOVERY_STUDY_CREDITS: 100,
+  DISCOVERY_RESEARCH_CREDITS: 400,
+  DISCOVERY_SELL_CREDITS: 150,
 
   /** Habitat Dome: people housed, and life support drawn per year. */
   DOME_HOUSING: 40,
@@ -1353,7 +1426,24 @@ export function validateTuning(t: Tuning): void {
   if (!(Number.isInteger(t.PLANET_HISTORY_EVERY) && t.PLANET_HISTORY_EVERY >= 0)) fail("PLANET_HISTORY_EVERY must be a whole number >= 0 (0 records nothing)");
   // Halving keeps the samples on multiples of twice the gap: an even, roomy record keeps that well-defined.
   if (!(Number.isInteger(t.PLANET_HISTORY_SAMPLES) && t.PLANET_HISTORY_SAMPLES >= 4 && t.PLANET_HISTORY_SAMPLES % 2 === 0)) fail("PLANET_HISTORY_SAMPLES must be an even whole number >= 4");
-  for (const k of ["GUIDE_ENABLED", "OBJECTIVES_ENABLED", "NEEDS_ENABLED"] as const) if (t[k] !== 0 && t[k] !== 1) fail(`${k} must be 0 or 1`);
+  for (const k of ["GUIDE_ENABLED", "OBJECTIVES_ENABLED", "NEEDS_ENABLED", "DECISIONS_ENABLED"] as const) if (t[k] !== 0 && t[k] !== 1) fail(`${k} must be 0 or 1`);
+  // Batch 33: the deck. A slot holds one card, so it must be a substep long at least; the deadline falls inside a world's time.
+  if (!(t.DECISION_EVERY_SECONDS > 0 && t.DECISION_FIRST_SECONDS >= 0 && t.DECISION_DEADLINE_SECONDS > 0)) fail("DECISION_EVERY_SECONDS and DECISION_DEADLINE_SECONDS must be > 0, DECISION_FIRST_SECONDS >= 0");
+  if (!(Number.isInteger(t.DECISION_LOG) && t.DECISION_LOG >= 1)) fail("DECISION_LOG must be a whole number >= 1");
+  if (!(Number.isInteger(t.METEOR_HITS) && t.METEOR_HITS >= 1)) fail("METEOR_HITS must be a whole number >= 1");
+  if (!(Number.isInteger(t.SHIP_SETTLERS) && t.SHIP_SETTLERS >= 0)) fail("SHIP_SETTLERS must be a whole number >= 0");
+  for (const k of ["DECISION_CHANCE", "FAILURE_DEGRADED", "FAILURE_REPAIR_SHARE", "OUTBREAK_SHARE", "OUTBREAK_TREATED", "OUTBREAK_QUARANTINED", "SHIP_ROUGH", "SHIP_UNATTENDED_EARLY", "SHIP_WAIT", "SHIP_UNATTENDED_LATE", "SHIP_FOUND"] as const) {
+    if (!(t[k] >= 0 && t[k] <= 1)) fail(`${k} must be in [0, 1]`);
+  }
+  if (!(t.SHIP_EARLY_SHARE >= 0 && t.SHIP_LATE_SHARE >= 0 && t.SHIP_EARLY_SHARE + t.SHIP_LATE_SHARE <= 1)) fail("SHIP_EARLY_SHARE and SHIP_LATE_SHARE must be >= 0 and sum to at most 1");
+  for (const k of TUNING_SCALAR_KEYS) {
+    if ((k.startsWith("DECISION_WEIGHT_") || k.startsWith("METEOR_") || k.startsWith("FAILURE_") || k.startsWith("OUTBREAK_") || k.startsWith("SHIP_") || k.startsWith("DISCOVERY_")) && !(t[k] >= 0)) fail(`${k} must be >= 0`);
+  }
+  // The default is the worst choice made worse: a tuning that let it beat a choice would break the deck's one promise.
+  if (!(t.FAILURE_DEGRADED > 0)) fail("FAILURE_DEGRADED must be > 0: running degraded must beat breaking down");
+  if (!(t.OUTBREAK_QUARANTINED < 1)) fail("OUTBREAK_QUARANTINED must be < 1: a quarantine must save someone");
+  if (!(t.SHIP_ROUGH > t.SHIP_UNATTENDED_EARLY && t.SHIP_WAIT > t.SHIP_UNATTENDED_LATE)) fail("SHIP_ROUGH and SHIP_WAIT must beat their unattended shares");
+  if (!(t.SHIP_INSURANCE_CREDITS > 0 && t.DISCOVERY_SELL_CREDITS > 0)) fail("SHIP_INSURANCE_CREDITS and DISCOVERY_SELL_CREDITS must be > 0: each beats doing nothing");
   // Batch 32: the weights keep the mood within -1 to 1, so growth never runs backwards.
   const needWeights = [t.NEED_WEIGHT_GREEN, t.NEED_WEIGHT_VARIETY, t.NEED_WEIGHT_MEDICAL, t.NEED_WEIGHT_RESEARCH, t.NEED_WEIGHT_TRANSPORT, t.NEED_WEIGHT_SHOPS];
   if (!needWeights.every((w) => w >= 0) || !(needWeights.reduce((a, w) => a + w, 0) <= 1 + 1e-9)) fail("the NEED_WEIGHT_* must be >= 0 and sum to at most 1");

@@ -14,11 +14,17 @@
 
 import { describe, expect, it } from "vitest";
 
-import { GUIDE_STEPS, NEUTRAL_ENV, OBJECTIVES, advance, claimObjective, foundSettlement, guideActive, marsStart, objectiveStatus } from "../sim/index.js";
+import { GUIDE_STEPS, NEUTRAL_ENV, OBJECTIVES, advance, claimObjective, foundSettlement, guideActive, makeTuning, marsStart, objectiveStatus } from "../sim/index.js";
 import { PACING_SITE, playPacing, playPlanet } from "../harness/pacing.js";
 import { MODE_OVERRIDES, worldTuning } from "./game-tuning.js";
 
-const T = worldTuning("standard", 0, "standard");
+/** A new Standard world as the browser makes it: since Batch 33, with events that ask for decisions. */
+const LIVE = worldTuning("standard", 0, "standard");
+/**
+ * The same without the events, for measuring the first hour and its rewards alone: a run with every event left to
+ * its default is a different run, and each reward's worth is a difference between two runs.
+ */
+const T = makeTuning({ ...LIVE, DECISIONS_ENABLED: 0 });
 const MIN = 60;
 const HOUR = 3600;
 /** Long enough for the city's and the network's chains with every reward taken (a city of 1,000 at 1.67 h; 1.66 before Batch 32's needs). */
@@ -28,6 +34,17 @@ const taught = playPacing(T, RUN, false, undefined, { guided: true, claim: true 
 const withheld = (id: string) => playPacing(T, RUN, false, undefined, { guided: true, claim: true, withhold: id }).goals.done;
 
 describe("the guided first steps, played by a scripted new player", () => {
+  it("are finished within 45 minutes with events too, answered or not (Batch 33)", () => {
+    // Measured: with every event left to its default, claim land 43.6 min, railway 43.8 min (the first card at
+    // 33 min, a failure, then a ship, an outbreak, a meteor); answered, 42.2 and 42.4, as without events.
+    for (const answer of [false, true]) {
+      const at = playPacing(LIVE, RUN, false, undefined, { guided: true, claim: true, answer }).goals.guide;
+      expect(at.every((s) => s !== null), `answer ${answer}: steps reached: ${at.join(", ")}`).toBe(true);
+      for (let k = 0; k < 5; k += 1) expect(at[k]!).toBeLessThan(MIN);
+      expect(at[6]! / MIN).toBeLessThan(45);
+    }
+  });
+
   it("are finished at 42 minutes: the first five within a minute, then land waits for 200 people", () => {
     // Measured: found 8 s, power 8 s, dome 42 s, connect 42 s, upgrade 50 s, claim land 42.2 min, railway 42.4 min.
     // The plan proposed 10-20 minutes; claiming land waits for 200 people (CLAIM_FIRST_POPULATION), and a city
@@ -102,7 +119,7 @@ describe("objectives on a scripted run", () => {
 
 describe("the first hour by mode", () => {
   it("is Standard's alone: a sandbox and a Terraformed start have neither the guide nor objectives", () => {
-    expect(MODE_OVERRIDES.standard).toEqual({ GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1 });
+    expect(MODE_OVERRIDES.standard).toEqual({ GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1, DECISIONS_ENABLED: 1 });
     for (const mode of ["sandbox", "terraformed"] as const) {
       const t = worldTuning(mode, 0, "standard");
       expect(t.GUIDE_ENABLED + t.OBJECTIVES_ENABLED, mode).toBe(0);

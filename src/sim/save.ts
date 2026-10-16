@@ -52,7 +52,12 @@ import type {
   Settlement,
   SettlementJob,
   BuildingType,
+  DecisionKind,
+  DecisionRecord,
+  DecisionVariant,
+  OpenDecision,
   PlacedBuilding,
+  SettlementEffect,
 } from "./types.js";
 import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORDER, RESERVOIR_KEYS } from "./types.js";
 
@@ -65,7 +70,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 17;
+export const SAVE_SCHEMA_VERSION = 18;
 
 export interface SavedFacility {
   readonly type: string;
@@ -118,6 +123,12 @@ export interface SaveFile {
    * on load.
    */
   readonly history?: { readonly every: number; readonly samples: readonly Record<string, number>[] };
+  /**
+   * Added in v18 (Batch 33, events that ask for decisions): the events open
+   * now, with the player's choice if made, and the record of those resolved.
+   * When a card is dealt is never kept: it is a function of the seed.
+   */
+  readonly decisions?: { readonly open: readonly Record<string, unknown>[]; readonly log: readonly Record<string, unknown>[] };
 }
 
 export interface SavedSettlement {
@@ -179,6 +190,8 @@ export interface SavedSettlement {
   readonly build_queue?: readonly { readonly tile: number; readonly upgrade: boolean; readonly paid: number }[];
   /** Added in v16 (the first hour): rovers landed as an objective's reward. */
   readonly extra_rovers?: number;
+  /** Added in v18 (Batch 33): what answered events leave on the city - sheltering, a quarantine, a fault. */
+  readonly effects?: readonly { readonly kind: string; readonly tile: number | null; readonly factor: number; readonly remaining: number; readonly event: number }[];
 }
 
 /**
@@ -268,6 +281,7 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       level_queue: s.levelQueue.map((q) => ({ tile: q.tile, level_m: q.levelM })),
       build_queue: s.buildQueue.map((q) => ({ tile: q.tile, upgrade: q.upgrade, paid: q.paid })),
       extra_rovers: s.extraRovers,
+      effects: s.effects.map((e) => ({ kind: e.kind, tile: e.tile, factor: e.factor, remaining: e.remaining, event: e.event })),
       planned: s.planned.map((p) => ({ layer: p.layer, tile: p.tile })),
       history: {
         acc: {
@@ -291,6 +305,10 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
     routes: state.routes.map((r) => ({ a: r.a, b: r.b, km: r.km })),
     goals: { guide: state.goals.guide, guide_skipped: state.goals.guideSkipped, claimed: [...state.goals.claimed] },
     history: { every: state.history.every, samples: state.history.samples.map((x) => ({ ...x })) },
+    decisions: {
+      open: state.decisions.open.map((e) => ({ ...e, at: e.at === null ? null : { ...e.at } })),
+      log: state.decisions.log.map((r) => ({ ...r, outcome: { ...r.outcome } })),
+    },
   };
 }
 
@@ -344,6 +362,7 @@ export function fromSave(raw: unknown, t: Tuning): SimState {
     routes: readRoutes(save, settlements),
     goals: readGoals(save),
     history: readPlanetHistory(save, steps),
+    decisions: readDecisions(save, settlements, steps),
   };
 
   assertFiniteState(state, "fromSave");
@@ -387,7 +406,111 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   if (version < 16) current = migrateV15toV16(current);
   // v16 -> v17: statistics (Batch 31). The planet's record starts empty, and a city's record keeps what it has.
   if (version < 17) current = migrateV16toV17(current, t);
+  // v17 -> v18: events that ask for decisions (Batch 33). None was open and none had happened: a world made before them
+  // has them off in its recorded tuning, so this is what it keeps; no city has anything left on it by one.
+  if (version < 18) current = migrateV17toV18(current);
   return current;
+}
+
+/** v17 -> v18: no event open, none resolved, nothing left on any city by one. */
+function migrateV17toV18(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  const settlements = Array.isArray(list) ? list.map((raw) => (typeof raw !== "object" || raw === null ? raw : { ...(raw as Record<string, unknown>), effects: [] })) : list;
+  return { ...save, schema_version: 18, settlements, decisions: { open: [], log: [] } };
+}
+
+const DECISION_KIND_SET: ReadonlySet<string> = new Set<DecisionKind>(["meteor", "failure", "outbreak", "ship", "discovery"]);
+const DECISION_VARIANT_SET: ReadonlySet<string> = new Set<DecisionVariant>(["early", "late", "lost", "ice", "meteorite", "traces"]);
+const BUILDING_TYPE_SET: ReadonlySet<string> = new Set<string>(BUILDING_TYPES);
+
+function wholeAt(source: Record<string, unknown>, key: string, what: string, min = 0): number {
+  const v = numberAt(source, key, what);
+  if (!Number.isInteger(v) || v < min) throw new SaveError(`${what} must be a whole number >= ${min}, got ${v}`);
+  return v;
+}
+
+/** v18: an event's kind, variant, settlement and building - the parts an open event and a record share. */
+function readDecisionHead(x: Record<string, unknown>, at: string, ids: ReadonlySet<string>): Pick<OpenDecision, "id" | "kind" | "variant" | "settlement" | "building" | "opened" | "chosen"> {
+  const kind = x["kind"];
+  if (typeof kind !== "string" || !DECISION_KIND_SET.has(kind)) throw new SaveError(`${at}.kind must be an event's kind, got ${describe(kind)}`);
+  const variant = x["variant"];
+  if (variant !== null && (typeof variant !== "string" || !DECISION_VARIANT_SET.has(variant))) throw new SaveError(`${at}.variant must be an event's variant or null, got ${describe(variant)}`);
+  const settlement = x["settlement"];
+  if (typeof settlement !== "string" || !ids.has(settlement)) throw new SaveError(`${at}.settlement must be a settlement of this world, got ${describe(settlement)}`);
+  const building = x["building"];
+  if (building !== null && (typeof building !== "string" || !BUILDING_TYPE_SET.has(building))) throw new SaveError(`${at}.building must be a building type or null, got ${describe(building)}`);
+  const chosen = x["chosen"];
+  if (chosen !== null && typeof chosen !== "string") throw new SaveError(`${at}.chosen must be a choice's id or null, got ${describe(chosen)}`);
+  return {
+    id: wholeAt(x, "id", `${at}.id`),
+    kind: kind as DecisionKind,
+    variant: variant as DecisionVariant | null,
+    settlement,
+    building: building as BuildingType | null,
+    opened: wholeAt(x, "opened", `${at}.opened`),
+    chosen,
+  };
+}
+
+/** v18: the events open (each once, opened no later than the world's own time) and the record of those resolved. */
+function readDecisions(save: Record<string, unknown>, settlements: readonly Settlement[], steps: number): SimState["decisions"] {
+  const raw = asRecord(save["decisions"], "decisions");
+  const ids = new Set(settlements.map((s) => s.id));
+  const seen = new Set<number>();
+  const open = asArray(raw["open"], "decisions.open").map((item, i): OpenDecision => {
+    const at = `decisions.open[${i}]`;
+    const x = asRecord(item, at);
+    const head = readDecisionHead(x, at, ids);
+    if (seen.has(head.id)) throw new SaveError(`${at}.id ${head.id} is open twice`);
+    seen.add(head.id);
+    if (head.opened > steps) throw new SaveError(`${at} opened after the world's own time`);
+    const deadline = wholeAt(x, "deadline", `${at}.deadline`);
+    if (deadline <= head.opened) throw new SaveError(`${at}.deadline must come after it opened`);
+    const stake = numberAt(x, "stake", `${at}.stake`);
+    if (!(stake >= 0)) throw new SaveError(`${at}.stake must be >= 0, got ${stake}`);
+    const where = x["at"];
+    let ground: OpenDecision["at"] = null;
+    if (where !== null) {
+      const g = asRecord(where, `${at}.at`);
+      ground = { x: wholeAt(g, "x", `${at}.at.x`, -Infinity), y: wholeAt(g, "y", `${at}.at.y`, -Infinity) };
+    }
+    return { ...head, at: ground, deadline, stake };
+  });
+  const log = asArray(raw["log"], "decisions.log").map((item, i): DecisionRecord => {
+    const at = `decisions.log[${i}]`;
+    const x = asRecord(item, at);
+    const head = readDecisionHead(x, at, ids);
+    const resolved = wholeAt(x, "resolved", `${at}.resolved`);
+    if (resolved < head.opened || resolved > steps) throw new SaveError(`${at}.resolved must fall between its opening and the world's own time`);
+    const o = asRecord(x["outcome"], `${at}.outcome`);
+    const outcome = {
+      people: numberAt(o, "people", `${at}.outcome.people`),
+      materials: numberAt(o, "materials", `${at}.outcome.materials`),
+      credits: numberAt(o, "credits", `${at}.outcome.credits`),
+      hit: wholeAt(o, "hit", `${at}.outcome.hit`),
+      wrecked: wholeAt(o, "wrecked", `${at}.outcome.wrecked`),
+    };
+    return { id: head.id, kind: head.kind, variant: head.variant, settlement: head.settlement, building: head.building, opened: head.opened, resolved, chosen: head.chosen, outcome };
+  });
+  return { open, log };
+}
+
+/** v18: what answered events left on a city - each a known kind, a share in [0, 1], time still to run. */
+function readEffects(s: Record<string, unknown>, where: string): readonly SettlementEffect[] {
+  return asArray(s["effects"], `${where}.effects`).map((item, i) => {
+    const at = `${where}.effects[${i}]`;
+    const x = asRecord(item, at);
+    const kind = x["kind"];
+    if (kind !== "shelter" && kind !== "quarantine" && kind !== "fault") throw new SaveError(`${at}.kind must be "shelter", "quarantine" or "fault", got ${describe(kind)}`);
+    const tileRaw = x["tile"];
+    const tile = tileRaw === null ? null : wholeAt(x, "tile", `${at}.tile`);
+    if (kind === "fault" && tile === null) throw new SaveError(`${at}: a fault must name its building's tile`);
+    const factor = numberAt(x, "factor", `${at}.factor`);
+    if (!(factor >= 0 && factor <= 1)) throw new SaveError(`${at}.factor must be in [0, 1], got ${factor}`);
+    const remaining = numberAt(x, "remaining", `${at}.remaining`);
+    if (!(remaining > 0)) throw new SaveError(`${at}.remaining must be > 0, got ${remaining}`);
+    return { kind, tile, factor, remaining, event: wholeAt(x, "event", `${at}.event`) };
+  });
 }
 
 /**
@@ -858,7 +981,7 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     const under = underBuildings(buildings);
     const extraRovers = numberAt(s, "extra_rovers", `${where}.extra_rovers`);
     if (!Number.isInteger(extraRovers) || extraRovers < 0) throw new SaveError(`${where}.extra_rovers must be a whole number >= 0, got ${extraRovers}`);
-    let settled: Settlement = { ...standing, cleared, jobs, rails: readKeys(s, "rails", where, "railway", under), ...readPlanner(s, where), extraRovers };
+    let settled: Settlement = { ...standing, cleared, jobs, rails: readKeys(s, "rails", where, "railway", under), ...readPlanner(s, where), extraRovers, effects: readEffects(s, where) };
     // v8: corridors and cables; null only for a settlement carried forward from v6.
     for (const layer of LAYERS) {
       settled = { ...settled, [layer]: s[layer] === null ? [] : readKeys(s, layer, where, LINK_WORDS[layer], under) };
