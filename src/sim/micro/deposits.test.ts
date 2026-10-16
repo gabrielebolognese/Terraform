@@ -141,6 +141,15 @@ describe("a building on its deposit makes more, by the tuned factor, through a r
     expect(sitingOf(cityWith("regolith_mine", vein, OFF).settlements[0]!, OFF)).toBeNull();
   });
 
+  it("a variant tuning in the same process reads its own ground: where it finds no ore, the same city's mine makes x1", () => {
+    // Invariant #4: a balance sweep runs variants side by side, on the very same state.
+    const s = cityWith("regolith_mine", square(map, n, (x) => x === code("ore")), ON);
+    const bare = made(cityWith("regolith_mine", BARE, ON), "materials", ON);
+    expect(made(s, "materials", ON) / bare).toBeCloseTo(1 + ON.ORE_BONUS, 9);
+    const NO_ORE = makeTuning({ ...ON, ORE_RISE_M: 1000 });
+    expect(made(s, "materials", NO_ORE) / bare).toBe(1);
+  });
+
   it("is chunk-independent: advance(s, 40) equals ten advance(s, 4) with a mine on its vein", () => {
     const s = cityWith("regolith_mine", square(map, n, (x) => x === code("ore")), ON);
     const cfg = { tuning: ON, env: NEUTRAL_ENV, forcing: null };
