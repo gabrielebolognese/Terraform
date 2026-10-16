@@ -19,15 +19,18 @@
  * under the pointer; the city's land not yet claimable has a dashed edge, a
  * refused placement a cross; the world map's settlements are told apart by
  * the shape of their marks - a metropolis, a city, an outpost, a ruin - far
- * out and up close, in gold too. And the colour-blind palettes keep their
- * meanings apart for the colour blindness each is for, measured.
+ * out and up close, in gold too; and every chart with more than one line is
+ * registered and tells its lines apart by pattern - drawn, and drawn again
+ * and named in its key - or, for the shortages, by a strip each with its
+ * name on it. And the colour-blind palettes keep their meanings apart for
+ * the colour blindness each is for, measured.
  */
 
 import { readFileSync } from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import type { EarthRecord, SimState } from "../sim/index.js";
+import type { EarthRecord, HistorySample, PlanetSample, SimState } from "../sim/index.js";
 import {
   BUILDING_DEFS,
   NEUTRAL_ENV,
@@ -67,6 +70,7 @@ import { MAP_PALETTES, zoneColour } from "./palette.js";
 import type { MapKind, Rgb8 } from "./palette.js";
 import { PlannerScreen, coverageOf, plannerPixels } from "./planner.js";
 import { DEFAULT_SETTINGS, PALETTES } from "./settings.js";
+import { PLANET, StatisticsScreen } from "./statistics.js";
 import type { Palette, Settings } from "./settings.js";
 import { Frames, drawCities, restoreCanvases } from "./test-frames.js";
 import { WorldMapScreen } from "./world-map.js";
@@ -642,6 +646,192 @@ describe("the world map's marks", () => {
         expect(m.lost.shape, `${where}: a ruin and a city`).not.toBe(m.city.shape);
       }
     }
+  });
+});
+
+describe("the charts", () => {
+  /** A stroke as drawn - its points, its pattern and its width - a block filled, or a word written; each with its colour, so the test knows whose it is. */
+  type Mark =
+    | { readonly how: "stroke"; readonly colour: string; readonly dash: readonly number[]; readonly width: number; readonly points: number }
+    | { readonly how: "block"; readonly colour: string; readonly y: number; readonly h: number }
+    | { readonly how: "text"; readonly text: string; readonly y: number };
+
+  /** Every chart's canvas given a 2D context that records what is drawn on it, kept by canvas; every other canvas none. */
+  function recording(): Map<HTMLCanvasElement, Mark[]> {
+    const all = new Map<HTMLCanvasElement, Mark[]>();
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string) {
+      if (kind !== "2d" || !this.classList.contains("planner-chart-canvas")) return null;
+      const drawn: Mark[] = [];
+      all.set(this, drawn);
+      let points = 0;
+      let dash: number[] = [];
+      const ctx: Record<string | symbol, unknown> = {
+        lineWidth: 1,
+        beginPath: () => (points = 0),
+        moveTo: () => (points += 1),
+        lineTo: () => (points += 1),
+        setLineDash: (d: number[]) => (dash = [...d]),
+        getLineDash: () => [...dash],
+        stroke: () => drawn.push({ how: "stroke", colour: String(ctx["strokeStyle"]), dash: [...dash], width: Number(ctx["lineWidth"]), points }),
+        fillRect: (_x: number, y: number, _w: number, h: number) => drawn.push({ how: "block", colour: String(ctx["fillStyle"]), y, h }),
+        fillText: (text: string, _x: number, y: number) => drawn.push({ how: "text", text, y }),
+      };
+      return new Proxy(ctx, {
+        get: (t, k) => (k in t ? t[k] : () => undefined),
+        set: (t, k, v) => {
+          t[k] = v;
+          return true;
+        },
+      });
+    } as typeof HTMLCanvasElement.prototype.getContext;
+    return all;
+  }
+
+  const YEARS = 40;
+  /** A city's record in which every line moves and every shortage happens - made and used close, as in a city that balances. */
+  const cityRecord = (): HistorySample[] =>
+    Array.from({ length: YEARS }, (_, i) => ({
+      index: i,
+      population: 100 + 5 * i,
+      housing: 400 - 2 * i,
+      births: 4 + (i % 3),
+      deaths: 2 + (i % 4),
+      short: [i % 4 === 0 ? 0.5 : 0, i % 5 === 0 ? 1 : 0, i % 3 === 0 ? 0.25 : 0, i % 7 === 0 ? 0.75 : 0, 0],
+      stores: [10 + i, 20 + 2 * i, 30 + (i % 5), 40 + i / 2, 600 - i],
+      net: [1 + (i % 3), -1 + (i % 2), 0.5, 2 - (i % 4), -3 + i / 10],
+      made: [50 + i, 30, 20 + (i % 3), 40, 10 + i / 4],
+      drawn: [48 + i, 31, 19 + (i % 2), 41, 9 + i / 5],
+    }));
+  const planetRecord = (): PlanetSample[] =>
+    Array.from({ length: YEARS }, (_, i) => ({ steps: 100 * i, T: 210 + i, P: 6 + i, o2: i / 10, ocean: i / 400, biomass: i / 50, co2: 6 - i / 10, progress: i / 100, credits: 1000 + 50 * i, people: 100 + 10 * i }));
+
+  /**
+   * Every chart the game draws, by title, with how its lines are told apart
+   * without their colours: each line its own pattern, drawn again in its key
+   * and named there; each share of the year its own strip, its name on it;
+   * or one line alone, named by the chart's title.
+   */
+  const CHARTS: Readonly<Record<string, "patterns" | "strips" | "one line">> = {
+    Population: "patterns",
+    "Growth and deaths": "patterns",
+    "Shortages - blackouts, hunger, thirst, suffocation": "strips",
+    Stores: "patterns",
+    "Made less drawn": "patterns",
+    "Power made and used - the power balance": "patterns",
+    "Water made and used": "patterns",
+    "Oxygen made and used": "patterns",
+    "Food made and used": "patterns",
+    "Materials made and used": "patterns",
+    Temperature: "one line",
+    Pressure: "one line",
+    Oxygen: "one line",
+    Ocean: "one line",
+    Biomass: "one line",
+    "Carbon dioxide": "one line",
+    Progress: "one line",
+    Credits: "one line",
+    People: "one line",
+  };
+
+  /** Whether a pattern's name says what the dash draws: none solid; on-and-off dots, dashes or long dashes; or a dash and a dot. */
+  const fits = (name: string, dash: readonly number[]): boolean => {
+    const [on = 0, , dot = 0] = dash;
+    if (name === "solid") return dash.length === 0;
+    if (name === "dotted") return dash.length === 2 && on <= 2;
+    if (name === "dashed") return dash.length === 2 && on >= 4 && on < 12;
+    if (name === "long dashes") return dash.length === 2 && on >= 12;
+    if (name === "dash-dot") return dash.length === 4 && on >= 4 && dot <= 2;
+    return false;
+  };
+
+  /** What is wrong with one chart as drawn, told without its colours: its lines or strips, and its key. */
+  function faults(fig: Element, drawn: ReadonlyMap<HTMLCanvasElement, readonly Mark[]>): { title: string; faults: string[] } {
+    const title = fig.querySelector("figcaption")!.textContent!.replace(/ \([^()]*\)$/, "");
+    const marks = drawn.get(fig.querySelector("canvas")!) ?? [];
+    const kind = CHARTS[title];
+    if (kind === undefined) return { title, faults: ["not registered"] };
+    // A key: "Homes (dashed): 300" on a chart of lines, "Blackout (power): 1.0" on the strips.
+    const keys = [...fig.querySelectorAll(".planner-chart-key")].map((k) => {
+      const words = k.textContent ?? "";
+      const named = words.replace(/: [^:]*$/, "");
+      const pattern = kind === "patterns" ? (/ \(([^()]+)\)$/.exec(named)?.[1] ?? null) : null;
+      const line = k.querySelector("svg line");
+      return {
+        words,
+        label: pattern === null ? named : named.slice(0, -(pattern.length + 3)),
+        pattern,
+        colour: line?.getAttribute("stroke") ?? (k.querySelector<HTMLElement>(".planner-swatch")?.style.background || null),
+        dash: line === null ? null : (line.getAttribute("stroke-dasharray") ?? "").split(" ").filter((x) => x !== "").map(Number),
+      };
+    });
+    const out: string[] = [];
+    if (kind === "one line") {
+      if (keys.length !== 1) out.push(`${keys.length} lines, registered as one`);
+      return { title, faults: out };
+    }
+    if (keys.length < 2) out.push(`${keys.length} lines, registered as more`);
+    if (kind === "patterns") {
+      // The lines: one stroke a year long each, in its colour - and apart without it.
+      const lines = marks.filter((m): m is Extract<Mark, { how: "stroke" }> => m.how === "stroke" && m.points === YEARS);
+      if (lines.length !== keys.length) out.push(`${lines.length} lines drawn for ${keys.length} in the key`);
+      const looks = new Set(lines.map((m) => JSON.stringify([m.dash, m.width])));
+      if (looks.size !== lines.length) out.push(`lines told apart without colour: ${looks.size} looks for ${lines.length} lines`);
+      if (new Set(keys.map((k) => k.pattern)).size !== keys.length) out.push(`patterns named in the key: ${keys.map((k) => k.pattern).join(", ")}`);
+      for (const k of keys) {
+        const drawnAs = lines.find((m) => m.colour === k.colour);
+        if (drawnAs === undefined) {
+          out.push(`${k.label}: no line in its colour`);
+          continue;
+        }
+        if (JSON.stringify(k.dash) !== JSON.stringify(drawnAs.dash)) out.push(`${k.label}: the key's sample [${k.dash}] is not its line [${drawnAs.dash}]`);
+        if (k.pattern === null || !fits(k.pattern, drawnAs.dash)) out.push(`${k.label}: the key says "${k.words}", the line is drawn [${drawnAs.dash}]`);
+      }
+    } else {
+      // The strips: each series' bars under its own name and above the next one's, in the key's order.
+      const names = keys.map((k) => marks.find((m): m is Extract<Mark, { how: "text" }> => m.how === "text" && m.text === k.label));
+      keys.forEach((k, i) => {
+        const name = names[i];
+        const below = names[i + 1]?.y ?? Infinity;
+        const bars = marks.filter((m): m is Extract<Mark, { how: "block" }> => m.how === "block" && m.colour === k.colour);
+        if (name === undefined) out.push(`${k.label}: not named on the chart`);
+        else if (bars.length === 0) out.push(`${k.label}: no bars`);
+        else if (!bars.every((b) => b.y > name.y && b.y + b.h < below)) out.push(`${k.label}: bars outside its strip`);
+      });
+    }
+    return { title, faults: out };
+  }
+
+  it("tells every chart's lines apart without their colours - patterns drawn and named in the key, a strip each for the shortages - in the statistics and the planner", () => {
+    const base = ares();
+    const c = base.settlements[0]!;
+    const s: SimState = { ...base, history: { ...base.history, samples: planetRecord() }, settlements: [{ ...c, history: { ...c.history, samples: cityRecord(), taken: YEARS } }] };
+    const drawn = recording();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const stats = new StatisticsScreen(host, T);
+    stats.update(s);
+    stats.setOpen(true, "settlement-1");
+    const city = [...host.querySelectorAll(".statistics-charts .planner-chart")];
+    stats.show(PLANET);
+    const planet = [...host.querySelectorAll(".statistics-charts .planner-chart")];
+    // The planner's Charts tab: the same charts, drawn again.
+    const planner = new PlannerScreen(host, { onRename: () => ({ ok: true, reason: null }), onZone: () => ({ ok: true, reason: null, zone: null }), onDeleteZone: () => ({ ok: true, reason: null }), onLevelZone: () => ({ ok: true, reason: null, queued: 0 }), onPlan: () => ({ ok: true, reason: null, planned: 0 }), onCancelPlans: () => ({ ok: true, reason: null }), onCityView: () => {} }, T);
+    const settlement = s.settlements[0]!;
+    planner.open(settlement.id);
+    [...host.querySelectorAll<HTMLButtonElement>(".planner-tab")].find((b) => b.textContent === "Charts")!.click();
+    planner.frame(settlement, habitat(s.reservoirs, derive(s.reservoirs, worldEnv(s, NEUTRAL_ENV, T), T), T, 0), 0);
+    const inPlanner = [...host.querySelectorAll(".planner-charts .planner-chart")];
+
+    const read = [...city, ...planet, ...inPlanner].map((f) => faults(f, drawn));
+    // Every chart registered, and every one registered drawn.
+    const titles = new Set(read.map((r) => r.title));
+    expect([...titles].filter((t) => CHARTS[t] === undefined), "charts with no cue registered").toEqual([]);
+    expect(Object.keys(CHARTS).filter((t) => !titles.has(t)), "registered charts not drawn").toEqual([]);
+    expect(inPlanner.map((f) => f.querySelector("figcaption")!.textContent), "the planner's charts are the statistics'").toEqual(city.map((f) => f.querySelector("figcaption")!.textContent));
+    // Each drawn: lines, bars and names reached, not passed for want of any.
+    expect(drawn.size, "every chart's canvas drawn").toBe(read.length);
+    expect(read.filter((r) => CHARTS[r.title] === "strips"), "the shortages, in both").toHaveLength(2);
+    expect(read.flatMap((r) => r.faults.map((f) => `${r.title}: ${f}`)), "told apart by colour alone").toEqual([]);
   });
 });
 
