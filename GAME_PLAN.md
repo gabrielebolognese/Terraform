@@ -52,7 +52,7 @@ What is missing, in the user's words (2026-10-11):
 | 31 | Knowing what is happening: alerts, notifications and statistics | **COMPLETE** - [note](docs/balance/batch31-alerts.md) - alerts derived at the readout, each type fired by a run that causes it and not by one beside it; toasts by priority and the alert centre, each clicking through to its city and building; the planet's record in the save, bounded by halving (125 samples, 25 kB after 1,000 sim-years); statistics; each city at a glance |
 | 32 | People, not a number: needs, services and happiness | **COMPLETE** - [note](docs/balance/batch32-people.md) - six needs above life support in two tiers, met by running services in reach of the homes over the corridors; happiness from them moves growth (x0.5 to x1.5) and output (x0.9 to x1.1), each need by its tuned factor through a real `advance`; coverage overlays, crowds, towers lit by occupancy; the example rebuilt with its services among the homes, every city perfect with needs on |
 | 33 | Events that ask for decisions | **COMPLETE** - [note](docs/balance/batch33-events.md) - a deck dealt from the seed brings an event about every 25 min from 30 min in: meteor shower, equipment failure, outbreak, supply ship early/late/lost, discovery; choices paid when made, outcomes at the deadline inside `advance`, the default the worst choice made worse; identical live, chunked and offline; the card, alerts and an event history kept in the world (save v18); Earth's request left to Batch 34 |
-| 34 | Earth: shipments, contracts and the market | NOT STARTED |
+| 34 | Earth: shipments, contracts and the market | **COMPLETE** - [note](docs/balance/batch34-earth.md) - launch windows every 2.135 planet-years from the window's number (50 measured, at most a substep late, no drift); each city's spaceport rocket flies at a window with sales and contract goods and lands a third of a window later with the order, a rocket away missing the window; a market by supply (seeded), trade and reputation that never pays more than it asks; contracts for materials, water or research, met for credits and reputation, failed for reputation; settlers and rovers unlocked; the Earth panel; save v19 |
 | 35 | Sound: music, ambience and effects | NOT STARTED |
 | 36 | Settings, controls and accessibility | NOT STARTED |
 | 37 | Terrain resource deposits (was `BUILD_PLAN` 27) | NOT STARTED |
@@ -688,16 +688,16 @@ event, measured. Behind `DECISIONS_ENABLED` (0); new Standard and Terraformed wo
 spaceport gets a job.
 
 **Deliverables:**
-- [ ] **Shipments:**
+- [x] **Shipments:**
   - rockets bring ordered goods on a schedule set by the launch windows (every 26 months, by sim
     time);
   - the spaceport's rocket is the one in the view;
   - a missed window waits for the next.
-- [ ] **Contracts:** Earth asks for amounts of materials, research or water by a date, and pays in
+- [x] **Contracts:** Earth asks for amounts of materials, research or water by a date, and pays in
   credits and unlocks. Failing costs reputation.
-- [ ] **A market:** what goods cost and what Earth pays moves with supply, and with the player's
+- [x] **A market:** what goods cost and what Earth pays moves with supply, and with the player's
   reputation.
-- [ ] **Interplanetary trade** in the economy panel, tied to the existing credits.
+- [x] **Interplanetary trade** in the economy panel, tied to the existing credits.
 
 **Exit gate:**
 - Launch windows land on the dates the orbit gives (synodic period 2.135 years), measured over 50
@@ -706,6 +706,54 @@ spaceport gets a job.
   amounts.
 - Behind a constant at 0 (it moves the economy). The browser opts in, and the Batch 3 score and
   golden run hold with it off.
+
+**Done** - see [the note](docs/balance/batch34-earth.md). Built unattended (`/next-batch auto`) in
+one session. The k-th launch window opens at the first substep on or after the planet's year
+k x 2.135, worked out from k: over 50 windows, measured through a real `advance` in chunks blind to
+them, every one is at most a substep late (0.030 of a 0.03125-year substep at Standard, 0.245 of 0.25
+at Classic) and the mean gap is 2.1346 and 2.1327 years. That is about 9.5 minutes at 1x at
+Standard, 71 seconds at Classic. At a window each city's rocket - a rocket job on its first finished
+spaceport whose rocket is home, the one the view draws - lifts off with what is sold and what the
+contracts take, never a store below a quarter of its room, and lands a third of a window later (3
+min 12 s at Standard) with what was ordered; what does not fit is sold back, settlers with no home
+refunded. A rocket away (a supply run) or a spaceport still going up misses the window, and the
+orders wait. Prices are each good's base x Earth's supply that window (seeded, +-20%) x the
+player's buying or selling (remembered, half forgotten each window) x reputation (+-25%), and Earth
+never pays more than it asks (`validateTuning`). Each window Earth offers a contract for materials,
+water or research, due three windows on: met, it pays and reputation rises 10; failed, it falls 20;
+settlers are for sale after one met, rovers after three. A contract met against the same run failed
+differs by its reward in credits and by 30 in reputation, measured in the scripted player's world
+at 60 minutes. Behind `EARTH_ENABLED` (0); new Standard and Terraformed worlds turn it on. A player
+who does not trade plays the same to the bit.
+
+**Decisions taken** (none were set for Phase 1; each recorded with its reason in the note):
+1. **Windows by the planet's calendar**, k x 2.135 of its years from the start, not the cities'
+   clock: the orbit is the planet's.
+2. **The spaceport's own rocket carries it**, both ways, as a rocket job: the view draws it, and a
+   supply run holds it, which is what makes a window missable.
+3. **Paid when ordered, refunded if cancelled; sold as it goes up.** What does not fit as it lands is
+   sold back; a settler with no home refunded.
+4. **One offer each window, dealt from the seed and the world, due three windows on.** Research goes
+   to Earth instead of the bank while its contract is open: a contract is credits later for credits
+   now.
+5. **Unlocks are Earth's goods**: settlers after one contract met, rovers after three.
+6. **On in new Standard and Terraformed worlds**, never a sandbox's or a world made before. The free
+   supply run is unchanged.
+7. **An offer is said by the Earth button, not the alerts**: one comes every window.
+
+**What changed from the plan, and why:**
+- **"The economy panel" is the Earth panel**, opened from the bar beside Statistics and Alerts: the
+  HUD's economy is one line of the orbit view, and trade is wanted from a city too. The panel shows
+  the bank and the trade so far.
+- **Contracts are sized by a window's span in a city's years**, not in units: the planet's calendar
+  runs eight times faster than the cities' at Classic, and a fixed 150 materials made the scripted
+  trader fail 23 contracts in its first Classic hour.
+- **Earth's request is a contract, not an event card**: Batch 33 left it here, and the contracts are
+  Earth's requests.
+- **Fun, measured**: a scripted player who sells spare materials and takes the materials contracts it
+  can send at once had the city of 1,000 at 2.05 h against 2.16 h and Phase 2 at 78.5 min against
+  99.2 min at Standard, with 3 contracts met and none failed; at Classic the city of 1,000 came 25 s
+  later (0.4%), 14 met and 1 failed.
 
 ---
 
