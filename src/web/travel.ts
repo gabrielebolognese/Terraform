@@ -64,12 +64,12 @@ export function goToOrbit(t: Travel, now: number): Transition {
   return { travel: { phase: "ascending", id: t.id, start: now, next: null }, effects: [{ type: "flush" }, { type: "unload", id: t.id }] };
 }
 
-/** Advance the clock: finish a descent (load the scene) or an ascent. */
-export function step(t: Travel, now: number): Transition {
-  if (t.phase === "descending" && now - t.start >= TRAVEL_MS) {
+/** Advance the clock: finish a descent (load the scene) or an ascent. `ms` is each move's length (Batch 36: 0 with reduced motion, a cut). */
+export function step(t: Travel, now: number, ms = TRAVEL_MS): Transition {
+  if (t.phase === "descending" && now - t.start >= ms) {
     return { travel: { phase: "city", id: t.id }, effects: [{ type: "load", id: t.id }, { type: "flush" }] };
   }
-  if (t.phase === "ascending" && now - t.start >= TRAVEL_MS) {
+  if (t.phase === "ascending" && now - t.start >= ms) {
     return stay(t.next === null ? IN_ORBIT : { phase: "descending", id: t.next, start: now });
   }
   return stay(t);
@@ -129,16 +129,16 @@ export function overSite(site: { lat: number; lon: number }, fromYaw: number): P
  * it (in orbit) or it is hidden (in a city). `home` is the orbit the player
  * left from, so the pull-back returns them to where they were.
  */
-export function travelPose(t: Travel, now: number, home: Pose, siteOf: (id: string) => { lat: number; lon: number } | null): Pose | null {
+export function travelPose(t: Travel, now: number, home: Pose, siteOf: (id: string) => { lat: number; lon: number } | null, ms = TRAVEL_MS): Pose | null {
   if (t.phase === "descending") {
     const site = siteOf(t.id);
     if (site === null) return null;
-    return mixPose(home, overSite(site, home.yaw), (now - t.start) / TRAVEL_MS);
+    return mixPose(home, overSite(site, home.yaw), ms > 0 ? (now - t.start) / ms : 1);
   }
   if (t.phase === "ascending") {
     const site = siteOf(t.id);
     if (site === null) return null;
-    return mixPose(overSite(site, home.yaw), home, (now - t.start) / TRAVEL_MS);
+    return mixPose(overSite(site, home.yaw), home, ms > 0 ? (now - t.start) / ms : 1);
   }
   return null;
 }

@@ -108,6 +108,14 @@ export interface CitySceneOptions {
    * the whole scene, as before.
    */
   readonly layer?: "static" | "live" | "overlay";
+  /**
+   * The city's moving details (Batch 36's graphics setting): absent or true,
+   * lights blink, blades turn, crowds walk and steam rises, as ever; false,
+   * each building stands as it is at time 0, its moving parts drawn with its
+   * still ones and kept in the picture - only vehicles and a rocket in flight
+   * move. Up close only: further out there are none.
+   */
+  readonly effects?: boolean;
 }
 
 /** How opaque a building is drawn in building mode. */
@@ -2767,11 +2775,24 @@ function emitBuilding(kit: Kit, b: CityBuildingView, cache: Map<string, Shape[][
   }
 }
 
-/** What else changes a building's still parts: a worksite's progress, a spaceport's rocket away or in flight. */
-function buildingVariant(b: CityBuildingView, quality: CityQuality, rocket: RocketState): string {
+/** What else changes a building's still parts: a worksite's progress, a spaceport's rocket away or in flight, its moving parts held still. */
+function buildingVariant(b: CityBuildingView, quality: CityQuality, rocket: RocketState, still = false): string {
   const site = b.construction ?? null;
   if (site !== null) return `site${Math.round(site * 10)}`;
-  return quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") : "";
+  return quality === "high" ? (rocket === null ? "" : rocket === "away" ? "away" : "flying") + (still ? "still" : "") : "";
+}
+
+/**
+ * Whether a building up close is drawn still (Batch 36: effects off): every
+ * building but a spaceport whose rocket is in flight, which still rises.
+ */
+function heldStill(options: CitySceneOptions, quality: CityQuality, rocket: RocketState): boolean {
+  return options.effects === false && quality === "high" && typeof rocket !== "number";
+}
+
+/** A kit with its moving parts made still: each drawn as it is at time 0, with the still parts; no steam. */
+function stillKit(k: Kit): Kit {
+  return { items: k.items.map((item) => (item.live ? { live: false, make: item.make } : item)), extras: [] };
 }
 
 /** A chunk's name, from its chunk coordinates. */
@@ -2819,7 +2840,7 @@ function chunkSignature(view: CityView, options: CitySceneOptions, size: number,
   for (const k of anchorsOf(view, scene, size).get(chunkId(cx, cy)) ?? []) {
     const b = view.buildings[k]!;
     const rocket: RocketState = b.type === "spaceport" && rockets !== null ? rockets.get(b.ty * view.tiles + b.tx) ?? null : null;
-    parts.push(buildingKey(b, buildingVariant(b, quality, rocket)), String(b.construction ?? ""));
+    parts.push(buildingKey(b, buildingVariant(b, quality, rocket, heldStill(options, quality, rocket))), String(b.construction ?? ""));
   }
   return parts.join("#");
 }
@@ -2890,7 +2911,16 @@ export function cityLiveChunks(view: CityView, options: CitySceneOptions, size: 
   const quality: CityQuality = options.quality ?? "high";
   const out = new Set<string>();
   if (quality === "low") return out;
-  if (quality === "high") for (const id of anchorsOf(view, viewScene(view, quality), size).keys()) out.add(id);
+  if (quality === "high" && options.effects !== false) for (const id of anchorsOf(view, viewScene(view, quality), size).keys()) out.add(id);
+  if (quality === "high" && options.effects === false) {
+    // Effects off: only a rocket in flight moves among the buildings - in the chunk its spaceport is drawn with.
+    const rockets = rocketsAt(view, options.sinceYears ?? 0);
+    const flying = (k: number): boolean => {
+      const b = view.buildings[k]!;
+      return b.type === "spaceport" && typeof rockets.get(b.ty * view.tiles + b.tx) === "number";
+    };
+    if ([...rockets.values()].some((r) => typeof r === "number")) for (const [id, list] of anchorsOf(view, viewScene(view, quality), size)) if (list.some(flying)) out.add(id);
+  }
   const rovers = roversAt(view, options.sinceYears ?? 0);
   for (const tile of rovers.keys()) out.add(chunkId(Math.floor((tile % view.tiles) / size), Math.floor(Math.floor(tile / view.tiles) / size)));
   for (const tile of trainsAt(view, options.time).keys()) out.add(chunkId(Math.floor((tile % view.tiles) / size), Math.floor(Math.floor(tile / view.tiles) / size)));
@@ -4163,8 +4193,9 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
     const site = b.construction ?? null;
     // Its seed: where it stands from the founding square (claims west or north move tile indices, not this).
     const seed = buildingSeed(view, b);
-    const built = site !== null ? worksite(b, site, quality) : quality === "high" ? assemble(b, options.time, rocket, seed) : quality === "medium" ? assembleMedium(b, seed) : assembleLow(b);
-    emitBuilding(built, b, buildings, out, buildingVariant(b, quality, rocket), mode);
+    const still = heldStill(options, quality, rocket);
+    const built = site !== null ? worksite(b, site, quality) : quality === "high" ? (still ? stillKit(assemble(b, 0, rocket, seed)) : assemble(b, options.time, rocket, seed)) : quality === "medium" ? assembleMedium(b, seed) : assembleLow(b);
+    emitBuilding(built, b, buildings, out, buildingVariant(b, quality, rocket, still), mode);
     return built;
   };
   drawWorld(src.worldBack);

@@ -208,6 +208,19 @@ export function readKeys(raw: unknown): KeyBindings {
   return out;
 }
 
+/**
+ * Whether the Settings panel is waiting for a key to bind: then the next key
+ * pressed is that, and no shortcut - the game's handler hears keys before
+ * the panel's, so it asks here first.
+ */
+let waitingForKey = false;
+export function setWaitingForKey(on: boolean): void {
+  waitingForKey = on;
+}
+export function isWaitingForKey(): boolean {
+  return waitingForKey;
+}
+
 /** Whether a key press is the player typing, or working a control, rather than a shortcut. */
 export function typing(target: EventTarget | null, chord: string | null): boolean {
   const t = target as (Element & { isContentEditable?: boolean }) | null;

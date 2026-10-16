@@ -21,6 +21,9 @@ import { BUILDING_DEFS, NAME_MAX, NEEDS, NEED_BY_ID, cityView, keyTile, needCove
 import { happinessWords, needLines } from "./needs-words.js";
 import { settlementLabel } from "./settlement-label.js";
 import { chartFigure, cityCharts, fmt } from "./charts.js";
+import type { Settings } from "./settings.js";
+import { DEFAULT_SETTINGS } from "./settings.js";
+import { Pinch, wheelIntent } from "./gestures.js";
 
 export interface PlannerHooks {
   readonly onRename: (id: string, name: string) => { ok: boolean; reason: string | null };
@@ -255,6 +258,11 @@ export class PlannerScreen {
   private readonly coverageBar: HTMLElement;
   private readonly coverageButtons = new Map<NeedId | "none", HTMLButtonElement>();
 
+  /** The player's settings (Batch 36): the wheel's way, two fingers, the colours. Read as it is used. */
+  prefs: () => Settings = () => DEFAULT_SETTINGS;
+  /** Two fingers on the map: a pinch zooms. */
+  private readonly pinch = new Pinch();
+
   constructor(
     host: HTMLElement,
     private readonly hooks: PlannerHooks,
@@ -483,11 +491,23 @@ export class PlannerScreen {
     };
     m.addEventListener("pointerdown", (e) => {
       m.setPointerCapture?.(e.pointerId);
+      if (this.pinch.down(e)) {
+        this.drag = null;
+        return;
+      }
       const p = local(e);
       const t = this.tileAt(p.x, p.y);
       this.drag = { x: p.x, y: p.y, from: t, to: t };
     });
     m.addEventListener("pointermove", (e) => {
+      const two = this.pinch.move(e);
+      if (two !== null) {
+        const p = local({ clientX: two.x, clientY: two.y });
+        this.zoomAbout(two.factor, p.x, p.y);
+        this.ox += two.dx;
+        this.oy += two.dy;
+        return;
+      }
       const d = this.drag;
       if (d === null) return;
       const p = local(e);
@@ -500,7 +520,12 @@ export class PlannerScreen {
       }
       d.to = this.tileAt(p.x, p.y) ?? d.to;
     });
-    m.addEventListener("pointerup", () => {
+    m.addEventListener("pointercancel", (e) => {
+      this.pinch.up(e);
+      this.drag = null;
+    });
+    m.addEventListener("pointerup", (e) => {
+      this.pinch.up(e);
       const d = this.drag;
       this.drag = null;
       if (d === null || d.from === null || d.to === null || this.tool === "pan") return;
@@ -511,14 +536,39 @@ export class PlannerScreen {
       (e) => {
         e.preventDefault();
         const p = local(e);
-        const k = Math.exp(-e.deltaY * 0.0015);
-        const next = Math.min(64, Math.max(0.5, this.scale * k));
-        this.ox = p.x - ((p.x - this.ox) * next) / this.scale;
-        this.oy = p.y - ((p.y - this.oy) * next) / this.scale;
-        this.scale = next;
+        // Batch 36: the wheel's way, a trackpad's pinch, or two fingers moving the map.
+        const intent = wheelIntent(e, this.prefs().controls);
+        if ("pan" in intent) {
+          this.ox += intent.pan.dx;
+          this.oy += intent.pan.dy;
+        } else this.zoomAbout(Math.exp(-intent.zoom * 0.0015), p.x, p.y);
       },
       { passive: false },
     );
+  }
+
+  /** Zoom by `factor`, keeping the point (px, py) of the map where it is. */
+  private zoomAbout(factor: number, px: number, py: number): void {
+    const next = Math.min(64, Math.max(0.5, this.scale * factor));
+    this.ox = px - ((px - this.ox) * next) / this.scale;
+    this.oy = py - ((py - this.oy) * next) / this.scale;
+    this.scale = next;
+  }
+
+  /** The keys (Batch 36): move the map by screen pixels - positive is right and down - or zoom about its middle. */
+  nudge(dx: number, dy: number): void {
+    this.ox -= dx;
+    this.oy -= dy;
+  }
+
+  zoomStep(factor: number): void {
+    const r = this.map.getBoundingClientRect();
+    this.zoomAbout(factor, r.width / 2, r.height / 2);
+  }
+
+  /** Where the map stands: its offset and scale, for a test to read. */
+  get placement(): { readonly ox: number; readonly oy: number; readonly scale: number } {
+    return { ox: this.ox, oy: this.oy, scale: this.scale };
   }
 
   /** A drag let go: the zone painted or erased, the link planned. */

@@ -9,7 +9,7 @@
  */
 
 import type { ActionId, KeyBindings } from "./keys.js";
-import { ACTIONS, chordOf, keyName, rebind, ACTION_BY_ID, DEFAULT_KEYS } from "./keys.js";
+import { ACTIONS, chordOf, keyName, rebind, ACTION_BY_ID, DEFAULT_KEYS, setWaitingForKey } from "./keys.js";
 import type { Settings } from "./settings.js";
 import { AUTOSAVE_CHOICES, CAMERA_SPEEDS, CHUNKS_KEPT, CHUNK_PIXELS, DETAILS, MOTIONS, PALETTES, POPUPS, UI_SCALES } from "./settings.js";
 import type { PlayerSettings } from "./settings.js";
@@ -114,7 +114,7 @@ export class SettingsPanel {
     const reset = el("button", "front-button settings-keys-reset", "Reset keys");
     reset.type = "button";
     reset.addEventListener("click", () => {
-      this.waiting = null;
+      this.wait(null);
       this.change("controls", { ...this.now.controls, keys: DEFAULT_KEYS });
       this.keyNote.textContent = "Every key is back to how it came.";
     });
@@ -171,6 +171,7 @@ export class SettingsPanel {
 
   /** Take the panel down: its listeners go with it. */
   dispose(): void {
+    this.wait(null);
     this.listening.abort();
     this.unsubscribe();
     this.root.remove();
@@ -179,6 +180,12 @@ export class SettingsPanel {
   /** Awaiting a key for an action: what a test, or the player, presses next. */
   get awaiting(): { readonly action: ActionId; readonly slot: 0 | 1 } | null {
     return this.waiting;
+  }
+
+  /** Wait for a key for an action's slot, or stop waiting; the game hears no shortcut meanwhile. */
+  private wait(w: Waiting | null): void {
+    this.waiting = w;
+    setWaitingForKey(w !== null);
   }
 
   private change<K extends keyof Settings>(part: K, next: Settings[K]): void {
@@ -260,7 +267,7 @@ export class SettingsPanel {
         b.dataset["slot"] = String(slot);
         b.setAttribute("aria-label", `${a.name}, ${slot === 0 ? "key" : "other key"}: ${keyName(keys[a.id][slot])}. Change`);
         b.addEventListener("click", () => {
-          this.waiting = { action: a.id, slot };
+          this.wait({ action: a.id, slot });
           this.keyNote.textContent = `Press the key for "${a.name}". Any key counts, Esc too.`;
           this.renderKeys();
         });
@@ -269,7 +276,7 @@ export class SettingsPanel {
           const cancel = el("button", "settings-key-cancel", "Cancel");
           cancel.type = "button";
           cancel.addEventListener("click", () => {
-            this.waiting = null;
+            this.wait(null);
             this.keyNote.textContent = "";
             this.renderKeys();
           });
@@ -287,7 +294,7 @@ export class SettingsPanel {
 
   private bind(w: Waiting, chord: string | null): void {
     const { bindings, swapped } = rebind(this.now.controls.keys, w.action, w.slot, chord);
-    this.waiting = null;
+    this.wait(null);
     const name = ACTION_BY_ID[w.action].name;
     this.keyNote.textContent =
       chord === null

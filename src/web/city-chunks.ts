@@ -66,13 +66,28 @@ export class ChunkedCity<P> {
     private readonly budgetMs = 8,
     // 24 million pixels, some 96 MB of pictures (48 million, with a metropolis's 18,000 chunks to fill, was
     // more than a browser tab could hold beside the city itself).
-    private readonly maxPixels = 24_000_000,
+    private maxPixels = 24_000_000,
     /** Milliseconds a frame for chunks never drawn: a whole metropolis is seconds of work, so it fills in rather than freezing. */
     private readonly firstBudgetMs = 40,
   ) {}
 
   /** Whether every chunk in view has a picture of what it holds now, at this zoom (a frame found nothing left to draw). */
   settled = true;
+
+  /** The picture pixels kept (Batch 36: the player's "pictures of the city kept"); over it, the longest unseen go. */
+  get budget(): number {
+    return this.maxPixels;
+  }
+
+  set budget(pixels: number) {
+    this.maxPixels = pixels;
+    this.evict();
+  }
+
+  /** Picture pixels kept now. */
+  get keptPixels(): number {
+    return this.pixels;
+  }
 
   /** Forget every picture (another settlement opened). */
   clear(): void {
