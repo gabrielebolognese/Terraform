@@ -133,6 +133,7 @@ describe("the Earth panel", () => {
     pick(host, "food", 10);
     host.querySelector<HTMLButtonElement>(".earth-buy")!.click();
     show(advance(state(), W1 - state().steps, cfg));
+    expect(host.querySelector(".earth-flight"), "the rocket away is listed").not.toBeNull();
     expect(host.querySelector(".earth-flight")!.textContent).toMatch(/^Ares's rocket, bringing 10 units of food: home in 3 min 1\d s$/);
     show(advance(state(), 30, cfg));
     expect(host.querySelector(".earth-flight")).toBeNull();

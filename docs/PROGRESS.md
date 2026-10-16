@@ -907,10 +907,15 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     on Earth's own totals and the moments instead.
   - the invariant #2 gate bans the word `window` in simulation code; three refusal strings were
     reworded, the gate unchanged.
-  - 54 faults injected: 46 caught at once, 3 only after a test was added or strengthened (a sale
-    that found nothing closed, orders not saved, contracts sized by Standard's clock), 2 masked by a
-    second guard and caught as coherent faults, 1 (a save's sale of settlers, found by reading the
-    code) caught at once.
+  - 71 faults injected (54 in the batch's run, 17 in review 1's fix round): 62 caught at once, 4
+    only after a test was added or strengthened (a sale that found nothing closed, orders not
+    saved, contracts sized by Standard's clock, and in the fix round a materials contract paying a
+    tenth), 2 masked by a second guard and caught as coherent faults, 1 (a save's sale of
+    settlers, found by reading the code) caught at once.
+  - review 1: seven tests had no injection on record. The fix round broke each (17 faults, 53 to
+    69, all seven failed) and found nothing saying a contract pays better than the market: a
+    materials contract at 0.4 credits a unit, less than Earth pays for a sale, passed every Earth
+    test. A test now holds it (measured: at least 1.71 times Earth's best price).
   - two earlier tests needed Earth adding: the v17-load test strips v19's field too, and the pinned
     mode overrides list EARTH_ENABLED.
 - decisions:
@@ -941,9 +946,10 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   script holds "Next launch window in", "Earth (an offer)", "Launch window missed in"; the styles the
   panel). With Earth off the golden run, the golden frames, the Batch 3 score and determinism are in
   the suite, unchanged.
-- injections: 54 faults, one at a time, each file restored byte for byte and checked: 46 caught at
-  once, 3 after a new or stronger test, 2 changing no behaviour as written (a second guard) and
-  caught as coherent faults, 1 added after the run and caught (the table is in the note).
+- injections: 71 faults, one at a time, each file restored byte for byte and checked: 62 caught at
+  once, 4 after a new or stronger test, 2 changing no behaviour as written (a second guard) and
+  caught as coherent faults, 1 added after the run and caught (the table is in the note; 53 to 69
+  are review 1's fix round).
 - review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch34-earth.md
   docs/design/macro-world.md docs/manual/README.md docs/manual/alerts-and-statistics.md
   docs/manual/buildings.md docs/manual/cities.md docs/manual/controls.md docs/manual/earth.md
@@ -1031,3 +1037,37 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     - **A rocket landing at a lost city loses its cargo unrefunded** (`landFlights`,
       `src/sim/earth.ts:476-503`). The orders still waiting are refunded. No city can be lost in
       the browser until flooding is turned on (Batch 38).
+- fix 1: done (session 2, 2026-10-16)
+  1. The seven tests broken, one fault at a time, each file restored byte for byte and `git status`
+     checked after each: 17 faults (53 to 69 in the note's table), every one run against the Earth
+     tests (the simulation's, the panel's and the exit gate's). All seven tests failed:
+     - `src/sim/earth.test.ts` "misses it too with no finished spaceport": a missed window recorded
+       only for a spaceport going up (53), the orders of a city with none dropped unrefunded (54);
+     - `src/web/earth-gate.test.ts` "is the orbit's period": the period a round 2 years (55, caught
+       by five other tests too);
+     - the Standard trading measurement: Earth's credits never reaching the bank (56; the city of
+       1,000 at 7,767 s both ways). A materials contract paying a tenth (57, 0.4 credits a unit,
+       less than Earth pays for a sale) passed every Earth test: nothing said a contract pays
+       better than the market. A test now does ("what a contract pays", in the gate file: at
+       least 1.71 times Earth's best price at full reputation over 40 windows at both paces,
+       research more than the bank), and it catches 57 and research at half pay (58);
+     - `src/web/earth.test.ts` "is not there in a world without Earth": the button in every world
+       (59, as the review's spot check);
+     - "shows the standing, the next launch window and Earth's prices": the window one late (60),
+       settlers and rovers priced while locked (61), "Earth pays" showing what Earth asks (62);
+     - "shows the rocket away": "home in" counted to the launch (63), the record oldest first (64),
+       the list redrawn only as the orders change (65; it failed on a null, so the test now checks
+       first that the rocket is listed, and says so);
+     - "offers Earth's contract": the button never saying an offer waits (66), the offer's
+       reputation gain and loss swapped (67), the bar full from the start (68), Accept never
+       reaching the simulation (69).
+     The note's totals (`docs/balance/batch34-earth.md` item 10, the new item 11 and "Injection
+     run") and this entry's `found:` and `injections:` lines now say 71 faults: 62 caught at once,
+     4 after a new or stronger test, 2 masked and caught as coherent faults, 1 the save check.
+  2. `src/sim/tuning.ts`: the contract sizes' comment says 150 to 310 materials at Standard.
+  - Nothing the player sees changed, so the manual is unchanged.
+  - checks: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 118 files, 1,394
+    tests, all passed (384 s; the Known-red opening test passed); build:web green (602.24 kB JS,
+    203.45 kB gzip, past Vite's 500 kB warning as recorded since Batch 31; 48.67 kB CSS); build
+    green.
+  - commits: the commit recording this

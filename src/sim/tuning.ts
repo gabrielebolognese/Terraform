@@ -1282,7 +1282,7 @@ export const BASE_TUNING = Object.freeze({
    *
    * CONTRACTS: each window Earth offers one (weights EARTH_WEIGHT_*):
    * EARTH_CONTRACT_MATERIALS_YEAR or EARTH_CONTRACT_WATER_YEAR for each of a
-   * city's years in a window's span (x1 to x2: 150 to 300 materials at the
+   * city's years in a window's span (x1 to x2: 150 to 310 materials at the
    * Standard pace, an eighth of it at Classic, whose windows are eight times
    * as close for the cities), or the
    * planet's research over EARTH_CONTRACT_RESEARCH_YEARS (x1 to x2), due by
