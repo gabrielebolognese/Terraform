@@ -1733,3 +1733,25 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     --minWorkers=1: 125 files, 1,512 tests, all passed (426 s; the Known-red opening test passed).
   - files: src/web/deposit-words.ts, src/web/deposits.test.ts, docs/balance/batch37-deposits.md,
     docs/manual/cities.md, docs/PROGRESS.md
+- review 2: accepted
+  - Review 1's problems are fixed. 1: `sitingWords` writes out the plurals ("Ice lenses are marked
+    with pale blue discs", "Sunny high flats are marked with yellow crosses"), and a test holds
+    the whole sentence for all four kinds, off the deposit and on it; the mine's hint test reads
+    the whole off-deposit sentence through the real component. 2: a test projects every ore mark
+    the city draws to the screen and holds it to a tile's diamond; the note's finding 7, its
+    injection table (32, 40-42) and this entry's `found:` line now say what is tested.
+  - Injected in this review, one at a time, the tree clean after each: the diamond's turn removed
+    (the flat bar, 40) - the screen-diamond test fails, its four points all "off"; the old plurals
+    (42) - the whole-sentence test and the mine's hint test fail ("Ice lenss are marked with a
+    pale blue discs").
+  - Checks: typecheck green; build green; build:web green (667.79 kB JS, 226.22 kB gzip, 52.19 kB
+    CSS, as fix 1 says); `npx vitest run --maxWorkers=2 --minWorkers=1`: 125 files, 1,512 tests,
+    all passed (514 s; the Known-red opening test passed).
+  - Manual checked against the code: Deposits is among the tools at the top right (`.city-tools`,
+    fixed top right); the four buildings' card tips name their deposit and its factor
+    (`depositLine` in the tip); the line above the build bar gives the ground's height and the
+    deposit under the pointer (`groundWords`), and the off-deposit sentence `cities.md` quotes is
+    the one the code writes.
+  - Since review 1, only `src/web/deposit-words.ts` and `src/web/deposits.test.ts` changed in the
+    source; review 1's other findings (exit gate, switch, tuning table, walls, no save change,
+    decisions) still stand.
