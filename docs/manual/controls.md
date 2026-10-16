@@ -59,7 +59,8 @@ Left alone for a few seconds, the planet turns slowly by itself - unless motion 
 | Move around | Drag, the move keys, two fingers on a trackpad (with that setting on), or rest the pointer at the edge of the screen (with **Edge scrolling** on) |
 | Zoom | Mouse wheel, a trackpad's pinch, two fingers on a touch screen, or the zoom keys |
 | Place a building | Choose its card, then click the ground |
-| Select a building or rock | Click it |
+| Select a building, a rock or a deposit | Click it |
+| Show the ground's deposits | **Deposits** (top right, with the tools); choosing a mine, water extractor, geothermal plant or solar array shows its own |
 | Upgrade the selected building | **Upgrade** in its panel, or **U** |
 | Lay corridors, cables or railway | Choose the tool, then drag; start on an existing link to remove links |
 | Put down the chosen tool, or deselect | **Esc** |

@@ -44,8 +44,8 @@ Cities run on their own, faster clock: a year in a city passes in about half a m
   rover.
 - **The build bar** along the bottom holds a card for every structure you can place. Hover over a
   card for what it does, what it uses and makes, its size and cost, and how long it takes to build.
-- **The tools** at the top right lay corridors, power cables and railways, claim land, and level
-  ground.
+- **The tools** at the top right lay corridors, power cables and railways, claim land, level
+  ground, and (in a world made from Update 37 on) show the ground's **Deposits**.
 
 Click any building to select it. The panel that opens says what it is doing, and has buttons to
 **Upgrade**, **Remove** or **Close** (and **Launch rocket** for a Spaceport).
@@ -70,6 +70,36 @@ hour for a Mega Mall. The rover's drive there and back adds to it (see below). S
 [Buildings](buildings.md) for every structure.
 
 **Removing** a building is free but gives no materials back.
+
+## Deposits
+
+In a world made from Update 37 on, the ground has deposits, and four buildings make more when they
+stand on their own:
+
+| Deposit | Where it lies | Its mark | What it gives |
+|---|---|---|---|
+| Ore vein | Ridges, hilltops and the rims of craters: ground higher than the ground around it | A copper diamond | A Regolith Mine on it makes twice the materials |
+| Ice lens | Hollows, basins and crater floors; more of it the further a city is from the equator | A pale blue disc | A Water Extractor on it makes twice the water while the planet is dry; less as liquid water comes within reach, and no more at all once it is in reach everywhere |
+| Geothermal vent | Along a line across the land: the fault the canyons follow | A red ring | A Geothermal Plant on it makes twice the power |
+| Sunny high flat | Flat ground above the city's own level, with nothing nearby standing higher | A yellow cross | A Solar Array on it makes 1.5 times the power |
+
+- **Partly on its deposit, a building gets part of the bonus**: a mine with 2 of its 4 tiles on
+  ore makes 1.5 times as much. Upgrades add their 10% a level on top.
+- **Choose one of the four buildings** and its own deposit is marked on the ground while you place
+  it. **Deposits**, among the tools at the top right, marks all four kinds at once; press it again
+  to hide them. Marks are not drawn under buildings.
+- **The line above the build bar** names the deposit under the pointer, and says what the building
+  would make there, for example "On ore vein, all 4 of its tiles: it would make x2 materials."
+- **Click a tile with a deposit** to see what it is and what it gives. A building's panel says what
+  it stands on, for example "On ore vein (all of it): x2 output."
+- A deposit never runs out, and stays where it is when the city claims more land.
+- Most cities have a place of each kind within about 30 tiles of the Headquarters. Some of the ore and
+  the ice lies on ground too steep to build on: **Level ground** makes such a tile buildable and
+  keeps its deposit.
+- **Take the deposits near the city.** A building far out needs a long corridor and power cable,
+  and its rover a long drive. Chasing deposits far from the city costs more than they give.
+
+Worlds made before Update 37 have no deposits.
 
 ## Rovers and the build queue
 

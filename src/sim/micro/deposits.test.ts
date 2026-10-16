@@ -23,7 +23,8 @@ import { DEPOSIT_KINDS, depositAt, depositBonus, depositOfCode, depositsOf, siti
 import { placeBuilding, settlementStep } from "./settlement.js";
 import type { DepositKind } from "./deposits.js";
 import { foundSettlement } from "./registry.js";
-import { chunkKey, frameOf } from "./space.js";
+import { cityView } from "./view.js";
+import { chunkKey, frameOf, tileKey } from "./space.js";
 import { groundOf } from "./terrain.js";
 
 /** The browser's ground, a city's founding square the browser's size, with deposits on - and the same with them off. */
@@ -224,6 +225,30 @@ describe("the same site always has the same deposits, and none are stored", () =
     expect(sitingOf(city, ON)?.shares[0]).toBe(1);
     // Nothing of the deposits is in the save: it is the same text with them on or off.
     expect(serialize(s, ON, "2026-10-16T00:00:00.000Z")).toBe(serialize(s, OFF, "2026-10-16T00:00:00.000Z"));
+  });
+
+  it("levelling the ground keeps the deposit under it: the same mine on its levelled vein makes the same", () => {
+    // The manual's word: Level ground makes a steep tile on ore buildable and keeps its ore.
+    const map = depositsOf(HERE, ON);
+    const n = frameOf(HERE, ON).n;
+    const vein = square(map, n, (x) => x === code("ore"));
+    const s = cityWith("regolith_mine", vein, ON);
+    const grades = [0, 1].flatMap((dy) => [0, 1].map((dx) => ({ tile: tileKey(vein.tx + dx, vein.ty + dy), heightM: -20 })));
+    const levelled = { ...s, settlements: s.settlements.map((c) => ({ ...c, grades })) };
+    expect(made(levelled, "materials", ON)).toBe(made(s, "materials", ON));
+    expect(made(levelled, "materials", ON) / made(cityWith("regolith_mine", square(map, n, (x) => x === 0), ON), "materials", ON)).toBeCloseTo(1 + ON.ORE_BONUS, 9);
+    // And the view's map, made first for a place with ore levelled away (nothing asked of it before), keeps it:
+    // tile by tile what the terrain itself says.
+    const there = { kind: "city" as const, lat: 0.12, lon: 0.9 };
+    const m = frameOf(there, ON).n;
+    const ore: { tx: number; ty: number }[] = [];
+    for (let ty = 0; ty < m && ore.length < 40; ty += 1) for (let tx = 0; tx < m && ore.length < 40; tx += 1) if (depositAt(there, tx, ty, ON) === "ore") ore.push({ tx, ty });
+    expect(ore.length).toBe(40);
+    const founded = foundSettlement(marsStart(undefined, ON), "city", there.lat, there.lon, ON).state;
+    const flat = { ...founded, settlements: founded.settlements.map((c) => ({ ...c, grades: ore.map((p) => ({ tile: tileKey(p.tx, p.ty), heightM: -30 })) })) };
+    const env = habitat(flat.reservoirs, derive(flat.reservoirs, worldEnv(flat, NEUTRAL_ENV, ON), ON), ON, 0);
+    const view = cityView(flat.settlements[0]!, env, ON);
+    expect(ore.filter((p) => view.deposits?.[p.ty * m + p.tx] !== code("ore")).length).toBe(0);
   });
 
   it("differs from place to place", () => {
