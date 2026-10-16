@@ -54,7 +54,7 @@ What is missing, in the user's words (2026-10-11):
 | 33 | Events that ask for decisions | **COMPLETE** - [note](docs/balance/batch33-events.md) - a deck dealt from the seed brings an event about every 25 min from 30 min in: meteor shower, equipment failure, outbreak, supply ship early/late/lost, discovery; choices paid when made, outcomes at the deadline inside `advance`, the default the worst choice made worse; identical live, chunked and offline; the card, alerts and an event history kept in the world (save v18); Earth's request left to Batch 34 |
 | 34 | Earth: shipments, contracts and the market | **COMPLETE** - [note](docs/balance/batch34-earth.md) - launch windows every 2.135 planet-years from the window's number (50 measured, at most a substep late, no drift); each city's spaceport rocket flies at a window with sales and contract goods and lands a third of a window later with the order, a rocket away missing the window; a market by supply (seeded), trade and reputation that never pays more than it asks; contracts for materials, water or research, met for credits and reputation, failed for reputation; settlers and rovers unlocked; the Earth panel; save v19 |
 | 35 | Sound: music, ambience and effects | **COMPLETE** - [note](docs/balance/batch35-sound.md) - one Web Audio engine, four channels and the player's volumes, no context before the first gesture; every sound made by the game: music written as it plays by the phase reached, crossfaded over 8 s; wind by pressure and storm, rain, sea, the machinery near the city camera; effects as crossings in the state, placed in the city view; the same world to the bit heard or not; settings kept per player; licences in docs/credits.md |
-| 36 | Settings, controls and accessibility | NOT STARTED |
+| 36 | Settings, controls and accessibility | **COMPLETE** - [note](docs/balance/batch36-settings.md) - every setting in one panel, kept per player in a store of their own (Batch 35's record moved, never deleted); detail held or Auto, pictures kept, moving details off, each level's frame time measured on the player's machine; 21 shortcuts by physical key, two rebindable slots each; camera speed, edge scrolling, invert zoom, trackpad and touch in every view; panel size, colour-blind palettes measured under simulated colour blindness, reduced motion, high contrast, pop-ups; autosave interval, Ctrl+S, where the worlds are kept; a second cue for every colour code, held to a register of the stylesheet's rules; the same world to the bit whatever the settings |
 | 37 | Terrain resource deposits (was `BUILD_PLAN` 27) | NOT STARTED |
 | 38 | Flood defences and the rising water; flooding on (was `BUILD_PLAN` 28) | NOT STARTED |
 | 39 | The ending: victory, scores and achievements | NOT STARTED |
@@ -831,22 +831,69 @@ and survive a reload through the real title screen. Licences in `docs/credits.md
 **Goal.** The player sets the game up for their machine and themselves.
 
 **Deliverables:**
-- [ ] **Graphics:** the detail level (auto, or high, medium or low, from Batch 26's levels); chunks
+- [x] **Graphics:** the detail level (auto, or high, medium or low, from Batch 26's levels); chunks
   kept; effects on or off. Shown with the frame time they cost.
-- [ ] **Controls:**
+- [x] **Controls:**
   - every keyboard shortcut listed and rebindable;
   - camera speed and edge scrolling;
   - invert zoom;
   - touch and trackpad gestures.
-- [ ] **Interface:** UI scale; colour-blind palettes for every colour-coded thing (zones, networks,
+- [x] **Interface:** UI scale; colour-blind palettes for every colour-coded thing (zones, networks,
   alerts); reduced motion; a high-contrast HUD.
-- [ ] **Autosave interval**, a manual save, and the save's location shown.
-- [ ] **Kept per player, not per world,** in their own store.
+- [x] **Autosave interval**, a manual save, and the save's location shown.
+- [x] **Kept per player, not per world,** in their own store.
 
 **Exit gate:**
 - Every setting changes what it says and survives a reload, through the real components.
 - Every colour-coded element has a second, non-colour cue, checked in the happy-dom harness.
 - No setting changes the simulation.
+
+**Done** - see [the note](docs/balance/batch36-settings.md). Built unattended (`/next-batch auto`)
+in one session. One **Settings** panel - Sound, Graphics, Controls, Interface, Saving - on the
+title screen and in the world menu, every change at work at once. The settings are the player's,
+in an IndexedDB object store of their own (`player`, database v3); Batch 35's sound record in the
+worlds' index is read once and left where it was. Graphics: the city's detail held at High,
+Medium or Low or left on Auto; how many of its pictures are kept (12, 24 or 36 million pixels);
+its moving details off, each building's moving parts drawn still into its picture while vehicles
+and a rocket in flight still move; each level's frame time measured on the player's machine and
+shown beside it. Controls: 21 shortcuts named by physical key, each with two slots, rebound by
+pressing the key (any key, Esc too), a key taken from another action swapped; camera speed for
+the keys and the screen's edge; edge scrolling in a city; invert zoom on every wheel; a trackpad's
+pinch zooming everywhere and, by choice, two fingers moving the view; two fingers pinching on a
+touch screen. Interface: the panels' size (never the canvases'), red-green and blue-yellow
+colour-blind palettes for the page and every canvas colour code, reduced motion (the interface
+still, the flight down a cut, the planet not turning), high contrast, and which alerts pop up.
+Saving: an autosave interval, Ctrl+S, and the menu saying when the world was last saved and where
+the worlds are kept. Every colour code has a second cue, and a test holds the stylesheet's colour
+rules to a register of them, each state put on screen by the real components; the planner's map
+carries patterns and names what is under the pointer.
+
+**Decisions taken** (none were set for Phase 1; each recorded with its reason in the note):
+1. **A store of their own**: a third IndexedDB object store, `player`; the v1 record moved on first
+   read and never deleted.
+2. **Shortcuts made, then made rebindable**: the game had one key (Esc). 21 actions, by physical
+   key (`code`), two slots each; a key taken is swapped, never lost.
+3. **Edge scrolling off by default**; camera speed 0.5x to 3x for the keys and the edge.
+4. **Invert zoom on every wheel**; a trackpad's pinch (the wheel with Ctrl) always zooms, uninverted.
+5. **Frame time measured on the player's machine**, per level and per effects on or off: an
+   unattended run cannot time a browser.
+6. **"Effects" are the city's moving details**; off, they are drawn still into the pictures. A
+   rocket in flight is information, not decoration: it still rises.
+7. **The panels are scaled with CSS `zoom`, never a canvas**, so a click lands where it did.
+8. **Palettes swap the zones' first colours at drawing**, never in the world: a colour the player
+   picked is kept, and no setting writes the save.
+9. **Autosave never off**: 15 s, 30 s, 1 min or 5 min.
+10. **Batch 31's open item taken**: which alerts pop up (all, urgent only, none); an alert that does
+    not pop up makes no sound.
+11. **Batch 33's open item declined**: no events while away would change the simulation, which no
+    setting may.
+
+**What changed from the plan:**
+- **Keyboard shortcuts were added**, not only listed: there was one.
+- **Pop-up alerts** setting (Batch 31's open item).
+- **The planner names what is under the pointer**, and **Alerts** and a milestone say their state
+  in words: found by the register of colour rules.
+- **In a city, Esc closes the game menu** (it did not).
 
 ---
 

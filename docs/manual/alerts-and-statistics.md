@@ -36,14 +36,19 @@ time, the urgent ones first, each with a sound: two soft notes for a notice, thr
 notes for an urgent one ([Sound and music](sound.md)). An urgent message stays about 12 seconds and a notice about
 6 seconds. Click a message to go where it happened, or **x** to dismiss it.
 
+**Pop-up alerts** in [Settings](settings.md#interface) chooses which pop up: urgent alerts and
+notices (as the game comes), urgent alerts only, or none. **Alerts** keeps every one whatever you
+choose, and an alert that does not pop up makes no sound.
+
 A problem that clears and comes back within a minute does not pop up again: a store right at its
 limit can flicker short and back.
 
 ### The Alerts button
 
 **Alerts** sits beside **Menu**: at the bottom right in orbit, and at the top right in a city. It
-shows how many things need you now, for example **Alerts (3)**, and turns red while one of them
-is urgent. Press it to see:
+shows how many things need you now, for example **Alerts (3)**, and how many of them are urgent,
+for example **Alerts (3, 1 urgent)**, when any is (it turns red then too). Press it, or **N**, to
+see:
 
 - **Now**: everything that holds at this moment, the most pressing first.
 - **What happened**: everything since you opened the world, newest first, with the year it

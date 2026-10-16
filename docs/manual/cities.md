@@ -164,7 +164,9 @@ better. See [People and their needs](people.md).
 
 A city starts on a patch of ground around its Headquarters. At **200 people** it can claim a new
 square of land next to what it holds, and one more for every 100 people after that. Press
-**Claim land**, then click where to grow. Claiming is free; outposts cannot claim land.
+**Claim land**, then click where to grow. Claiming is free; outposts cannot claim land. The squares
+the city can claim now are drawn green with a whole edge; those it must grow into first are grey,
+with a dashed edge.
 
 ## The Spaceport and rockets
 
@@ -192,8 +194,16 @@ away when a window opens makes the city miss it, and its orders wait for the nex
   [Alerts and statistics](alerts-and-statistics.md)).
 - **Coverage** (in a world made from Update 32 on) shows where a service reaches: choose **Green
   space**, **Medical care**, **Research**, **Transport** or **Shops** to see the homes it reaches in
-  green and the homes nothing reaches in red. **Overview** lists the city's happiness and each
-  need. See [People and their needs](people.md#seeing-it).
+  green and the homes nothing reaches in red, and hatched. **Overview** lists the city's happiness
+  and each need. See [People and their needs](people.md#seeing-it).
+
+On the planner's map, buildings are coloured by what they do, and the legend under it says which
+colour is which. Each kind of line has its own pattern as well as its colour: a corridor is solid,
+a power line dashed, a railway striped, something planned but not yet built dotted, and a zone
+outlined. Point at any tile and the line under the map says what is there, for example "Here:
+Greenhouse (homes and life support), zone "Farms", corridor, power line planned." With a
+colour-blind palette chosen in [Settings](settings.md#interface), the colours change to ones that
+stay apart for you; a zone colour you picked yourself stays as you picked it.
 
 ## The world map and railways
 

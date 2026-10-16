@@ -87,8 +87,8 @@ play.
 
 ## Sound settings
 
-**Settings** on the title screen, or **Menu** then **Settings** in a world, opens the sound
-settings. Each slider goes from 0 to 100%:
+**Settings** on the title screen, or **Menu** then **Settings** in a world, opens the settings,
+the sound first (the rest are in [Settings](settings.md)). Each slider goes from 0 to 100%:
 
 | Slider | What it sets | To start with |
 |---|---|---|
