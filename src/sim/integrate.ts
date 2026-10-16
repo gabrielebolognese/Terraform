@@ -32,6 +32,7 @@ import { computeStep } from "./rates/index.js";
 import { flowRoutes } from "./micro/routes.js";
 import { latchGuide } from "./objectives.js";
 import { stepDecisions } from "./decisions.js";
+import { divertResearch, stepEarth } from "./earth.js";
 import { planetSample, recordPlanet, samplesAt } from "./history.js";
 import { liquidWaterRate } from "./sea-level.js";
 import type { Tuning } from "./tuning.js";
@@ -333,8 +334,17 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
      * `d` the flows did rather than a half-updated world.
      */
     const accrued = t.ECONOMY_ENABLED ? accrue(working.economy, habitat(working.reservoirs, d, t, liquidWaterRate(contribution.flows)), working, h, t) : working.economy;
-    // The cities' research is income too (laboratories, observatories, forums).
-    const economy = t.ECONOMY_ENABLED && contribution.research > 0 ? { ...accrued, credits: accrued.credits + contribution.research * h, earned: accrued.earned + contribution.research * h } : accrued;
+    // The cities' research is income too (laboratories, observatories, forums) - unless Earth has a research
+    // contract open (Batch 34): then it goes to Earth until the contract is met. With Earth off the sum is the
+    // same expression as before, so a world without it is unchanged to the bit.
+    let research = contribution.research * h;
+    let earth = working.earth;
+    if (t.EARTH_ENABLED && research > 0) {
+      const sent = divertResearch(earth, research);
+      earth = sent.earth;
+      research = sent.kept;
+    }
+    const economy = t.ECONOMY_ENABLED && contribution.research > 0 ? { ...accrued, credits: accrued.credits + research, earned: accrued.earned + research } : accrued;
 
     /**
      * Phase latch and tech unlock, EVERY substep, on the `d` already computed.
@@ -363,6 +373,7 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
       reservoirs,
       ledger,
       economy,
+      earth,
       phaseReached: reached,
       techUnlocked,
       facilities: stepFacilities(working.facilities, t, h),
@@ -373,6 +384,8 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
     };
     // Events that ask for decisions (Batch 33): those due resolve and the card dealt now opens, every substep.
     if (t.DECISIONS_ENABLED) working = stepDecisions(working, t);
+    // Earth (Batch 34): rockets home land, a launch window sends them up, contracts are settled - every substep.
+    if (t.EARTH_ENABLED) working = stepEarth(working, t);
     // The guided first steps (Batch 30), latched like the phase: every substep, from the state it leaves.
     if (t.GUIDE_ENABLED) working = latchGuide(working, t);
     // The planet's record (Batch 31): the planet as the HUD shows it, weather included, on the substep grid.

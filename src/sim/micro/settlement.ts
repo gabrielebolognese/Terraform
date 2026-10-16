@@ -1255,7 +1255,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
       if (job.upgrade) built = built.map((b) => (tileKey(b.tx, b.ty) === job.tile ? { ...b, level: Math.min(maxLevel(b.type, t), b.level + 1) } : b));
       continue;
     }
-    const brought = job.kind === "rover" ? job.materials : t.ROCKET_MATERIALS;
+    // Earth's shipment (Batch 34) brings no materials of its own: `stepEarth` lands its cargo this same substep.
+    const brought = job.kind === "rover" ? job.materials : job.earth !== undefined ? 0 : t.ROCKET_MATERIALS;
     stores.materials = Math.min(cap.materials, stores.materials + brought);
     if (job.kind === "rover" && !cleared.includes(job.tile)) cleared = [...cleared, job.tile].sort((a, b) => a - b);
     if (job.kind === "rover" && job.levelM !== undefined) grades = [...grades, { tile: job.tile, heightM: job.levelM }];

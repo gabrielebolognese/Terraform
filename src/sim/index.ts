@@ -290,3 +290,39 @@ export {
 export type { ChooseOutcome, DecisionChoice } from "./decisions.js";
 export { NO_DECISIONS } from "./planets/mars.js";
 export type { DecisionKind, DecisionOutcome, DecisionRecord, DecisionVariant, Decisions, OpenDecision, SettlementEffect } from "./types.js";
+
+// ---- Earth: shipments, contracts and the market, Batch 34 -------------------
+export {
+  CONTRACT_KINDS,
+  NO_GOODS,
+  SELLABLE,
+  acceptContract,
+  basePrice,
+  buyCost,
+  cancelEarthOrder,
+  contractFor,
+  contractPay,
+  dealOffer,
+  divertResearch,
+  earthPrices,
+  emptyEarth,
+  exportable,
+  goodUnlocked,
+  goodWords,
+  hasSpaceport,
+  orderFromEarth,
+  researchRate,
+  rocketPort,
+  saleEstimate,
+  stepEarth,
+  supplyOf,
+  tripCityYears,
+  tripSubsteps,
+  windowAt,
+  windowIndex,
+  windowStep,
+  windowYear,
+} from "./earth.js";
+export type { EarthOutcome } from "./earth.js";
+export { EARTH_GOODS } from "./types.js";
+export type { ContractKind, EarthContract, EarthFlight, EarthGood, EarthGoods, EarthOrder, EarthRecord, EarthState } from "./types.js";

@@ -1256,6 +1256,75 @@ export const BASE_TUNING = Object.freeze({
   DISCOVERY_STUDY_CREDITS: 100,
   DISCOVERY_RESEARCH_CREDITS: 400,
   DISCOVERY_SELL_CREDITS: 150,
+  /**
+   * Earth (Batch 34): "Earth is part of the game: it sends supplies, asks for
+   * exports, and pays for them. The spaceport gets a job."
+   *
+   * LAUNCH WINDOWS come by the orbit: the k-th opens on the planet's year
+   * k x EARTH_SYNODIC_YEARS (Mars and Earth line up every 2.135 years), at the
+   * first substep on or after it - worked out from k, never accumulated, so
+   * fifty windows on they still fall on their dates. At a window each city's
+   * rocket (its first finished spaceport whose rocket is home) lifts off with
+   * what Earth is sent - sales, and contracts' materials and water, never
+   * taking a store below EARTH_KEEP_SHARE of its room - and comes back
+   * EARTH_TRIP_SHARE of a window later with what was ordered. A city whose
+   * rocket is away (or which has no finished spaceport) misses the window:
+   * its orders wait for the next. What does not fit as it lands is sold back
+   * at Earth's price; a settler with no home to go to is refunded.
+   *
+   * THE MARKET: Earth's price for each good is EARTH_PRICE_<GOOD> x its
+   * supply this window (EARTH_SUPPLY_SWING either way, drawn from the seed)
+   * x the player's buying since (+100% for every EARTH_MARKET_DEPTH credits'
+   * worth) x reputation (EARTH_REP_PRICE cheaper at 100, dearer at 0). Earth
+   * pays EARTH_SELL_SHARE of its price for what it buys, less the more it
+   * has been sold, more with reputation. Each window the market keeps
+   * EARTH_MARKET_RECOVERY of the trade it remembers.
+   *
+   * CONTRACTS: each window Earth offers one (weights EARTH_WEIGHT_*):
+   * EARTH_CONTRACT_MATERIALS or EARTH_CONTRACT_WATER (x1 to x2), or the
+   * planet's research over EARTH_CONTRACT_RESEARCH_YEARS (x1 to x2), due by
+   * the EARTH_CONTRACT_WINDOWS-th window on. Accepted, a contract's
+   * materials and water go up on the rockets, and research earned goes to
+   * Earth instead of the bank until it is met. Met: EARTH_CONTRACT_PAY_<KIND>
+   * credits a unit, reputation +EARTH_REP_FULFIL. Failed: -EARTH_REP_FAIL.
+   * Settlers are for sale once EARTH_UNLOCK_SETTLERS contracts are met,
+   * rovers once EARTH_UNLOCK_ROVERS are. The latest EARTH_LOG records kept.
+   *
+   * OFF (0) by default and in every world made before it: it moves the
+   * economy. New Standard and Terraformed worlds turn it on; a sandbox has
+   * unlimited everything and no use for it.
+   */
+  EARTH_ENABLED: 0,
+  EARTH_SYNODIC_YEARS: 2.135,
+  EARTH_TRIP_SHARE: 0.33,
+  EARTH_KEEP_SHARE: 0.25,
+  EARTH_PRICE_MATERIALS: 4,
+  EARTH_PRICE_WATER: 6,
+  EARTH_PRICE_FOOD: 6,
+  EARTH_PRICE_OXYGEN: 6,
+  EARTH_PRICE_SETTLERS: 30,
+  EARTH_PRICE_ROVERS: 1500,
+  EARTH_SELL_SHARE: 0.4,
+  EARTH_SUPPLY_SWING: 0.2,
+  EARTH_MARKET_DEPTH: 2000,
+  EARTH_MARKET_RECOVERY: 0.5,
+  EARTH_REP_START: 50,
+  EARTH_REP_PRICE: 0.25,
+  EARTH_REP_FULFIL: 10,
+  EARTH_REP_FAIL: 20,
+  EARTH_CONTRACT_WINDOWS: 3,
+  EARTH_CONTRACT_MATERIALS: 150,
+  EARTH_CONTRACT_WATER: 40,
+  EARTH_CONTRACT_RESEARCH_YEARS: 3,
+  EARTH_CONTRACT_PAY_MATERIALS: 4,
+  EARTH_CONTRACT_PAY_WATER: 6,
+  EARTH_CONTRACT_PAY_RESEARCH: 2,
+  EARTH_WEIGHT_MATERIALS: 1,
+  EARTH_WEIGHT_WATER: 1,
+  EARTH_WEIGHT_RESEARCH: 1,
+  EARTH_UNLOCK_SETTLERS: 1,
+  EARTH_UNLOCK_ROVERS: 3,
+  EARTH_LOG: 40,
 
   /** Habitat Dome: people housed, and life support drawn per year. */
   DOME_HOUSING: 40,
@@ -1444,6 +1513,27 @@ export function validateTuning(t: Tuning): void {
   if (!(t.OUTBREAK_QUARANTINED < 1)) fail("OUTBREAK_QUARANTINED must be < 1: a quarantine must save someone");
   if (!(t.SHIP_ROUGH > t.SHIP_UNATTENDED_EARLY && t.SHIP_WAIT > t.SHIP_UNATTENDED_LATE)) fail("SHIP_ROUGH and SHIP_WAIT must beat their unattended shares");
   if (!(t.SHIP_INSURANCE_CREDITS > 0 && t.DISCOVERY_SELL_CREDITS > 0)) fail("SHIP_INSURANCE_CREDITS and DISCOVERY_SELL_CREDITS must be > 0: each beats doing nothing");
+  // Batch 34: Earth.
+  if (t.EARTH_ENABLED !== 0 && t.EARTH_ENABLED !== 1) fail("EARTH_ENABLED must be 0 or 1");
+  if (t.EARTH_ENABLED && !(t.ECONOMY_ENABLED && t.SETTLEMENTS_ENABLED)) fail("EARTH_ENABLED needs ECONOMY_ENABLED and SETTLEMENTS_ENABLED: Earth trades credits for a city's goods");
+  if (!(t.EARTH_SYNODIC_YEARS > 0)) fail("EARTH_SYNODIC_YEARS must be > 0");
+  if (!(t.EARTH_TRIP_SHARE > 0 && t.EARTH_TRIP_SHARE < 1)) fail("EARTH_TRIP_SHARE must be in (0, 1): a rocket is back before the next of the launch windows");
+  {
+    // The rocket's trip, in whole substeps, must end before the next window can open.
+    const gap = Math.floor(t.EARTH_SYNODIC_YEARS / t.SUBSTEP_YEARS);
+    const trip = Math.max(1, Math.round((t.EARTH_TRIP_SHARE * t.EARTH_SYNODIC_YEARS) / t.SUBSTEP_YEARS));
+    if (t.EARTH_ENABLED && !(trip < gap)) fail(`EARTH_TRIP_SHARE gives a trip of ${trip} substeps; windows can come ${gap} apart`);
+  }
+  for (const k of ["EARTH_KEEP_SHARE", "EARTH_SUPPLY_SWING", "EARTH_REP_PRICE"] as const) if (!(t[k] >= 0 && t[k] < 1)) fail(`${k} must be in [0, 1)`);
+  for (const k of ["EARTH_SELL_SHARE", "EARTH_MARKET_RECOVERY"] as const) if (!(t[k] >= 0 && t[k] <= 1)) fail(`${k} must be in [0, 1]`);
+  if (!(t.EARTH_REP_START >= 0 && t.EARTH_REP_START <= 100)) fail("EARTH_REP_START must be in [0, 100]");
+  if (!(t.EARTH_MARKET_DEPTH > 0)) fail("EARTH_MARKET_DEPTH must be > 0");
+  for (const k of ["EARTH_CONTRACT_WINDOWS", "EARTH_LOG"] as const) if (!(Number.isInteger(t[k]) && t[k] >= 1)) fail(`${k} must be a whole number >= 1`);
+  for (const k of ["EARTH_UNLOCK_SETTLERS", "EARTH_UNLOCK_ROVERS"] as const) if (!(Number.isInteger(t[k]) && t[k] >= 0)) fail(`${k} must be a whole number >= 0`);
+  for (const k of TUNING_SCALAR_KEYS) {
+    if ((k.startsWith("EARTH_PRICE_") || k.startsWith("EARTH_CONTRACT_")) && !(t[k] > 0)) fail(`${k} must be > 0`);
+    if ((k.startsWith("EARTH_WEIGHT_") || k.startsWith("EARTH_REP_F")) && !(t[k] >= 0)) fail(`${k} must be >= 0`);
+  }
   // Batch 32: the weights keep the mood within -1 to 1, so growth never runs backwards.
   const needWeights = [t.NEED_WEIGHT_GREEN, t.NEED_WEIGHT_VARIETY, t.NEED_WEIGHT_MEDICAL, t.NEED_WEIGHT_RESEARCH, t.NEED_WEIGHT_TRANSPORT, t.NEED_WEIGHT_SHOPS];
   if (!needWeights.every((w) => w >= 0) || !(needWeights.reduce((a, w) => a + w, 0) <= 1 + 1e-9)) fail("the NEED_WEIGHT_* must be >= 0 and sum to at most 1");
