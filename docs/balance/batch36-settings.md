@@ -150,8 +150,16 @@ player's own numbers are measured in their browser and shown in Settings.
 it 112.0 at 1x and 336.0 at 3x (700 px a second). The flight down takes 75 frames (1.2 s); with
 motion reduced, one.
 
-**The page's script**: 654.97 kB (221.50 kB gzip), up from 623.88 kB (210.56 kB); the styles
-52.14 kB, up from 49.29 kB.
+**The page's script**: 655.03 kB (221.53 kB gzip), up from 623.88 kB (210.56 kB) - past Vite's
+500 kB warning, as since Batch 31; the styles 52.14 kB, up from 49.29 kB.
+
+**Verification**: typecheck green; `npx vitest run --maxWorkers=2 --minWorkers=1`: 123 files, 1,473
+tests, all passed (542.7 s; the Known-red metropolis opening test passed); `build:web` green;
+`build` green; the built page, its script and its styles served and fetched over HTTP (the script
+holds "Pictures of the city kept", "Red-green colour-blind safe", "Reset keys"; the styles the
+palettes, `--ui-scale`, reduced motion and high contrast). The simulation is unchanged: nothing in
+`src/sim/` changed, and the golden run, golden frames, Batch 3 score and determinism are in the
+suite as they were.
 
 ## Injections
 

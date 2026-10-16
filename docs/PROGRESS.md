@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 35
-in_progress_batch: 36
+last_completed_batch: 36
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -1331,5 +1331,83 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     10 tests (`docs/balance/batch35-sound.md:199`); it has 12 since fix 1.
 
 ### Batch 36 - Settings, controls and accessibility
-- status: in progress
-- sessions: 1 (2026-10-16, started)
+- status: complete
+- note: docs/balance/batch36-settings.md
+- manual: docs/manual/settings.md (new: every setting), docs/manual/controls.md (rewritten: every
+  keyboard shortcut, the mouse, a trackpad and touch in every view, the menu's last save and
+  Settings), docs/manual/update-notes.md (Update 36, the current known issues),
+  docs/manual/README.md (contents, the game in one minute), docs/manual/worlds-and-saving.md
+  (autosave interval, Ctrl+S, last saved and where the worlds are kept, settings kept apart),
+  docs/manual/alerts-and-statistics.md (pop-up alerts setting, "Alerts (3, 1 urgent)", N),
+  docs/manual/cities.md (claimable land's edges, the planner's patterns, legend and the line under
+  the map, palettes), docs/manual/sound.md (the Settings panel), docs/manual/getting-started.md
+  (Settings), docs/manual/the-planet.md (the keys)
+- commits: 781211a (started), ccca07b, 089106a, dfa068b, 94b072e, 9e6d258, 2969e9f, and the
+  completing commit
+- sessions: 1 (2026-10-16)
+- found:
+  - binding Esc from the world's menu would have closed the menu: the game's key handler hears keys
+    before the panel's; the panel now says when it waits for a key and the game stands aside.
+  - a wheel with no position (happy-dom's) set the city camera to NaN for good; it now zooms about
+    the middle.
+  - an autosave is written once per frame until the first write lands (Autosaver.due reads the
+    last finished write) - older than this batch, recorded under the note's Open for Batch 40.
+  - the register of colour rules found two colour-only cues: the Alerts button's "urgent" (only in
+    its spoken label) and a milestone in the planet's news; both now say it on screen.
+  - moving details off would have frozen a rocket in mid-air; a rocket in flight stays live, in the
+    chunk its spaceport is drawn with.
+  - in a city, Esc did not close the game menu (older); it does now, and the city under it does not
+    hear the key.
+  - the injection run found two weak tests: the cue test read spoken labels (40), and the page
+    colours were bounded by their closest pair only (51); both strengthened.
+  - docs/AUTO_BATCH_SETUP.md (untracked, not this batch's) left as it is.
+- decisions:
+  - A store of their own: a third IndexedDB object store, `player` (database v3), the v1 record
+    in the worlds' index read once, written there, never deleted; the store closes on
+    versionchange so a newer page is not blocked.
+  - Shortcuts made, then made rebindable: the game had one key (Esc). 21 actions by physical key
+    (`code`, Cmd as Ctrl), two slots each; a key taken is swapped, never lost; any key binds, Esc
+    too (Cancel and Clear are buttons); Reset keys.
+  - Edge scrolling off by default (the pointer crosses the window's edge on its way elsewhere);
+    camera speed 0.5x-3x for the keys and the edge.
+  - Invert zoom on every wheel; a wheel with Ctrl (a trackpad's pinch) zooms 6x as strongly and is
+    never inverted; two fingers pan by choice; two touches pinch, in every view.
+  - Frame time measured on the player's machine, per level and per effects on or off, and shown:
+    an unattended run cannot time a browser.
+  - "Effects" are the city's moving details; off, drawn still into the pictures; vehicles and a
+    rocket in flight still move. The globe's weather is the planet's state and is left alone.
+  - Panels scaled with CSS `zoom`, never a canvas or the countdown labels: pointer sums unchanged.
+  - Palettes swap the zones' first colours at drawing, never in the world; a colour the player
+    picked is kept; networks keep their colours (they differ in lightness for every kind of colour
+    blindness) and gain patterns.
+  - Autosave never off: 15 s (Batch 4's), 30 s, 1 min, 5 min.
+  - Batch 31's open item taken: which alerts pop up (all, urgent only, none); one that does not pop
+    up is not heard; the Alerts panel keeps every one.
+  - Batch 33's open item (no events while away) declined: it would change the simulation.
+  - Settings constants are browser constants in src/web, not tuning.ts and section 10: they change
+    nothing the simulation computes.
+- verification: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 123 files, 1,473
+  tests, all passed (542.7 s; the Known-red opening test passed); build:web green (655.03 kB JS,
+  221.53 kB gzip - past Vite's 500 kB warning, as recorded since Batch 31; 52.14 kB CSS); build
+  green; the built page, its script and its styles served and fetched over HTTP (the script holds
+  the settings' words, the styles the palettes, --ui-scale, reduced motion and high contrast).
+  Nothing in src/sim changed; the golden run, golden frames, Batch 3 score and determinism are in
+  the suite as they were.
+- injections: 56 faults, one at a time, each file restored from a backup and checked: 54 caught at
+  once; 40 (the Alerts button's urgent in colour only) caught once the cue test read only what is
+  on screen; 51 (the page's red-green "good" left green) changes nothing the test can call wrong -
+  still 93.1-103.4 apart for deuteranopes, measured - and 54, two of the standard's colours put
+  back, is caught. The table is in the note.
+- review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch36-settings.md
+  docs/manual/README.md docs/manual/alerts-and-statistics.md docs/manual/cities.md
+  docs/manual/controls.md docs/manual/getting-started.md docs/manual/settings.md
+  docs/manual/sound.md docs/manual/the-planet.md docs/manual/update-notes.md
+  docs/manual/worlds-and-saving.md src/render/city.ts src/web/alert-centre.test.ts
+  src/web/alert-centre.ts src/web/app.ts src/web/city-chunks.ts src/web/city.ts
+  src/web/frame-costs.ts src/web/game.ts src/web/gestures.ts src/web/globe.ts src/web/hud.test.ts
+  src/web/hud.ts src/web/interface.ts src/web/journey.ts src/web/keys.ts src/web/orbit.ts
+  src/web/palette.ts src/web/planner.ts src/web/settings-cues.test.ts
+  src/web/settings-gate.test.ts src/web/settings-panel.ts src/web/settings.test.ts
+  src/web/settings.ts src/web/sound-gate.test.ts src/web/sound-settings.ts src/web/storage.ts
+  src/web/style.css src/web/test-frames.ts src/web/travel-prompt.ts src/web/travel.ts
+  src/web/world-map.ts
