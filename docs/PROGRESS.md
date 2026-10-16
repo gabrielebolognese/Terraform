@@ -1300,3 +1300,32 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     (623.88 kB JS, 210.56 kB gzip, unchanged; 49.29 kB CSS); build green.
   - files: GAME_PLAN.md docs/PROGRESS.md docs/balance/batch35-sound.md docs/manual/sound.md
     docs/manual/update-notes.md src/web/sound-gate.test.ts
+- review 2: accepted
+  - Review 1's problem is fixed. The record now says what the browser does:
+    - the title's **Example planet** (a look-only world, its alerts, objectives and cards shown)
+      is heard in full;
+    - only while the Instruments drawer's **See example planet** shows (`cues: !example.active`,
+      `src/web/game.ts:929`) are its built, upgraded and rocket sounds silent.
+    - Checked against the code: in the drawer's example `mine` is false, so no alerts, objectives
+      or cards show (`game.ts:1020-1027`); trains, machinery and placement are not gated by
+      `cues`. That matches `docs/manual/sound.md:79-86` and decision 6 as now recorded.
+    - The false known issue is gone from both lists in `update-notes.md`.
+  - The two new tests in `src/web/sound-gate.test.ts` go through the assembled game. The drawer's
+    test enters the example by its button and has its own vacuity guard: the greenhouse is seen
+    finished in the city's line.
+  - Re-run in this round, one at a time, `game.ts` restored from a backup, `git status` clean
+    after each:
+    - #81, `cues: true`: the drawer test fails ("the drawer's example heard finishing a building:
+      expected 1 to be +0"), the other 11 pass;
+    - #82, `cues: !example.active && !options.lookOnly`: the title test fails ("the title's
+      Example planet heard finishing its building: expected undefined to be 1"), the other 11 pass.
+  - Typecheck green. `npx vitest run --maxWorkers=2 --minWorkers=1`: 120 files, 1,430 tests, all
+    passed (500 s; the Known-red opening test passed). `build:web` green (623.88 kB JS, 210.56 kB
+    gzip, past Vite's 500 kB warning as recorded since Batch 31; 49.29 kB CSS). `build` green.
+  - Manual statements checked against the code:
+    - the default levels 80/60/70/80/70% (`DEFAULT_SOUND`);
+    - quiet on another tab (`visibilitychange` suspends the context);
+    - **Credits** on the title (`app.ts:201`);
+    - the drawer's button named as on screen ("Instruments", "See example planet").
+  - Seen, not grounds for rejection: the note's measurements still say `sound-gate.test.ts` has
+    10 tests (`docs/balance/batch35-sound.md:199`); it has 12 since fix 1.
