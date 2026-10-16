@@ -114,6 +114,8 @@ export interface AwaySummary {
    * them nobody had answered (each came to its default).
    */
   readonly events: { readonly resolved: number; readonly unanswered: number };
+  /** Batch 34: Earth's contracts met and failed while away, from its counters (exact, however long the absence). */
+  readonly contracts: { readonly fulfilled: number; readonly failed: number };
   /** One line for the player, picking whatever actually changed most. */
   readonly headline: string;
 }
@@ -207,7 +209,11 @@ export function summariseAway(before: SimState, after: SimState, t: Tuning): Awa
     came.length === 0
       ? ""
       : ` ${came.length === 1 ? "An event" : `${came.length} events`} came to a head${unanswered === 0 ? "" : unanswered === came.length ? (came.length === 1 ? ", unanswered" : ", none of them answered") : `, ${unanswered} unanswered`} - see Alerts, Event history.`;
-  return { simYears, phasesGained, deltas, builds, events, headline: planet + line + eventLine };
+  // Batch 34: Earth's contracts settled while away - the rest of the trade is in the Earth panel's record.
+  const contracts = { fulfilled: after.earth.fulfilled - before.earth.fulfilled, failed: after.earth.failed - before.earth.failed };
+  const settled = [contracts.fulfilled > 0 ? `${contracts.fulfilled === 1 ? "a contract" : `${contracts.fulfilled} contracts`} met` : "", contracts.failed > 0 ? `${contracts.failed === 1 ? "a contract" : `${contracts.failed} contracts`} failed` : ""].filter((x) => x !== "");
+  const earthLine = settled.length === 0 ? "" : ` Earth: ${settled.join(", ")} - see Earth.`;
+  return { simYears, phasesGained, deltas, builds, events, contracts, headline: planet + line + eventLine + earthLine };
 }
 
 function headlineFor(simYears: number, phasesGained: readonly Phase[], d: AwayDeltas): string {

@@ -34,6 +34,7 @@ import { advance } from "./integrate.js";
 import { foundSettlement } from "./micro/registry.js";
 import { capacities, housing, launchRocket, removeBuilding, settlementStep } from "./micro/settlement.js";
 import { tileKey } from "./micro/space.js";
+import { summariseAway } from "./offline.js";
 import { marsStart } from "./planets/mars.js";
 import { SaveError, deserialize, serialize, toSave } from "./save.js";
 import { makeTuning, validateTuning } from "./tuning.js";
@@ -485,6 +486,17 @@ describe("Earth in time and in the save (Batch 34)", () => {
     delete v18["earth"];
     const back = deserialize(JSON.stringify(v18), T);
     expect(back.earth).toEqual(emptyEarth(T));
+  });
+
+  it("tells a player coming back how many contracts were met and failed while away", () => {
+    const met = accepted({ ...contractFor(town(), 1, "materials", T), amount: 50, due: 3 });
+    const lost = accepted({ ...contractFor(town(), 0, "water", T), amount: 5000, due: 1 });
+    const before = withEarth(town(), { contracts: [met, lost] });
+    const after = upTo(before, W1);
+    const away = summariseAway(before, after, T);
+    expect(away.contracts).toEqual({ fulfilled: 1, failed: 1 });
+    expect(away.headline).toMatch(/ Earth: a contract met, a contract failed - see Earth\.$/);
+    expect(summariseAway(after, after, T).headline).not.toMatch(/Earth/);
   });
 
   it("refuses a corrupt record, by name", () => {
