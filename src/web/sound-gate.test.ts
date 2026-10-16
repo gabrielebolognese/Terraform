@@ -147,6 +147,31 @@ describe("the sound settings", () => {
     expect(second.root.querySelector<HTMLInputElement>(".sound-mute-box")!.checked).toBe(true);
   });
 
+  it("are the session's in a world opened from the title: its music follows that world's phase", async () => {
+    const store = new MemorySaveStore(true);
+    const root = document.createElement("div");
+    document.body.append(root);
+    const sound = engine();
+    const app = new App({ root, store, now: () => Date.parse("2026-10-16T12:00:00Z"), randomSeed: () => 4242, launch: startGame, buildExample: () => ({ state: marsStart(7, BROWSER_TUNING), tuning: BROWSER_TUNING }), download: () => undefined, titleGlobe: false, sound });
+    await app.start();
+    expect(sound.musicPiece).toBe(PIECES[0]);
+    [...root.querySelectorAll("button")].find((b) => b.textContent === "New world")!.click();
+    root.querySelector<HTMLFormElement>("form.new-world")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await wait(80);
+    await app.settled();
+    expect(app.currentView).toBe("game");
+    try {
+      // A new planet is in Phase 1 from its first moments (the title plays Phase 0's piece): the title's
+      // engine, handed to the world, plays Thin Light.
+      for (let i = 0; i < 40 && sound.musicPiece === PIECES[0]; i += 1) await wait(100);
+      expect(sound.musicPiece).toBe(PIECES[1]);
+    } finally {
+      await app.quitToTitle();
+    }
+    // Back on the title: Cold Ground again.
+    expect(sound.musicPiece).toBe(PIECES[0]);
+  });
+
   it("open in a world's menu too, the same settings", async () => {
     const store = new MemorySaveStore(true);
     const page = await title(store);
@@ -173,7 +198,7 @@ describe("the sound settings", () => {
     }
   });
 
-  it("the title's music waits for the first gesture, then starts, and every button ticks", async () => {
+  it("the title's music waits for the first gesture, then starts, plays on, and every button ticks", async () => {
     const store = new MemorySaveStore(true);
     const page = await title(store);
     expect(page.sound.musicPiece).toBe(PIECES[0]);
@@ -183,6 +208,13 @@ describe("the sound settings", () => {
     gesture();
     expect(FakeAudioContext.made).toHaveLength(1);
     expect(page.sound.player!.current).toBe(PIECES[0]);
+    // No world's frames on the title: the engine's own clock keeps writing the music as time goes on.
+    const ctx = FakeAudioContext.made[0]!;
+    const later = () => ctx.oscillators(20, Infinity).length;
+    expect(later()).toBe(0);
+    ctx.currentTime = 25;
+    await wait(500);
+    expect(later(), "notes written 20 s on").toBeGreaterThan(0);
     [...page.root.querySelectorAll("button")].find((b) => b.textContent === "Back")!.click();
     expect(page.sound.played.get("click")).toBe(1);
   });
@@ -276,9 +308,11 @@ describe("the assembled game", () => {
       click();
       expect(handle.state.settlements[0]!.buildings.length, root.querySelector(".city-hint")?.textContent ?? "").toBe(before + 1);
       expect(sound.played.get("place")).toBe(1);
-      // The same place again is refused: no sound for a building not placed.
-      root.querySelector<HTMLButtonElement>('.city-card[data-type="greenhouse"]')!.click();
+      // The same place again, the card still chosen, is refused: no sound for a building not placed.
+      expect(root.querySelector('.city-card[data-type="greenhouse"]')!.getAttribute("aria-pressed")).toBe("true");
       click();
+      await wait(250);
+      expect(root.querySelector(".city-hint")!.textContent).toMatch(/^Cannot build: /);
       expect(handle.state.settlements[0]!.buildings.length).toBe(before + 1);
       expect(sound.played.get("place")).toBe(1);
       expect(sound.played.get("built") ?? 0).toBe(0);

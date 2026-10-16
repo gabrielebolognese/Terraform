@@ -895,7 +895,6 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     const ear = resident !== null && planner.openId !== resident ? city.ear() : null;
     if (ear !== null) sound.city(ear, timestamp, () => trainCars(ear.view, timestamp / 1000));
     else sound.orbit();
-    sound.engine.frame();
 
     if (timestamp - lastSample >= 1000 / SPARK_HZ) {
       lastSample = timestamp;
