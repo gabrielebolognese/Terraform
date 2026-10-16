@@ -1,6 +1,7 @@
 # The planet
 
-The view from orbit is where you change Mars itself. Drag to turn the planet and scroll to zoom.
+The view from orbit is where you change Mars itself. Drag to turn the planet and scroll to zoom,
+or use the keys (**W A S D** or the arrows, and **=** and **-**; see [Controls](controls.md)).
 The panel on the left holds everything you need, from top to bottom.
 
 ## The top line

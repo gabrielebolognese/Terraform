@@ -4,6 +4,58 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 36 - Settings, keys and accessibility
+
+Set the game up for your computer and for yourself: how much detail a city is drawn with, every
+key, how the mouse, trackpad and touch screen behave, the size and colours of the interface, and
+how often your world is saved. Colour is never the only way the game tells you something.
+
+**New**
+- **Settings** has every setting now, on the title screen and in the game menu: **Sound**,
+  **Graphics**, **Controls**, **Interface** and **Saving**. They are yours, kept by this browser for
+  every world. See [Settings](settings.md).
+- **Keyboard shortcuts**: **Space** to pause, **1** to **4** for the speeds, **W A S D** or the arrow
+  keys to move the view (or turn the planet), **=** and **-** to zoom, **O**, **N**, **C** and **E**
+  for Objectives, Alerts, Statistics and Earth, **M** for the world map, **B** back to orbit, **P**
+  for the city planner, **U** to upgrade the selected building, and **Ctrl+S** to save. Every one is
+  listed in Settings and can be changed, two keys to an action. See [Controls](controls.md).
+- **Graphics**: hold a city's detail at **High**, **Medium** or **Low**, or leave it on **Auto**;
+  keep fewer or more pictures of a city in memory; turn the **Moving details** (blinking lights,
+  turning blades, crowds, steam) off. Each level shows what a frame took to draw on your computer.
+- **Controls**: the camera's speed, **Edge scrolling** in a city, **Invert zoom**, and a trackpad
+  setting where two fingers move the map and a pinch zooms. A pinch zooms on a touch screen and on
+  a trackpad, in every view.
+- **Interface**: its size, from 75% to 150%; **Red-green** and **Blue-yellow colour-blind safe**
+  colours; **Reduced motion** (or follow your system's setting); **High contrast**; and which alerts
+  pop up.
+- **Saving**: autosave every 15 seconds, 30 seconds, minute or 5 minutes; **Ctrl+S** saves at once
+  and says "Saved."; the game menu says when the world was last saved and where your worlds are
+  kept.
+- **The planner says what is under the pointer**: the building and what it does, the zone, the
+  lines laid and planned.
+
+**Changed**
+- The planner's map has patterns as well as colours: power lines dashed, railways striped, plans
+  dotted, zones outlined, and homes no service reaches hatched. Its legend shows them.
+- Land a city must grow into before it can claim it has a dashed edge.
+- **Alerts** says how many are urgent, for example **Alerts (3, 1 urgent)**, in its own words as
+  well as in red.
+- A milestone in the planet's news says "milestone", as a warning says "warning".
+- With motion reduced, going down to a city is a cut rather than a flight, and the planet does not
+  turn by itself.
+- Your sound settings moved into your settings' own place in this browser; they come with you.
+
+**Fixed**
+- Settings had only the sound.
+- In a city, **Esc** did not close the game menu.
+
+**Known issues**
+- Keys are named as on an English keyboard: on another layout the key in the place of **W** may
+  have another letter on it. It is still the key in that place.
+- A frame's time is measured in the cities you see after the page opens; reloading starts again.
+
+---
+
 ## Update 35 - Sound and music
 
 Mars has a voice now: music that warms as the planet does, wind that thickens with the air, the hum
@@ -372,7 +424,6 @@ and railways between settlements; and the Example planet.
 - In a city, a right click also places or selects, the same as a left click.
 - The **While you were away** summary only appears in the Instruments drawer.
 - The ocean cover bar's minimum mark says "0.3%" when it means 30%.
-- **Settings** has only the sound so far: graphics and control settings are not available yet.
 - There is no ending yet: the game carries on after the planet becomes a Living world.
 - In a city, trains on different lines pass through each other where the lines cross.
 - A rover driving past another one at work beside its site can pass through it.
@@ -404,8 +455,12 @@ and railways between settlements; and the Example planet.
   one's rocket is away.
 - At Classic pace a launch window, and an offer from Earth, come about every 71 seconds.
 - The statistics do not chart your trade with Earth or your reputation.
-- Your sound settings are kept by this browser: another browser, or a world's exported file, does
-  not carry them.
+- Your settings are kept by this browser: another browser, or a world's exported file, does not
+  carry them.
 - A rocket coming home makes no sound; only its lift-off does.
 - A train that stops at a station near the middle of your view is heard as it comes, not again as
   it leaves.
+- Keys are named as on an English keyboard: on another layout the key in the place of **W** may have
+  another letter on it. It is still the key in that place.
+- A frame's time, shown in **Settings**, is measured in the cities you see after the page opens;
+  reloading starts again.

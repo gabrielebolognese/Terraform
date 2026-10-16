@@ -19,17 +19,21 @@ seed.
 ## Saving
 
 The game saves for you:
-- every 15 seconds while you play,
+- every 15 seconds while you play - or every 30 seconds, minute or 5 minutes, as you choose under
+  **Autosave** in [Settings](settings.md#saving),
 - when you go down to a city or come back up,
 - when you switch to another tab or close the page,
-- when you press **Save** in the game menu, or **Save and quit to title**.
+- when you press **Save** in the game menu, or **Ctrl+S** (**Cmd+S** on a Mac) while you play, or
+  **Save and quit to title**.
 
-Saves are kept in your web browser. Clearing your browser's site data deletes them, and a private
-window does not keep them; the title screen warns you if this browser cannot keep worlds. Use
-**Export** to keep a copy that is safe from that.
+The game menu says, under **Save**, when the world was last saved ("Last saved 42 seconds ago")
+and where your worlds are kept: in this browser's storage for this site, on this device. Clearing
+your browser's site data deletes them, and a private window does not keep them; the title screen
+warns you if this browser cannot keep worlds. Use **Export** to keep a copy that is safe from that.
 
-Your sound settings are kept apart from your worlds, by this browser, for every world you play:
-they are not in a world's save or its exported file. See [Sound and music](sound.md).
+Your settings - sound, graphics, controls, the interface and saving - are kept apart from your
+worlds, by this browser, for every world you play: they are not in a world's save or its exported
+file, and deleting a world does not touch them. See [Settings](settings.md).
 
 Each world has one save. To keep an earlier state, **Duplicate** the world first, or **Export** it.
 

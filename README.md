@@ -173,6 +173,21 @@ heard and a run not are the same to the bit. The volumes are the player's, kept 
 list, and set on the title's **Settings** and the world menu's. The licences are in
 [`docs/credits.md`](docs/credits.md): the font's, and the game's own for every sound.
 
+**Settings, controls and accessibility** (Batch 36). Every setting in one panel, on the title and
+in the world menu, kept per player in an IndexedDB store of its own (Batch 35's sound record moved
+there and left where it was). Graphics: the city's detail held or Auto, the pictures of the city
+kept, and its moving details off (each building held still in its picture; vehicles and a rocket
+in flight still move), each level's frame time measured on the player's machine. Controls: 21
+shortcuts by physical key, each with two rebindable slots that swap on conflict; camera speed;
+edge scrolling; invert zoom; trackpad pinch and two-finger panning, and pinch on touch, in every
+view. Interface: the panels' size (never the canvases'), red-green and blue-yellow colour-blind
+palettes for the page and the canvases (measured under simulated colour blindness), reduced
+motion (a cut for the flight down, a still planet), high contrast, and which alerts pop up.
+Saving: the autosave interval, Ctrl+S, and where the worlds are kept. Every colour code has a
+second cue - a word, a sign, a shape, or on the planner's map a pattern - and a test holds the
+stylesheet's colour rules to a register of them. No setting changes the simulation: the same
+frames with every setting moved come out the same.
+
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved

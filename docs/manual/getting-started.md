@@ -12,9 +12,9 @@ first click or key press, as browsers require; then the music starts.
 - **New world** makes a new planet to play.
 - **Example planet** shows a fully terraformed Mars with cities and metropolises already built,
   to look around. It takes about forty seconds to build, and nothing you do there is saved.
-- **Settings** sets the sound: a volume for the music, the ambience, the effects and the
-  interface, and mute. Graphics and control settings arrive in a later update. See
-  [Sound and music](sound.md).
+- **Settings** sets the game up for you: the sound, the graphics, the controls and every key,
+  the size and colours of the interface (with colour-blind palettes, reduced motion and high
+  contrast), and how often your world is saved. See [Settings](settings.md).
 - **Credits** says who made the game.
 
 ## Making a world
