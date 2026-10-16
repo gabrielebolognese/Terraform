@@ -117,6 +117,11 @@ Each city's line in the list also says how it is doing: its people against its h
 running short, and what is being built, for example "120 of 160 people - short of water - 2 going
 up, 1 waiting for a rover". See [Alerts and statistics](alerts-and-statistics.md).
 
+In a world made from Update 38 on, a city the rising sea is coming for has a flood warning on its
+line: when the sea reaches it and when the city would be lost, and how many years switching off
+the planet's machines would buy it. Switching machines off slows the warming, and the sea with
+it. See [Cities](cities.md#the-rising-sea).
+
 ## Instruments
 
 The **Instruments** button (top right) opens a detailed drawer for the curious: every number the

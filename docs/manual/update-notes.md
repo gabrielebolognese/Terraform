@@ -4,6 +4,44 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 38 - The rising sea
+
+As Mars warms, its ice melts and a sea rises, and in worlds made from this update on it floods
+the low cities you built early. You are warned well ahead, and you can wall a city, raise its
+buildings, move its people to safety, or slow the planet down.
+
+**New**
+- **The sea floods cities**, in Standard and Terraformed worlds made from this update on. A city's
+  warning comes about 50 of the planet's years before the sea reaches it. Buildings under water
+  stop, and are lost once the water stands 2 m over them; a city is lost when the sea stands 10 m
+  over its ground. See [Cities](cities.md#the-rising-sea).
+- **Water in the city view**: the sea fills the low ground, and its shore creeps inland as it
+  rises.
+- **The Seawall** (200 materials, 3x1): each level holds the sea back 4 m more, up to 32 m at level
+  8. One for each settlement. It stands until the city falls. See [Buildings](buildings.md#against-the-sea).
+- **Raise its ground**, in a building's panel: a rover raises the ground under it 2 m above its
+  highest point, so the water must climb higher to take it.
+- **The sea** panel in a threatened city says what is coming, and **Evacuate its people** moves
+  them to the nearest cities out of the sea's way that have empty homes.
+- **A flood warning says what switching off the planet's machines would buy**, for example
+  "Switching off the planet's machines would buy ~8 yr."
+
+**Changed**
+- **Found a city** refuses a place the sea already covers: "The sea covers that place."
+- The **Flood warning** alert pops up when the sea is coming for one of your cities.
+
+**Fixed**
+- Nothing in this update.
+
+**Known issues**
+- Worlds made before this update have no rising sea, and cannot turn it on.
+- A city's people cannot be moved anywhere but the nearest safe cities, and a city cannot be moved.
+- While the sea rises fastest, even a full Seawall buys a city only a few months of the planet's time
+  (a minute or so at 1x).
+- A building standing in the water is drawn on top of it, not partly under it.
+
+---
+
 ## Update 37 - Deposits in the ground
 
 The ground under your cities holds ore, ice, hot vents and sunny high flats. A mine, water
@@ -514,3 +552,9 @@ and railways between settlements; and the Example planet.
   another letter on it. It is still the key in that place.
 - A frame's time, shown in **Settings**, is measured in the cities you see after the page opens;
   reloading starts again.
+- Worlds made before Update 38 have no rising sea, and cannot turn it on.
+- A city's people can only be moved to the nearest cities out of the sea's way, and a city cannot be
+  moved.
+- While the sea rises fastest, even a full Seawall buys a city only a few months of the planet's time
+  (a minute or so at 1x).
+- A building standing in the sea is drawn on top of the water, not partly under it.

@@ -61,11 +61,11 @@ describe("the flood warning's words (Batch 38)", () => {
   });
 
   it("say what switching the planet's facilities off would buy, from the projection", () => {
-    expect(throttleWords({ asIsYears: 17.25, throttledYears: 25 })).toBe(" Switching off the planet's facilities would buy ~8 yr.");
-    expect(throttleWords({ asIsYears: 38.5, throttledYears: null })).toBe(" Switching off the planet's facilities would keep the sea from it for the century ahead.");
+    expect(throttleWords({ asIsYears: 17.25, throttledYears: 25 })).toBe(" Switching off the planet's machines would buy ~8 yr.");
+    expect(throttleWords({ asIsYears: 38.5, throttledYears: null })).toBe(" Switching off the planet's machines would keep the sea from it for the century ahead.");
     expect(throttleWords({ asIsYears: null, throttledYears: null })).toBe("");
     expect(throttleWords(null)).toBe("");
-    expect(floodWarning(forecast, reading, true, { asIsYears: 17.25, throttledYears: 25 })).toMatch(/at current rate\. Switching off the planet's facilities would buy ~8 yr\.$/);
+    expect(floodWarning(forecast, reading, true, { asIsYears: 17.25, throttledYears: 25 })).toMatch(/at current rate\. Switching off the planet's machines would buy ~8 yr\.$/);
   });
 
   it("ask the projection for the warned cities only, and only when one is warned", () => {
@@ -281,7 +281,7 @@ describe("the throttle link in the assembled game (Batch 38)", () => {
         frames.step(1, 100);
         words = root.querySelector(".hud-settlement-flood")?.textContent ?? "";
       }
-      expect(words).toMatch(/^Flood warning: submersion begins in ~\d+ yr, total loss in ~\d+ yr at current rate\. Switching off the planet's facilities would buy ~8 yr\.$/);
+      expect(words).toMatch(/^Flood warning: submersion begins in ~\d+ yr, total loss in ~\d+ yr at current rate\. Switching off the planet's machines would buy ~8 yr\.$/);
       expect(handle.state.settlements[0]!.lostAtSeaLevelM).toBeNull();
     } finally {
       handle.stop();
@@ -316,7 +316,7 @@ describe("the throttle link in the assembled game (Batch 38)", () => {
         text = root.querySelector(".city-flood-text")?.textContent ?? "";
       }
       expect(root.querySelector<HTMLElement>(".city-flood")!.hidden).toBe(false);
-      expect(text).toMatch(/^Flood warning: .* Switching off the planet's facilities would buy ~8 yr\.$/);
+      expect(text).toMatch(/^Flood warning: .* Switching off the planet's machines would buy ~8 yr\.$/);
       const evacuate = root.querySelector<HTMLButtonElement>(".city-evacuate")!;
       expect(evacuate.hidden).toBe(false);
       evacuate.click();

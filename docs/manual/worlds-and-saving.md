@@ -64,6 +64,10 @@ Launch windows keep opening too: orders go up and come back, and Earth's contrac
 as they would with you watching. The summary says how many contracts were met and failed. See
 [Earth](earth.md).
 
+The sea keeps rising too, in a world made from Update 38 on: a city can be lost to it while you
+are away, and the summary says so first ("The sea rose over a settlement - lost."), or names the
+buildings the water took. See [Cities](cities.md#the-rising-sea).
+
 A world left open in a background tab pauses until you come back to it.
 
 ## The Example planet
