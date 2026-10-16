@@ -159,6 +159,20 @@ go on sale as contracts are met. All of it inside `advance`, every substep; save
 panel trades, and Earth's news comes in the alerts. Behind `EARTH_ENABLED`; new Standard and
 Terraformed worlds have it, a sandbox and the worlds before do not.
 
+**Sound: music, ambience and effects** (Batch 35). One Web Audio engine for the session, with
+channels for music, ambience, effects and the interface, each with the player's volume, and no
+`AudioContext` at all until the first click, key or touch. Nothing is loaded: the music is written
+as it plays from a piece per phase (a key, chords, a tempo, a timbre - cold, minor and sparse on
+bare Mars, warm, major and full on a living world), crossfaded over 8 seconds when the planet
+reaches a new phase; the wind follows the pressure and the dust storms, rain the clouds over warm
+water, the sea the ocean and how near a city is to its shore, the machinery what runs near the
+city camera. Effects - placed, finished, upgraded, a train going by, a rocket up, an alert, an
+objective - are crossings seen between two looks at the state (the first look takes its bearings),
+placed by where they happen in the city view. The sound reads the state and never writes it: a run
+heard and a run not are the same to the bit. The volumes are the player's, kept beside the worlds
+list, and set on the title's **Settings** and the world menu's. The licences are in
+[`docs/credits.md`](docs/credits.md): the font's, and the game's own for every sound.
+
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved

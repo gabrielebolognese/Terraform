@@ -22,7 +22,7 @@ has none, and worlds made before this update have none either.
 ## The event card
 
 When an event comes, a card opens at the top left of the screen (in a city, below the tool bar),
-and an urgent alert pops up. The card shows:
+and an urgent alert pops up with its sound. The card shows:
 
 - **What happened and where**, for example "Meteor shower in Ares".
 - **Decide within** and the time left.

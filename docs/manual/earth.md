@@ -40,7 +40,7 @@ Mars and Earth line up about every 26 months, and a window opens each time:
 
 At each window, every city with something to send or fetch flies **its rocket**: the rocket of its
 first finished Spaceport whose rocket is at home. It is the rocket you see on the pad. It climbs
-out of sight with what goes to Earth, and comes back down with what you ordered: about
+out of sight with a roar, with what goes to Earth, and comes back down with what you ordered: about
 **3 minutes 12 seconds** later at Standard pace, about **25 seconds** at Classic. It is always
 home before the next window.
 

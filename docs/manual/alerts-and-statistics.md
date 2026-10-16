@@ -32,7 +32,8 @@ another supply ran short are counted in that shortage's alert, not listed again.
 ### Pop-up messages
 
 Urgent and notice alerts pop up at the top right of the screen as they happen, up to three at a
-time, the urgent ones first. An urgent message stays about 12 seconds and a notice about
+time, the urgent ones first, each with a sound: two soft notes for a notice, three quick pairs of
+notes for an urgent one ([Sound and music](sound.md)). An urgent message stays about 12 seconds and a notice about
 6 seconds. Click a message to go where it happened, or **x** to dismiss it.
 
 A problem that clears and comes back within a minute does not pop up again: a store right at its
