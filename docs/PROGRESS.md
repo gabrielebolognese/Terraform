@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 32
-in_progress_batch: 33
+last_completed_batch: 33
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -702,6 +702,71 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   (`src/harness/pacing.ts:79-84`), as this entry's own decisions say.
 
 ### Batch 33 - Events that ask for decisions
-- status: in progress
-- sessions: 1 (started 2026-10-16)
-- commits: (started)
+- status: complete
+- note: docs/balance/batch33-events.md
+- manual: docs/manual/events.md (new: when events come, the card, every event's choices and
+  default, what lasts, alerts and the history, while away), docs/manual/update-notes.md (Update 33,
+  known issues), docs/manual/alerts-and-statistics.md (the event alerts, Event history),
+  docs/manual/cities.md (the status line), docs/manual/worlds-and-saving.md (events while away),
+  docs/manual/getting-started.md (events from half an hour in), docs/manual/README.md (contents,
+  the game in one minute)
+- commits: d8d603f (started), 3eb9779, be1d378, c3c48e9, 2413076, 43b798e, and the completing commit
+- sessions: 1 (2026-10-16)
+- found:
+  - "runs at half" holds only over the first sample after the deadline (0.500); later a broken-down
+    machine's shortages lower the mood and every building makes less (0.466): a cascade, measured
+    as such.
+  - "the default is never the best" judged on every store failed: a wrecked consumer stops
+    drawing. Judged at the deadline on the bank, people, levels, buildings, materials and a
+    fault's output, a choice dominates the default in every event.
+  - a supply ship's materials land in a full store (a growing city's is full); settlers matter.
+    Settlers tried at 40, measured, kept at 20.
+  - unanswered events bring the scripted city of 1,000 sooner at Standard (2.16 h to 2.04 h;
+    answered 1.98 h), later at Classic (1.74 h to 1.82 h; answered 1.81 h); each kind alone moves
+    it 2.11-2.29 h. The script answers a shock by building what is short.
+  - five measured tests that priced one feature on new-world tuning broke with events on; they
+    now run with events off in both runs, and the events have pacing tests of their own.
+  - the boundary test forbids a sim test importing src/web: the gate test lives in
+    src/web/decisions-gate.test.ts.
+  - two of 44 injected faults were missed, each a test missing (the deck's off-switch at a
+    substep that deals; a world opened with past events); both tests added, both faults caught.
+  - the note's draft gave a count (151 cards dealt) before measuring it; measured 141, corrected.
+- decisions:
+  - The deck's timing is a pure hash of the seed and the card's number (a 20-minute slot from
+    30 minutes, chance 0.75); the open events, choices and the latest 40 resolved are world
+    state (save v18) - a choice cannot be derived.
+  - Costs are paid when a choice is made (refused, with the reason, when they cannot be); every
+    outcome, and the default, lands at the deadline (3 min at 1x) inside `advance`.
+  - The default is the worst choice made worse (twice the meteor's hits, broken down rather than
+    degraded, the whole toll and the quarantine's stop, less cargo than waiting);
+    `validateTuning` refuses a tuning that would let it catch up.
+  - What lasts (shelter, quarantine, a fault) goes on the settlement and counts down in its own
+    substep, so the city view and the alerts see it; a fault follows its building through claims
+    and goes with it.
+  - Earth's request left to Batch 34 (contracts and reputation).
+  - On in new Standard and Terraformed worlds (MODE_OVERRIDES), never in a sandbox ("no losses")
+    or a world made before.
+  - The outbreak's medical capacity is the city's built Medical Centers (400 people a level),
+    the shelter the shortage rule already gives them.
+  - The scripted pacing player answers no event unless told to (`answer`: the first choice it
+    can pay).
+- verification: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 115 files, 1,347
+  tests, all passed (452 s; the Known-red opening test passed); build:web green (567.98 kB JS,
+  193.34 kB gzip - past Vite's 500 kB warning, as recorded since Batch 31; 45.35 kB CSS); build
+  green; the built page, its script and its styles served and fetched over HTTP (the script holds
+  "Decide within", "Event history", "If you do nothing", "came to a head"; the styles the card).
+  With events off the golden run, the golden frames, the Batch 3 score and determinism are in the
+  suite, unchanged.
+- injections: 44 faults, one at a time, each file restored byte for byte and checked: 42 caught at
+  once, 2 only after a new test (the table is in the note).
+- review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch32-people.md
+  docs/balance/batch33-events.md docs/design/macro-world.md docs/manual/README.md
+  docs/manual/alerts-and-statistics.md docs/manual/cities.md docs/manual/events.md
+  docs/manual/getting-started.md docs/manual/update-notes.md docs/manual/worlds-and-saving.md
+  src/harness/pacing.ts src/sim/decisions.test.ts src/sim/decisions.ts src/sim/index.ts
+  src/sim/integrate.ts src/sim/micro/settlement-save.test.ts src/sim/micro/settlement.ts
+  src/sim/micro/view.ts src/sim/offline.ts src/sim/planets/mars.ts src/sim/save.ts
+  src/sim/tuning.ts src/sim/types.ts src/web/alert-centre.ts src/web/alerts.ts src/web/city.ts
+  src/web/decision-words.ts src/web/decisions-gate.test.ts src/web/decisions.test.ts
+  src/web/decisions.ts src/web/first-hour.test.ts src/web/game-tuning.ts src/web/game.ts
+  src/web/offline-words.ts src/web/pace.test.ts src/web/style.css
