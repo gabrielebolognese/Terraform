@@ -4372,7 +4372,8 @@ export function depositMark(kind: DepositKind, tx: number, ty: number, z: number
   const mark = DEPOSIT_MARKS[kind];
   const back: Rgba = { r: 0.08, g: 0.07, b: 0.06, a: 0.55 };
   const of = (k: number): (readonly number[])[] => {
-    if (mark.shape === "diamond") return [groundPolygon(cx, cy, 0.34 * k, 4, z)];
+    // Square to the tiles, so a diamond on screen, as a tile is (turned a quarter, it drew as a flat bar).
+    if (mark.shape === "diamond") return [groundPolygon(cx, cy, 0.36 * k, 4, z, Math.PI / 4)];
     if (mark.shape === "disc") return [groundPolygon(cx, cy, 0.27 * k, 10, z)];
     // A ring: two outlines, even-odd, so its middle is the ground.
     if (mark.shape === "ring") return [groundPolygon(cx, cy, 0.32 * k, 12, z), groundPolygon(cx, cy, 0.32 - 0.13 * k, 12, z)];
@@ -4390,11 +4391,14 @@ function depositOverlay(view: CityView, kinds: readonly DepositKind[], viewport:
   const want = new Set(kinds);
   const z = heightAt(view, false);
   const n = view.tiles;
+  // A building's own tiles carry no mark: it would be drawn over the building (its inspector says what is under it).
+  const covered = new Set<number>();
+  for (const b of view.buildings) for (let y = b.ty; y < b.ty + (b.depth ?? b.size); y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) covered.add(y * n + x);
   const out: Shape[] = [];
   for (let ty = 0; ty < n; ty += 1) {
     for (let tx = 0; tx < n; tx += 1) {
       const kind = DEPOSIT_CODES[(codes[ty * n + tx] ?? 0) - 1];
-      if (kind === undefined || !want.has(kind)) continue;
+      if (kind === undefined || !want.has(kind) || covered.has(ty * n + tx)) continue;
       const h = z(tx + 0.5, ty + 0.5) + 0.06;
       if (viewport !== undefined) {
         const p = isoProject(tx + 0.5, ty + 0.5, h);

@@ -203,6 +203,12 @@ describe("deposits in the city view, before placing (Batch 37's third deliverabl
     expect(mine).toMatchObject({ tx: vein.tx, ty: vein.ty });
     const view = cityView(page.state().settlements[0]!, page.env(), ON);
     expect(view.buildings.find((b) => b.type === "regolith_mine")?.deposit).toEqual({ kind: "ore", share: 1, factor: 2 });
+    // The ore under it is no longer marked: a mark there would be drawn over the mine.
+    page.q('.city-card[data-type="regolith_mine"]').click(); // disarm
+    page.q(".city-deposits").click();
+    page.frame();
+    const ore = [...depositsOf(HERE, ON)].filter((c) => c === ORE).length;
+    expect(marks(page.overlay(), "ore")).toBe(ore - 4);
   });
 
   it("partly on the vein, the hint gives the share and its factor: two of four tiles, x1.5", () => {
