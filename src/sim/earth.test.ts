@@ -366,11 +366,16 @@ describe("orders and the market (Batch 34)", () => {
     expect(earthPrices(up, T).materials.sell).toBeLessThan(earthPrices(upTo(town(), W1), T).materials.sell);
   });
 
-  it("keeps a sale with nothing to send waiting for the next window", () => {
+  it("keeps a sale with nothing to send waiting for the next window, though the rocket flies", () => {
     const before = upTo(order(town(), "food", "sell", 10), W1 - 1);
     const up = advance(withCity(before, { stores: { ...city(before).stores, food: 0 } }), 1, cfg);
     expect(up.earth.orders.length).toBe(1);
     expect(up.earth.flights).toEqual([]);
+    // With a purchase going up on the same rocket, the sale that found nothing still waits.
+    const both = order(withCity(before, { stores: { ...city(before).stores, food: 0 } }), "water", "buy", 5);
+    const flown = advance(both, 1, cfg);
+    expect(flown.earth.flights.length).toBe(1);
+    expect(flown.earth.orders.map((o) => [o.good, o.side])).toEqual([["food", "sell"]]);
   });
 });
 
@@ -522,9 +527,11 @@ describe("Earth in time and in the save (Batch 34)", () => {
   });
 
   it("saves and loads every part of it, a rocket away included, and carries on the same", () => {
-    const s = upTo(acceptContract(upTo(busy(), W1), T).state, W1 + 3);
+    // A purchase and a sale waiting for the next window, too.
+    const s = order(order(upTo(acceptContract(upTo(busy(), W1), T).state, W1 + 3), "food", "buy", 4), "water", "sell", 2);
     expect(s.earth.flights.length).toBe(1);
     expect(s.earth.contracts.length).toBe(3);
+    expect(s.earth.orders.length).toBe(2);
     const back = deserialize(serialize(s, T, "2026-10-16T00:00:00Z"), T);
     expect(back.earth).toEqual(s.earth);
     expect(city(back).jobs).toEqual(city(s).jobs);
@@ -562,6 +569,7 @@ describe("Earth in time and in the save (Batch 34)", () => {
     expect(bad({ offer: { id: 1, kind: "gold", amount: 1, delivered: 0, reward: 1, due: 2, accepted: false } })).toThrow(/earth.offer.kind/);
     expect(bad({ next_id: 1 })).toThrow(/not below earth.next_id/);
     expect(bad({ bought: { ...(good.earth["bought"] as object), water: -1 } })).toThrow(/earth.bought.water/);
+    expect(bad({ orders: [{ id: 1, settlement: city(s).id, good: "settlers", side: "sell", amount: 1, paid: 0, placed: 0 }] })).toThrow(/sells settlers, which Earth does not buy/);
     expect(SaveError).toBeDefined();
   });
 });

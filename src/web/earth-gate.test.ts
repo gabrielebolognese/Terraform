@@ -90,6 +90,25 @@ describe("launch windows by the orbit (Batch 34's exit gate)", () => {
   }
 });
 
+describe("a contract's size (Batch 34)", () => {
+  it("asks for what a city makes in a window's span: 150 to 310 materials at Standard, an eighth at Classic", () => {
+    // Sized in units, Classic's contracts failed 23 in the scripted trader's first hour: its windows are
+    // eight times as close for the cities.
+    const world = playPacing(worldTuning("standard", 7, "standard"), 1, false).state;
+    for (const [pace, lo, hi, wlo, whi] of [["standard", 150, 310, 40, 80], ["classic", 20, 40, 10, 10]] as const) {
+      const t = worldTuning("standard", 7, pace);
+      const materials = Array.from({ length: 40 }, (_, k) => contractFor(world, k + 1, "materials", t).amount);
+      const water = Array.from({ length: 40 }, (_, k) => contractFor(world, k + 1, "water", t).amount);
+      expect(Math.min(...materials), pace).toBeGreaterThanOrEqual(lo);
+      expect(Math.max(...materials), pace).toBeLessThanOrEqual(hi);
+      expect(Math.min(...water), pace).toBeGreaterThanOrEqual(wlo);
+      expect(Math.max(...water), pace).toBeLessThanOrEqual(whi);
+      // Not vacuous: the sizes vary across the range.
+      if (pace === "standard") expect(Math.max(...materials) - Math.min(...materials)).toBeGreaterThan(100);
+    }
+  });
+});
+
 describe("a contract met, against the same run failed (Batch 34's exit gate)", () => {
   /** The scripted player's city at 60 minutes, played with Earth off. Kept: it takes a few seconds. */
   let kept: SimState | null = null;

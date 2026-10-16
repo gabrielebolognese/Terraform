@@ -68,7 +68,7 @@ import type {
   EarthState,
 } from "./types.js";
 import { BUILDING_TYPES, EARTH_GOODS, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORDER, RESERVOIR_KEYS } from "./types.js";
-import { NO_GOODS, emptyEarth } from "./earth.js";
+import { NO_GOODS, SELLABLE, emptyEarth } from "./earth.js";
 
 /**
  * Current save shape.
@@ -526,6 +526,8 @@ function readEarth(save: Record<string, unknown>, settlements: readonly Settleme
     if (typeof good !== "string" || !EARTH_GOOD_SET.has(good)) throw new SaveError(`${at}.good must be one of Earth's goods, got ${describe(good)}`);
     const side = x["side"];
     if (side !== "buy" && side !== "sell") throw new SaveError(`${at}.side must be "buy" or "sell", got ${describe(side)}`);
+    // A sale is of a store a rocket can carry off: Earth buys no settlers or rovers.
+    if (side === "sell" && !SELLABLE.includes(good as EarthGood)) throw new SaveError(`${at} sells ${good}, which Earth does not buy`);
     const paid = numberAt(x, "paid", `${at}.paid`);
     if (!(paid >= 0) || (side === "sell" && paid !== 0)) throw new SaveError(`${at}.paid must be >= 0, and 0 for a sale, got ${paid}`);
     const placed = wholeAt(x, "placed", `${at}.placed`);
