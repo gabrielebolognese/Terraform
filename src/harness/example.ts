@@ -123,6 +123,7 @@ const ZONE_OF: Readonly<Record<BuildingType, Zone>> = {
   park: "mixed",
   biosphere: "habitat",
   headquarters: "mixed",
+  seawall: "industry",
 };
 
 /** Free tiles kept round every building: a street each side, so no two stand closer than this. */

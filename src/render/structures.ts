@@ -119,6 +119,7 @@ export const GREEBLE_BASE: Readonly<Record<string, number>> = {
   park: 0,
   biosphere: 4,
   headquarters: 6,
+  seawall: 0,
 };
 
 /** Greebles each level adds (§2.4: "complexity scales with level"). */

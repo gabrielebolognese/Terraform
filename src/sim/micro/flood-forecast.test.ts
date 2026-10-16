@@ -103,10 +103,10 @@ describe("when the sea is not coming", () => {
   const low = START.settlements[0]!;
 
   it("forecasts nothing with the sea still or falling, and 0 once the sea is over the height", () => {
-    expect(floodForecast(low, START.reservoirs, 0, t)).toEqual({ yearsToBase: null, yearsToDestroy: null });
-    expect(floodForecast(low, START.reservoirs, -0.05, t)).toEqual({ yearsToBase: null, yearsToDestroy: null });
+    expect(floodForecast(low, START.reservoirs, 0, t)).toEqual({ yearsToBase: null, yearsToDestroy: null, graceYears: 0 });
+    expect(floodForecast(low, START.reservoirs, -0.05, t)).toEqual({ yearsToBase: null, yearsToDestroy: null, graceYears: 0 });
     const drowned = { ...START.reservoirs, h2o_liq: START.reservoirs.h2o_liq + 50 };
-    expect(floodForecast(low, drowned, -0.05, t)).toEqual({ yearsToBase: 0, yearsToDestroy: 0 });
+    expect(floodForecast(low, drowned, -0.05, t)).toEqual({ yearsToBase: 0, yearsToDestroy: 0, graceYears: 0 });
   });
 
   it("forecasts nothing for a ruin, with flooding off, or past what the ocean can ever cover", () => {
@@ -115,10 +115,10 @@ describe("when the sea is not coming", () => {
     expect(floodForecast(low, START.reservoirs, 0.1, off)).toBeNull();
     // An ocean that saturates short of the low city's base (36.5% of the planet below it) never reaches it.
     const shallow = makeTuning({ SETTLEMENTS_ENABLED: 1, TERRAIN_RELIEF_M: 12, FLOODING_ENABLED: 1, OCEAN_FRAC_MAX: 0.36 });
-    expect(floodForecast(low, START.reservoirs, 0.1, shallow)).toEqual({ yearsToBase: null, yearsToDestroy: null });
+    expect(floodForecast(low, START.reservoirs, 0.1, shallow)).toEqual({ yearsToBase: null, yearsToDestroy: null, graceYears: 0 });
     // Nor one whose ice holds the ground: at the most (85%) the sea may cover 15% of the planet, whatever water comes.
     const icy = { ...START.reservoirs, h2o_ice: START.reservoirs.h2o_ice + 1e4 };
-    expect(floodForecast(low, icy, 0.1, t)).toEqual({ yearsToBase: null, yearsToDestroy: null });
+    expect(floodForecast(low, icy, 0.1, t)).toEqual({ yearsToBase: null, yearsToDestroy: null, graceYears: 0 });
   });
 });
 

@@ -524,6 +524,8 @@ const TOPS: Readonly<Record<string, number>> = {
   park: 0.75,
   biosphere: 2.1,
   headquarters: 1.7,
+  // Its highest level's wall (Batch 38): 0.3 + 0.12 a level, and its cap.
+  seawall: 1.35,
 };
 
 /** A park's and a biosphere's trees: where each stands in its footprint, and how wide its crown. */
@@ -536,6 +538,11 @@ const BIOSPHERE_TREES: readonly (readonly [number, number, number])[] = [
 
 export function buildingTop(type: string): number {
   return TOPS[type] ?? 1;
+}
+
+/** A Seawall's wall top, tiles over its ground: higher a level at a time (Batch 38). */
+function seawallTop(level: number): number {
+  return 0.3 + 0.12 * Math.max(1, Math.min(8, Math.floor(level)));
 }
 
 function plume(x: number, y: number, z: number, time: number, on: boolean): Shape[] {
@@ -1390,6 +1397,28 @@ function assembleSignature(b: CityBuildingView, time: number, rocket: RocketStat
       live(() => part(box(x0 + s - 0.02, y0 + d / 2 - 0.7, 1.0, x0 + s - 0.01, y0 + d / 2 + 0.7, 1.25), on ? mix(RED_LIGHT, WARM_LIGHT, 0.5 + 0.5 * Math.sin(time * 2)) : UNLIT, { emissive: true }));
       return k;
     }
+    case "seawall": {
+      // Batch 38: a wall against the sea along its length, its face to the far side, higher a level at a time.
+      const top = seawallTop(b.level ?? 1);
+      const lv = Math.max(1, Math.floor(b.level ?? 1));
+      add(() => part(box(x0 + 0.02, y0 + 0.1, 0, x0 + s - 0.02, y0 + 0.9, 0.08), CONCRETE));
+      add(() => part(box(x0 + 0.05, y0 + 0.2, 0.08, x0 + s - 0.05, y0 + 0.6, top), CONCRETE));
+      add(() => part(box(x0 + 0.03, y0 + 0.16, top, x0 + s - 0.03, y0 + 0.64, top + 0.05), shade(CONCRETE, 1.12)));
+      // Buttresses on its near face, one a tile.
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < s; i += 1) out.push(part(box(x0 + i + 0.4, y0 + 0.6, 0.08, x0 + i + 0.6, y0 + 0.84, top * 0.7), shade(CONCRETE, 0.92)));
+        return out;
+      });
+      // A hazard band under the cap, and a mark a level on the near face: its height as a count, not only a size.
+      add(() => part(box(x0 + 0.05, y0 + 0.6, top - 0.1, x0 + s - 0.05, y0 + 0.61, top - 0.05), HAZARD));
+      add(() => {
+        const out: Part[] = [];
+        for (let i = 0; i < lv; i += 1) out.push(part(box(x0 + 0.12 + i * 0.11, y0 + 0.6, 0.12, x0 + 0.18 + i * 0.11, y0 + 0.61, 0.22), DARK_METAL));
+        return out;
+      });
+      return k;
+    }
     case "water_tank": {
       // A great round tank on a ring wall, banded, domed, with its ladder and pipe.
       pad(0.06);
@@ -2015,6 +2044,7 @@ const FAR_COLOUR: Readonly<Record<string, Rgb>> = {
   park: rgb(0.433, 0.662, 0.401),
   biosphere: rgb(0.519, 0.547, 0.552),
   headquarters: rgb(0.622, 0.549, 0.475),
+  seawall: rgb(0.715, 0.716, 0.687),
 };
 
 /** Medium detail: each building's signature masses, coarse curves, no greebles, nothing animated. */
@@ -2184,6 +2214,13 @@ function assembleMedium(b: CityBuildingView, seed = 0): Kit {
       add(() => [part(box(x0 + 0.28, y0 + 0.28, 1.1, x0 + s - 0.28, y0 + 2.42, 1.18).slice(1, 3), ACCENT), part(box(x0 + 0.28, y0 + d - 2.42, 1.1, x0 + s - 0.28, y0 + d - 0.28, 1.18).slice(1, 3), HAZARD)]);
       add(() => part(vault(x0 + 0.3, x0 + s - 0.3, y0 + d / 2, 0.62, 0.9, 6), GLASS));
       for (const u of [1.6, 4, 6.4]) add(() => part(dome(x0 + u, y0 + 1.35, 1.3, 0.62, 10, 3), GLASS));
+      break;
+    }
+    case "seawall": {
+      const top = seawallTop(b.level ?? 1);
+      add(() => part(box(x0 + 0.02, y0 + 0.1, 0, x0 + s - 0.02, y0 + 0.9, 0.08), CONCRETE));
+      add(() => part(box(x0 + 0.05, y0 + 0.2, 0.08, x0 + s - 0.05, y0 + 0.6, top + 0.05), CONCRETE));
+      add(() => part(box(x0 + 0.05, y0 + 0.6, top - 0.1, x0 + s - 0.05, y0 + 0.61, top - 0.05), HAZARD));
       break;
     }
     case "water_tank":

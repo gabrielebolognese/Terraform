@@ -17,7 +17,7 @@ import type { HabitatChannels } from "../habitat.js";
 import { habitat } from "../habitat.js";
 import { derive } from "../derive.js";
 import type { Tuning } from "../tuning.js";
-import type { BuildingType, History, MicroResource, PlacedBuilding, PlannedLink, QueuedBuild, Settlement, SettlementJob, SettlementKind, SimState, Zone } from "../types.js";
+import type { BuildingType, Grade, History, MicroResource, PlacedBuilding, PlannedLink, QueuedBuild, Settlement, SettlementJob, SettlementKind, SimState, Zone } from "../types.js";
 import { MICRO_RESOURCES, NEUTRAL_ENV, isCityKind } from "../types.js";
 import { BUILDING_DEFS, UNLOCKED, buildYears, keySet, levelFactor, maxLevel, tilesUnder } from "./buildings.js";
 import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
@@ -65,6 +65,8 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     history: EMPTY_HISTORY,
     extraRovers: 0,
     effects: [],
+    floodGraceYears: 0,
+    evacuated: false,
   };
 }
 
@@ -257,6 +259,8 @@ function placing(state: SimState, settlementId: string, type: BuildingType, tx: 
     const locked = def.locked(env ?? habitat(state.reservoirs, derive(state.reservoirs, NEUTRAL_ENV, t), t, 0), t);
     if (locked !== null) return refuse(locked);
   }
+  // Batch 38: one Seawall a city - its height is its level, so a second would hold nothing back.
+  if (type === "seawall" && s.buildings.some((b) => b.type === "seawall")) return refuse(`a city has one ${def.name} - upgrade it to raise it`);
   if (type === "rover_post" && !unlocked(t)) {
     // One post for every ROVER_POST_PEOPLE people.
     const posts = s.buildings.filter((b) => b.type === "rover_post").length;
@@ -1271,7 +1275,17 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     const brought = job.kind === "rover" ? job.materials : job.earth !== undefined ? 0 : t.ROCKET_MATERIALS;
     stores.materials = Math.min(cap.materials, stores.materials + brought);
     if (job.kind === "rover" && !cleared.includes(job.tile)) cleared = [...cleared, job.tile].sort((a, b) => a - b);
-    if (job.kind === "rover" && job.levelM !== undefined) grades = [...grades, { tile: job.tile, heightM: job.levelM }];
+    if (job.kind === "rover" && job.levelM !== undefined) {
+      const levelM = job.levelM;
+      if (job.area === undefined) grades = [...grades, { tile: job.tile, heightM: levelM }];
+      else {
+        // Batch 38, terracing: the whole footprint, row by row, raised to the one height.
+        const { tx, ty } = keyTile(job.tile);
+        const raised: Grade[] = [];
+        for (let y = ty; y < ty + job.area.d; y += 1) for (let x = tx; x < tx + job.area.w; x += 1) raised.push({ tile: tileKey(x, y), heightM: levelM });
+        grades = [...grades, ...raised];
+      }
+    }
   }
 
   /**
@@ -1291,7 +1305,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   let birthsNow = 0;
   let deathsNow = 0;
   if (isCityKind(s.kind)) {
-    const home = housing(s, t);
+    // Batch 38: an evacuated city takes no settlers and does not grow - its people were moved to safety.
+    const home = s.evacuated ? Math.min(housing(s, t), s.population) : housing(s, t);
     // The first settlers arrive once there is somewhere to live and every need is met.
     if (supported && home > 0) population = Math.max(population, Math.min(home, t.MICRO_SEED_POPULATION));
     // A running Research Forum: people are drawn to the city.
@@ -1331,7 +1346,9 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   // The planner's work: drawn links built, zones levelled - and the record kept.
   // An effect counts down like a job, gone once its time is spent.
   const effects = s.effects.length === 0 ? s.effects : s.effects.flatMap((e) => (e.remaining - h > 1e-9 ? [{ ...e, remaining: e.remaining - h }] : []));
-  let next: Settlement = { ...s, stores, population, jobs, cleared, grades, buildings: built, effects };
+  // Batch 38: the grace of a city found under the sea counts down like an effect.
+  const floodGraceYears = s.floodGraceYears > 0 && s.floodGraceYears - h > 1e-9 ? s.floodGraceYears - h : 0;
+  let next: Settlement = { ...s, stores, population, jobs, cleared, grades, buildings: built, effects, floodGraceYears };
   next = buildPlanned(next, t, h);
   next = sendBuilders(next, t);
   next = sendLevellers(next, t);

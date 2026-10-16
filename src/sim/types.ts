@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 19;
+  readonly schemaVersion: 20;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -689,6 +689,21 @@ export interface Settlement {
    * the alerts - which take the same substep - see it too.
    */
   readonly effects: readonly SettlementEffect[];
+  /**
+   * Batch 38 - the guard for a city found under the sea: city-years in which
+   * the sea takes nothing of it, counted down a substep at a time like an
+   * effect. 0 for a city founded in a world that floods - it is warned as the
+   * sea comes. A city carried forward from a save made before flooding was on
+   * (v19 and older) is given FLOOD_GRACE_YEARS: it may already stand under
+   * the sea, and is warned, not lost on the first substep.
+   */
+  readonly floodGraceYears: number;
+  /**
+   * Batch 38 - §4.5's evacuation: true once its people were moved to safety
+   * from the sea. An evacuated city takes no new settlers and does not grow;
+   * what is built runs until the sea takes it.
+   */
+  readonly evacuated: boolean;
 }
 
 /**
@@ -796,7 +811,11 @@ export type SettlementJob =
    * tile it works from. Found when it set out and kept; absent, it was sent
    * the old way (or before routes existed) and its drive is the straight line.
    */
-  | { readonly kind: "rover"; readonly tile: number; readonly materials: number; readonly work: number; readonly total: number; readonly remaining: number; readonly levelM?: number; readonly route?: readonly number[] }
+  /**
+   * With `area` as well (Batch 38, terracing), it raises a whole footprint - the
+   * `w` x `d` tiles from `tile` - to `levelM`, a building standing on it.
+   */
+  | { readonly kind: "rover"; readonly tile: number; readonly materials: number; readonly work: number; readonly total: number; readonly remaining: number; readonly levelM?: number; readonly route?: readonly number[]; readonly area?: { readonly w: number; readonly d: number } }
   /**
    * A rocket off the spaceport whose corner is `tile`, to come back with
    * materials - or, with `earth` (Batch 34), Earth's shipment of that number,
@@ -846,6 +865,8 @@ export const BUILDING_TYPES = [
   "park",
   "biosphere",
   "headquarters",
+  // Batch 38: the dike of detail §4.5, a building that raises the city's datum.
+  "seawall",
 ] as const;
 export type BuildingType = (typeof BUILDING_TYPES)[number];
 

@@ -605,6 +605,10 @@ FLOOD_WARN_MARGIN_M = 20     # warning begins with the sea this far below the ba
 FLOOD_THRESHOLD_M = 10       # the sea this far above the base declares the settlement lost
 FLOOD_BUILDING_LOSS_M = 2    # a building is lost with this much water over its highest tile
 FLOOD_ALERT_YEARS = 50       # a settlement's warning begins this many sim-years before the sea reaches its base
+DIKE_M_PER_LEVEL = 4         # Batch 38: each level of a city's Seawall raises its datum (the effective base) this many metres
+COST_SEAWALL = 200           BUILD_YEARS_SEAWALL = 0.4   BUILD_SECONDS_SEAWALL = 240   # one a city; upgrades raise it
+FLOOD_GRACE_YEARS = 36       # city-years the sea takes nothing of a city carried from a save before flooding (20 min at 1x)
+TERRACE_STEP_M = 2           TERRACE_MATERIALS_PER_M = 4  # terracing raises a footprint this far over its highest tile; materials per tile-metre
 
 # Worlds (Batch 27). Both 0 by default; a new world in the browser records its own.
 TERRAIN_SEED = 0             # turns the elevation field to a seeded orientation; 0 is the original planet
