@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 33
-in_progress_batch: none
+in_progress_batch: 34
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -880,3 +880,7 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     - "about one every 25 minutes" rounds 26.7 (20 min / 0.75), but the measured gap is 25.3;
     - `pace.test.ts`'s title says "a twentieth or so" where it bounds an eighth (its measured
       values are beside it).
+
+### Batch 34 - Earth: shipments, contracts and the market
+- status: in progress
+- sessions: 1 (2026-10-16)
