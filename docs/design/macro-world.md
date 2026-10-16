@@ -584,6 +584,16 @@ TERRAIN_WORLD_MARGIN = 48  # the open world: tiles of terrain round the buildabl
 TERRAIN_MOUNTAIN_SCALE = 8 TERRAIN_CANYON_SCALE = 3.5  TERRAIN_PIT_SCALE = 2.5   # big features, x relief
 TERRAIN_MAX_SLOPE = 0.3    # steepest buildable ground, rise over run along a tile edge (with a foundation)
 
+# Terrain resource deposits (detail §3.1; Batch 37). OFF by default; new worlds in the browser use 1. Derived, never stored.
+DEPOSITS_ENABLED = 0         # deposits on the ground, and the bonus to the building on its own
+DEPOSIT_RING_TILES = 5       # a tile is judged against the ring of ground this many tiles round it
+ORE_RISE_M = 6               # ore: this far above the ring's mean (ridges, hilltops, crater rims)
+ICE_DIP_M = 7                # ice: this far below it at the equator, x cos(latitude) (basins; more poleward)
+VENT_FAULT_WIDTH = 0.015     VENT_STRETCH_MIN = 0.55   # vents: near the fault course's contour, on the stretches a slow noise picks
+SUN_HIGH_M = 3               SUN_FLAT_SLOPE = 0.08     # sun: flat ground this far above the base, nothing in its ring above it
+ORE_BONUS = 1                ICE_BONUS = 1             VENT_BONUS = 1            SUN_BONUS = 0.5
+                             # a mine, extractor, geothermal plant, solar array wholly on its deposit makes x(1 + this); by footprint share; ice's fades with water access
+
 # The planet's hypsometry (detail §1.1, §4.1; Batch 22). Metres at rank k/8 of the shared elevation field.
 HYPSO_ELEV_0 = -8200       HYPSO_ELEV_1 = -4600       HYPSO_ELEV_2 = -4100
 HYPSO_ELEV_3 = -3000       HYPSO_ELEV_4 = -1000       HYPSO_ELEV_5 = 500

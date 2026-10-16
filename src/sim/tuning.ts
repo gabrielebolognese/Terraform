@@ -729,6 +729,37 @@ export const BASE_TUNING = Object.freeze({
   TERRAIN_MAX_SLOPE: 0.3,
 
   // -------------------------------------------------------------------------
+  // Terrain resource deposits (detail §3.1, Batch 37)
+  //
+  // OFF by default: a deposit makes the building on it make more, which moves
+  // the settlements' balance (conflict 9). New worlds in the browser opt in;
+  // a world made before keeps playing as it did. Derived from the terrain at
+  // site coordinates, never stored (no depletion). A tile's own height is
+  // judged against a ring of ground DEPOSIT_RING_TILES out round it.
+  // Shares measured in the Batch 37 note.
+  // -------------------------------------------------------------------------
+  DEPOSITS_ENABLED: 0,
+  /** Tiles from a tile to the ring of ground it is judged against: half a hill (TERRAIN_FEATURE_TILES 10). */
+  DEPOSIT_RING_TILES: 5,
+  /** Ore: a tile this many metres above its ring's mean - a ridge, a hilltop, a crater's rim. */
+  ORE_RISE_M: 6,
+  /** Ice: a tile this many metres below its ring's mean at the equator - a basin; times cos(latitude), so less poleward. */
+  ICE_DIP_M: 7,
+  /** Vents: within this much of the fault course's contour (the 0.5 the canyons follow), in the course's own units. */
+  VENT_FAULT_WIDTH: 0.015,
+  /** Vents only on the stretches of the fault where a slow noise (0..1) is above this. */
+  VENT_STRETCH_MIN: 0.55,
+  /** Sun: a flat tile (slope at most SUN_FLAT_SLOPE) this many metres above the base, with no ground of its ring above it. */
+  SUN_HIGH_M: 3,
+  SUN_FLAT_SLOPE: 0.08,
+  /** What a building wholly on its deposit makes more, as a share: x(1 + this). Partly on it, by the share of its footprint. */
+  ORE_BONUS: 1,
+  /** The ice's bonus fades as liquid water comes in reach (section 3.2: extractors "no longer need a deposit"). */
+  ICE_BONUS: 1,
+  VENT_BONUS: 1,
+  SUN_BONUS: 0.5,
+
+  // -------------------------------------------------------------------------
   // The planet's hypsometry (detail §1.1 and §4.1, Batch 22)
   //
   // Elevation in metres against the areoid, at evenly spaced RANKS of the
@@ -1463,6 +1494,15 @@ export function validateTuning(t: Tuning): void {
   }
   if (!(t.TERRAIN_RELIEF_M >= 0)) fail("TERRAIN_RELIEF_M must be >= 0");
   if (!(t.TERRAIN_MAX_SLOPE > 0)) fail("TERRAIN_MAX_SLOPE must be > 0");
+  if (t.DEPOSITS_ENABLED !== 0 && t.DEPOSITS_ENABLED !== 1) fail("DEPOSITS_ENABLED must be 0 or 1");
+  if (!(Number.isInteger(t.DEPOSIT_RING_TILES) && t.DEPOSIT_RING_TILES >= 1)) fail("DEPOSIT_RING_TILES must be a whole number >= 1");
+  // Above 0: a deposit is a tile that stands out from its ring, never every tile of flat ground.
+  for (const k of ["ORE_RISE_M", "ICE_DIP_M", "SUN_HIGH_M"] as const) if (!(t[k] > 0)) fail(`${k} must be > 0`);
+  if (!(t.VENT_FAULT_WIDTH >= 0 && t.VENT_FAULT_WIDTH <= 0.5)) fail("VENT_FAULT_WIDTH must be in [0, 0.5]");
+  if (!(t.VENT_STRETCH_MIN >= 0 && t.VENT_STRETCH_MIN <= 1)) fail("VENT_STRETCH_MIN must be in [0, 1]");
+  if (!(t.SUN_FLAT_SLOPE >= 0)) fail("SUN_FLAT_SLOPE must be >= 0");
+  // A bonus only (Batch 37): bare ground keeps today's output, so none may be negative.
+  for (const k of ["ORE_BONUS", "ICE_BONUS", "VENT_BONUS", "SUN_BONUS"] as const) if (!(t[k] >= 0)) fail(`${k} must be >= 0`);
   if (!(t.FLOOD_WARN_MARGIN_M >= 0)) fail("FLOOD_WARN_MARGIN_M must be >= 0");
   if (!(t.FLOOD_THRESHOLD_M > 0)) fail("FLOOD_THRESHOLD_M must be > 0");
   if (!(t.FLOOD_BUILDING_LOSS_M >= 0)) fail("FLOOD_BUILDING_LOSS_M must be >= 0");

@@ -32,6 +32,7 @@ import type { Layer, LinkLayer, NetworkIssue } from "./network.js";
 import { LAYERS, applyNetwork, linksForRedundancy, linksToConnect, networkOf, withRails } from "./network.js";
 import type { NeedsReading } from "./needs.js";
 import { readNeeds } from "./needs.js";
+import { DEPOSIT_KINDS, depositBonus, sitingOf } from "./deposits.js";
 
 /** Section 7.2: the resources whose shortage is a life-support emergency. */
 const LIFE_SUPPORT: readonly MicroResource[] = ["power", "water", "oxygen", "food"];
@@ -1162,6 +1163,16 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   // The Industrial Command Center: facilities in the square about a running one make COMMAND_BOOST more (not stacked).
   // Which command centers' squares each building stands in: geometry, kept per building list and tuning.
   const cover = commandCover(s.buildings, t);
+  // Batch 37 - detail §3.1: a building on its own deposit makes more, by the share of its footprint on it -
+  // through its efficiency, as the planet's own scaling is. Null with deposits off, or none on one.
+  const siting = sitingOf(s, t);
+  const depositNow = siting === null ? null : DEPOSIT_KINDS.map((k) => depositBonus(k, env, t));
+  const onDeposit = (i: number): number => {
+    if (siting === null) return 1;
+    const share = siting.shares[i]!;
+    return share > 0 ? 1 + depositNow![siting.kinds[i]!]! * share : 1;
+  };
+
   const commandBoost = (i: number): number => {
     const list = cover[i];
     if (list === undefined) return 1;
@@ -1179,6 +1190,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
       if (!operable[i]) continue;
       const k = kindOf[i]!;
       let eff = kindEff[k]! * levels[i]! * commandBoost(i) * out;
+      if (siting !== null) eff *= onDeposit(i);
       if (faultOf !== null) eff *= faultOf[i]!;
       const p = kindMakeRow[k]!;
       const c = kindDrawRow[k]!;

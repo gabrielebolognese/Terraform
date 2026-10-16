@@ -217,7 +217,8 @@ export function terrainHeight(seed: number, tiles: number, x: number, y: number,
 
   // Canyons: a channel along a contour of a slow noise field, steep-walled.
   // Its width wanders, and only some stretches of the contour are cut at all.
-  const course = gradNoise(seed ^ 0x3ca9, x, y, 40, 0.8);
+  // The contour is the site's fault line (Batch 37: its vents lie along it).
+  const course = faultCourse(seed, x, y);
   const width = 0.025 + 0.05 * gradNoise(seed ^ 0x19e2, x, y, 18, 1.7);
   const cut = smoothstep(0.64, 0.78, gradNoise(seed ^ 0x0ddc, x, y, 80, 2.9));
   const canyon = t.TERRAIN_CANYON_SCALE * relief * cut * smoothstep(width * 2.5, width * 0.5, Math.abs(course - 0.5));
@@ -252,6 +253,20 @@ export function terrainHeight(seed: number, tiles: number, x: number, y: number,
   }
 
   return ease * (rolling * relief + settled * (mountains - canyon + pits));
+}
+
+/**
+ * The slow noise field whose 0.5 contour is the site's fault line: canyons are
+ * cut along stretches of it (`terrainHeight`), and geothermal vents lie on it
+ * (Batch 37, `deposits.ts`). 0..1, at the point (x, y) in site tile units.
+ */
+export function faultCourse(seed: number, x: number, y: number): number {
+  return gradNoise(seed ^ 0x3ca9, x, y, 40, 0.8);
+}
+
+/** Gradient noise in [0, 1) for a feature laid over the terrain (Batch 37's deposits): `scale` tiles a cell, its own `salt`. */
+export function featureNoise(seed: number, salt: number, x: number, y: number, scale: number): number {
+  return gradNoise(seed ^ salt, x, y, scale, 0.6);
 }
 
 /** A deterministic hash of a tile at a site, 0..1. */
