@@ -912,10 +912,16 @@ export class CityScreen {
       this.inspectorFlows.textContent = `Uses ${rateList(def.consumes(this.tuning, env))}. Makes ${rateList(made)}. ${extra.join(" ")}`.trim();
       if (b.type === "spaceport") {
         const job = s.jobs.find((j) => j.kind === "rocket" && j.tile === tileKey(b.tx, b.ty));
+        // Batch 34: with Earth, the rocket flies to Earth at each launch window - and a supply run keeps it from one.
+        const earth = this.tuning.EARTH_ENABLED
+          ? " At each launch window its rocket flies to Earth with what is sold and what Earth's contracts take, and back with what was ordered (see Earth). A supply run away at a window misses it."
+          : "";
         this.inspectorSummary.textContent =
           job === undefined
-            ? `${def.summary} Launch a supply rocket: back in ${seconds(this.tuning.ROCKET_TRIP_YEARS, this.tuning)} with ${this.tuning.ROCKET_MATERIALS} materials, or as many as the stores have room for.`
-            : `Its rocket is away: back in ${seconds(job.remaining, this.tuning)}.`;
+            ? `${def.summary} Launch a supply rocket: back in ${seconds(this.tuning.ROCKET_TRIP_YEARS, this.tuning)} with ${this.tuning.ROCKET_MATERIALS} materials, or as many as the stores have room for.${earth}`
+            : job.kind === "rocket" && job.earth !== undefined
+              ? `Its rocket is away to Earth: home in ${seconds(job.remaining, this.tuning)} with what was ordered.`
+              : `Its rocket is away: back in ${seconds(job.remaining, this.tuning)}.`;
       }
     }
   }

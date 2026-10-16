@@ -71,6 +71,9 @@ import {
   planLinks,
   cancelPlans,
   chooseDecision,
+  acceptContract,
+  cancelEarthOrder,
+  orderFromEarth,
   claimObjective,
   hasCosmetic,
   hasUnlock,
@@ -94,6 +97,7 @@ import { AlertWatch, buildingAt, shortagesOf } from "./alerts.js";
 import type { AlertTarget } from "./alerts.js";
 import { AlertCentre, AlertToasts } from "./alert-centre.js";
 import { DecisionPanel } from "./decisions.js";
+import { EarthPanel } from "./earth.js";
 import { historyLines } from "./decision-words.js";
 import { StatisticsScreen } from "./statistics.js";
 import { cityOverview, overviewWords } from "./city-overview.js";
@@ -598,7 +602,14 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     if (target.kind === "objectives") {
       statistics.setOpen(false);
       alertCentre.setOpen(false);
+      earth.setOpen(false);
       objectives.setOpen(true);
+      return;
+    }
+    if (target.kind === "earth") {
+      statistics.setOpen(false);
+      alertCentre.setOpen(false);
+      earth.setOpen(true);
       return;
     }
     if (worldMap.isOpen) worldMap.close();
@@ -615,17 +626,56 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   const alertCentre = new AlertCentre(root, goToAlert, () => {
     objectives.setOpen(false);
     statistics.setOpen(false);
+    earth.setOpen(false);
   });
   const toasts = new AlertToasts(root, goToAlert);
   const statistics = new StatisticsScreen(root, tuning, () => {
     objectives.setOpen(false);
     alertCentre.setOpen(false);
+    earth.setOpen(false);
   });
-  /** Beside the Menu button: the statistics and the alerts. */
+  /** Beside the Menu button: the statistics and the alerts - and Earth. */
   const bar = document.createElement("div");
   bar.className = "game-bar";
   bar.append(statistics.toggle, alertCentre.toggle);
   root.append(bar);
+  /**
+   * Earth (Batch 34): trade with Earth, its contracts and the rockets, in a
+   * panel from the bar. An order, a cancel and an acceptance go through the
+   * simulation, as a claim does; the panel only reads.
+   */
+  const earth = new EarthPanel(
+    root,
+    tuning,
+    {
+      onOrder: (id, good, side, amount) => {
+        const outcome = orderFromEarth(state, id, good, side, amount, tuning);
+        state = outcome.state;
+        return outcome;
+      },
+      onCancel: (order) => {
+        const outcome = cancelEarthOrder(state, order, tuning);
+        state = outcome.state;
+        return outcome;
+      },
+      onAccept: () => {
+        const outcome = acceptContract(state, tuning);
+        state = outcome.state;
+        return outcome;
+      },
+      onGo: (target) => goToAlert(target),
+      onOpen: () => {
+        objectives.setOpen(false);
+        statistics.setOpen(false);
+        alertCentre.setOpen(false);
+      },
+    },
+    bar,
+  );
+  // Objectives open where Earth does: one at a time.
+  objectives.toggle.addEventListener("click", () => {
+    if (objectives.isOpen) earth.setOpen(false);
+  });
   let lastAlerts = -Infinity;
   /** What each settlement is short of at the last look: the overview cards read it. */
   let shortBy: ReadonlyMap<string, readonly MicroResource[]> = new Map();
@@ -641,6 +691,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     milestones.reset();
     cards.clear();
     decisions.clear();
+    earth.clear();
     historyOf = null;
     alertWatch.reset();
     alertCentre.clear();
@@ -949,6 +1000,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       objectives.update(mine ? objectiveStatus(state, tuning) : []);
       if (mine) cards.push(milestones.observe(state, tuning));
       decisions.update(mine ? state : null, speed);
+      earth.update(mine ? state : null, speed);
       statistics.update(state);
       // The alerts, a couple of times a second (`ALERT_HZ`); none while the example planet shows.
       if (mine && timestamp - lastAlerts >= 1000 / ALERT_HZ) {

@@ -25,13 +25,14 @@
 import type { BuildingType, HabitatChannels, MicroResource, Settlement, SettlementStep, SimState, Tuning } from "../sim/index.js";
 import { BUILDING_DEFS, MICRO_RESOURCES, constructionOf, decisionText, eventsBeginningIn, frameOf, objectiveStatus, settlementStep, simYear, submerged, tileKey } from "../sim/index.js";
 import { decisionHeadline, deadlineWords, outcomeWords } from "./decision-words.js";
+import { contractAmount, credits, recordWords } from "./earth-words.js";
 import { formatDuration } from "./build-time.js";
 import { ALERT_QUIET_MS, STORM_WARN_SECONDS } from "./config.js";
 import { floodWarnings } from "./flood-warning.js";
 import { MADE_BY, RESOURCE_NAMES, offlineWords } from "./offline-words.js";
 import { settlementLabel } from "./settlement-label.js";
 
-export type AlertKind = "blackout" | "shortage" | "offline" | "flood" | "storm" | "built" | "upgraded" | "objective" | "decision" | "resolved";
+export type AlertKind = "blackout" | "shortage" | "offline" | "flood" | "storm" | "built" | "upgraded" | "objective" | "decision" | "resolved" | "earth";
 
 /** Urgent and notice interrupt with a toast; a record only goes in the centre. */
 export type AlertPriority = "urgent" | "notice" | "record";
@@ -44,7 +45,9 @@ export type AlertPriority = "urgent" | "notice" | "record";
 export type AlertTarget =
   | { readonly kind: "city"; readonly id: string; readonly at: { readonly x: number; readonly y: number } | null }
   | { readonly kind: "planet" }
-  | { readonly kind: "objectives" };
+  | { readonly kind: "objectives" }
+  /** Batch 34: the Earth panel. */
+  | { readonly kind: "earth" };
 
 export interface Alert {
   /** Its identity: a condition is the same alert for as long as it holds; a happening's says where it happened. */
@@ -381,6 +384,9 @@ export class AlertWatch {
   private ready = new Set<string>();
   /** Batch 33: the events whose resolution has been announced (or was already past on the first look). */
   private resolved = new Set<number>();
+  /** Batch 34: Earth's records announced (or already past on the first look), and the offer last seen. */
+  private earthSeen = new Set<number>();
+  private offerSeen: number | null = null;
   private slice: Slice = { budgetMs: Infinity, clock: () => 0, kept: new Map(), cursor: 0, unseen: new Set(), arrived: new Set() };
 
   observe(input: AlertInput): AlertLook {
@@ -469,6 +475,25 @@ export class AlertWatch {
     }
     if (this.resolved.size > 4 * t.DECISION_LOG) this.resolved = new Set(state.decisions.log.map((r) => r.id));
 
+    // Batch 34: what passed between the planet and Earth since the last look - a rocket home, a window missed, a
+    // contract met or failed - and a new offer. A rocket going up is only the Earth panel's record. Each opens
+    // the Earth panel; the first look takes its bearings.
+    if (t.EARTH_ENABLED) {
+      for (const r of state.earth.log) {
+        if (this.earthSeen.has(r.id)) continue;
+        this.earthSeen.add(r.id);
+        if (first || r.kind === "launched") continue;
+        const words = recordWords(r, state);
+        fresh.push({ key: `earth:${r.id}`, kind: "earth", priority: r.kind === "missed" || r.kind === "failed" ? "notice" : "record", title: words.title, text: words.text, count: 1, target: { kind: "earth" } });
+      }
+      if (this.earthSeen.size > 4 * t.EARTH_LOG) this.earthSeen = new Set(state.earth.log.map((r) => r.id));
+      const offer = state.earth.offer;
+      if (offer !== null && offer.id !== this.offerSeen && !first) {
+        fresh.push({ key: `earth-offer:${offer.id}`, kind: "earth", priority: "record", title: `Earth offers a contract: ${contractAmount(offer.kind, offer.amount)}`, text: `It pays ${credits(offer.reward)}. Accept it in Earth before the next launch window.`, count: 1, target: { kind: "earth" } });
+      }
+      this.offerSeen = offer?.id ?? this.offerSeen;
+    }
+
     for (const o of objectiveStatus(state, t)) {
       const ready = o.open && !o.claimed && o.progress.done;
       if (!ready) {
@@ -492,6 +517,8 @@ export class AlertWatch {
     this.seen.clear();
     this.ready.clear();
     this.resolved.clear();
+    this.earthSeen.clear();
+    this.offerSeen = null;
     this.slice = { budgetMs: Infinity, clock: () => 0, kept: new Map(), cursor: 0, unseen: new Set(), arrived: new Set() };
   }
 }
