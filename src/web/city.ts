@@ -17,9 +17,9 @@
 import { CITY_BACKGROUND, CITY_TILE_PX, cityScene, groundPointAt, rayHit } from "../render/city.js";
 import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
-import type { BuildingType, CityView, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
+import type { BuildingType, CityView, DepositKind, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import type { Layer, LinkLayer } from "../sim/index.js";
-import { BUILDING_DEFS, BUILDING_TYPES, MICRO_RESOURCES, NO_ROUTE, buildSeconds, buildYears, cityView, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, tileKey } from "../sim/index.js";
+import { BUILDING_DEFS, BUILDING_TYPES, DEPOSIT_KINDS, MICRO_RESOURCES, NO_ROUTE, buildSeconds, buildYears, cityView, depositOfCode, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, sitingPreview, tileKey } from "../sim/index.js";
 import { TILE_W, isoProject, isoToGround } from "../render/iso.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, isoToScreen, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
@@ -39,6 +39,7 @@ import { CHUNK_PIXELS, DEFAULT_SETTINGS } from "./settings.js";
 import type { FrameCosts } from "./frame-costs.js";
 import { Pinch, wheelIntent } from "./gestures.js";
 import { MAP_PALETTES } from "./palette.js";
+import { DEPOSIT_NAMES, depositLine, depositOfType, factorWords, sitingWords } from "./deposit-words.js";
 
 export interface ActionOutcome {
   readonly ok: boolean;
@@ -247,6 +248,8 @@ export class CityScreen {
   private claiming = false;
   /** The levelling tool: a click sends a rover to level the tile. */
   private levelling = false;
+  /** Batch 37: every deposit marked on the ground, by the Deposits card (placing a building its deposit boosts marks that one alone). */
+  private showDeposits = false;
   private claimHover: { i: number; j: number } | null = null;
   /** The view's origin the camera was last placed against: a claim west or north moves every tile. */
   private origin: { x: number; y: number } | null = null;
@@ -499,6 +502,20 @@ export class CityScreen {
     this.lastPanel = -Infinity;
   }
 
+  /** Batch 37: every deposit marked on the ground, or only those of a building being placed. */
+  toggleDeposits(on: boolean): void {
+    this.showDeposits = on;
+    this.renderPalette(true);
+  }
+
+  /** The deposits to mark: every kind with the Deposits card on; the one a building being placed is boosted by; else none. */
+  depositsShown(): readonly DepositKind[] {
+    if (this.view?.deposits === undefined) return [];
+    if (this.showDeposits) return DEPOSIT_KINDS;
+    const kind = this.placing === null ? null : depositOfType(this.placing);
+    return kind === null ? [] : [kind];
+  }
+
   /** The levelling tool on or off. */
   armLevel(on: boolean): void {
     this.levelling = on;
@@ -698,6 +715,8 @@ export class CityScreen {
       sinceYears: this.sinceYears,
       seeThrough: this.building,
       ...(claimable === undefined ? {} : { claimable }),
+      // Batch 37: the deposits, visible before placing.
+      ...(this.depositsShown().length > 0 ? { deposits: this.depositsShown() } : {}),
       // Batch 36: the land on offer in the player's palette (the standard green left as the renderer has it).
       ...(palette === "standard" ? {} : { claimReady: MAP_PALETTES[palette].claimReady }),
     };
@@ -908,7 +927,7 @@ export class CityScreen {
 
     this.renderPalette(false);
     this.placeThumb();
-    const here = this.placing !== null && this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) : "";
+    const here = this.placing !== null && this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) + this.sitingHint(s, this.placing, this.hover) : "";
     this.hint.textContent =
       this.levelling
         ? this.notice ?? `Click a tile of ground to send a rover to level it to the level beside it - for looks, and so a building needs no foundation there. It breaks any rock there too. Esc finishes.${this.hover !== null ? this.groundWords(view, this.hover.tx, this.hover.ty) : ""}`
@@ -937,7 +956,9 @@ export class CityScreen {
       const time = t.BUILD_TIME_ENABLED > 0 ? `, ${formatDuration(realSeconds(buildYears(b.type, t, level + 1), t, 1))}` : "";
       this.upgradeButton.textContent = `Upgrade to level ${level + 1} (${BUILDING_DEFS[b.type].cost(t)}${time})`;
     }
-    this.roverButton.hidden = !(b === undefined && this.selectedTile !== null);
+    // A rover is sent to break a rock: a tile selected for its deposit alone has none.
+    const rockHere = this.selectedTile === null ? "none" : view.rocks[this.selectedTile.ty * view.tiles + this.selectedTile.tx] ?? "none";
+    this.roverButton.hidden = !(b === undefined && this.selectedTile !== null && rockHere !== "none");
     this.launchButton.hidden = b?.type !== "spaceport";
     if (b === undefined && this.selectedTile !== null) this.renderRock(view, s, this.selectedTile);
     if (b !== undefined && index !== null) {
@@ -957,6 +978,11 @@ export class CityScreen {
       const k = levelFactor(level, this.tuning);
       const made = Object.fromEntries(Object.entries(def.produces(this.tuning)).map(([r, v]) => [r, (v ?? 0) * k]));
       if (level > 1) extra.push(`Level ${level}: x${k.toFixed(2)} output.`);
+      // Batch 37: the deposit under it, and what it makes for it now.
+      if (b.deposit !== undefined) {
+        const share = b.deposit.share === 1 ? "all of it" : `${Math.round(b.deposit.share * BUILDING_DEFS[b.type].footprint * BUILDING_DEFS[b.type].depth)} of its ${BUILDING_DEFS[b.type].footprint * BUILDING_DEFS[b.type].depth} tiles`;
+        extra.push(`On ${DEPOSIT_NAMES[b.deposit.kind].toLowerCase()} (${share}): ${factorWords(b.deposit.factor)} output.`);
+      }
       // Batch 33: a fault from an equipment failure, and how long it has to run.
       if (b.fault !== undefined) extra.push(b.fault.factor === 0 ? `Broken down: back in ${seconds(b.fault.remaining, this.tuning)}.` : `A fault: it makes ${Math.round(b.fault.factor * 100)}% of its output, for ${seconds(b.fault.remaining, this.tuning)}.`);
       // Batch 32: a service's reach, and the crowd at a station or a park.
@@ -1026,12 +1052,14 @@ export class CityScreen {
   private renderRock(view: CityView, s: Settlement, tile: { tx: number; ty: number }): void {
     const rock = view.rocks[tile.ty * view.tiles + tile.tx] ?? "none";
     const job = s.jobs.find((j) => j.kind === "rover" && j.tile === tileKey(tile.tx, tile.ty));
-    this.inspectorName.textContent = rock === "crag" ? "Crag" : rock === "loose" ? "Loose rocks" : "Open ground";
+    // Batch 37: a deposit on open ground names the tile; under a rock it is said beneath.
+    const deposit = view.deposits === undefined ? null : depositOfCode(view.deposits[tile.ty * view.tiles + tile.tx] ?? 0);
+    this.inspectorName.textContent = rock === "crag" ? "Crag" : rock === "loose" ? "Loose rocks" : deposit !== null ? DEPOSIT_NAMES[deposit] : "Open ground";
     this.inspectorStatus.dataset["state"] = "ok";
     if (job !== undefined) {
       this.inspectorStatus.textContent = `A rover is on its way: back in ${seconds(job.remaining, this.tuning)}.`;
     } else if (rock === "none") {
-      this.inspectorStatus.textContent = "Nothing here to break.";
+      this.inspectorStatus.textContent = deposit !== null ? "Nothing here to break: ground to build on." : "Nothing here to break.";
     } else if (view.garage === null) {
       this.inspectorStatus.textContent = "There is no headquarters to send a rover from.";
     } else {
@@ -1048,16 +1076,26 @@ export class CityScreen {
         : rock === "loose"
           ? `Scattered rock. Breaking it brings back ${this.tuning.ROCK_LOOSE_MATERIALS} material.`
           : "";
+    if (deposit !== null) this.inspectorSummary.textContent = `${this.inspectorSummary.textContent} ${depositLine(deposit, this.env, this.tuning)}`.trim();
     this.inspectorFlows.textContent = "";
   }
 
-  /** The ground under the pointer, in words: its height here, on the planet, and whether it is too steep. */
+  /** The ground under the pointer, in words: its height here, on the planet, whether it is too steep, and its deposit. */
   private groundWords(view: CityView, tx: number, ty: number): string {
     const i = ty * view.tiles + tx;
     const local = view.heightM[i];
     if (local === undefined) return "";
     const steep = view.steep[i] === true ? " Too steep to build on." : "";
-    return ` Ground here: ${formatMetres(local, true)} (${formatMetres(view.baseElevationM + local)} on the planet).${steep}`;
+    const deposit = view.deposits === undefined ? null : depositOfCode(view.deposits[i] ?? 0);
+    return ` Ground here: ${formatMetres(local, true)} (${formatMetres(view.baseElevationM + local)} on the planet).${steep}${deposit === null ? "" : ` ${DEPOSIT_NAMES[deposit]} here.`}`;
+  }
+
+  /** Batch 37: placing a building a deposit boosts, how much of it would stand on its deposit and what it would make - from the sim's own rule. */
+  private sitingHint(s: Settlement, type: BuildingType, hover: { tx: number; ty: number }): string {
+    if (this.env === null || this.view?.deposits === undefined) return "";
+    const at = footprintOrigin(hover.tx, hover.ty, BUILDING_DEFS[type].footprint, BUILDING_DEFS[type].depth);
+    const p = sitingPreview(s, type, at.tx, at.ty, this.env, this.tuning);
+    return p === null ? "" : sitingWords(p);
   }
 
   private renderPalette(force: boolean): void {
@@ -1067,7 +1105,7 @@ export class CityScreen {
     const land = view === null ? "" : `${view.claims.held}/${view.claims.allowed}`;
     const env = this.env;
     const unlocked = BUILDING_TYPES.filter((type) => s.population >= BUILDING_DEFS[type].minPopulation(this.tuning) && (env === null || BUILDING_DEFS[type].locked(env, this.tuning) === null)).length;
-    const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}|${this.claiming}|${this.levelling}|${land}|${unlocked}`;
+    const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}|${this.claiming}|${this.levelling}|${land}|${unlocked}|${this.showDeposits}|${view?.deposits !== undefined}`;
     if (!force && key === this.paletteKind) return;
     this.paletteKind = key;
     const cards = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].buildable && BUILDING_DEFS[type].kinds.includes(s.kind)).map((type) => {
@@ -1105,7 +1143,10 @@ export class CityScreen {
     const level = this.card("level", "Level ground", "a rover", false, this.levelling, () => this.armLevel(!this.levelling));
     level.classList.add("city-level");
     this.palette.replaceChildren(...cards);
-    this.tools.replaceChildren(corridor, cable, rail, connect, twice, claim, level);
+    // Batch 37: the deposits, marked on the ground or not - in a world that has them.
+    const deposits = this.card("deposits", "Deposits", this.showDeposits ? "shown" : "show", false, this.showDeposits, () => this.toggleDeposits(!this.showDeposits));
+    deposits.classList.add("city-deposits");
+    this.tools.replaceChildren(corridor, cable, rail, connect, twice, claim, level, ...(view?.deposits !== undefined ? [deposits] : []));
     this.placeThumb();
     // A card rebuilt under the pointer keeps its tooltip.
     if (this.tipFor !== null) {
@@ -1209,6 +1250,16 @@ export class CityScreen {
         ],
       };
     }
+    if (kind === "deposits") {
+      return {
+        title: "Deposits",
+        lines: [
+          "Marks the ground's deposits. A building standing on its own deposit makes more - by the share of its tiles on it.",
+          ...DEPOSIT_KINDS.map((d) => depositLine(d, this.env, t)),
+          "Choosing a mine, a water extractor, a geothermal plant or a solar array marks its own deposit while you place it.",
+        ],
+      };
+    }
     if (kind === "connect") {
       return {
         title: "Connect everything",
@@ -1225,6 +1276,9 @@ export class CityScreen {
     if (cap.length > 0) lines.push(`Stores more ${cap.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")}.`);
     if (def.research(t) > 0) lines.push(`Research: ${def.research(t)} credits a year while it runs.`);
     if (def.minPopulation(t) > 0) lines.push(`Needs a city of ${def.minPopulation(t).toLocaleString("en")} people.`);
+    // Batch 37: the deposit that boosts it, in a world with deposits.
+    const boost = t.DEPOSITS_ENABLED ? depositOfType(kind) : null;
+    if (boost !== null) lines.push(depositLine(boost, this.env, t));
     const locked = this.env === null ? null : def.locked(this.env, t);
     if (locked !== null) lines.push(`Not yet: ${locked}.`);
     lines.push(`${def.footprint} x ${def.depth} tiles. Costs ${def.cost(t)} materials.`);
@@ -1534,7 +1588,9 @@ export class CityScreen {
     if (picked === null) {
       const tile = tileUnder(view, cam, size.w, size.h, at.x, at.y);
       const rock = tile === null ? "none" : view.rocks[tile.ty * view.tiles + tile.tx] ?? "none";
-      this.selectedTile = tile !== null && rock !== "none" ? tile : null;
+      // Batch 37: a deposit is something to look at too - what it is and what it gives.
+      const deposit = tile === null || view.deposits === undefined ? 0 : view.deposits[tile.ty * view.tiles + tile.tx] ?? 0;
+      this.selectedTile = tile !== null && (rock !== "none" || deposit !== 0) ? tile : null;
       this.lastPanel = -Infinity;
     }
   }
