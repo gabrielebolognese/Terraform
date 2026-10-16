@@ -265,32 +265,97 @@ const DEPOSIT_TUNING = [
   "TILE_METRES",
 ] as const satisfies readonly (keyof Tuning)[];
 
-/** Per tuning, per site: each site tile asked about, by its packed key - a building's tiles, asked once. */
-const siteTiles = new WeakMap<Tuning, Map<string, Map<number, number>>>();
+/** A place's codes as the simulation has asked for them: a byte a tile of its frame, UNKNOWN until asked. */
+interface SiteCodes {
+  readonly seed: number;
+  readonly base: number;
+  readonly x0: number;
+  readonly y0: number;
+  readonly n: number;
+  readonly lat: number;
+  readonly codes: Uint8Array;
+}
 
-/** The code of site tile (sx, sy) at a place, kept: the simulation asks for the tiles under its buildings. */
-function codeAt(place: Place, sx: number, sy: number, t: Tuning): number {
-  let sites = siteTiles.get(t);
+const UNKNOWN = 255;
+
+/** Per tuning, per place and frame. A byte a tile: a metropolis's 288 x 288 frame is 83 kB. */
+const siteCodes = new WeakMap<Tuning, Map<string, SiteCodes>>();
+
+function codesOf(place: Place, t: Tuning): SiteCodes {
+  let sites = siteCodes.get(t);
   if (sites === undefined) {
     sites = new Map();
-    siteTiles.set(t, sites);
+    siteCodes.set(t, sites);
   }
-  const base = frameOf(place, t).base;
-  const siteKey = `${place.lat}|${place.lon}|${base}`;
-  let tiles = sites.get(siteKey);
-  if (tiles === undefined) {
+  const f = frameOf(place, t);
+  const key = `${place.lat}|${place.lon}|${f.base}|${f.x0}|${f.y0}|${f.n}`;
+  let c = sites.get(key);
+  if (c === undefined) {
     if (sites.size > 256) sites.clear();
-    tiles = new Map();
-    sites.set(siteKey, tiles);
+    // The view's whole map, if it is made: the same codes (its test), so nothing to work out again.
+    const whole = maps.get(mapKey(place, t));
+    c = { seed: placeSeed(place.lat, place.lon), base: f.base, x0: f.x0, y0: f.y0, n: f.n, lat: place.lat, codes: whole !== undefined ? Uint8Array.from(whole) : new Uint8Array(f.n * f.n).fill(UNKNOWN) };
+    sites.set(key, c);
   }
-  const k = (sy + 32768) * 65536 + (sx + 32768);
-  let code = tiles.get(k);
-  if (code === undefined) {
-    const seed = placeSeed(place.lat, place.lon);
-    code = classify((x, y) => clean(terrainHeight(seed, base, x, y, t)), seed, sx, sy, place.lat, t);
-    tiles.set(k, code);
+  return c;
+}
+
+/**
+ * The codes of local tiles `tiles` (each `ty * n + tx`), worked out where not
+ * yet known. The tiles asked together share their corners' heights: a
+ * building's ring overlaps its neighbours', and asked one tile at a time the
+ * example planet's 84,000 mines, extractors, power plants and arrays took
+ * 5.5 s of terrain samples (measured).
+ */
+function learn(c: SiteCodes, tiles: readonly number[], t: Tuning): void {
+  // The box of the tiles still to work out, grown by the ring's reach: its corners, each sampled once when first read.
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  const todo: number[] = [];
+  for (const i of tiles) {
+    if (c.codes[i] !== UNKNOWN) continue;
+    todo.push(i);
+    const tx = i % c.n;
+    const ty = (i - tx) / c.n;
+    if (tx < x0) x0 = tx;
+    if (tx > x1) x1 = tx;
+    if (ty < y0) y0 = ty;
+    if (ty > y1) y1 = ty;
   }
-  return code;
+  if (todo.length === 0) return;
+  const pad = Math.max(t.DEPOSIT_RING_TILES, diagonal(t)) + 1;
+  const left = x0 - pad + c.x0;
+  const top = y0 - pad + c.y0;
+  const w = x1 - x0 + 2 * pad + 2;
+  const h = y1 - y0 + 2 * pad + 2;
+  const heights = new Float64Array(w * h).fill(NaN);
+  const corner = (sx: number, sy: number): number => {
+    const k = (sy - top) * w + (sx - left);
+    let v = heights[k]!;
+    if (Number.isNaN(v)) {
+      v = clean(terrainHeight(c.seed, c.base, sx, sy, t));
+      heights[k] = v;
+    }
+    return v;
+  };
+  for (const i of todo) {
+    if (c.codes[i] !== UNKNOWN) continue;
+    const tx = i % c.n;
+    c.codes[i] = classify(corner, c.seed, tx + c.x0, (i - tx) / c.n + c.y0, c.lat, t);
+  }
+}
+
+/** The code of local tile (tx, ty) of a place's frame; off the frame (a building an old save kept past a shrunk grid), from the terrain itself. */
+function codeOf(c: SiteCodes, tx: number, ty: number, t: Tuning): number {
+  if (tx < 0 || ty < 0 || tx >= c.n || ty >= c.n) return classify((x, y) => clean(terrainHeight(c.seed, c.base, x, y, t)), c.seed, tx + c.x0, ty + c.y0, c.lat, t);
+  return c.codes[ty * c.n + tx]!;
+}
+
+/** The local tiles of a footprint that lie on the frame. */
+function footprintIn(c: SiteCodes, tx: number, ty: number, w: number, h: number, out: number[]): void {
+  for (let y = ty; y < ty + h; y += 1) for (let x = tx; x < tx + w; x += 1) if (x >= 0 && y >= 0 && x < c.n && y < c.n) out.push(y * c.n + x);
 }
 
 /** What each building stands on: the share of its footprint on its own deposit, and which deposit (an index into DEPOSIT_KINDS, -1 for none). */
@@ -314,13 +379,18 @@ export function sitingOf(s: Place & { readonly buildings: readonly PlacedBuildin
   const shares = new Float64Array(s.buildings.length);
   const kinds = new Int8Array(s.buildings.length).fill(-1);
   let any = false;
+  // Every tile under a building a deposit boosts, worked out together.
+  const c = codesOf(s, t);
+  const ask: number[] = [];
+  for (const b of s.buildings) if (depositFor(b.type) !== null) footprintIn(c, b.tx, b.ty, BUILDING_DEFS[b.type].footprint, BUILDING_DEFS[b.type].depth, ask);
+  learn(c, ask, t);
   s.buildings.forEach((b, i) => {
     const kind = depositFor(b.type);
     if (kind === null) return;
     const def = BUILDING_DEFS[b.type];
     const want = DEPOSIT_KINDS.indexOf(kind) + 1;
     let on = 0;
-    for (let y = b.ty; y < b.ty + def.depth; y += 1) for (let x = b.tx; x < b.tx + def.footprint; x += 1) if (codeAt(s, x + f.x0, y + f.y0, t) === want) on += 1;
+    for (let y = b.ty; y < b.ty + def.depth; y += 1) for (let x = b.tx; x < b.tx + def.footprint; x += 1) if (codeOf(c, x, y, t) === want) on += 1;
     if (on === 0) return;
     shares[i] = on / (def.footprint * def.depth);
     kinds[i] = want - 1;
@@ -340,11 +410,14 @@ export function sitingOf(s: Place & { readonly buildings: readonly PlacedBuildin
 export function sitingPreview(s: Place, type: BuildingType, tx: number, ty: number, env: HabitatChannels, t: Tuning): { readonly kind: DepositKind; readonly on: number; readonly of: number; readonly factor: number } | null {
   const kind = depositFor(type);
   if (kind === null || !t.DEPOSITS_ENABLED) return null;
-  const f = frameOf(s, t);
   const def = BUILDING_DEFS[type];
   const want = DEPOSIT_KINDS.indexOf(kind) + 1;
+  const c = codesOf(s, t);
+  const ask: number[] = [];
+  footprintIn(c, tx, ty, def.footprint, def.depth, ask);
+  learn(c, ask, t);
   let on = 0;
-  for (let y = ty; y < ty + def.depth; y += 1) for (let x = tx; x < tx + def.footprint; x += 1) if (codeAt(s, x + f.x0, y + f.y0, t) === want) on += 1;
+  for (let y = ty; y < ty + def.depth; y += 1) for (let x = tx; x < tx + def.footprint; x += 1) if (codeOf(c, x, y, t) === want) on += 1;
   const of = def.footprint * def.depth;
   return { kind, on, of, factor: 1 + depositBonus(kind, env, t) * (on / of) };
 }
