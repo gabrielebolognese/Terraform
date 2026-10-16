@@ -22,15 +22,17 @@ import { Globe } from "./globe.js";
 import type { GameHandle, GameOptions, GameHooks } from "./game.js";
 import { Autosaver } from "./session.js";
 import type { GameStore } from "./storage.js";
-import { AUTOSAVE_INTERVAL_MS } from "./config.js";
 import type { WorldMode, WorldPace } from "./game-tuning.js";
 import { BROWSER_TUNING, MODE_NAMES, PACE_NAMES, WORLD_MODES, WORLD_PACES } from "./game-tuning.js";
 import type { Clock, WorldMeta } from "./worlds.js";
 import { WorldLibrary, parseSeed, startState } from "./worlds.js";
 import { drawThumbnail, planetLook } from "./thumbnail.js";
 import { SoundEngine } from "./sound-engine.js";
-import { PlayerSettings } from "./sound-settings.js";
-import { SoundPanel } from "./sound-panel.js";
+import { PlayerSettings } from "./settings.js";
+import type { Settings } from "./settings.js";
+import { SettingsPanel } from "./settings-panel.js";
+import { FrameCosts } from "./frame-costs.js";
+import { applyInterface } from "./interface.js";
 import { pieceFor } from "./sound-music.js";
 import { ORBIT_HEARING, SILENCE, WIND_THIN_MBAR, windFor } from "./sound-ambience.js";
 
@@ -52,6 +54,8 @@ export interface AppDeps {
   readonly debugSpeeds?: boolean;
   /** The session's sound (Batch 35), already listening for the player's first gesture. Absent, the game is silent. */
   readonly sound?: SoundEngine;
+  /** Where the interface settings go (Batch 36): the page's root. Absent, `document.documentElement`. */
+  readonly page?: HTMLElement;
 }
 
 /** What the title sounds like: the first piece, and bare Mars's thin wind heard from afar. */
@@ -98,8 +102,12 @@ function phaseName(phase: number): string {
 export class App {
   readonly library: WorldLibrary;
   readonly sound: SoundEngine;
-  /** The player's own settings, kept for every world (Batch 35: sound). */
+  /** The player's own settings, kept for every world in a store of their own (Batch 35: sound; Batch 36: the rest). */
   readonly settings: PlayerSettings;
+  /** What a city frame costs on this machine, this session: the graphics settings show it. */
+  readonly frameCosts = new FrameCosts();
+  /** The open Settings panel, on the title or in the menu: one at a time. */
+  private settingsPanel: SettingsPanel | null = null;
   private readonly front: HTMLElement;
   private readonly screen: HTMLElement;
   private readonly notice: HTMLElement;
@@ -114,6 +122,8 @@ export class App {
     this.library = new WorldLibrary(deps.store, deps.now);
     this.sound = deps.sound ?? new SoundEngine(() => null);
     this.settings = new PlayerSettings(deps.store);
+    // Every change is heard and seen at once: the volumes, and the interface on the page.
+    this.settings.onChange((s) => this.apply(s));
     // Every button answers with a tick (the interface channel), the game's own and the menus'.
     deps.root.addEventListener("click", (e) => {
       const target = e.target as Element | null;
@@ -130,7 +140,7 @@ export class App {
 
   /** Read the worlds, show the title, then check every world's save in the background. */
   async start(): Promise<void> {
-    this.sound.setVolumes(await this.settings.load());
+    await this.settings.load();
     await this.library.open();
     if (this.library.problem !== null) this.say(this.library.problem);
     if (!this.deps.store.durable) this.say("This browser has no durable storage: worlds will not survive a reload.");
@@ -141,6 +151,12 @@ export class App {
 
   get currentView(): View {
     return this.view;
+  }
+
+  /** The player's settings, put to work: sound volumes and the interface; the world reads the rest as it plays. */
+  private apply(s: Settings): void {
+    this.sound.setVolumes(s.sound);
+    applyInterface(this.deps.page ?? document.documentElement, s.ui);
   }
 
   private say(text: string): void {
@@ -174,6 +190,7 @@ export class App {
   // ---- the screens --------------------------------------------------------------
 
   private render(view: View, ...children: HTMLElement[]): void {
+    this.closeSettings();
     this.view = view;
     this.front.hidden = false;
     this.screen.replaceChildren(...children);
@@ -405,20 +422,27 @@ export class App {
     const panel = el("section", "front-panel front-settings");
     const head = el("header", "front-head");
     head.append(this.back(), el("h2", "", "Settings"));
-    panel.append(head, this.soundPanel().root, el("p", "front-about", "Graphics and controls arrive in a later update."));
+    const settings = this.openSettings();
+    panel.append(head, settings.root);
     this.render("settings", panel);
+    this.settingsPanel = settings;
   }
 
-  /** The sound settings: each change heard at once, and kept for every world. */
-  private soundPanel(): SoundPanel {
-    return new SoundPanel(
-      this.settings.sound,
-      (next) => {
-        this.sound.setVolumes(next);
-        void this.settings.setSound(next);
-      },
-      this.sound.unlocked ? null : "Sound starts with your first click or key press: browsers keep a page silent until then.",
-    );
+  /** The settings: each change heard and seen at once, and kept for every world. */
+  private openSettings(lastSaved?: () => string | null): SettingsPanel {
+    this.closeSettings();
+    return new SettingsPanel({
+      settings: this.settings,
+      soundUnlocked: this.sound.unlocked,
+      frameCosts: this.frameCosts,
+      place: this.deps.store.place,
+      ...(lastSaved === undefined ? {} : { lastSaved }),
+    });
+  }
+
+  private closeSettings(): void {
+    this.settingsPanel?.dispose();
+    this.settingsPanel = null;
   }
 
   showCredits(): void {
@@ -496,14 +520,39 @@ export class App {
     this.hidePlanet();
     this.front.hidden = true;
     this.view = "game";
-    const handle = this.deps.launch(this.deps.root, { ...options, sound: this.sound }, {
+    const handle = this.deps.launch(this.deps.root, { ...options, sound: this.sound, settings: this.settings, frameCosts: this.frameCosts }, {
       save: (state) => void this.saveWorld(state, false),
-      saveDue: () => autosaver?.due(AUTOSAVE_INTERVAL_MS) ?? false,
+      // The player's own interval (Batch 36), read each time: a change in the menu counts at once.
+      saveDue: () => autosaver?.due(this.settings.current.saving.autosaveMs) ?? false,
       saveFailures: () => autosaver?.failureCount ?? 0,
+      saveNow: () => this.saveNow(),
       onMenu: () => (this.menu === null ? this.openMenu() : this.closeMenu()),
       onBackToTitle: () => void this.quitToTitle(),
     });
     this.game = { handle, world, autosaver, playedBefore: world?.playtimeMs ?? 0 };
+  }
+
+  /** Save the world now (the menu's Save, or its key), and say how it went. */
+  saveNow(): Promise<string> {
+    const g = this.game;
+    if (g === null) return Promise.resolve("");
+    if (!g.handle.mayPersist || g.autosaver === null) return Promise.resolve("Nothing is saved on the Example planet.");
+    let said = "";
+    return this.queue(async () => {
+      await this.saveWorld(g.handle.state, true);
+      said = (g.autosaver?.failureCount ?? 0) > 0 ? "Saving failed - progress may not survive a reload." : "Saved.";
+    }).then(() => said);
+  }
+
+  /** When the open world was last written, in words. */
+  private lastSavedWords(): string | null {
+    const g = this.game;
+    if (g === null) return null;
+    if (!g.handle.mayPersist || g.autosaver === null) return "Nothing here is saved.";
+    const at = g.autosaver.lastSaved;
+    if (at === 0) return "Not saved yet since this world was opened.";
+    const s = Math.max(0, Math.round((this.deps.now() - at) / 1000));
+    return `Last saved ${s < 5 ? "just now" : s < 120 ? `${s} seconds ago` : `${Math.round(s / 60)} minutes ago`}.`;
   }
 
   /** Write the world and what the list shows of it. The thumbnail is drawn when asked, or when there is none. */
@@ -533,25 +582,28 @@ export class App {
     status.setAttribute("role", "status");
     const mayPersist = this.game.handle.mayPersist;
     const save = button("Save", () => {
-      const g = this.game;
-      if (g === null) return;
-      void this.queue(async () => {
-        await this.saveWorld(g.handle.state, true);
-        status.textContent = (g.autosaver?.failureCount ?? 0) > 0 ? "Saving failed - progress may not survive a reload." : "Saved.";
+      void this.saveNow().then((said) => {
+        status.textContent = said;
+        saved.textContent = this.lastSavedWords() ?? "";
       });
     });
     save.disabled = !mayPersist;
-    // Settings (Batch 35): the sound, opened in the menu; graphics and controls come later.
-    let sounds: SoundPanel | null = null;
+    // Batch 36: when it was last saved, and where the worlds are kept.
+    const saved = el("p", "game-menu-saved", this.lastSavedWords() ?? "");
+    const place = el("p", "game-menu-place", mayPersist ? this.deps.store.place : "");
+    place.hidden = !mayPersist;
+    // Settings: every setting, opened under the button and closed again.
+    let open: SettingsPanel | null = null;
     const settings = button("Settings", () => {
-      if (sounds !== null) {
-        sounds.root.remove();
-        sounds = null;
+      if (open !== null) {
+        this.closeSettings();
+        open = null;
         settings.setAttribute("aria-expanded", "false");
         return;
       }
-      sounds = this.soundPanel();
-      settings.after(sounds.root);
+      open = this.openSettings(() => this.lastSavedWords());
+      this.settingsPanel = open;
+      settings.after(open.root);
       settings.setAttribute("aria-expanded", "true");
     });
     settings.setAttribute("aria-expanded", "false");
@@ -559,6 +611,8 @@ export class App {
       el("h2", "", this.game.world?.name ?? "Example planet"),
       button("Resume", () => this.closeMenu(), "front-button primary"),
       save,
+      saved,
+      place,
       settings,
       button(mayPersist ? "Save and quit to title" : "Quit to title", () => void this.quitToTitle()),
       status,
@@ -570,6 +624,7 @@ export class App {
   }
 
   closeMenu(): void {
+    this.closeSettings();
     this.menu?.remove();
     this.menu = null;
     this.game?.handle.setPaused(false);
@@ -581,6 +636,7 @@ export class App {
       const g = this.game;
       if (g === null) return;
       await this.saveWorld(g.handle.state, true);
+      this.closeSettings();
       this.menu?.remove();
       this.menu = null;
       g.handle.stop();

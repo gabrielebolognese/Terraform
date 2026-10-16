@@ -29,7 +29,8 @@ import type { GameHandle } from "./game.js";
 import { BROWSER_TUNING, worldTuning } from "./game-tuning.js";
 import { SoundEngine } from "./sound-engine.js";
 import { PIECES, pieceFor } from "./sound-music.js";
-import { DEFAULT_SOUND, PlayerSettings, SETTINGS_KEY, readSound } from "./sound-settings.js";
+import { DEFAULT_SOUND, readSound } from "./sound-settings.js";
+import { PlayerSettings, SETTINGS_KEY } from "./settings.js";
 import { MemorySaveStore } from "./storage.js";
 
 /**
@@ -83,23 +84,23 @@ describe("the sound settings", () => {
     expect(readSound({ sound: { master: 0, music: 1, ambience: 0.5, effects: 0.2, interface: 0.9, muted: true } })).toEqual({ master: 0, music: 1, ambience: 0.5, effects: 0.2, interface: 0.9, muted: true });
   });
 
-  it("are kept per player beside the worlds, and keep what this does not know of the record", async () => {
+  it("are kept per player in their own store (Batch 36), never in a world or the worlds' index", async () => {
     const store = new MemorySaveStore(true);
-    await store.saveMeta(SETTINGS_KEY, { graphics: { detail: "low" } });
     const a = new PlayerSettings(store);
-    expect(await a.load()).toEqual(DEFAULT_SOUND);
+    expect((await a.load()).sound).toEqual(DEFAULT_SOUND);
     await a.setSound({ ...DEFAULT_SOUND, music: 0.1, muted: true });
     const b = new PlayerSettings(store);
-    expect(await b.load()).toEqual({ ...DEFAULT_SOUND, music: 0.1, muted: true });
-    expect(await store.loadMeta(SETTINGS_KEY)).toEqual({ graphics: { detail: "low" }, version: 1, sound: { ...DEFAULT_SOUND, music: 0.1, muted: true } });
-    // Not in any world's save: a world is written without them.
+    expect((await b.load()).sound).toEqual({ ...DEFAULT_SOUND, music: 0.1, muted: true });
+    expect((await store.loadPlayer(SETTINGS_KEY)) as { sound: unknown }).toMatchObject({ version: 2, sound: { ...DEFAULT_SOUND, music: 0.1, muted: true } });
+    // Not in the worlds' index, nor in any world's save.
+    expect(await store.loadMeta(SETTINGS_KEY)).toBeNull();
     expect(await store.loadMeta("worlds")).toBeNull();
   });
 
   it("play on the defaults when the record cannot be read or written", async () => {
-    const broken = { loadMeta: () => Promise.reject(new Error("no")), saveMeta: () => Promise.reject(new Error("no")) };
+    const broken = { loadPlayer: () => Promise.reject(new Error("no")), savePlayer: () => Promise.reject(new Error("no")) };
     const s = new PlayerSettings(broken);
-    expect(await s.load()).toEqual(DEFAULT_SOUND);
+    expect((await s.load()).sound).toEqual(DEFAULT_SOUND);
     await expect(s.setSound({ ...DEFAULT_SOUND, music: 0 })).resolves.toBeUndefined();
     expect(s.sound.music).toBe(0);
   });

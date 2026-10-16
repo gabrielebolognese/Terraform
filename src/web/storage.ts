@@ -15,10 +15,15 @@
 import type { SaveFile, SaveStore } from "../sim/index.js";
 
 const DB_NAME = "terraform";
-/** v2 (Batch 27): a second object store, for the worlds' index. v1's saves are untouched. */
-const DB_VERSION = 2;
+/**
+ * v2 (Batch 27): a second object store, for the worlds' index. v3 (Batch 36):
+ * a third, the player's own settings. Each upgrade adds a store and touches
+ * none of the others: every save and the worlds list come through as they were.
+ */
+const DB_VERSION = 3;
 const STORE = "saves";
 const META = "meta";
+const PLAYER = "player";
 
 /**
  * The worlds' index (Batch 27): small, kept apart from the saves so the
@@ -30,13 +35,47 @@ export interface IndexStore {
   saveMeta(key: string, value: unknown): Promise<void>;
 }
 
-export type GameStore = SaveStore & IndexStore;
+/**
+ * The player's own settings (Batch 36): kept apart from the worlds and their
+ * index, so no world carries them and deleting a world never touches them.
+ * Untrusted like a save - the reader validates it.
+ */
+export interface PlayerStore {
+  loadPlayer(key: string): Promise<unknown | null>;
+  savePlayer(key: string, value: unknown): Promise<void>;
+}
+
+export type GameStore = SaveStore & IndexStore & PlayerStore & {
+  /** Whether what is written survives a reload. */
+  readonly durable: boolean;
+  /** Where the worlds are kept, in the player's words (Batch 36: the save's location, shown). */
+  readonly place: string;
+};
+
+/** Where the browser keeps the worlds: the site's own storage, in this browser, on this device. */
+export const DURABLE_PLACE = "In this browser's storage for this site, on this device (IndexedDB database \"terraform\"). Clearing the site's data deletes it; Export a world to keep a copy elsewhere.";
+export const MEMORY_PLACE = "Nowhere that lasts: this browser offers no storage, so worlds are lost when the page closes. Export a world to keep it.";
 
 /** A store that forgets everything on reload, used when the browser has no durable option. */
 export class MemorySaveStore implements GameStore {
   readonly durable: boolean;
   private readonly slots = new Map<string, string>();
   private readonly meta = new Map<string, string>();
+  private readonly player = new Map<string, string>();
+
+  get place(): string {
+    return this.durable ? DURABLE_PLACE : MEMORY_PLACE;
+  }
+
+  loadPlayer(key: string): Promise<unknown | null> {
+    const raw = this.player.get(key);
+    return Promise.resolve(raw === undefined ? null : (JSON.parse(raw) as unknown));
+  }
+
+  savePlayer(key: string, value: unknown): Promise<void> {
+    this.player.set(key, JSON.stringify(value));
+    return Promise.resolve();
+  }
 
   loadMeta(key: string): Promise<unknown | null> {
     const raw = this.meta.get(key);
@@ -87,8 +126,20 @@ export class MemorySaveStore implements GameStore {
 
 class IndexedDbSaveStore implements GameStore {
   readonly durable = true;
+  readonly place = DURABLE_PLACE;
 
-  constructor(private readonly db: IDBDatabase) {}
+  constructor(private readonly db: IDBDatabase) {
+    // A newer page asking for a newer database: let it, rather than leave it blocked on this one.
+    db.onversionchange = () => db.close();
+  }
+
+  loadPlayer(key: string): Promise<unknown | null> {
+    return this.run(PLAYER, "readonly", (store) => store.get(key)).then((value) => value ?? null);
+  }
+
+  savePlayer(key: string, value: unknown): Promise<void> {
+    return this.run(PLAYER, "readwrite", (store) => store.put(value, key)).then(() => undefined);
+  }
 
   load(slot: string): Promise<unknown | null> {
     return this.run(STORE, "readonly", (store) => store.get(slot)).then((value) => value ?? null);
@@ -159,6 +210,7 @@ export function openSaveStore(): Promise<GameStore> {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
       if (!db.objectStoreNames.contains(META)) db.createObjectStore(META);
+      if (!db.objectStoreNames.contains(PLAYER)) db.createObjectStore(PLAYER);
     };
     request.onsuccess = () => {
       if (settled) return;

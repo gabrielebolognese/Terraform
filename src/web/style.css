@@ -3829,3 +3829,192 @@ button:hover {
 .front-settings {
   width: min(460px, 100%);
 }
+
+/* ---- settings (Batch 36): every setting in one panel, on the Settings screen and in the menu ---- */
+
+.front-settings {
+  width: min(640px, 100%);
+}
+
+.settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: min(70vh, 720px);
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.game-menu-panel:has(.settings-panel) {
+  width: min(640px, 100%);
+}
+
+.game-menu-panel .settings-panel {
+  padding: 10px 0 4px;
+  border-top: 1px solid var(--line);
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-head,
+.settings-subhead {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.settings-subhead {
+  font-size: 12px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr minmax(10em, 16em);
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+}
+
+.settings-check {
+  grid-template-columns: auto 1fr;
+}
+
+.settings-select {
+  min-width: 0;
+  padding: 4px 6px;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  font: inherit;
+}
+
+.settings-box {
+  accent-color: var(--accent);
+}
+
+.settings-about,
+.settings-place,
+.settings-last-saved,
+.settings-key-note,
+.game-menu-saved,
+.game-menu-place {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.settings-keys-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-keys {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.settings-key-group th {
+  padding: 8px 0 2px;
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-3);
+}
+
+.settings-key td {
+  padding: 2px 4px 2px 0;
+}
+
+.settings-key-button,
+.settings-key-cancel,
+.settings-key-clear {
+  min-width: 5.5em;
+  padding: 2px 8px;
+  color: var(--text);
+  background: var(--surface-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-key-cancel,
+.settings-key-clear {
+  min-width: 0;
+  margin-left: 4px;
+}
+
+/* ---- the interface settings, on the page's root (Batch 36) ---- */
+
+/* The size of the panels, buttons and text - never of the planet or the city, so a click lands where it did. */
+:root {
+  --ui-scale: 1;
+}
+
+.front-screen,
+.front-notice,
+.game-menu-panel,
+.game > :not(.stage):not(.city):not(.planner):not(.worldmap),
+.city > :not(canvas):not(.city-countdowns),
+.planner > :not(.planner-stage),
+.worldmap > :not(canvas) {
+  zoom: var(--ui-scale);
+}
+
+/* Colours that mean something, for colour-blind players. Every one of them also has a word or a mark. */
+:root[data-palette="red-green"] {
+  --good: #56b4e9;
+  --warn: #f0e442;
+  --bad: #f07c3c;
+}
+
+:root[data-palette="blue-yellow"] {
+  --good: #2bd9c5;
+  --warn: #ff9db5;
+  --bad: #ee3b55;
+}
+
+/* High contrast: solid black panels, white text, strong edges. */
+:root[data-contrast="high"] {
+  --bg: #000;
+  --surface: #000;
+  --surface-solid: #000;
+  --surface-2: #000;
+  --surface-3: #141414;
+  --line: #ffffff;
+  --line-strong: #ffffff;
+  --text: #ffffff;
+  --text-2: #ffffff;
+  --text-3: #e6e6e6;
+}
+
+:root[data-contrast="high"] .front-panel,
+:root[data-contrast="high"] .game-menu-panel {
+  backdrop-filter: none;
+}
+
+/* Reduced motion: nothing in the interface slides, fades or pulses. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Touch: the canvases take every finger themselves, so a pinch zooms the map and not the page. */
+.stage canvas,
+.city-canvas,
+.planner-map,
+.worldmap canvas {
+  touch-action: none;
+}
