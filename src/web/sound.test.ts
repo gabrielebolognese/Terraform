@@ -15,7 +15,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import type { Derived, SimState } from "../sim/index.js";
-import { NEUTRAL_ENV, advance, cityView, constructionOf, derive, foundSettlement, habitat, launchRocket, marsStart, placeBuilding, upgradeBuilding, worldEnv } from "../sim/index.js";
+import { NEUTRAL_ENV, advance, cityView, claimLand, constructionOf, derive, foundSettlement, habitat, launchRocket, marsStart, placeBuilding, upgradeBuilding, worldEnv } from "../sim/index.js";
 import { deepFreeze } from "../testkit/helpers.js";
 import { worldTuning } from "./game-tuning.js";
 import { FakeAudioContext, FakeGain, FakeOscillator } from "./fake-audio.js";
@@ -28,7 +28,7 @@ import { SoundWatch, TrainEar } from "./sound-cues.js";
 import type { Car } from "./sound-cues.js";
 import { ELSEWHERE_HEARD, EFFECTS_PER_LOOK, SoundDirector, planetBeds } from "./sound-director.js";
 import type { CityEar } from "./sound-director.js";
-import { DEFAULT_SOUND } from "./sound-settings.js";
+import { CHANNELS, DEFAULT_SOUND } from "./sound-settings.js";
 
 const T = worldTuning("standard", 0, "standard");
 const cfg = { tuning: T, env: NEUTRAL_ENV, forcing: null };
@@ -101,7 +101,8 @@ describe("no audio before the player's first gesture", () => {
     expect(FakeAudioContext.made).toHaveLength(1);
   });
 
-  it.each(GESTURES)("is let start by a %s", (gesture) => {
+  it.each(["pointerdown", "keydown", "touchend"])("is let start by a %s", (gesture) => {
+    expect(GESTURES).toContain(gesture);
     const engine = new SoundEngine(() => new FakeAudioContext());
     const target = new EventTarget();
     engine.listen(target);
@@ -137,6 +138,9 @@ describe("no audio before the player's first gesture", () => {
 describe("the effects", () => {
   it("each makes its sound on its channel, from now, with every ramp a sound one", () => {
     const { engine, ctx } = started();
+    // The master, then a gain a channel in CHANNELS order: the first five made.
+    const buses = ctx.nodes.filter((n) => n.kind === "gain").slice(0, 5);
+    const world = ["place", "built", "upgraded", "train", "rocket"];
     ctx.currentTime = 5;
     for (const e of EFFECTS) {
       const mark = ctx.nodes.length;
@@ -150,6 +154,10 @@ describe("the effects", () => {
       const own = made[0] as FakeGain;
       expect(own.gain.events[0]).toEqual({ kind: "set", value: 0.5, time: 5.01 });
       expect(made.some((n) => n.kind === "panner")).toBe(true);
+      // The world's effects on the effects channel, the rest on the interface's.
+      const panner = own.outputs[0] as FakeGain;
+      expect(panner.kind).toBe("panner");
+      expect(panner.outputs, e).toEqual([buses[1 + CHANNELS.indexOf(world.includes(e) ? "effects" : "interface")]]);
     }
     expect([...engine.played.values()].every((n) => n === 1)).toBe(true);
   });
@@ -211,6 +219,81 @@ describe("the effects", () => {
     expect(w2.observe(t2, T)).toEqual([]);
   });
 
+  it("hears no finish when land claimed west renumbers the ground under a worksite", () => {
+    // A building standing, and a worksite the width of a claim east of it: claimed west, the worksite takes the
+    // standing one's old numbers - a watch that kept the numbers, not the ground, would hear that one finish.
+    let s = ares();
+    const shift = T.CLAIM_CHUNK_TILES;
+    let pair: { tx: number; ty: number } | null = null;
+    for (let ty = 30; ty < 60 && pair === null; ty += 1) {
+      for (let tx = 2; tx < 30 && pair === null; tx += 1) {
+        const a = placeBuilding(s, "settlement-1", "solar_array", tx, ty, T);
+        if (a.ok && placeBuilding(a.state, "settlement-1", "solar_array", tx + shift, ty, T).ok) pair = { tx, ty };
+      }
+    }
+    expect(pair, "two places a claim apart").not.toBeNull();
+    s = placeBuilding(s, "settlement-1", "solar_array", pair!.tx, pair!.ty, T).state;
+    for (let i = 0; i < 60 && s.settlements[0]!.jobs.length > 0; i += 1) s = advance(s, 1, cfg);
+    s = placeBuilding(s, "settlement-1", "solar_array", pair!.tx + shift, pair!.ty, T).state;
+    const watch = new SoundWatch();
+    expect(watch.observe(s, T)).toEqual([]);
+    // Enough people to claim (the run so far has none: no homes).
+    s = { ...s, settlements: s.settlements.map((c) => ({ ...c, population: 400 })) };
+    const claimed = claimLand(s, "settlement-1", -1, 0, T);
+    expect(claimed.ok, claimed.reason ?? "").toBe(true);
+    s = claimed.state;
+    expect(s.settlements[0]!.buildings.some((b) => b.tx === pair!.tx + shift && b.ty === pair!.ty), "the standing one renumbered onto the worksite's old tile").toBe(true);
+    const said = (c: { kind: string; tx: number; ty: number }) => `${c.kind}@${c.tx},${c.ty}`;
+    const heard: string[] = watch.observe(s, T).map(said);
+    for (let i = 0; i < 60 && constructionOf(s.settlements[0]!).size > 0; i += 1) {
+      s = advance(s, 1, cfg);
+      heard.push(...watch.observe(s, T).map(said));
+    }
+    expect(heard).toEqual([`built@${pair!.tx + 2 * shift},${pair!.ty}`]);
+  });
+
+  it("hears a rocket that landed and went up again between two looks", () => {
+    // Room in the stores: a rocket is refused when they are full.
+    let s: SimState = { ...ares(), settlements: ares().settlements.map((c) => ({ ...c, stores: { ...c.stores, materials: 0 } })) };
+    const port = s.settlements[0]!.buildings.find((b) => b.type === "spaceport")!;
+    const launch = () => {
+      const o = launchRocket(s, "settlement-1", port.tx, port.ty, T);
+      expect(o.ok, o.reason ?? "").toBe(true);
+      s = o.state;
+    };
+    launch();
+    const watch = new SoundWatch();
+    watch.observe(s, T);
+    s = advance(s, 3, cfg);
+    expect(watch.observe(s, T), "still away").toEqual([]);
+    for (let i = 0; i < 80 && s.settlements[0]!.jobs.length > 0; i += 1) s = advance(s, 1, cfg);
+    expect(s.settlements[0]!.jobs, "home").toEqual([]);
+    s = { ...s, settlements: s.settlements.map((c) => ({ ...c, stores: { ...c.stores, materials: 0 } })) };
+    launch();
+    expect(watch.observe(s, T).map((c) => c.kind)).toEqual(["rocket"]);
+  });
+
+  it("plays nothing of what the world does while the example planet shows, but keeps its music and its wind", () => {
+    const { engine } = started();
+    const director = new SoundDirector(engine, T);
+    let s = place(ares(), "solar_array").state;
+    for (let i = 0; i < 40; i += 1) {
+      director.readout({ state: s, derived: derivedOf(s), storm: 0, seaLevelM: 0, cues: false });
+      s = advance(s, 1, cfg);
+    }
+    expect(engine.played.size).toBe(0);
+    expect(engine.musicPiece).toBe(pieceFor(s.phaseReached));
+    expect(engine.ambienceLevels.wind).toBeGreaterThan(0);
+    // Vacuity: the same run, the player's own, is heard.
+    const mine = new SoundDirector(started().engine, T);
+    let m = place(ares(), "solar_array").state;
+    for (let i = 0; i < 40; i += 1) {
+      mine.readout({ state: m, derived: derivedOf(m), storm: 0, seaLevelM: 0, cues: true });
+      m = advance(m, 1, cfg);
+    }
+    expect(mine.engine.played.get("built")).toBe(1);
+  });
+
   it("hears a train once as it comes near, not again until it has gone and come back", () => {
     const ear = new TrainEar();
     const at = (x: number): Car[] => [
@@ -221,9 +304,13 @@ describe("the effects", () => {
     const passes: number[] = [];
     // Taking bearings in a new city: a train already near is not "coming".
     expect(ear.hear("a", at(2), listen)).toEqual([]);
-    for (const x of [3, 5, 8, 9, 8.5, 9.5, 20, 30, 12, 7, 5, 0, -5, -12]) passes.push(...ear.hear("a", at(x), listen).map((p) => p.train));
-    // Out past 9 (0.9 of the radius) at 20, back within 6 at 5: once. Lingering between 6 and 9 is no new pass.
+    expect(ear.hear("a", at(3), listen)).toEqual([]);
+    // Away past 9 (0.9 of the radius), then in within 6: heard. Wavering about 6, or lingering out to 9: not again.
+    for (const x of [20, 30, 12, 7, 5.9, 6.2, 5.8, 6.3, 8.5, 5.5, 0, -5, -8.9]) passes.push(...ear.hear("a", at(x), listen).map((p) => p.train));
     expect(passes).toEqual([7]);
+    // Gone past 9 and back: heard again.
+    for (const x of [-9.5, -20, -4]) passes.push(...ear.hear("a", at(x), listen).map((p) => p.train));
+    expect(passes).toEqual([7, 7]);
     // Vacuity: one coming from far off is heard at once.
     const fresh = new TrainEar();
     fresh.hear("b", at(40), listen);
