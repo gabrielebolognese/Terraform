@@ -85,8 +85,13 @@ list at the top:
   made and what it used. The power chart is the city's power balance. A city's charts cover its
   last 150 years, about 80 minutes of play at 1x. The made and used charts begin with this update.
 
-Each chart's key gives every line's latest value. Press **Close** to go back. The same city charts
-are in the city planner's **Charts** tab.
+Each chart's key gives every line's latest value. Where a chart has more than one line, each line
+has its own pattern as well as its colour, and the key shows it and names it: the first line is
+solid, then dashed, dotted, dash-dot and long dashes, for example "Homes (dashed): 320". In a
+city's chart of made and used, what was made is solid and what was used is dashed. The shortages
+chart gives each shortage a strip of its own, blackouts at the top, then water, oxygen and food,
+with its name on it: a bar is the share of that year the city went without. Press **Close** to go
+back. The same city charts are in the city planner's **Charts** tab.
 
 ## Each city at a glance
 

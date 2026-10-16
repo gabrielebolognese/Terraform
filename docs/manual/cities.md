@@ -190,8 +190,9 @@ away when a window opens makes the city miss it, and its orders wait for the nex
 - You can rename the city here.
 - **Charts** show population, growth and deaths, shortages, stores, what the city makes less what
   it uses, and, for each of power, water, oxygen, food and materials, what it made and what it
-  used, year by year. The same charts are in **Statistics** (see
-  [Alerts and statistics](alerts-and-statistics.md)).
+  used, year by year. Each line has its own pattern as well as its colour, shown and named in the
+  chart's key, and each shortage its own strip with its name on it. The same charts are in
+  **Statistics** (see [Alerts and statistics](alerts-and-statistics.md#statistics)).
 - **Coverage** (in a world made from Update 32 on) shows where a service reaches: choose **Green
   space**, **Medical care**, **Research**, **Transport** or **Shops** to see the homes it reaches in
   green and the homes nothing reaches in red, and hatched. **Overview** lists the city's happiness

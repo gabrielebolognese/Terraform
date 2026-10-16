@@ -1526,3 +1526,37 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     lost to the sea grey and crossed out; gold for cities and metropolises but not outposts
     (`:488`); up close, the mark in the middle of the land held; under the open menu only Esc and
     Ctrl+S (`game.ts:399`).
+- fix 2: done
+  1. The charts' lines told apart without their colours (`src/web/charts.ts`): in a chart of more
+     than one line each line has a pattern by its place - solid, dashed, dotted, dash-dot, long
+     dashes - and its key draws a sample of the line in its colour and pattern and names it
+     ("Homes (dashed): 320"); Made solid and Used dashed on all five made-and-used charts. The
+     shortages a strip each, top to bottom in the key's order, its name over its bars, where four
+     bars to a year were each under a pixel wide. `settings-cues.test.ts`, "the charts": Statistics
+     on a city and on the planet and the planner's Charts tab, each chart's canvas recorded; all 19
+     charts registered by how their series are told apart (patterns, strips, one line), checked
+     both ways; lines no two alike without their colours, the key's sample the line's dash, the
+     pattern's name true of it; each strip named, its bars inside it. Nine faults, one at a time,
+     all caught, `cmp` against the backup after each (66-74): every line solid (review 2's fault:
+     "Population: lines told apart without colour: 1 looks for 2 lines"), the key's sample solid,
+     the pattern not named, dashed and dotted named the wrong way round, the shortages side by side
+     again, the strips not named, every strip in one place, a chart renamed (not registered), the
+     fifth line given the first's pattern. Drawn to a PNG by a scratch software context and looked
+     at: the five patterns distinct at 1.5 px, Made and Used apart where they nearly meet.
+  - Every other canvas read in the code (not tested): sparklines one line beside a named metric,
+    the city's badges shapes, the world map's railways one colour, the globe and pictures no code.
+    The palettes reach the page, the city and the planner's map only: GAME_PLAN's "every canvas
+    colour code" and README's "the canvases" corrected to that.
+  - Player documentation: docs/manual/alerts-and-statistics.md (the charts' patterns and the
+    shortages' strips), docs/manual/cities.md (the planner's Charts), docs/manual/settings.md (the
+    charts and the world map keep their colours), docs/manual/update-notes.md (Update 36, Changed).
+    Note: item 11, the injection table (66-74, 74 faults in all), the verification after the fix.
+    GAME_PLAN.md (review 2's fix, the palettes' reach) and README.md (the charts' cue).
+  - verification: typecheck green; `npx vitest run --maxWorkers=2 --minWorkers=1`: 123 files,
+    1,476 tests, all passed (451.8 s; the Known-red opening test passed); `build:web` green
+    (656.72 kB JS, 222.17 kB gzip; 52.19 kB CSS); `build` green. Nothing in `src/sim/` or
+    `src/render/` changed.
+  - commits: c030a4b (the fix), and the review 2 fixes commit.
+  - review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch36-settings.md
+    docs/manual/alerts-and-statistics.md docs/manual/cities.md docs/manual/settings.md
+    docs/manual/update-notes.md src/web/charts.ts src/web/settings-cues.test.ts src/web/style.css
