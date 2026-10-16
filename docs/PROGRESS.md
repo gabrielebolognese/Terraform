@@ -1182,3 +1182,86 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   src/web/sound-director.ts src/web/sound-engine.ts src/web/sound-gate.test.ts
   src/web/sound-music.ts src/web/sound-panel.ts src/web/sound-recipes.ts src/web/sound-settings.ts
   src/web/sound.test.ts src/web/style.css
+- review 1: rejected
+  1. The manual and the batch's decision say the Example planet's buildings finishing and rockets
+     lifting off are not heard. On the Example planet a player reaches (the title's **Example
+     planet** button, the only one the manual names) they are heard. Nothing tests the game's
+     wiring of that decision.
+     - The game silences the happenings only while the Instruments drawer's "See example planet"
+       shows: `src/web/game.ts:929` passes `cues: !example.active`. The title's Example planet is
+       launched as a look-only world (`src/web/app.ts:484`, `lookOnly`). That never enters
+       `ExampleMode` (`example.enter` is called only at `src/web/game.ts:737`), so `example.active`
+       is false and every cue plays.
+     - Measured in this review: `src/web/sound-gate.test.ts`'s assembled-game test, run with
+       `lookOnly: { banner: "Example planet" }` added to `startGame`'s options, still passes. On a
+       look-only world, a greenhouse finished at 1000x plays "built" once, and the objective
+       chime plays as well.
+     - Statements that are false as written:
+       - `docs/manual/sound.md:79-80`: "On the **Example planet** you hear its music, its wind and
+         its cities, but not its buildings finishing or its rockets lifting off";
+       - `docs/manual/update-notes.md:46` and `:410` (known issues): "On the Example planet,
+         buildings finishing and rockets lifting off make no sound";
+       - the decision as recorded: `docs/balance/batch35-sound.md:147`, `GAME_PLAN.md:811` and
+         this entry's `decisions:` (`:1157`). Its reason, "as its milestones and alerts are not
+         shown", does not hold for the title's Example planet either: there `mine` and the alerts
+         go by `!example.active` too, so they are shown.
+     - Untested: replacing `cues: !example.active` with `cues: true` at `src/web/game.ts:929`
+       fails none of `sound.test.ts`, `sound-gate.test.ts` or `onboarding.test.ts` (48 tests
+       passed). The "example's happenings" tests and injection 49 reach only the director called
+       with `cues: false`. The note's item 7 (`docs/balance/batch35-sound.md:58-62`) says this
+       wiring now has a test; it does not.
+     - Needed, either way:
+       - Make the browser and the record agree. Either the title's Example planet silences its
+         happenings as decided (for example `cues` false for a look-only world too), or the
+         manual, the known issues and the decision say what the browser does: the title's Example
+         planet heard in full, and only the Instruments drawer's example silent, named as it is
+         on screen.
+       - Add a test through the assembled game for the behaviour chosen, with its injection
+         recorded (the wiring at `game.ts:929` broken), and correct the note's item 7.
+
+  Checked in this round, and sound:
+  - Typecheck green. `npx vitest run --maxWorkers=2 --minWorkers=1`: 120 files, 1,428 tests, all
+    passed (379 s; the Known-red opening test passed). `build:web` green (623.88 kB JS, 210.56 kB
+    gzip, past Vite's 500 kB warning as recorded since Batch 31; 49.29 kB CSS). `build` green.
+  - Every deliverable is built:
+    - one engine with four channels and a master, and no `AudioContext` before a gesture;
+    - music by the phase reached, crossfaded over 8 s;
+    - wind, rain, sea and machinery beds;
+    - the seven effects, placed in the city view;
+    - volumes kept per player in the store's index.
+  - Each of the exit gate's points has a test:
+    - a scripted run heard every substep on deep-frozen states `toEqual` the run not heard;
+    - each effect once per event, against the fake context;
+    - each bed following its driver;
+    - the music changing with the phase and never cut;
+    - no context before a gesture, for the engine, the title and the assembled game.
+  - `docs/credits.md` lists Lexend's licence (loaded from Google Fonts by `index.html`) and the
+    game's own sounds.
+  - Every one of the 34 new tests (24 in `sound.test.ts`, 10 in `sound-gate.test.ts`) is named in
+    the note's injection table. The note leads with what went wrong and carries its measurements.
+  - Two injections re-run, one at a time. Each file was restored from its backup, and
+    `git status` was clean after each:
+    - #16, the old piece writing on after its fade (`sound-music.ts:232`): the crossfade test
+      fails ("expected [ FakeOscillator ... ] to deeply equal []");
+    - #79, the engine's clock never started (`sound-engine.ts:209`): the title test fails
+      ("notes written 20 s on: expected 0 to be greater than 0").
+  - Simulation rules:
+    - nothing in `src/sim/` changed;
+    - the sound reads the state and never writes it;
+    - no save change: the settings are a separate `settings` meta record, distinct from
+      `worlds`;
+    - the sound constants live in `src/web/`, as decision 7 records.
+  - `GAME_PLAN.md`'s row is COMPLETE with the note linked and the changes from the plan recorded;
+    `README.md` has the batch's paragraph; `update-notes.md` has Update 35 at the top.
+  - Manual statements that match the code:
+    - a building finished, an upgrade done and a contract met make no alert sound: their alerts
+      are `record` priority, and the director skips those;
+    - **Mute all sound** keeps the levels: it sets only the master gain to 0;
+    - the sea is not heard from about 1,500 m above it (`SEA_HEARD_M` 1500);
+    - a missed launch window and a failed contract sound as an alert (`notice` priority);
+    - the Earth rocket roars: it is a `rocket` job, which the cue watch hears.
+  - Seen, not grounds for rejection: some lower bounds in `src/web/sound.test.ts` do not have
+    their measured value beside them. Measured here:
+    - the machinery near the camera is 0.19, bounded at more than 0.05 (`:460`);
+    - First water writes 75 notes, bounded at more than 10 (`:555`), over 20 distinct pitches,
+      bounded at more than 3 (`:562`).
