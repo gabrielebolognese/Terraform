@@ -1836,3 +1836,59 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   src/sim/throttle.ts src/sim/tuning.ts src/sim/types.ts src/web/city.ts
   src/web/decisions-gate.test.ts src/web/flood-defences.test.ts src/web/flood-warning.ts
   src/web/game-tuning.ts src/web/game.ts src/web/pace.test.ts src/web/style.css
+- review 1: rejected
+  1. A terrace's footprint is never read back from a save in any test. The new v20 field is the
+     `area` of a rover job, read at `src/sim/save.ts:1412-1416`. With the read removed, every
+     terrace in flight loads as a one-tile levelling job. All 27 test files that load a save (388
+     tests) still pass. Today the code is right: a scratch round-trip in this review found the
+     job, its `area` included, exactly as saved. But nothing would notice it breaking. The effect
+     would be a save made while a rover is out raising a building's ground (an autosave makes this
+     likely) raising only the corner tile once loaded, after the player paid for the whole
+     footprint. This is the one part of the deliverable's "All saved as true state" without a
+     test; the grace and `evacuated` have theirs (injections 16 and 17). Needed: a test that saves
+     mid-terrace, loads it, runs the rover home and finds every tile of a multi-tile footprint at
+     the plan's level. Then inject the dropped `area` and record it in the note's table.
+  2. The game's **Raise its ground** has no test. In `src/web/game.ts:635-639` the hook can be
+     deleted (it is optional, so it still compiles), and every test file that starts the
+     assembled game (9 files, 111 tests) still passes. Yet without the hook `src/web/city.ts:1009`
+     hides the button, so the shipped game would never offer terracing. The note's injection 38
+     broke the city screen mounted with the test's own hooks (`src/web/flood-defences.test.ts`,
+     `mount`), not the game's wiring. Evacuate has an assembled-game test (injection 37);
+     terracing needs one too: down in a city through `startGame`, select a building, press
+     **Raise its ground**, and find the rover job in the game's state. Inject the deleted hook and
+     record it.
+  3. Two refusals in `src/sim/micro/defences.ts` have no test:
+     - terracing with every rover out (`:110`). Removed, `defences.test.ts` and
+       `flood-defences.test.ts` pass (33 tests), and a city could send more terrace rovers than it
+       has;
+     - an evacuated city refused as a refuge (`:170`, `!o.evacuated`). Removed, the same 33 tests
+       pass.
+
+     Add both to the refusal tests (`defences.test.ts:233` and `:304`), break each once, and
+     record both in the note's table (its totals too).
+
+  Checked and sound:
+  - `npm run typecheck`, `npm run build:web` (682.79 kB JS, 231.21 kB gzip, 52.54 kB CSS) and
+    `npm run build` are green.
+  - `npx vitest run --maxWorkers=2 --minWorkers=1`: 129 files, 1,555 tests, all passed (483 s).
+  - Two of the note's injections, one at a time, each caught by the test it names:
+    - #4, a building's loss ignoring the dike: "saved by good play", 0 people against 80;
+    - #46, the projection asked for every city: "asks for the warned cities only", plus two
+      others.
+  - The tree was clean after every injection in this review (seven in all).
+  - The re-baked structures sheet differs from the one before the batch only in one 115 x 65 px
+    box, where the Seawall was added; the other 28 types render exactly as before.
+  - Flooding is off by default (`FLOODING_ENABLED` 0) and on only in `NEW_WORLD_OVERRIDES`; a
+    Sandbox keeps it off.
+  - The nine new constants are in `tuning.ts`, validated, and in §10.
+  - `src/sim/` imports nothing from `src/web/` or `src/render/`, and has no clock or randomness in
+    the new code.
+  - v20 has its migration, and a test loads a v19 save 10 m under the sea through its grace.
+  - Three statements in the manual checked against the code: the Seawall takes 4 min and 33 min
+    at level 8 (240 s x 1.35^7); terracing takes about 7 s a tile (0.2 city-years); the warning
+    comes 50 years ahead or within 20 m. The quoted words ("Offline: under water.", the Flood
+    warning alert, the throttle's sentence) are the game's own.
+  - The ten decisions are ones a bare "Go" would accept; none deletes or overwrites player data.
+    Old worlds keep the tuning they recorded.
+  - GAME_PLAN's row and BUILD_PLAN's row are COMPLETE with the note linked, and README has the
+    batch's row.
