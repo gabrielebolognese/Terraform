@@ -1071,3 +1071,50 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     203.45 kB gzip, past Vite's 500 kB warning as recorded since Batch 31; 48.67 kB CSS); build
     green.
   - commits: the commit recording this
+- review 2: accepted
+  - Both of review 1's problems are fixed:
+    1. Every new test is in the injection table now. Each of the batch's 47 Earth tests (28 in
+       `src/sim/earth.test.ts`, 10 in `src/web/earth-gate.test.ts`, 9 in `src/web/earth.test.ts`)
+       was checked against the "Caught by" column, and every one is named in at least one row. The
+       seven review 1 listed are rows 53 to 69. The test the fix round added ("what a contract
+       pays") is rows 57 and 58, and its measurement (at least 1.71 times Earth's best price) sits
+       beside its threshold.
+    2. `src/sim/tuning.ts:1285` says 150 to 310 materials at Standard.
+  - Checks in this round:
+    - typecheck green;
+    - `npx vitest run --maxWorkers=2 --minWorkers=1`: 118 files, 1,394 tests, all passed (434 s;
+      the Known-red opening test passed);
+    - `build:web` green (602.24 kB JS, 203.45 kB gzip, past Vite's 500 kB warning as recorded
+      since Batch 31; 48.67 kB CSS);
+    - `build` green.
+  - Two injections from the fix round, one at a time. Each file was restored byte for byte, and
+    `git status` was clean after each:
+    - #57, `EARTH_CONTRACT_PAY_MATERIALS` at 0.4: "what a contract pays" fails (0.179 against more
+      than 1);
+    - #63, the panel's "home in" counted to the launch (`f.launched` for `f.arrives`): "shows the
+      rocket away and when it is home" fails on its "home in 3 min 1x s".
+  - Checked again, and review 1's findings still hold:
+    - the exit gate;
+    - the simulation rules (`stepEarth` and `divertResearch` in `advance`, every substep, the
+      research sum the same expression with Earth off);
+    - the panel's actions, which go through `orderFromEarth`, `cancelEarthOrder` and
+      `acceptContract`;
+    - save v19 and its migration;
+    - the decisions;
+    - GAME_PLAN's row and README.
+  - Manual statements checked against the code in this round:
+    - the button reads "Earth (an offer)" when one stands (`src/web/earth.ts:188`);
+    - the reputation words, with 50 "Neutral" (`src/web/earth-words.ts:29-35`);
+    - the market is "about double after 2,000 credits' worth" and forgets half each window
+      (`EARTH_MARKET_DEPTH`, `EARTH_MARKET_RECOVERY`);
+    - a settler with no home is refunded what was paid (`landFlights`);
+    - water contracts are always 10 at Classic (2.4 x 2.135 x 1 to 2, rounded to tens, at least
+      10);
+    - the away line reads "Earth: a contract met, a contract failed - see Earth"
+      (`src/sim/offline.ts:215`).
+  - Seen, not a ground for rejection:
+    - The injection totals say 71 faults, and the table has 69 rows. The other two are #30 and #35
+      injected again as coherent faults, and the note says so. "62 + 4 + 2 + 1" counts rows.
+    - "What a contract pays" checks research on a world one second old, which earns no research.
+      Every research contract there is the floor of 10, so its half checks only the ratio of pay
+      to amount. That is what it is for, and #58 shows it catches half pay.
