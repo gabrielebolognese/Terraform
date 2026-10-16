@@ -207,8 +207,13 @@ stay apart for you; a zone colour you picked yourself stays as you picked it.
 
 ## The world map and railways
 
-**World map** shows the whole planet flat, with every settlement. Click a settlement to see it,
-how it is doing (its people, anything running short, and what is being built), and its railways.
+**World map** shows the whole planet flat, with every settlement. Each kind has its own mark, in
+its own colour and its own shape: an outpost is a small grey square, a city a round blue dot, and a
+metropolis a larger yellow diamond. A settlement lost to the sea is grey and crossed out. Zoomed in
+close, you see the land each settlement holds, with its mark in the middle. Once your markers turn
+gold, cities and metropolises are both gold and are told apart by their shapes. Click a settlement
+to see it, how it is doing (its people, anything running short, and what is being built), and its
+railways.
 
 - **Lay a railway to...** then choose another settlement to connect them. A railway costs 5
   materials a kilometre, half paid by each end.

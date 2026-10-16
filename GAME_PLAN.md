@@ -894,6 +894,11 @@ carries patterns and names what is under the pointer.
 - **The planner names what is under the pointer**, and **Alerts** and a milestone say their state
   in words: found by the register of colour rules.
 - **In a city, Esc closes the game menu** (it did not).
+- **Review 1's fixes**: a railway laid in the cue test (it was only planned there), a test that no
+  shortcut acts under the open game menu, and the world map's settlements given shapes by kind (an
+  outpost a square, a city a disc, a metropolis a diamond, a ruin crossed out) at every zoom: they
+  were a colour code the batch had not registered, and with gold markers a city and a metropolis
+  differed only in size.
 
 ---
 

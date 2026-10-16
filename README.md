@@ -184,8 +184,8 @@ view. Interface: the panels' size (never the canvases'), red-green and blue-yell
 palettes for the page and the canvases (measured under simulated colour blindness), reduced
 motion (a cut for the flight down, a still planet), high contrast, and which alerts pop up.
 Saving: the autosave interval, Ctrl+S, and where the worlds are kept. Every colour code has a
-second cue - a word, a sign, a shape, or on the planner's map a pattern - and a test holds the
-stylesheet's colour rules to a register of them. No setting changes the simulation: the same
+second cue - a word, a sign, a shape, on the planner's map a pattern, on the world map a shape for
+each kind of settlement - and a test holds the stylesheet's colour rules to a register of them. No setting changes the simulation: the same
 frames with every setting moved come out the same.
 
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,

@@ -38,6 +38,10 @@ how often your world is saved. Colour is never the only way the game tells you s
 - The planner's map has patterns as well as colours: power lines dashed, railways striped, plans
   dotted, zones outlined, and homes no service reaches hatched. Its legend shows them.
 - Land a city must grow into before it can claim it has a dashed edge.
+- On the **World map**, each kind of settlement has its own shape as well as its colour: an outpost
+  is a small square, a city a round dot, a metropolis a larger diamond, and a settlement lost to the
+  sea is crossed out. The mark stays on the city when you zoom in close, and with gold markers on,
+  cities and metropolises are still told apart by their shapes.
 - **Alerts** says how many are urgent, for example **Alerts (3, 1 urgent)**, in its own words as
   well as in red.
 - A milestone in the planet's news says "milestone", as a warning says "warning".
