@@ -56,7 +56,7 @@ What is missing, in the user's words (2026-10-11):
 | 35 | Sound: music, ambience and effects | **COMPLETE** - [note](docs/balance/batch35-sound.md) - one Web Audio engine, four channels and the player's volumes, no context before the first gesture; every sound made by the game: music written as it plays by the phase reached, crossfaded over 8 s; wind by pressure and storm, rain, sea, the machinery near the city camera; effects as crossings in the state, placed in the city view; the same world to the bit heard or not; settings kept per player; licences in docs/credits.md |
 | 36 | Settings, controls and accessibility | **COMPLETE** - [note](docs/balance/batch36-settings.md) - every setting in one panel, kept per player in a store of their own (Batch 35's record moved, never deleted); detail held or Auto, pictures kept, moving details off, each level's frame time measured on the player's machine; 21 shortcuts by physical key, two rebindable slots each; camera speed, edge scrolling, invert zoom, trackpad and touch in every view; panel size, colour-blind palettes measured under simulated colour blindness, reduced motion, high contrast, pop-ups; autosave interval, Ctrl+S, where the worlds are kept; a second cue for every colour code, held to a register of the stylesheet's rules; the same world to the bit whatever the settings |
 | 37 | Terrain resource deposits (was `BUILD_PLAN` 27) | **COMPLETE** - [note](docs/balance/batch37-deposits.md) - ore on ridges and rims, ice in hollows (more poleward), vents along the canyons' fault, sunny high flats: derived at site coordinates, never stored; a mine, extractor, geothermal plant or solar array on its own deposit makes x2, x2 (fading with water), x2, x1.5 by the share of its footprint, through `advance`, in new worlds only; marked by shape when placing and by a Deposits tool, the hint giving the factor; Batch 18's bootstrap done 13 years sooner, the scripted pacing within 4%, far deposits a trap |
-| 38 | Flood defences and the rising water; flooding on (was `BUILD_PLAN` 28) | NOT STARTED |
+| 38 | Flood defences and the rising water; flooding on (was `BUILD_PLAN` 28) | **COMPLETE** - [note](docs/balance/batch38-flood-defences.md) - the sea floods cities in new worlds; a Seawall raises a city's datum 4 m a level and stands until the city falls; terracing raises a building's ground; evacuation moves people to the nearest safe cities; the throttle link as a projection with every machine off (7.75-48 years bought at year 290, named exactly); a water plane clipped at the waterline in a reference frame; a grace for a city carried from an older save (v20); no founding under the sea |
 | 39 | The ending: victory, scores and achievements | NOT STARTED |
 | 40 | Playtest pass: performance, polish and an adversarial review | NOT STARTED |
 
@@ -980,13 +980,73 @@ ring, a cross) registered in the cue test, the hint and the panels saying the sh
 **Goal and exit gate:** `BUILD_PLAN.md` §Batch 28: dikes, terracing, evacuation, the throttle link,
 and the water plane.
 
-Plus:
-- [ ] **Turn flooding on in the browser** (Batch 25's open item), with a guard for old saves. A city
+**Deliverables** (`BUILD_PLAN.md` §Batch 28's, and this plan's):
+- [x] Dikes (a building that raises `dike_height`), terracing (raise a footprint for materials),
+  and evacuation (conflict 8). All saved as true state.
+- [x] The throttle link: a forecast that shows how much time slowing the water buys.
+- [x] The water plane at `sea_level_m`, with a shoreline that moves inland as it rises (§4.6).
+- [x] **Turn flooding on in the browser** (Batch 25's open item), with a guard for old saves. A city
   found already under the sea on loading is given a grace period, warned, not lost on the first
   substep.
 
 **Exit gate (added):** loading a pre-flooding save with a city 10 m under the sea never loses it
 before its grace period ends, tested.
+
+**Done** - see [the note](docs/balance/batch38-flood-defences.md). Built unattended
+(`/next-batch auto`) in one session.
+- **The Seawall**: 3 x 1, 200 materials, one a settlement. Its level x `DIKE_M_PER_LEVEL` (4 m) is
+  the city's `dike_height`, derived, never stored; every flood rule reads `base + dike` - the
+  tiles, the states, a building's loss, the city's fall, the forecast. It stands until the city
+  falls. Only where the sea floods.
+- **Terracing**: **Raise its ground** - a rover lifts a building's footprint 2 m over its highest
+  corner, `TERRACE_MATERIALS_PER_M` (4) a tile-metre, recorded as grades.
+- **Evacuation**: the people of a city the sea threatens go to the nearest safe cities with homes;
+  the city is left (`evacuated`, v20).
+- **The throttle link**: a projection of the planet, 100 years on, as it is and with every machine
+  off; the warning says "Switching off the planet's machines would buy ~8 yr."
+- **The water plane**: each ground triangle clipped where it lies under the waterline, drawn flat
+  and translucent at it; the grid at the level behind its wall, the world beyond at the open sea's.
+- **Flooding on** in `NEW_WORLD_OVERRIDES`; a Sandbox keeps it off. **The grace**: every standing
+  city of a v19 save gets `FLOOD_GRACE_YEARS` (36 city-years, 20 minutes at 1x). **No founding
+  under the sea.**
+
+**Measured:**
+- **Each defence buys time, through a real `advance`:** on Batch 24's fixture, the wall holds the
+  low city's fall 5.67 substeps (1.42 sim-years) a level (37 -> 43, 49, 60 at levels 1, 2, 4);
+  terracing its -11 m depot 2.27 m keeps it 3 substeps longer (11 -> 14). Switching every machine
+  off at year 290 buys cities at -6,000, -5,000 and -4,400 m 7.75, 19.75 and 48 years; the forecast
+  named each exactly (within 0.31 years at the Standard pace's finer substeps).
+- **Saved by good play, lost by neglect:** the sea held 15 m over the low city's base takes it and
+  its people undefended; walled 8 m in time it stands with all of them; evacuated it falls and they
+  live on in the high city.
+- **On the reference arc** a full 32 m wall buys a -6,000 m city one substep in the burst; near the
+  sea's final level (-3,090 m) two levels save a city 15 m under it, eight a city 30 m under.
+- **The water plane's frame**: tolerance 0.003%; 10 cm of waterline is 0.035%.
+- **The grace**: a v19 save's city 10 m under the sea stands all 144 substeps of its grace, warned,
+  and falls on the 145th.
+- **Pacing**: Batch 28's targets unchanged; the reference arc has no liquid water before about year
+  275 (some 20 hours of Standard play).
+
+**Decisions taken** (none were set for Phase 1; each recorded with its reason in the note):
+1. **Flooding in new worlds only**, the grace guarding old saves in the simulation: a world keeps
+   the tuning it was made with (Batch 27), and every feature since followed that.
+2. **The grace to every standing city of an old save**, by the migration.
+3. **The dike as a building**, its height derived; one a settlement.
+4. **The dike lifts the datum for the tiles too** (§4.2 writes the tile rule against the bare base).
+5. **The Seawall stands until the city falls.**
+6. **Terracing raises a building's footprint**, by a fixed step, paid by the metre.
+7. **Evacuation to the nearest safe cities with homes**; relocation not built.
+8. **The throttle as a projection with every machine off.**
+9. **No city founded where the sea stands.**
+
+**What changed from the plan:**
+- **The throttle link is a projection, not a rate.** Switching machines off leaves the melt rate of
+  the moment the same to three places; what they change is the warming to come.
+- **The Seawall cannot be taken by the water.** Lost like any building, a wall on low ground took
+  the dike with it, and its city fell as if it had none.
+- **Old worlds keep no sea.** The plan's "guard for old saves" is built and tested in the
+  simulation; no browser path loads an old world with the sea on.
+- **Relocation** (§4.5) is not built: Open, for Batch 40 or later.
 
 ---
 

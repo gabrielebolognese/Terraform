@@ -121,7 +121,8 @@ describe("the example's metropolises", () => {
   it("have every structure a metropolis may build", () => {
     for (const s of metropolises) {
       const types = new Set(s.buildings.map((b) => b.type));
-      expect(BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].kinds.includes("metropolis") && !types.has(t)), s.id).toEqual([]);
+      // But the Seawall (Batch 38): the example's settlements stand 300 m or more above the sea, where a wall holds nothing back.
+      expect(BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].kinds.includes("metropolis") && !types.has(t) && t !== "seawall"), s.id).toEqual([]);
     }
   });
 

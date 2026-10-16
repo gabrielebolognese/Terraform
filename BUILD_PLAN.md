@@ -34,7 +34,7 @@ This file is the source of truth for *in what order* we build it, and for what "
 | 25 | Detail: flood forecast and warnings | **COMPLETE** - [note](docs/balance/batch25-flood-forecast.md) - forecast in water, not §4.4's metres (58 yr wrong across a kink); every crossing within 0.07 yr; 50-year alert horizon; browser opt-in left to the user |
 | 26 | Detail: procedural structures and the instancing renderer | **COMPLETE** - [note](docs/balance/batch26-structures.md) - the shape pipeline, not GPU instancing (conflict 6); all 28 types at two levels on a reference sheet; later batches continue in `GAME_PLAN.md` |
 | 27 | Detail: terrain resource deposits | **COMPLETE** as `GAME_PLAN.md` Batch 37 - [note](docs/balance/batch37-deposits.md) - four deposits derived at site coordinates, never stored; the bonus by footprint share through `advance`, in new worlds only; Batch 18's bootstrap re-measured (13 years sooner) |
-| 28 | Detail: flood mitigation and the rising water | NOT STARTED - detail §4.5, §4.6, §6 step 7 |
+| 28 | Detail: flood mitigation and the rising water | **COMPLETE** as `GAME_PLAN.md` Batch 38 - [note](docs/balance/batch38-flood-defences.md) - a Seawall (4 m a level, derived), terracing, evacuation; the throttle as a projection with every machine off; a water plane in a reference frame; flooding on in new worlds, a grace for old saves (v20) |
 
 > **Batch 10 was not in the original plan.** Every batch note from 6 onward closed with "Batches 3-N
 > have had no adversarial review". Batches 1 and 2 got one and it paid - 18 defects and a blocker.
@@ -989,15 +989,17 @@ then fill in the rest."
   real `advance`.
 - The Batch 18 bootstrap is re-measured with deposits, and the note records how it changed.
 
-## Batch 28 - Detail: flood mitigation and the rising water - NOT STARTED
+## Batch 28 - Detail: flood mitigation and the rising water - COMPLETE (as GAME_PLAN Batch 38)
 
 **Goal.** Detail §6 step 7: "Add mitigation: dikes, terracing, evacuation, and the macro
 throttle-for-time link (section 4.5), plus the rising water-plane visualization (4.6)."
 
-- [ ] Dikes (a building that raises `dike_height`), terracing (flatten a footprint for
-  materials), and evacuation or relocation (conflict 8). All saved as true state.
-- [ ] The throttle link: a forecast that shows how much time slowing the water buys.
-- [ ] The water plane at `sea_level_m`, with a shoreline that moves inland as it rises (§4.6).
+- [x] Dikes (a building that raises `dike_height`), terracing (flatten a footprint for
+  materials), and evacuation or relocation (conflict 8). All saved as true state. - the Seawall,
+  Raise its ground and evacuation; relocation not built (GAME_PLAN Batch 38)
+- [x] The throttle link: a forecast that shows how much time slowing the water buys. - a projection
+  with every machine off (GAME_PLAN Batch 38)
+- [x] The water plane at `sea_level_m`, with a shoreline that moves inland as it rises (§4.6).
 
 **Exit gate.**
 - Each defence measurably buys time: the flood-crossing year with the defence minus without,

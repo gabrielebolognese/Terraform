@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 37
-in_progress_batch: 38
+last_completed_batch: 38
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -1757,5 +1757,82 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     decisions) still stand.
 
 ### Batch 38 - Flood defences and the rising water; flooding on
-- status: in progress
+- status: complete
+- note: docs/balance/batch38-flood-defences.md
+- manual: docs/manual/cities.md (new section: The rising sea; the city screen's The sea; founding),
+  docs/manual/buildings.md (Against the sea: the Seawall), docs/manual/controls.md (Raise its
+  ground, Evacuate its people), docs/manual/alerts-and-statistics.md (the Flood warning alert),
+  docs/manual/the-planet.md (a city's flood line, switching machines off),
+  docs/manual/worlds-and-saving.md (the sea while away), docs/manual/update-notes.md (Update 38,
+  the current known issues), docs/manual/README.md (contents, the game in one minute)
+- commits: 9ff996f (started), 59e5883, d7c887e, b8f354e, ef064af, and the completing commit
 - sessions: 1 (2026-10-16)
+- found:
+  - the throttle link as planned (the forecast at current rate with the water slowed) would show
+    nothing: with every machine off, the melt rate of the moment is the same to three places
+    (0.193, 0.402, 0.500 m a year at years 290, 310, 330). Built as a projection, 100 years on,
+    as it is and with every machine off; it buys real years (finding 1).
+  - a Seawall the water could take collapsed its own dike: on low ground the city fell exactly as
+    with no wall. The wall now stands until the city falls.
+  - three tests passed with their rule removed (injections 5, 19, 25), each strengthened.
+  - five test premises of mine were wrong (the warning margin; a fixture with no life support; a
+    dome over the wall's site; the grace outlasting the offline cap; pixel-sampling the water,
+    where a hill and the boundary rightly hid tiles) - each found when the test first ran.
+  - founding under the sea was possible (a city lost on its first substep); refused now.
+  - the first full run: the vehicles scene's metropolis stands under the terraformed planet's sea
+    (refused with the sea on; kept on its measured world), and the example's metropolises lack a
+    Seawall (left out of "every structure", their sites 300 m above the sea).
+  - in the burst a full 32 m wall buys a -6,000 m city one substep; near the sea's final level
+    (-3,090 m) two levels save a city 15 m under it for good.
+  - the Seawall drew with clutter on its top and 3.6% off its colour far away; both fixed.
+  - docs/AUTO_BATCH_SETUP.md (untracked, not this batch's) left as it is.
+- decisions:
+  - Flooding in new worlds only (NEW_WORLD_OVERRIDES; a Sandbox keeps it off); old worlds keep the
+    tuning they recorded (Batch 27), as every feature since Batch 29 - the grace for old saves is
+    built and tested in the simulation (a v19 save loaded under a flooding tuning).
+  - The grace (FLOOD_GRACE_YEARS 36 city-years, 20 min at 1x) to every standing city of an old save
+    by the v19 -> v20 migration: no physics in a migration.
+  - The dike as a building (the Seawall, 3 x 1, 200 materials, one a settlement), its height
+    derived from its level (DIKE_M_PER_LEVEL 4 m), never stored.
+  - The dike lifts the datum for the tiles too (§4.2 writes the tile rule against the bare base;
+    a dike that kept no tile dry would hold nothing back).
+  - The Seawall stands until the city falls.
+  - Terracing raises a building's footprint TERRACE_STEP_M (2 m) over its highest corner, paid
+    TERRACE_MATERIALS_PER_M (4) a tile-metre, recorded as grades.
+  - Evacuation to the nearest cities the sea does not threaten, by their free homes; the city left
+    evacuated (no settlers, no growth); refused for a city out of the sea's way. Relocation not
+    built (Open).
+  - The throttle as a projection with every machine off (THROTTLE_HORIZON_YEARS 100,
+    THROTTLE_STEP_YEARS 0.25), asked once a sim-year of the world while a city is warned.
+  - No city founded where the sea already stands, in a world that floods.
+  - "Machines" in the words, as the planet's panel says.
+- verification: typecheck green; build green; build:web green (682.79 kB JS, 231.21 kB gzip, 52.54
+  kB CSS); the built page, script and styles served and fetched over HTTP (the script holds the
+  defences' words, the styles .city-flood); npx vitest run --maxWorkers=2 --minWorkers=1: 129
+  files, 1,555 tests, all passed (650 s; the Known-red opening test passed). The first full run
+  had two failures (above), fixed before this run. Flooding is off by default: the golden run, the
+  planet's golden frames, the city's reference and terrain frames and the Batch 3 score are in the
+  suite as they were; the structures sheet re-rendered with the Seawall and looked at.
+- measured: the wall holds the fixture's low city 5.67 substeps a level (37 -> 43, 49, 60);
+  terracing its -11 m depot 2.27 m, 3 substeps (11 -> 14); switching every machine off at year
+  290 buys cities at -6,000, -5,000, -4,400 m 7.75, 19.75, 48 years through a real advance, the
+  forecast exact (within 0.31 yr at the Standard pace); a v19 city 10 m under stands its 144
+  grace substeps, warned, and falls on the 145th; the water plane's frame at 0.003% (10 cm of
+  waterline is 0.035%); the picture's water matches the simulation tile for tile; Batch 28's
+  pacing unchanged (no liquid water on the reference arc before about year 275).
+- injections: 47 faults, one at a time, each file restored from a copy and checked: 44 caught at
+  once, 3 caught once their test was strengthened (5, 19, 25). The table is in the note.
+- review request: BUILD_PLAN.md GAME_PLAN.md README.md docs/PROGRESS.md
+  docs/balance/batch38-flood-defences.md docs/design/macro-world.md docs/frames/city-flood.png
+  docs/frames/structures-sheet.png docs/manual/README.md docs/manual/alerts-and-statistics.md
+  docs/manual/buildings.md docs/manual/cities.md docs/manual/controls.md docs/manual/the-planet.md
+  docs/manual/update-notes.md docs/manual/worlds-and-saving.md src/harness/city-frames.ts
+  src/harness/example.ts src/harness/flood-golden.test.ts src/harness/metropolis.test.ts
+  src/render/city.ts src/render/structures.ts src/render/vehicles.test.ts src/sim/index.ts
+  src/sim/micro/buildings.ts src/sim/micro/defences.test.ts src/sim/micro/defences.ts
+  src/sim/micro/flood-forecast.test.ts src/sim/micro/flood.ts src/sim/micro/registry.ts
+  src/sim/micro/settlement-save.test.ts src/sim/micro/settlement.ts src/sim/micro/view.ts
+  src/sim/objectives.test.ts src/sim/planets/mars.ts src/sim/save.ts src/sim/throttle.test.ts
+  src/sim/throttle.ts src/sim/tuning.ts src/sim/types.ts src/web/city.ts
+  src/web/decisions-gate.test.ts src/web/flood-defences.test.ts src/web/flood-warning.ts
+  src/web/game-tuning.ts src/web/game.ts src/web/pace.test.ts src/web/style.css
