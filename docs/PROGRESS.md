@@ -770,3 +770,55 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   src/web/decision-words.ts src/web/decisions-gate.test.ts src/web/decisions.test.ts
   src/web/decisions.ts src/web/first-hour.test.ts src/web/game-tuning.ts src/web/game.ts
   src/web/offline-words.ts src/web/pace.test.ts src/web/style.css
+- review 1: rejected
+  1. The note gives the wrong length for the run behind one of its measurements.
+     `docs/balance/batch33-events.md:174-175` says "In four hours at Standard the scripted world met
+     4 events (a failure, a ship, an outbreak, a meteor), the first at 33 minutes." The run that
+     gives those four is `playPacing(STANDARD, 4 * HOUR)` as `src/web/pace.test.ts` calls it, and
+     with `stopWhenDone` (the default) it stops once every moment is reached, at 2.03 h, not four
+     hours. Measured in this review (`worldTuning("standard", 0, "standard")`):
+     - stopping when done: 2.03 h, 4 resolved (failure at 33 min, ship 56, outbreak 96, meteor
+       111);
+     - the full four hours (`stopWhenDone` false): 6 resolved (the same four, then outbreaks at
+       139 and 160 min).
+     Read as written, the line says about one event an hour. The note's own design figure, the
+     manual and GAME_PLAN all say about one every 25 minutes. Needed: correct the line to say
+     what was measured (4 events in the 2.03 h the run lasts, or 6 in four hours, or both, with
+     their times).
+
+  Checked in this round, and sound:
+  - Typecheck, `build:web` (567.97 kB JS, 193.34 kB gzip; Vite's 500 kB warning, as recorded
+    since Batch 31) and `build` are green.
+  - Full suite (`--maxWorkers=2 --minWorkers=1`): 115 files, 1,347 tests, all passed (565 s; the
+    Known-red opening test passed).
+  - Every deliverable is built. Earth's request is left to Batch 34, as the plan's own deliverable
+    says. The exit gate is met by tests in `src/web/decisions-gate.test.ts`:
+    - the same world is `toEqual` in one call, in ragged chunks, offline from a save, and with the
+      player's answers given at the same substeps;
+    - each choice is measured through a real `advance` against the town alone;
+    - per event, a choice dominates the default at the deadline;
+    - `DECISIONS_ENABLED` is 0 by default, and new Standard and Terraformed worlds turn it on.
+  - Two injections re-run, one at a time, each file restored and `git status` checked clean
+    after each:
+    - #6, the deck's off-switch removed from `stepDecisions`, is caught by "changes nothing with
+      events off";
+    - #21, the quarantine no longer stopping growth, is caught by the gate's outbreak test (76.7
+      births where 0 are allowed).
+  - The note's 141 cards dealt in 200 slots of seed 7 is re-measured: 141.
+  - Simulation rules hold:
+    - deck and outcomes are in `advance`, per substep, after the cities' own;
+    - effects count down in `settlementStep`;
+    - `src/sim/` imports nothing from the browser;
+    - the card writes only through `chooseDecision`, an action like claiming an objective;
+    - every new constant is in `tuning.ts` and the section 10 table;
+    - save v18 has its migration and a test loading a v17 save;
+    - worlds made before keep their recorded tuning, so events stay off in them.
+  - The manual was checked against the code:
+    - the Spaceport can fail (it makes water, oxygen and food);
+    - a Medical Center shelters 400 people a level;
+    - **Show** *city* selects the failing building (`game.ts:816`);
+    - Standard worlds offer 2x and 3x;
+    - a Terraformed start's planet is already old, so cards can come at once.
+  - Every decision is one a bare "Go" would accept, and none deletes or overwrites player data.
+  - Seen, not a ground for rejection: in `src/web/city.ts:112` the doc comment of `seconds` was
+    left above `effectWords`'s own.
