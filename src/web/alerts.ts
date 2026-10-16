@@ -23,14 +23,15 @@
  */
 
 import type { BuildingType, HabitatChannels, MicroResource, Settlement, SettlementStep, SimState, Tuning } from "../sim/index.js";
-import { BUILDING_DEFS, MICRO_RESOURCES, constructionOf, eventsBeginningIn, frameOf, objectiveStatus, settlementStep, simYear, submerged, tileKey } from "../sim/index.js";
+import { BUILDING_DEFS, MICRO_RESOURCES, constructionOf, decisionText, eventsBeginningIn, frameOf, objectiveStatus, settlementStep, simYear, submerged, tileKey } from "../sim/index.js";
+import { decisionHeadline, deadlineWords, outcomeWords } from "./decision-words.js";
 import { formatDuration } from "./build-time.js";
 import { ALERT_QUIET_MS, STORM_WARN_SECONDS } from "./config.js";
 import { floodWarnings } from "./flood-warning.js";
 import { MADE_BY, RESOURCE_NAMES, offlineWords } from "./offline-words.js";
 import { settlementLabel } from "./settlement-label.js";
 
-export type AlertKind = "blackout" | "shortage" | "offline" | "flood" | "storm" | "built" | "upgraded" | "objective";
+export type AlertKind = "blackout" | "shortage" | "offline" | "flood" | "storm" | "built" | "upgraded" | "objective" | "decision" | "resolved";
 
 /** Urgent and notice interrupt with a toast; a record only goes in the centre. */
 export type AlertPriority = "urgent" | "notice" | "record";
@@ -378,6 +379,8 @@ export class AlertWatch {
   /** By settlement: what the last look read, so an unchanged settlement is passed over. */
   private seen = new Map<string, { buildings: Settlement["buildings"]; jobs: Settlement["jobs"]; queue: Settlement["buildQueue"]; claims: Settlement["claims"] }>();
   private ready = new Set<string>();
+  /** Batch 33: the events whose resolution has been announced (or was already past on the first look). */
+  private resolved = new Set<number>();
   private slice: Slice = { budgetMs: Infinity, clock: () => 0, kept: new Map(), cursor: 0, unseen: new Set(), arrived: new Set() };
 
   observe(input: AlertInput): AlertLook {
@@ -386,7 +389,7 @@ export class AlertWatch {
     this.first = false;
     const slice = input.budgetMs === undefined ? undefined : Object.assign(this.slice, { budgetMs: input.budgetMs, clock: input.clock ?? (() => 0) });
     this.slice.arrived.clear();
-    const now = conditions(state, input.env, input.liquidRatePerYear, t, input.speed ?? 1, slice);
+    const now = [...decisionConditions(state, t, input.speed ?? 1), ...conditions(state, input.env, input.liquidRatePerYear, t, input.speed ?? 1, slice)];
     const fresh: Alert[] = [];
     // A settlement seen for the first time this look (its turn come at last, on a world just opened) takes its bearings.
     const arrived = (a: Alert): boolean => a.target.kind === "city" && this.slice.arrived.has(a.target.id);
@@ -454,6 +457,18 @@ export class AlertWatch {
       this.levels.set(s.id, levels);
     }
 
+    // Batch 33: each event resolved since the last look - a record of what was chosen and what it did, a notice
+    // when nothing was (the default, always the worst, came about). The first look takes its bearings.
+    for (const r of state.decisions.log) {
+      if (this.resolved.has(r.id)) continue;
+      this.resolved.add(r.id);
+      if (first) continue;
+      const city = state.settlements.find((c) => c.id === r.settlement);
+      const where = city === undefined ? "a city" : settlementLabel(city);
+      fresh.push({ key: `resolved:${r.id}`, kind: "resolved", priority: r.chosen === null ? "notice" : "record", title: decisionHeadline(r, where), text: outcomeWords(r, t), count: 1, target: { kind: "city", id: r.settlement, at: null } });
+    }
+    if (this.resolved.size > 4 * t.DECISION_LOG) this.resolved = new Set(state.decisions.log.map((r) => r.id));
+
     for (const o of objectiveStatus(state, t)) {
       const ready = o.open && !o.claimed && o.progress.done;
       if (!ready) {
@@ -476,6 +491,24 @@ export class AlertWatch {
     this.levels.clear();
     this.seen.clear();
     this.ready.clear();
+    this.resolved.clear();
     this.slice = { budgetMs: Infinity, clock: () => 0, kept: new Map(), cursor: 0, unseen: new Set(), arrived: new Set() };
   }
+}
+
+/**
+ * Batch 33: an event waiting on a decision is a condition - urgent, for as
+ * long as nothing is chosen - so it interrupts once as it opens and stays in
+ * the centre's "Now" until it is answered (or comes to its default).
+ */
+function decisionConditions(state: SimState, t: Tuning, speed: number): Alert[] {
+  if (!t.DECISIONS_ENABLED) return [];
+  const out: Alert[] = [];
+  for (const e of state.decisions.open) {
+    if (e.chosen !== null) continue;
+    const city = state.settlements.find((c) => c.id === e.settlement);
+    const where = city === undefined ? "a city" : settlementLabel(city);
+    out.push({ key: `decision:${e.id}`, kind: "decision", priority: "urgent", title: decisionHeadline(e, where), text: `${decisionText(e, t)} Decide within ${deadlineWords(e, state.steps, t, speed)}.`, count: 1, target: { kind: "city", id: e.settlement, at: e.at } });
+  }
+  return out;
 }

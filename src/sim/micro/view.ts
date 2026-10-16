@@ -70,6 +70,12 @@ export interface CityBuildingView {
    * it reaches while it runs. Absent for anything else, and with needs off.
    */
   readonly reaches?: number;
+  /**
+   * Batch 33: a fault left by an equipment failure - the share of its output
+   * it makes (0: broken down, offline) and the city-years until it is past.
+   * Absent for a building without one.
+   */
+  readonly fault?: { readonly factor: number; readonly remaining: number };
 }
 
 export interface CityView {
@@ -316,6 +322,14 @@ function jobSite(s: Settlement, j: Exclude<SettlementJob, { kind: "rocket" }>): 
 
 export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityView {
   const step = settlementStep(s, env, t, t.SUBSTEP_YEARS * t.CITY_CLOCK);
+  // Batch 33: each faulty building's fault, the worst if two, by its corner.
+  let faults: Map<number, { factor: number; remaining: number }> | null = null;
+  for (const e of s.effects) {
+    if (e.kind !== "fault" || e.tile === null) continue;
+    faults ??= new Map();
+    const was = faults.get(e.tile);
+    if (was === undefined || e.factor < was.factor) faults.set(e.tile, { factor: e.factor, remaining: e.remaining });
+  }
   const home = housing(s, t);
   const powerLoad = step.production.power > 0 ? Math.min(1, step.consumption.power / step.production.power) : 0;
   const occupancy = home > 0 ? Math.min(1, s.population / home) : 0;
@@ -378,6 +392,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     baseElevationM: siteElevation(s.lat, s.lon, t),
     buildings: s.buildings.map((b, index) => {
       const operable = step.operable[index] === true;
+      const fault = faults === null ? undefined : faults.get(tileKey(b.tx, b.ty));
       const activity = !operable
         ? 0
         : POWER_PLANTS.has(b.type)
@@ -393,7 +408,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
       const baseZ = bases[index]!;
       const drowned = step.flood !== null && submerged(b, step.flood);
       const reaches = reached !== null && PROVIDERS.has(b.type) ? reached[index]! : undefined;
-      return { index, type: b.type, tx: b.tx, ty: b.ty, size, ...(depth === size ? {} : { depth }), operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null, ...(reaches === undefined ? {} : { reaches }) };
+      return { index, type: b.type, tx: b.tx, ty: b.ty, size, ...(depth === size ? {} : { depth }), operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null, ...(reaches === undefined ? {} : { reaches }), ...(fault === undefined ? {} : { fault }) };
     }),
     population: s.population,
     housing: home,

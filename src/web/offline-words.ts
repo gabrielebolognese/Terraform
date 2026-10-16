@@ -25,7 +25,7 @@ export const RESOURCE_NAMES: Readonly<Record<MicroResource, string>> = {
 };
 
 /** What the words need of a building: the view's own fields. */
-export type OfflineBuilding = Pick<CityBuildingView, "type" | "operable" | "submerged" | "network"> & { readonly construction?: number | null | undefined };
+export type OfflineBuilding = Pick<CityBuildingView, "type" | "operable" | "submerged" | "network"> & { readonly construction?: number | null | undefined; readonly fault?: CityBuildingView["fault"] | undefined };
 
 /**
  * Why a building is not running, or null for one that is. `shortages` are
@@ -35,6 +35,8 @@ export function offlineWords(b: OfflineBuilding, kind: SettlementKind, shortages
   if (b.operable) return null;
   if (b.construction !== undefined && b.construction !== null) return `Under construction: ${Math.round(b.construction * 100)}% built. A rover is at work on it.`;
   if (b.submerged) return "Offline: under water.";
+  // Batch 33: an equipment failure left to break down.
+  if (b.fault !== undefined && b.fault.factor === 0) return "Broken down: an equipment failure nobody saw to. It runs again once the fault is past.";
   if (b.network !== null) {
     const lacks = b.network.resources;
     // Power comes by cable; everything else by corridor - say which to lay, to what.

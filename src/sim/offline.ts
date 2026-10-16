@@ -109,6 +109,11 @@ export interface AwaySummary {
    * being built.
    */
   readonly builds: readonly string[];
+  /**
+   * Batch 33: events that came to their deadline while away, and how many of
+   * them nobody had answered (each came to its default).
+   */
+  readonly events: { readonly resolved: number; readonly unanswered: number };
   /** One line for the player, picking whatever actually changed most. */
   readonly headline: string;
 }
@@ -194,7 +199,15 @@ export function summariseAway(before: SimState, after: SimState, t: Tuning): Awa
   const shown = builds.slice(0, 3);
   const more = builds.length - shown.length;
   const line = shown.length === 0 ? "" : ` In the cities, ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}.`;
-  return { simYears, phasesGained, deltas, builds, headline: planet + line };
+  // Batch 33: the events that came and went, and how many had no answer - their history is in the alert centre.
+  const came = after.decisions.log.filter((r) => r.resolved > before.steps);
+  const unanswered = came.filter((r) => r.chosen === null).length;
+  const events = { resolved: came.length, unanswered };
+  const eventLine =
+    came.length === 0
+      ? ""
+      : ` ${came.length === 1 ? "An event" : `${came.length} events`} came to a head${unanswered === 0 ? "" : unanswered === came.length ? (came.length === 1 ? ", unanswered" : ", none of them answered") : `, ${unanswered} unanswered`} - see Alerts, Event history.`;
+  return { simYears, phasesGained, deltas, builds, events, headline: planet + line + eventLine };
 }
 
 function headlineFor(simYears: number, phasesGained: readonly Phase[], d: AwayDeltas): string {

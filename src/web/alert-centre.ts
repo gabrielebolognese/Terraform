@@ -12,6 +12,10 @@
  *
  * Every line and toast clicks through to where it happened. Both read what
  * the alerts derived; neither writes anything.
+ *
+ * Batch 33: the centre's third part is the world's event history - every
+ * event that asked for a decision, what was chosen and what it did - kept in
+ * the world, so unlike "What happened" it survives a reload.
  */
 
 import type { Alert, AlertTarget } from "./alerts.js";
@@ -34,11 +38,24 @@ export interface LogLine {
 
 const PRIORITY_WORDS: Readonly<Record<Alert["priority"], string>> = { urgent: "Urgent", notice: "Notice", record: "Done" };
 
+/** A line of the event history (Batch 33): an event resolved, when (the world's year), and where it clicks through to. */
+export interface HistoryLine {
+  readonly key: string;
+  readonly title: string;
+  readonly text: string;
+  readonly year: number;
+  /** Nothing was chosen: the default came about. */
+  readonly ignored: boolean;
+  readonly target: AlertTarget;
+}
+
 export class AlertCentre {
   readonly toggle: HTMLButtonElement;
   readonly panel: HTMLElement;
   private readonly nowList: HTMLElement;
   private readonly logList: HTMLElement;
+  private readonly historyList: HTMLElement;
+  private history: readonly HistoryLine[] = [];
   private now: readonly Alert[] = [];
   private readonly lines: LogLine[] = [];
   private key = "";
@@ -62,7 +79,8 @@ export class AlertCentre {
     head.append(el("h2", "", "Alerts"), close);
     this.nowList = el("ul", "alerts-now");
     this.logList = el("ul", "alerts-log");
-    this.panel.append(head, el("h3", "alerts-section", "Now"), this.nowList, el("h3", "alerts-section", "What happened"), this.logList);
+    this.historyList = el("ul", "alerts-history");
+    this.panel.append(head, el("h3", "alerts-section", "Now"), this.nowList, el("h3", "alerts-section", "What happened"), this.logList, el("h3", "alerts-section", "Event history"), this.historyList);
     host.append(this.toggle, this.panel);
   }
 
@@ -102,9 +120,20 @@ export class AlertCentre {
     return this.lines;
   }
 
+  /** The world's event history, newest first (Batch 33): kept in the world, so it is the same after a reload. */
+  setHistory(lines: readonly HistoryLine[]): void {
+    this.history = lines;
+    if (this.isOpen) this.render();
+  }
+
+  get historyLines(): readonly HistoryLine[] {
+    return this.history;
+  }
+
   clear(): void {
     this.now = [];
     this.lines.length = 0;
+    this.history = [];
     this.key = "";
     this.toggle.textContent = "Alerts";
     this.toggle.removeAttribute("data-urgent");
@@ -112,7 +141,7 @@ export class AlertCentre {
   }
 
   private render(): void {
-    const key = JSON.stringify([this.now.map((a) => [a.key, a.title, a.text]), this.lines.map((l) => [l.alert.key, l.times, l.alert.title])]);
+    const key = JSON.stringify([this.now.map((a) => [a.key, a.title, a.text]), this.lines.map((l) => [l.alert.key, l.times, l.alert.title]), this.history.map((h) => h.key)]);
     if (key === this.key) return;
     this.key = key;
     this.nowList.replaceChildren(
@@ -121,6 +150,22 @@ export class AlertCentre {
     this.logList.replaceChildren(
       ...(this.lines.length === 0 ? [el("li", "alerts-empty", "Nothing yet this session.")] : this.lines.map((l) => this.line(l.alert, l))),
     );
+    this.historyList.replaceChildren(...(this.history.length === 0 ? [el("li", "alerts-empty", "No events yet in this world.")] : this.history.map((h) => this.historyLine(h))));
+  }
+
+  private historyLine(h: HistoryLine): HTMLElement {
+    const item = el("li", "alert-line");
+    item.dataset["kind"] = "resolved";
+    item.dataset["ignored"] = String(h.ignored);
+    const go = el("button", "alert-go");
+    go.type = "button";
+    go.append(el("span", "alert-tag", h.ignored ? "Missed" : "Decided"), el("span", "alert-title", h.title), el("span", "alert-text", `Year ${Math.floor(h.year).toLocaleString("en")}. ${h.text}`));
+    go.addEventListener("click", () => {
+      this.setOpen(false);
+      this.onGo(h.target);
+    });
+    item.append(go);
+    return item;
   }
 
   private line(a: Alert, l: LogLine | null): HTMLElement {
