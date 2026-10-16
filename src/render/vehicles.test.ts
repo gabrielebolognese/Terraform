@@ -12,7 +12,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { CityDay, MetropolisScene } from "../harness/vehicles.js";
 import { cityDay, metropolisScene } from "../harness/vehicles.js";
 import type { CityView } from "../sim/index.js";
-import { cityView } from "../sim/index.js";
+import { cityView, makeTuning } from "../sim/index.js";
 import { worldTuning } from "../web/game-tuning.js";
 import type { CityQuality, CitySceneOptions } from "./city.js";
 import { CITY_BACKGROUND, buildingTop, cityChunkRange, cityChunkReach, cityScene, drawCarShapes, drawRoverShapes, trainCars, trainLinesOf } from "./city.js";
@@ -22,8 +22,12 @@ import { rasterize } from "./raster.js";
 import type { Footprint, TrainCar } from "./vehicles.js";
 import { ROVER_HALF_L, TRAIN_DWELL_S, cornersOf, footprintsOverlap, roversOf } from "./vehicles.js";
 
-/** A new world's tuning: the Standard pace, routes on. */
-const T = worldTuning("standard", 0, "standard");
+/**
+ * A new world's tuning: the Standard pace, routes on - as Batch 29 measured it, with no sea. Since Batch 38 a
+ * new world floods, and the scene's metropolis stands where the terraformed planet's sea covers the ground: it
+ * could no longer be founded there. Kept on the world it was measured on.
+ */
+const T = makeTuning({ ...worldTuning("standard", 0, "standard"), FLOODING_ENABLED: 0 });
 const SUBSTEP = T.SUBSTEP_YEARS * T.CITY_CLOCK;
 
 let day: CityDay;

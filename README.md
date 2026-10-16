@@ -201,6 +201,20 @@ building would make there, from the simulation's own rule. Batch 18's bootstrap,
 done 13 years sooner with the four on their deposits; the scripted pacing moves by 4% or less, and
 chasing far deposits starves a city (its corridors and cables cost what it needs).
 
+**Flood defences and the rising water** (Batch 38). In a new Standard or Terraformed world the sea
+floods cities (Batches 24-25, now on). A **Seawall** - one a settlement - raises its datum 4 m a
+level (`dike_height`, derived from the wall, never stored), and every flood rule reads the effective
+base; it stands until the city falls. **Raise its ground** sends a rover to lift a building's
+footprint 2 m over its highest corner, paid by the metre and recorded as grades. **Evacuate its
+people** moves a threatened city's people to the nearest safe cities with homes, and leaves it to
+the sea. The throttle link is a projection - the planet run on as it is and with every machine off
+- because switching machines off leaves the melt rate of the moment where it was: at year 290 it
+buys cities at -6,000, -5,000 and -4,400 m 7.75, 19.75 and 48 years, named exactly. The water plane
+clips each ground triangle at the waterline, behind the wall and beyond it, in a committed reference
+frame and tile for tile the simulation's flood. A city carried from an older save gets a grace
+before the sea may take it (save v20); no city is founded under the sea. In the burst, metres of
+wall buy weeks; near the sea's final level, a wall saves a city for good.
+
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved
