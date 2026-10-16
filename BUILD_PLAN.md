@@ -33,7 +33,7 @@ This file is the source of truth for *in what order* we build it, and for what "
 | 24 | Detail: the flood model, headless | **COMPLETE** - [note](docs/balance/batch24-flood.md) - behind FLOODING_ENABLED=0; six weak tests found by injection and fixed; browser stays off until Batch 25's warnings |
 | 25 | Detail: flood forecast and warnings | **COMPLETE** - [note](docs/balance/batch25-flood-forecast.md) - forecast in water, not §4.4's metres (58 yr wrong across a kink); every crossing within 0.07 yr; 50-year alert horizon; browser opt-in left to the user |
 | 26 | Detail: procedural structures and the instancing renderer | **COMPLETE** - [note](docs/balance/batch26-structures.md) - the shape pipeline, not GPU instancing (conflict 6); all 28 types at two levels on a reference sheet; later batches continue in `GAME_PLAN.md` |
-| 27 | Detail: terrain resource deposits | NOT STARTED - detail §3, §6 step 6 |
+| 27 | Detail: terrain resource deposits | **COMPLETE** as `GAME_PLAN.md` Batch 37 - [note](docs/balance/batch37-deposits.md) - four deposits derived at site coordinates, never stored; the bonus by footprint share through `advance`, in new worlds only; Batch 18's bootstrap re-measured (13 years sooner) |
 | 28 | Detail: flood mitigation and the rising water | NOT STARTED - detail §4.5, §4.6, §6 step 7 |
 
 > **Batch 10 was not in the original plan.** Every batch note from 6 onward closed with "Batches 3-N
@@ -973,15 +973,15 @@ then fill in the rest."
 - The draw cost is measured: draw calls and frame time for a dense reference city, stated with
   the numbers.
 
-## Batch 27 - Detail: terrain resource deposits - NOT STARTED
+## Batch 27 - Detail: terrain resource deposits - COMPLETE (as GAME_PLAN Batch 37)
 
 **Goal.** Detail §6 step 6: "Add terrain resource deposits (section 3.1) and siting bonuses."
 
-- [ ] Deposits derived from the terrain (§3.1): ore on ridges, ice in basins, vents on faults, and
+- [x] Deposits derived from the terrain (§3.1): ore on ridges, ice in basins, vents on faults, and
   high flats for solar.
-- [ ] Siting bonuses through each building's `efficiency`, behind `SETTLEMENTS_ENABLED`
+- [x] Siting bonuses through each building's `efficiency`, behind `SETTLEMENTS_ENABLED` - and their own `DEPOSITS_ENABLED`, on in new worlds only (GAME_PLAN Batch 37)
   (conflict 9).
-- [ ] Deposits visible in the city view before placing.
+- [x] Deposits visible in the city view before placing.
 
 **Exit gate.**
 - The same site always has the same deposits, and none are stored unless depletion is modelled.
