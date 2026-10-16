@@ -215,11 +215,12 @@ describe("the assembled game", () => {
   function play(state: SimState, sound: SoundEngine): { root: HTMLElement; handle: GameHandle } {
     const root = document.createElement("div");
     document.body.append(root);
-    const handle = startGame(root, { state, tuning: T, fresh: () => marsStart(undefined, T), sound }, { save: () => {}, saveDue: () => false, saveFailures: () => 0, onMenu: () => {}, onBackToTitle: () => {} });
+    // Every speed (the debug setting), so a build can finish within the test.
+    const handle = startGame(root, { state, tuning: T, fresh: () => marsStart(undefined, T), sound, debugSpeeds: true }, { save: () => {}, saveDue: () => false, saveFailures: () => 0, onMenu: () => {}, onBackToTitle: () => {} });
     return { root, handle };
   }
 
-  it("is silent until a gesture, then plays the phase's music, the wind, the city's machinery, and a building placed", async () => {
+  it("is silent until a gesture, then plays the phase's music, the wind, the city's machinery, a building placed and finished, and the alert it brings", async () => {
     const s = city();
     const sound = engine();
     const { root, handle } = play(s, sound);
@@ -244,7 +245,7 @@ describe("the assembled game", () => {
       expect(root.querySelector<HTMLElement>(".city")!.hidden).toBe(false);
       expect(sound.ambienceLevels.machinery).toBeGreaterThan(0);
 
-      // A solar array placed through the canvas, as a player would: the place sound, once.
+      // A greenhouse placed through the canvas, as a player would: the place sound, once.
       const now = handle.state;
       const env = habitat(now.reservoirs, derive(now.reservoirs, worldEnv(now, NEUTRAL_ENV, T), T), T, 0);
       const view = cityView(now.settlements[0]!, env, T);
@@ -254,7 +255,7 @@ describe("the assembled game", () => {
           const a = (k / (8 * r)) * 2 * Math.PI;
           const tx = Math.round(view.tiles / 2 + r * Math.cos(a));
           const ty = Math.round(view.tiles / 2 + r * Math.sin(a));
-          if (placeBuilding(now, "settlement-1", "solar_array", tx, ty, T).ok) {
+          if (placeBuilding(now, "settlement-1", "greenhouse", tx, ty, T).ok) {
             spot = { tx, ty };
             break;
           }
@@ -262,20 +263,63 @@ describe("the assembled game", () => {
       }
       expect(spot, "somewhere on screen to build").not.toBeNull();
       const before = now.settlements[0]!.buildings.length;
-      root.querySelector<HTMLButtonElement>('.city-card[data-type="solar_array"]')!.click();
-      const size = BUILDING_DEFS.solar_array.footprint;
+      root.querySelector<HTMLButtonElement>('.city-card[data-type="greenhouse"]')!.click();
+      const size = BUILDING_DEFS.greenhouse.footprint;
       const at = { x: spot!.tx + Math.floor((size - 1) / 2) + 0.5, y: spot!.ty + Math.floor((size - 1) / 2) + 0.5 };
       const z = view.groundZ[Math.floor(at.y) * view.tiles + Math.floor(at.x)]!;
       const iso = isoProject(at.x, at.y, z);
       const p = isoToScreen(centreCamera(view.tiles, 800), 800, 600, iso.sx, iso.sy);
-      canvas.dispatchEvent(new PointerEvent("pointerdown", { clientX: p.px, clientY: p.py, pointerId: 1, button: 0 }));
-      canvas.dispatchEvent(new PointerEvent("pointerup", { clientX: p.px, clientY: p.py, pointerId: 1, button: 0 }));
+      const click = () => {
+        canvas.dispatchEvent(new PointerEvent("pointerdown", { clientX: p.px, clientY: p.py, pointerId: 1, button: 0 }));
+        canvas.dispatchEvent(new PointerEvent("pointerup", { clientX: p.px, clientY: p.py, pointerId: 1, button: 0 }));
+      };
+      click();
       expect(handle.state.settlements[0]!.buildings.length, root.querySelector(".city-hint")?.textContent ?? "").toBe(before + 1);
       expect(sound.played.get("place")).toBe(1);
-      await wait(300);
+      // The same place again is refused: no sound for a building not placed.
+      root.querySelector<HTMLButtonElement>('.city-card[data-type="greenhouse"]')!.click();
+      click();
+      expect(handle.state.settlements[0]!.buildings.length).toBe(before + 1);
       expect(sound.played.get("place")).toBe(1);
+      expect(sound.played.get("built") ?? 0).toBe(0);
+
+      // Fast, until it is finished: its sound once, and - standing on no network - the alert that it is offline.
+      [...root.querySelectorAll<HTMLButtonElement>(".hud-speed")].find((b) => b.textContent === "1000x")!.click();
+      for (let i = 0; i < 40 && sound.played.get("built") === undefined; i += 1) await wait(100);
+      await wait(1200);
+      expect(sound.played.get("built")).toBe(1);
+      root.querySelector<HTMLButtonElement>(".alerts-toggle")!.click();
+      const centre = [...root.querySelectorAll(".alerts-now .alert-title")].map((n) => n.textContent);
+      expect(centre.some((t) => /Greenhouse offline in Ares/.test(t ?? "")), centre.join(" | ")).toBe(true);
+      expect((sound.played.get("alert") ?? 0) + (sound.played.get("urgent") ?? 0)).toBeGreaterThan(0);
     } finally {
       handle.stop();
     }
-  }, 20_000);
+  }, 30_000);
+
+  it("chimes for an objective done, with its card", async () => {
+    // Batch 30's setting: a hundred people claimed, and the steady supply behind it done the moment it opens.
+    let s = foundSettlement(marsStart(undefined, T), "city", 0.31, -1.2, T, "Ares").state;
+    const g = s.settlements[0]!.buildings.find((b) => b.type === "headquarters")!;
+    s = { ...s, settlements: s.settlements.map((c) => ({ ...c, stores: { ...c.stores, materials: 400 } })) };
+    for (let k = 0; k < 3; k += 1) s = placeBuilding(s, "settlement-1", "habitat_dome", g.tx - 12 + 4 * k, g.ty - 10, T).state;
+    s = advance(s, 200, cfg);
+    const sample = { index: 0, population: 210, housing: 240, births: 0, deaths: 0, short: [0, 0, 0, 0, 0], stores: [0, 0, 0, 0, 0], net: [0, 0, 0, 0, 0] };
+    s = { ...s, settlements: s.settlements.map((c) => ({ ...c, population: 100, history: { ...c.history, samples: Array.from({ length: 20 }, () => sample) } })) };
+    const sound = engine();
+    const { root, handle } = play(s, sound);
+    try {
+      gesture();
+      await wait(400);
+      expect(sound.played.get("objective") ?? 0, "nothing on opening the world").toBe(0);
+      root.querySelector<HTMLButtonElement>(".objectives-toggle")!.click();
+      await wait(300);
+      root.querySelector<HTMLButtonElement>('.objective[data-id="city_first"] .objective-claim')!.click();
+      await wait(400);
+      expect(root.querySelector(".milestone-card")!.textContent).toContain("Objective done: Steady supply");
+      expect(sound.played.get("objective")).toBe(1);
+    } finally {
+      handle.stop();
+    }
+  });
 });
