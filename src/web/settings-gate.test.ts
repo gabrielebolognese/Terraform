@@ -212,22 +212,25 @@ function ares(): SimState {
 }
 
 /** A world played on its own page, frame by frame, with `settings` as the player's. */
-function play(state: SimState, settings: { current: Settings }, extra: Partial<GameOptions> = {}): { root: HTMLElement; handle: GameHandle; saves: { n: number } } {
+function play(state: SimState, settings: { current: Settings }, extra: Partial<GameOptions> = {}): { root: HTMLElement; handle: GameHandle; saves: { n: number }; menus: { n: number } } {
   const root = document.createElement("div");
   document.body.append(root);
   const saves = { n: 0 };
+  const menus = { n: 0 };
   const handle = startGame(root, { state, tuning: T, fresh: () => marsStart(undefined, T), debugSpeeds: true, settings, ...extra }, {
     save: () => {},
     saveDue: () => false,
     saveFailures: () => 0,
-    onMenu: () => {},
+    onMenu: () => {
+      menus.n += 1;
+    },
     onBackToTitle: () => {},
     saveNow: () => {
       saves.n += 1;
       return Promise.resolve("Saved.");
     },
   });
-  return { root, handle, saves };
+  return { root, handle, saves, menus };
 }
 
 /** Down to the first settlement, through its Open button, frames stepped until it is there. */
@@ -285,6 +288,31 @@ describe("the keys, in a world", () => {
       expect(handle.views.worldMap.isOpen).toBe(false);
       press("KeyS", { ctrlKey: true });
       expect(saves.n).toBe(1);
+    } finally {
+      handle.stop();
+    }
+  });
+
+  it("Esc closes the game menu in a city as in orbit, and the city under it does not hear it", () => {
+    drawCities();
+    frames.install();
+    const { root, handle, menus } = play(ares(), settingsOf());
+    try {
+      frames.step(2);
+      goDown(root, handle);
+      const city = handle.views.city;
+      city.show(0);
+      expect(city.selection).toBe(0);
+      // In a city with nothing in hand, Esc lets go of the selection and opens no menu (as ever).
+      press("Escape");
+      expect(city.selection).toBeNull();
+      expect(menus.n).toBe(0);
+      city.show(0);
+      // The menu open over the city (the App holds the world still behind it): Esc closes it, and the selection stays.
+      handle.setPaused(true);
+      press("Escape");
+      expect(menus.n, "the menu asked to close").toBe(1);
+      expect(city.selection, "the city did not hear it").toBe(0);
     } finally {
       handle.stop();
     }

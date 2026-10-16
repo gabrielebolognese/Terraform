@@ -103,7 +103,8 @@ function colourRules(css: string): string[] {
   return [...new Set(out)];
 }
 
-const words = (el: Element | null): string => (el === null ? "" : `${el.textContent ?? ""} ${el.getAttribute("aria-label") ?? ""}`.replace(/\s+/g, " ").trim());
+/** What an element says on screen: its text. A label only a screen reader hears is no cue for a player who cannot tell the colours apart. */
+const words = (el: Element | null): string => (el === null ? "" : (el.textContent ?? "").replace(/\s+/g, " ").trim());
 const up = (el: Element, sel: string): Element => el.closest(sel) ?? el;
 
 /** How each colour-coded element says its state without colour. */
@@ -607,7 +608,22 @@ describe("the colour-blind palettes, measured", () => {
       const pairs: [Rgb8, Rgb8][] = [[v.good, v.warn], [v.good, v.bad], [v.warn, v.bad]];
       return Math.min(...pairs.map(([a, b]) => apart(seenBy(a, kind), seenBy(b, kind))));
     };
-    for (const kind of ["deutan", "protan"] as const) expect(closest("red-green", kind), kind).toBeGreaterThan(closest("standard", kind));
+    /*
+     * Each pair (good-warning, good-bad, warning-bad), measured:
+     *   standard,    deutan   46.7  42.8  35.4     protan  51.8  75.4  50.8     tritan 143.5 174.0  50.5
+     *   red-green,   deutan  203.9 181.3  93.1     protan 225.0 187.5 122.5
+     *   blue-yellow, tritan  268.8 365.7 177.3
+     * Every pair bounded under its palette's measurement and over the standard's for the same eyes.
+     */
+    const pairs = (palette: Palette, kind: keyof typeof SIMULATE): number[] => {
+      const v = vars(palette);
+      return [[v.good, v.warn], [v.good, v.bad], [v.warn, v.bad]].map(([a, b]) => apart(seenBy(a!, kind), seenBy(b!, kind)));
+    };
+    for (const kind of ["deutan", "protan"] as const) {
+      for (const [i, d] of pairs("red-green", kind).entries()) expect(d, `red-green, ${kind}, pair ${i}`).toBeGreaterThan(80);
+      expect(closest("red-green", kind), kind).toBeGreaterThan(closest("standard", kind));
+    }
+    for (const [i, d] of pairs("blue-yellow", "tritan").entries()) expect(d, `blue-yellow, pair ${i}`).toBeGreaterThan(150);
     expect(closest("blue-yellow", "tritan")).toBeGreaterThan(closest("standard", "tritan"));
     document.documentElement.removeAttribute("data-palette");
   });

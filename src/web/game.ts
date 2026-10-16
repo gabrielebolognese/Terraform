@@ -398,6 +398,13 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       // The menu over the world takes no shortcut but its own key and Save.
       if (pausedFrom !== null && action !== "menu" && action !== "save") return;
       if (action === "menu") {
+        // The menu over the world: its key closes it, wherever it was opened - in a city too (it did not, before
+        // Batch 36) - and nothing under the menu hears the key as well.
+        if (pausedFrom !== null) {
+          e.stopImmediatePropagation();
+          hooks.onMenu();
+          return;
+        }
         if (founding !== null) {
           cancelFounding();
           return;
