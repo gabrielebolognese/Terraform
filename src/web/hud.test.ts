@@ -218,7 +218,8 @@ describe("readable without colour", () => {
       }),
     );
     const text = root.querySelector(".hud-feed-item")?.textContent ?? "";
-    expect(text).toMatch(/year 280\s+Mean temperature/);
+    // Batch 36: a milestone says so in words, between the year and the text.
+    expect(text).toMatch(/year 280\s+milestone\s+Mean temperature/);
   });
 
   it("prints the word 'warning' on a warning, rather than only colouring it", () => {

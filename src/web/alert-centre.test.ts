@@ -46,10 +46,11 @@ describe("the alert centre", () => {
     expect(centre.toggle.textContent).toBe("Alerts");
     expect(centre.toggle.getAttribute("aria-label")).toBe("Alerts: nothing needs you");
     centre.update([alert("a", "urgent"), alert("b", "notice")], [], 3);
-    expect(centre.toggle.textContent).toBe("Alerts (2)");
+    expect(centre.toggle.textContent).toBe("Alerts (2, 1 urgent)");
     expect(centre.toggle.hasAttribute("data-urgent")).toBe(true);
     expect(centre.toggle.getAttribute("aria-label")).toBe("Alerts: 2 need you, 1 urgent");
     centre.update([alert("b", "notice")], [], 4);
+    expect(centre.toggle.textContent).toBe("Alerts (1)");
     expect(centre.toggle.hasAttribute("data-urgent")).toBe(false);
   });
 

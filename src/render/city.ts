@@ -116,6 +116,12 @@ export interface CitySceneOptions {
    * move. Up close only: further out there are none.
    */
   readonly effects?: boolean;
+  /**
+   * The colour of land a city can claim now (Batch 36: the player's palette);
+   * absent, the green it always was. Land it must grow into is grey, and its
+   * edge dashed - the second cue, whatever the colours.
+   */
+  readonly claimReady?: { readonly r: number; readonly g: number; readonly b: number };
 }
 
 /** How opaque a building is drawn in building mode. */
@@ -3910,11 +3916,11 @@ function boundaryOf(view: CityView): Shape[] {
  * cells, following the hills, and an outline - green for a chunk the city
  * can claim now, grey for one it must grow into; brighter under the pointer.
  */
-function claimOverlay(view: CityView, chunks: NonNullable<CitySceneOptions["claimable"]>): Shape[] {
+function claimOverlay(view: CityView, chunks: NonNullable<CitySceneOptions["claimable"]>, ready: Rgb = rgb(0.45, 0.95, 0.55)): Shape[] {
   const out: Shape[] = [];
   const z = heightAt(view, false);
   for (const c of chunks) {
-    const base = c.ready ? rgb(0.45, 0.95, 0.55) : rgb(0.8, 0.8, 0.82);
+    const base = c.ready ? ready : rgb(0.8, 0.8, 0.82);
     const fill: Rgba = { ...base, a: c.hover ? 0.34 : 0.16 };
     const step = 4;
     for (let y = c.ty; y < c.ty + c.size; y += step) {
@@ -3925,6 +3931,8 @@ function claimOverlay(view: CityView, chunks: NonNullable<CitySceneOptions["clai
     }
     const line: Rgba = { ...base, a: c.hover ? 0.95 : 0.6 };
     for (let k = 0; k < c.size; k += 1) {
+      // Land the city must grow into: its edge dashed, a tile drawn and a tile left.
+      if (!c.ready && k % 2 === 1) continue;
       for (const [x0, y0, x1, y1] of [
         [c.tx + k, c.ty, c.tx + k + 1, c.ty],
         [c.tx + k, c.ty + c.size, c.tx + k + 1, c.ty + c.size],
@@ -4320,7 +4328,7 @@ export function cityScene(view: CityView, options: CitySceneOptions): Shape[] {
       out.push({ rings: [groundStrip(mx, g.ty + 0.2, mx, g.ty + gd - 0.2, 0.05, z)], fill: cross });
     }
   }
-  if (options.claimable !== undefined && options.claimable.length > 0) out.push(...claimOverlay(view, options.claimable));
+  if (options.claimable !== undefined && options.claimable.length > 0) out.push(...claimOverlay(view, options.claimable, options.claimReady === undefined ? undefined : rgb(options.claimReady.r, options.claimReady.g, options.claimReady.b)));
   out.push(...badges);
   return out;
 }

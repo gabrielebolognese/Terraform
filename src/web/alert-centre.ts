@@ -109,7 +109,8 @@ export class AlertCentre {
     }
     if (this.lines.length > ALERT_LOG) this.lines.length = ALERT_LOG;
     const pressing = now.filter((a) => a.priority === "urgent").length;
-    this.toggle.textContent = now.length === 0 ? "Alerts" : `Alerts (${now.length})`;
+    // Batch 36: "urgent" in the button's own words, not only in its colour and its spoken label.
+    this.toggle.textContent = now.length === 0 ? "Alerts" : pressing > 0 ? `Alerts (${now.length}, ${pressing} urgent)` : `Alerts (${now.length})`;
     this.toggle.toggleAttribute("data-urgent", pressing > 0);
     this.toggle.setAttribute("aria-label", now.length === 0 ? "Alerts: nothing needs you" : `Alerts: ${now.length} need${now.length === 1 ? "s" : ""} you${pressing > 0 ? `, ${pressing} urgent` : ""}`);
     if (this.isOpen) this.render();

@@ -24,6 +24,9 @@ import { chartFigure, cityCharts, fmt } from "./charts.js";
 import type { Settings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import { Pinch, wheelIntent } from "./gestures.js";
+import type { Palette } from "./settings.js";
+import type { MapKind } from "./palette.js";
+import { MAP_PALETTES, zoneColour } from "./palette.js";
 
 export interface PlannerHooks {
   readonly onRename: (id: string, name: string) => { ok: boolean; reason: string | null };
@@ -47,27 +50,51 @@ export interface CoverageOverlay {
   readonly homes: readonly { readonly index: number; readonly reached: boolean }[];
 }
 
-/** The overlay's colours: the reach, homes reached, homes not reached, a provider. */
-export const COVERAGE_COLOURS = { reach: [120, 230, 140], reached: [80, 200, 110], gap: [232, 72, 60], provider: [255, 255, 255] } as const;
+/** The overlay's colours in the standard palette: the reach, homes reached, homes not reached, a provider (`palette.ts` has each palette's). */
+export const COVERAGE_COLOURS = MAP_PALETTES.standard.coverage;
 
 /** A need's coverage, from what the view says runs. */
 export function coverageOf(s: Settlement, view: CityView, id: NeedId, t: Tuning): CoverageOverlay {
   return needCoverage(s, id, view.buildings.map((b) => b.operable), t);
 }
 
-/** What each building reads as on the map, by what it does. */
-export const MAP_COLOURS: Readonly<Record<"home" | "green" | "power" | "industry" | "civic" | "commerce" | "port" | "hq", readonly [number, number, number]>> = {
-  home: [92, 156, 230],
-  green: [86, 186, 96],
-  commerce: [226, 96, 90],
-  power: [236, 200, 64],
-  industry: [214, 124, 60],
-  civic: [176, 110, 214],
-  port: [80, 196, 186],
-  hq: [245, 245, 245],
+/** What each building reads as on the map, by what it does, in the standard palette (`palette.ts` has each palette's). */
+export const MAP_COLOURS = MAP_PALETTES.standard.kinds;
+
+/** What each kind is called, in the legend and under the pointer. */
+export const MAP_KIND_NAMES: Readonly<Record<MapKind, string>> = {
+  home: "Homes and life support",
+  green: "Parks and biospheres",
+  power: "Power",
+  industry: "Industry and stores",
+  civic: "Research",
+  commerce: "Commerce",
+  port: "Port and stations",
+  hq: "Headquarters",
 };
 
-export function mapKind(type: BuildingType): keyof typeof MAP_COLOURS {
+/**
+ * The patterns that tell the map's colours apart without colour (Batch 36),
+ * a tile a pixel: a power line dashed, a railway striped (its tiles alternate
+ * dark and light), a plan dotted (every other tile marked strongly), a home
+ * no service reaches hatched, a zone outlined.
+ */
+const PLANNED_MIX = { strong: 0.85, faint: 0.3 } as const;
+const ZONE_MIX = { inside: 0.45, edge: 0.85 } as const;
+/** How dark the off tiles of a dash, a stripe or a hatch are drawn. */
+const PATTERN_SHADE = 0.55;
+
+const CORRIDOR_RGB = [226, 228, 232] as const;
+const CABLE_RGB = [246, 206, 60] as const;
+const BOTH_RGB = [238, 226, 170] as const;
+const RAIL_RGB = [120, 84, 60] as const;
+const RAIL_LIGHT_RGB = [196, 160, 128] as const;
+const PLAN_RGB = { cables: [255, 160, 40], rails: [200, 120, 90], corridors: [255, 110, 200] } as const;
+const LEVEL_RGB = [90, 220, 230] as const;
+
+const shaded = (c: readonly [number, number, number] | readonly number[], k: number): [number, number, number] => [c[0]! * k, c[1]! * k, c[2]! * k];
+
+export function mapKind(type: BuildingType): MapKind {
   if (type === "headquarters") return "hq";
   if (type === "park" || type === "biosphere") return "green";
   if (type === "mega_mall") return "commerce";
@@ -87,8 +114,11 @@ const hex = (c: string): [number, number, number] => [parseInt(c.slice(1, 3), 16
  * their colour, corridors, cables and rails, buildings on top, and what is
  * planned or waiting for a rover marked. Pure: tested without a canvas.
  */
-export function plannerPixels(view: CityView, s: Settlement, coverage: CoverageOverlay | null = null): Uint8ClampedArray<ArrayBuffer> {
+export function plannerPixels(view: CityView, s: Settlement, coverage: CoverageOverlay | null = null, palette: Palette = "standard"): Uint8ClampedArray<ArrayBuffer> {
+  const pal = MAP_PALETTES[palette];
   const n = view.tiles;
+  /** The "off" tiles of a dash, a stripe, a dot or a hatch: every other tile, in a checker. */
+  const odd = (i: number): boolean => ((i % n) + Math.floor(i / n)) % 2 === 1;
   const px = new Uint8ClampedArray(new ArrayBuffer(n * n * 4));
   let lo = Infinity;
   let hi = -Infinity;
@@ -114,30 +144,37 @@ export function plannerPixels(view: CityView, s: Settlement, coverage: CoverageO
     return tx < n && ty < n ? ty * n + tx : -1;
   };
   for (const z of s.zones) {
-    const c = hex(z.colour);
+    const c = hex(zoneColour(z.colour, palette));
+    // Its edge drawn strongly: two zones side by side read as two without their colours.
+    const mine = new Set(z.tiles);
     for (const k of z.tiles) {
       const i = at(k);
-      if (i >= 0) set(i, c, 0.45);
+      if (i < 0) continue;
+      const { tx, ty } = keyTile(k);
+      const edge = !mine.has(tileKey(tx - 1, ty)) || !mine.has(tileKey(tx + 1, ty)) || !mine.has(tileKey(tx, ty - 1)) || !mine.has(tileKey(tx, ty + 1));
+      set(i, c, edge ? ZONE_MIX.edge : ZONE_MIX.inside);
     }
   }
   for (let i = 0; i < n * n; i += 1) {
     const corridor = view.corridors[i] === true;
     const cable = view.cables[i] === true;
-    if (corridor && cable) set(i, [238, 226, 170]);
-    else if (corridor) set(i, [226, 228, 232]);
-    else if (cable) set(i, [246, 206, 60]);
-    if (view.rails?.[i] === true) set(i, [120, 84, 60]);
+    // A corridor solid; a power line dashed, over a corridor or not; a railway striped.
+    if (corridor && cable) set(i, odd(i) ? shaded(BOTH_RGB, PATTERN_SHADE) : BOTH_RGB);
+    else if (corridor) set(i, CORRIDOR_RGB);
+    else if (cable) set(i, odd(i) ? shaded(CABLE_RGB, PATTERN_SHADE) : CABLE_RGB);
+    if (view.rails?.[i] === true) set(i, odd(i) ? RAIL_LIGHT_RGB : RAIL_RGB);
   }
   for (const q of s.levelQueue) {
     const i = at(q.tile);
-    if (i >= 0) set(i, [90, 220, 230], 0.55);
+    if (i >= 0) set(i, LEVEL_RGB, 0.55);
   }
   for (const p of s.planned) {
     const i = at(p.tile);
-    if (i >= 0) set(i, p.layer === "cables" ? [255, 160, 40] : p.layer === "rails" ? [200, 120, 90] : [255, 110, 200], 0.7);
+    // Dotted: what is planned, not laid.
+    if (i >= 0) set(i, PLAN_RGB[p.layer], odd(i) ? PLANNED_MIX.faint : PLANNED_MIX.strong);
   }
   for (const b of view.buildings) {
-    const c = MAP_COLOURS[mapKind(b.type)];
+    const c = pal.kinds[mapKind(b.type)];
     const d = b.depth ?? b.size;
     for (let y = b.ty; y < b.ty + d; y += 1) {
       for (let x = b.tx; x < b.tx + b.size; x += 1) {
@@ -151,18 +188,20 @@ export function plannerPixels(view: CityView, s: Settlement, coverage: CoverageO
   if (coverage !== null) {
     // Batch 32: the ground a running provider reaches washed green, its own footprint white; the homes over it,
     // green where one reaches them and red where none does - the gaps.
+    const cov = pal.coverage;
     for (const q of coverage.squares) {
       if (!q.running) continue;
-      for (let y = Math.max(0, Math.ceil(q.y0)); y < Math.min(n, Math.ceil(q.y1)); y += 1) for (let x = Math.max(0, Math.ceil(q.x0)); x < Math.min(n, Math.ceil(q.x1)); x += 1) set(y * n + x, COVERAGE_COLOURS.reach, 0.3);
+      for (let y = Math.max(0, Math.ceil(q.y0)); y < Math.min(n, Math.ceil(q.y1)); y += 1) for (let x = Math.max(0, Math.ceil(q.x0)); x < Math.min(n, Math.ceil(q.x1)); x += 1) set(y * n + x, cov.reach, 0.3);
     }
-    const paint = (index: number, c: readonly [number, number, number]): void => {
+    const paint = (index: number, c: readonly [number, number, number], hatched = false): void => {
       const b = view.buildings[index];
       if (b === undefined) return;
       const d = b.depth ?? b.size;
-      for (let y = b.ty; y < b.ty + d; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) if (x >= 0 && y >= 0 && x < n && y < n) set(y * n + x, c);
+      for (let y = b.ty; y < b.ty + d; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) if (x >= 0 && y >= 0 && x < n && y < n) set(y * n + x, hatched && odd(y * n + x) ? shaded(c, PATTERN_SHADE) : c);
     };
-    for (const h of coverage.homes) paint(h.index, h.reached ? COVERAGE_COLOURS.reached : COVERAGE_COLOURS.gap);
-    for (const q of coverage.squares) paint(q.index, COVERAGE_COLOURS.provider);
+    // A home no one reaches is hatched as well as coloured: the gaps read without colour.
+    for (const h of coverage.homes) paint(h.index, h.reached ? cov.reached : cov.gap, !h.reached);
+    for (const q of coverage.squares) paint(q.index, cov.provider);
   }
   return px;
 }
@@ -262,6 +301,11 @@ export class PlannerScreen {
   prefs: () => Settings = () => DEFAULT_SETTINGS;
   /** Two fingers on the map: a pinch zooms. */
   private readonly pinch = new Pinch();
+  private readonly legend: HTMLElement;
+  private readonly under: HTMLElement;
+  /** The palette the legend and the map's pixels were made in. */
+  private legendPalette: Palette | null = null;
+  private pixelsPalette: Palette = "standard";
 
   constructor(
     host: HTMLElement,
@@ -328,15 +372,11 @@ export class PlannerScreen {
     }
     side.append(tabRow, this.zoneList, this.chartBox, this.overview);
 
-    const legend = el("div", "planner-legend");
-    for (const [label, c] of [["Homes and life support", MAP_COLOURS.home], ["Parks and biospheres", MAP_COLOURS.green], ["Power", MAP_COLOURS.power], ["Industry and stores", MAP_COLOURS.industry], ["Research", MAP_COLOURS.civic], ["Commerce", MAP_COLOURS.commerce], ["Port and stations", MAP_COLOURS.port], ["Headquarters", MAP_COLOURS.hq]] as const) {
-      const item = el("span", "planner-legend-item", label);
-      const sw = el("span", "planner-swatch");
-      sw.style.background = `rgb(${c.join(",")})`;
-      item.prepend(sw);
-      legend.append(item);
-    }
-    this.root.append(top, tools, this.coverageBar, stage, this.hint, legend, side);
+    this.legend = el("div", "planner-legend");
+    // Batch 36: what is under the pointer, in words - every colour on the map named.
+    this.under = el("p", "planner-under", "");
+    this.root.append(top, tools, this.coverageBar, stage, this.hint, this.under, this.legend, side);
+    this.renderLegend("standard");
     host.append(this.root);
     this.showTab("zones");
     this.setTool("pan");
@@ -346,6 +386,78 @@ export class PlannerScreen {
 
   get openId(): string | null {
     return this.id;
+  }
+
+  /**
+   * The legend, in the player's palette: each kind of building with its
+   * colour, and each pattern with what it means (Batch 36).
+   */
+  private renderLegend(palette: Palette): void {
+    if (this.legendPalette === palette) return;
+    this.legendPalette = palette;
+    const kinds = MAP_PALETTES[palette].kinds;
+    const cov = MAP_PALETTES[palette].coverage;
+    const items: HTMLElement[] = [];
+    for (const k of Object.keys(MAP_KIND_NAMES) as MapKind[]) {
+      const item = el("span", "planner-legend-item", MAP_KIND_NAMES[k]);
+      item.dataset["kind"] = k;
+      const sw = el("span", "planner-swatch");
+      sw.style.background = `rgb(${kinds[k].join(",")})`;
+      item.prepend(sw);
+      items.push(item);
+    }
+    const pattern = (label: string, key: string, a: readonly number[], b: readonly number[]): HTMLElement => {
+      const item = el("span", "planner-legend-item", label);
+      item.dataset["pattern"] = key;
+      const sw = el("span", "planner-swatch planner-swatch-pattern");
+      sw.style.background = `repeating-linear-gradient(90deg, rgb(${a.join(",")}) 0 4px, rgb(${b.map((v) => Math.round(v)).join(",")}) 4px 8px)`;
+      item.prepend(sw);
+      return item;
+    };
+    items.push(
+      pattern("Corridor (solid)", "corridor", CORRIDOR_RGB, CORRIDOR_RGB),
+      pattern("Power line (dashed)", "cable", CABLE_RGB, shaded(CABLE_RGB, PATTERN_SHADE)),
+      pattern("Railway (striped)", "rail", RAIL_RGB, RAIL_LIGHT_RGB),
+      pattern("Planned (dotted)", "planned", PLAN_RGB.corridors, [40, 40, 44]),
+      pattern("Home a service misses (hatched)", "gap", cov.gap, shaded(cov.gap, PATTERN_SHADE)),
+      pattern("Zone (outlined)", "zone", [230, 230, 230], [90, 90, 96]),
+    );
+    this.legend.replaceChildren(...items);
+  }
+
+  /**
+   * What is on a tile, in words (Batch 36): the building and what it does,
+   * the zone, the links laid and planned, levelling, and with the overlay on
+   * whether a service reaches the home - every colour on the map, named.
+   */
+  describeTile(tx: number, ty: number): string {
+    const view = this.view;
+    const s = this.settlement;
+    if (view === null || s === null) return "";
+    const n = view.tiles;
+    if (tx < 0 || ty < 0 || tx >= n || ty >= n) return "";
+    const i = ty * n + tx;
+    const k = tileKey(tx, ty);
+    const parts: string[] = [];
+    const bIndex = view.buildings.findIndex((b) => tx >= b.tx && ty >= b.ty && tx < b.tx + b.size && ty < b.ty + (b.depth ?? b.size));
+    const b = bIndex >= 0 ? view.buildings[bIndex]! : null;
+    if (b !== null) parts.push(`${BUILDING_DEFS[b.type].name} (${MAP_KIND_NAMES[mapKind(b.type)].toLowerCase()})`);
+    const zone = s.zones.find((z) => z.tiles.includes(k));
+    if (zone !== undefined) parts.push(`zone "${zone.name}"`);
+    if (view.corridors[i] === true) parts.push("corridor");
+    if (view.cables[i] === true) parts.push("power line");
+    if (view.rails?.[i] === true) parts.push("railway");
+    for (const p of s.planned) if (p.tile === k) parts.push(`${p.layer === "cables" ? "power line" : p.layer === "rails" ? "railway" : "corridor"} planned`);
+    if (s.levelQueue.some((q) => q.tile === k)) parts.push("waiting to be levelled");
+    if (this.coverage !== null && b !== null && (view.needs ?? null) !== null) {
+      const cov = coverageOf(s, view, this.coverage, this.tuning);
+      const name = NEED_BY_ID[this.coverage].name.toLowerCase();
+      const home = cov.homes.find((h) => h.index === bIndex);
+      if (home !== undefined) parts.push(home.reached ? `a home ${name} reaches` : `a home no ${name} reaches`);
+      if (cov.squares.some((q) => q.index === bIndex)) parts.push(`gives ${name}`);
+    }
+    if (parts.length === 0) parts.push(view.claimed[i] !== true ? "land not the city's" : view.rocks[i] === "crag" ? "a crag" : view.steep[i] ? "steep ground" : "open ground");
+    return `Here: ${parts.join(", ")}.`;
   }
 
   open(id: string): void {
@@ -435,9 +547,12 @@ export class PlannerScreen {
     }
     const ctx = this.map.getContext("2d");
     if (ctx === null) return;
-    if (this.pixels === null || this.image === null || this.image.width !== n) {
+    const palette = this.prefs().ui.palette;
+    this.renderLegend(palette);
+    if (this.pixels === null || this.image === null || this.image.width !== n || this.pixelsPalette !== palette) {
       const coverage = this.coverage !== null && (view.needs ?? null) !== null ? coverageOf(s, view, this.coverage, this.tuning) : null;
-      this.pixels = plannerPixels(view, s, coverage);
+      this.pixels = plannerPixels(view, s, coverage, palette);
+      this.pixelsPalette = palette;
       this.image ??= document.createElement("canvas");
       this.image.width = n;
       this.image.height = n;
@@ -509,7 +624,12 @@ export class PlannerScreen {
         return;
       }
       const d = this.drag;
-      if (d === null) return;
+      if (d === null) {
+        const p = local(e);
+        const t = this.tileAt(p.x, p.y);
+        this.under.textContent = t === null ? "" : this.describeTile(t.tx, t.ty);
+        return;
+      }
       const p = local(e);
       if (this.tool === "pan" || e.buttons === 4) {
         this.ox += p.x - d.x;
