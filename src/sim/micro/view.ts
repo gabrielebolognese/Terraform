@@ -17,7 +17,7 @@ import { MICRO_RESOURCES } from "../types.js";
 import { BUILDING_DEFS } from "./buildings.js";
 import { capacities, claimableChunks, claimsAllowed, constructionOf, housing, nextClaimAt, settlementStep } from "./settlement.js";
 import { siteElevation } from "../hypsometry.js";
-import type { FloodState } from "./flood.js";
+import type { FloodReading, FloodState } from "./flood.js";
 import { submerged } from "./flood.js";
 import type { NetworkIssue } from "./network.js";
 import { linkGrid } from "./network.js";
@@ -153,6 +153,13 @@ export interface CityView {
   readonly floodDepthM: number | null;
   /** Null while it stands; the sea level it was lost at. */
   readonly lostAtSeaLevelM: number | null;
+  /**
+   * Batch 38 - detail §4.6's water plane, in the view's height unit (tiles over
+   * the base): `inner`, the waterline behind the city's Seawall - the level its
+   * wet tiles are judged by - and `outer`, the open sea round it. Absent (or
+   * null) with flooding off or no sea.
+   */
+  readonly sea?: { readonly inner: number; readonly outer: number } | null;
   /** Row-major: the tiles that carry a corridor (water, oxygen, food, materials). */
   readonly corridors: readonly boolean[];
   /** Row-major: the tiles that carry a power cable. */
@@ -442,6 +449,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     floodState: s.lostAtSeaLevelM !== null ? "flooded" : step.flood?.state ?? "dry",
     floodDepthM: step.flood?.depthM ?? null,
     lostAtSeaLevelM: s.lostAtSeaLevelM,
+    sea: seaPlane(step.flood, t),
     corridors: grid(s.corridors),
     cables: grid(s.cables),
     rails: grid(s.rails),
@@ -452,6 +460,13 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     needs: step.needs,
     ...(t.DEPOSITS_ENABLED ? { deposits: depositsOf(s, t) } : {}),
   };
+}
+
+/** The water plane's two levels (Batch 38), in tiles over the base, or null with no sea to draw. */
+function seaPlane(flood: FloodReading | null, t: Tuning): { readonly inner: number; readonly outer: number } | null {
+  if (flood === null || flood.seaM === null) return null;
+  const outer = (flood.seaM - flood.baseM) / t.TILE_METRES;
+  return { inner: outer - flood.dikeM / t.TILE_METRES, outer };
 }
 
 function jobView(s: Settlement, j: SettlementJob, t: Tuning): CityJobView {

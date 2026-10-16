@@ -411,14 +411,15 @@ describe("answering (Batch 33)", () => {
     const s = town();
     const v18 = toSave(s, OFF, AT) as unknown as Record<string, unknown>;
     const v17: Record<string, unknown> = { ...v18, schema_version: 17, settlements: (v18["settlements"] as Record<string, unknown>[]).map((raw) => {
-      const { effects: _gone, ...rest } = raw;
+      const { effects: _gone, flood_grace_years: _grace, evacuated: _evacuated, ...rest } = raw;
       return rest;
     }) };
     delete v17["decisions"];
     // Nor Earth (v19, Batch 34): a world from before it loads with Earth as a world starts it.
     delete v17["earth"];
     const loaded = fromSave(v17, OFF);
-    expect({ ...loaded, earth: s.earth }).toEqual(s);
+    // And each city is held from the sea for its grace (v20, Batch 38): it was made before flooding.
+    expect({ ...loaded, earth: s.earth }).toEqual({ ...s, settlements: s.settlements.map((c) => ({ ...c, floodGraceYears: OFF.FLOOD_GRACE_YEARS })) });
     expect(loaded.decisions).toEqual({ open: [], log: [] });
     expect(loaded.earth).toEqual(emptyEarth(OFF));
   });

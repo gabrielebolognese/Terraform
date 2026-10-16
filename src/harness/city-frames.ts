@@ -51,6 +51,14 @@ export const CITY_GOLDEN = { name: "city-reference.png", width: 384, height: 240
  * by 0.0000%. This one holds the terrain to account.
  */
 export const CITY_GOLDEN_WHOLE = { name: "city-terrain.png", width: 384, height: 240 } as const;
+/**
+ * Batch 38's exit gate: "The water plane is part of a committed reference
+ * frame." The whole grid of the reference city with the sea in it: 2 m below
+ * the landing zone behind a 5 m Seawall, the open sea 3 m above it beyond.
+ */
+export const CITY_FLOOD = { name: "city-flood.png", width: 384, height: 240 } as const;
+/** The flood frame's waterlines, tiles over the base (TILE_METRES 10). */
+export const FLOOD_SEA = { inner: -0.2, outer: 0.3 } as const;
 
 /** Where the reference city stands - any fixed place; the ground is derived from it. */
 const SITE = { lat: 0.31, lon: -1.2 };
@@ -258,6 +266,7 @@ function main(): void {
   const golden = renderCity(view, options, CITY_GOLDEN.width, CITY_GOLDEN.height);
   writeFileSync(join(FRAMES_DIR, CITY_GOLDEN.name), encodePng(golden));
   writeFileSync(join(FRAMES_DIR, CITY_GOLDEN_WHOLE.name), encodePng(renderCity(view, options, CITY_GOLDEN_WHOLE.width, CITY_GOLDEN_WHOLE.height, false)));
+  writeFileSync(join(FRAMES_DIR, CITY_FLOOD.name), encodePng(renderCity({ ...view, sea: FLOOD_SEA }, options, CITY_FLOOD.width, CITY_FLOOD.height, false)));
   // Larger, for a human to look at; not compared.
   writeFileSync(join(FRAMES_DIR, "city-preview.png"), encodePng(renderCity(view, options, 1280, 800)));
   writeFileSync(join(FRAMES_DIR, "city-whole.png"), encodePng(renderCity(view, options, 1280, 800, false)));
@@ -272,7 +281,7 @@ function main(): void {
   writeFileSync(join(FRAMES_DIR, "city-buildings.png"), encodePng(renderCity(sheet.view, sheet.options, 1800, 900, false, sheetBox)));
   const structures = structureSheet();
   writeFileSync(join(FRAMES_DIR, STRUCTURES_GOLDEN.name), encodePng(renderCity(structures.view, structures.options, STRUCTURES_GOLDEN.width, STRUCTURES_GOLDEN.height, false, structures.box)));
-  console.log(`wrote ${CITY_GOLDEN.name}, ${CITY_GOLDEN_WHOLE.name}, city-preview.png, city-whole.png, city-buildings.png and ${STRUCTURES_GOLDEN.name} to ${FRAMES_DIR}`);
+  console.log(`wrote ${CITY_GOLDEN.name}, ${CITY_GOLDEN_WHOLE.name}, ${CITY_FLOOD.name}, city-preview.png, city-whole.png, city-buildings.png and ${STRUCTURES_GOLDEN.name} to ${FRAMES_DIR}`);
 }
 
 if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {

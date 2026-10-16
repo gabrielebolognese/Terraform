@@ -19,7 +19,7 @@ import type { CitySceneOptions } from "../render/city.js";
 import type { Shape } from "../render/raster.js";
 import type { BuildingType, CityView, DepositKind, HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
 import type { Layer, LinkLayer } from "../sim/index.js";
-import { BUILDING_DEFS, BUILDING_TYPES, DEPOSIT_KINDS, MICRO_RESOURCES, NO_ROUTE, buildSeconds, buildYears, cityView, depositOfCode, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, sitingPreview, tileKey } from "../sim/index.js";
+import { BUILDING_DEFS, BUILDING_TYPES, DEPOSIT_KINDS, MICRO_RESOURCES, NO_ROUTE, buildSeconds, buildYears, cityView, depositOfCode, frameOf, layerOf, prepareCity, levelFactor, maxLevel, roverCount, roverYears, sitingPreview, terracePlan, tileKey } from "../sim/index.js";
 import { TILE_W, isoProject, isoToGround } from "../render/iso.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, footprintOrigin, isoToScreen, pan, qualityFor, screenToIso, zoomAt } from "./city-camera.js";
@@ -69,6 +69,12 @@ export interface CityHooks {
   readonly canLevel: (settlementId: string, tx: number, ty: number) => ActionOutcome;
   /** Raise the building covering (tx, ty) a level; the sim decides. */
   readonly onUpgrade: (settlementId: string, tx: number, ty: number) => ActionOutcome;
+  /** Batch 38: send a rover to raise the ground under the building covering (tx, ty); absent, no button. */
+  readonly onTerrace?: (settlementId: string, tx: number, ty: number) => ActionOutcome;
+  /** Batch 38: move the city's people to safety from the sea; the sim decides, and the game says where they went. */
+  readonly onEvacuate?: (settlementId: string) => ActionOutcome & { readonly words: string | null };
+  /** Batch 38: the city's flood warning as the HUD words it, whether it may be evacuated, and whether it was. Absent, no flood panel. */
+  readonly floodNote?: (settlementId: string) => { readonly words: string | null; readonly evacuate: boolean; readonly evacuated: boolean };
   /** Lay the corridors and cables that give every building its own route to two others. */
   readonly onConnectTwice: (settlementId: string) => ActionOutcome & { readonly laid: number };
   /** Claim chunk (i, j) of land - chunk coordinates from the founding square; the sim decides. */
@@ -229,6 +235,12 @@ export class CityScreen {
   private readonly roverButton: HTMLButtonElement;
   private readonly launchButton: HTMLButtonElement;
   private readonly upgradeButton: HTMLButtonElement;
+  /** Batch 38: terracing - raise the selected building's ground. */
+  private readonly terraceButton: HTMLButtonElement;
+  /** Batch 38: the city's flood warning, and the way out - evacuation. */
+  private readonly flood: HTMLElement;
+  private readonly floodText: HTMLElement;
+  private readonly evacuateButton: HTMLButtonElement;
   /** The city's still parts, kept as pictures chunk by chunk; made with the first frame that has a canvas. */
   private chunks: ChunkedCity<HTMLCanvasElement> | null = null;
   private chunkCtx: CanvasRenderingContext2D | null = null;
@@ -381,8 +393,11 @@ export class CityScreen {
     this.roverButton = button("city-send-rover", "Send rover", () => this.sendRover());
     this.upgradeButton = button("city-upgrade", "Upgrade", () => this.upgradeSelected());
     this.launchButton = button("city-launch", "Launch rocket", () => this.launch());
+    this.terraceButton = button("city-terrace", "Raise its ground", () => this.terraceSelected());
+    this.terraceButton.hidden = true;
     actions.append(
       this.upgradeButton,
+      this.terraceButton,
       this.roverButton,
       this.launchButton,
       this.removeButton,
@@ -401,7 +416,15 @@ export class CityScreen {
     this.countdowns = el("div", "city-countdowns");
     this.countdowns.setAttribute("aria-hidden", "true");
 
-    panel.append(head, this.status, this.people, stores, this.buildsSection, this.inspector);
+    this.flood = el("section", "city-flood");
+    this.flood.hidden = true;
+    this.floodText = el("p", "city-flood-text", "");
+    this.floodText.setAttribute("role", "status");
+    this.evacuateButton = button("city-evacuate", "Evacuate its people", () => this.evacuate());
+    this.evacuateButton.hidden = true;
+    this.flood.append(el("h3", "city-section-title", "The sea"), this.floodText, this.evacuateButton);
+
+    panel.append(head, this.status, this.flood, this.people, stores, this.buildsSection, this.inspector);
     this.root.append(this.canvas, this.countdowns, panel, this.tools, this.dock, this.tip);
     host.append(this.root);
     this.bindInput();
@@ -574,6 +597,27 @@ export class CityScreen {
     if (id === null || b === undefined) return;
     const outcome = this.hooks.onUpgrade(id, b.tx, b.ty);
     this.notice = outcome.ok ? (this.tuning.BUILD_TIME_ENABLED > 0 ? "A rover is on its way to upgrade it." : "Upgraded.") : `Cannot upgrade: ${outcome.reason ?? "refused"}.`;
+    this.lastPanel = -Infinity;
+  }
+
+  /** Batch 38: terracing - a rover raises the selected building's ground; the sim decides. */
+  private terraceSelected(): void {
+    const id = this.settlementId;
+    const b = this.selected === null ? undefined : this.view?.buildings[this.selected];
+    const hook = this.hooks.onTerrace;
+    if (id === null || b === undefined || hook === undefined) return;
+    const outcome = hook(id, b.tx, b.ty);
+    this.notice = outcome.ok ? `A rover is on its way to raise the ${BUILDING_DEFS[b.type].name}'s ground.` : `Cannot raise its ground: ${outcome.reason ?? "refused"}.`;
+    this.lastPanel = -Infinity;
+  }
+
+  /** Batch 38: evacuation - the city's people moved to safety from the sea; the sim decides. */
+  private evacuate(): void {
+    const id = this.settlementId;
+    const hook = this.hooks.onEvacuate;
+    if (id === null || hook === undefined) return;
+    const outcome = hook(id);
+    this.notice = outcome.ok ? outcome.words ?? "Evacuated." : `Cannot evacuate: ${outcome.reason ?? "refused"}.`;
     this.lastPanel = -Infinity;
   }
 
@@ -911,6 +955,7 @@ export class CityScreen {
         : `Short of ${view.shortages.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(", ")} - buildings that use it are browned out.`;
     this.status.textContent = people + need + effectWords(s, this.tuning);
     this.status.dataset["state"] = view.shortages.length === 0 ? "ok" : "short";
+    this.renderFlood(s);
     this.renderPeople(view);
     this.renderBuilds(s);
 
@@ -960,6 +1005,10 @@ export class CityScreen {
     const rockHere = this.selectedTile === null ? "none" : view.rocks[this.selectedTile.ty * view.tiles + this.selectedTile.tx] ?? "none";
     this.roverButton.hidden = !(b === undefined && this.selectedTile !== null && rockHere !== "none");
     this.launchButton.hidden = b?.type !== "spaceport";
+    // Batch 38: terracing, in a world the sea floods - for any building but the wall the water is held against.
+    const plan = b !== undefined && this.hooks.onTerrace !== undefined && this.tuning.FLOODING_ENABLED && b.type !== "seawall" && (b.construction ?? null) === null ? terracePlan(s, b.tx, b.ty, this.tuning) : null;
+    this.terraceButton.hidden = plan === null;
+    if (plan !== null) this.terraceButton.textContent = `Raise its ground ${this.tuning.TERRACE_STEP_M} m (${plan.materials} materials)`;
     if (b === undefined && this.selectedTile !== null) this.renderRock(view, s, this.selectedTile);
     if (b !== undefined && index !== null) {
       const def = BUILDING_DEFS[b.type];
@@ -983,6 +1032,8 @@ export class CityScreen {
         const share = b.deposit.share === 1 ? "all of it" : `${Math.round(b.deposit.share * BUILDING_DEFS[b.type].footprint * BUILDING_DEFS[b.type].depth)} of its ${BUILDING_DEFS[b.type].footprint * BUILDING_DEFS[b.type].depth} tiles`;
         extra.push(`On ${DEPOSIT_NAMES[b.deposit.kind].toLowerCase()} (${share}): ${factorWords(b.deposit.factor)} output.`);
       }
+      // Batch 38: what the Seawall holds back - its level's metres, once it stands.
+      if (b.type === "seawall") extra.push((b.construction ?? null) === null ? `Holds the sea back ${level * this.tuning.DIKE_M_PER_LEVEL} m - ${this.tuning.DIKE_M_PER_LEVEL} m a level.` : "Holds the sea back once it is built.");
       // Batch 33: a fault from an equipment failure, and how long it has to run.
       if (b.fault !== undefined) extra.push(b.fault.factor === 0 ? `Broken down: back in ${seconds(b.fault.remaining, this.tuning)}.` : `A fault: it makes ${Math.round(b.fault.factor * 100)}% of its output, for ${seconds(b.fault.remaining, this.tuning)}.`);
       // Batch 32: a service's reach, and the crowd at a station or a park.
@@ -1006,6 +1057,21 @@ export class CityScreen {
               : `Its rocket is away: back in ${seconds(job.remaining, this.tuning)}.`;
       }
     }
+  }
+
+  /**
+   * Batch 38: the sea, for a city it threatens - the warning in the HUD's words
+   * (with how long a grace holds it, and what throttling the planet would buy),
+   * and the button that moves its people to safety. Hidden while the sea is no
+   * threat.
+   */
+  private renderFlood(s: Settlement): void {
+    const note = this.hooks.floodNote?.(s.id) ?? null;
+    const evacuated = note !== null && note.evacuated ? " Evacuated: its people were moved to safety, and no one settles here again." : "";
+    const words = note === null ? "" : (note.words ?? "") + evacuated;
+    this.flood.hidden = words.trim() === "";
+    this.floodText.textContent = words.trim();
+    this.evacuateButton.hidden = note === null || !note.evacuate || this.hooks.onEvacuate === undefined;
   }
 
   /** Batch 32: how happy the people are, and each need - shown only with needs on, in a city. */
@@ -1108,7 +1174,8 @@ export class CityScreen {
     const key = `${s.kind}|${this.placing ?? ""}|${this.paving}|${Math.floor(s.stores.materials)}|${this.claiming}|${this.levelling}|${land}|${unlocked}|${this.showDeposits}|${view?.deposits !== undefined}`;
     if (!force && key === this.paletteKind) return;
     this.paletteKind = key;
-    const cards = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].buildable && BUILDING_DEFS[type].kinds.includes(s.kind)).map((type) => {
+    // Batch 38: the Seawall, only in a world the sea floods.
+    const cards = BUILDING_TYPES.filter((type) => BUILDING_DEFS[type].buildable && BUILDING_DEFS[type].kinds.includes(s.kind) && (type !== "seawall" || this.tuning.FLOODING_ENABLED > 0)).map((type) => {
       const cost = BUILDING_DEFS[type].cost(this.tuning);
       const c = this.card(type, BUILDING_DEFS[type].name, `${cost}`, s.stores.materials < cost, this.placing === type, () => this.arm(this.placing === type ? null : type));
       // A building the city is not yet big enough for says so on its card.
@@ -1288,7 +1355,9 @@ export class CityScreen {
     } else if (t.BUILD_TIME_ENABLED > 0) {
       lines.push(`A rover builds it in ${Math.round(buildYears(kind, t) * 10)} month${Math.round(buildYears(kind, t) * 10) === 1 ? "" : "s"} at the site (${seconds(buildYears(kind, t), t)}), plus the drive.`);
     }
-    lines.push(`Upgrades to level ${maxLevel(kind, t)}, each +${Math.round(t.LEVEL_BONUS * 100)}% on the last.`);
+    // Batch 38: a Seawall's levels are metres held back, not output.
+    if (kind === "seawall") lines.push(`Each level holds the sea back ${t.DIKE_M_PER_LEVEL} m more: ${maxLevel(kind, t) * t.DIKE_M_PER_LEVEL} m at level ${maxLevel(kind, t)}. It stands until the city falls.`);
+    else lines.push(`Upgrades to level ${maxLevel(kind, t)}, each +${Math.round(t.LEVEL_BONUS * 100)}% on the last.`);
     return { title: def.name, lines };
   }
 

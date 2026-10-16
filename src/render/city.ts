@@ -2449,6 +2449,110 @@ export function groundColour(x: number, y: number, z: number, slope: number, gre
 /** A height sampler over tile space, in tiles. */
 type HeightAt = (x: number, y: number) => number;
 
+/** Batch 38: the sea's surface - translucent, so shallow water shows the ground under it. */
+export const SEA: Rgba = { r: 0.16, g: 0.36, b: 0.52, a: 0.72 };
+const EMPTY_SHAPES: readonly Shape[] = [];
+
+/**
+ * Detail §4.6: "a translucent water plane at sea_level_m intersecting the
+ * heightmap ... the shoreline is simply the plane-terrain intersection". Over
+ * a square of ground, each triangle of the mesh `groundMesh` draws (the same
+ * triangles, split the same way) is clipped to where its ground lies below
+ * `seaZ`, and that part drawn flat at `seaZ`. Ground above the plane gets
+ * nothing; the shoreline falls where the mesh crosses the plane.
+ */
+export function waterMesh(x0: number, y0: number, w: number, step: number, z: HeightAt, seaZ: number, out: Shape[]): void {
+  const k = Math.max(1, Math.round(w / step));
+  for (let d = 0; d <= 2 * (k - 1); d += 1) {
+    for (let j = Math.max(0, d - (k - 1)); j <= Math.min(k - 1, d); j += 1) {
+      const i = d - j;
+      const xa = x0 + i * step;
+      const ya = y0 + j * step;
+      const xb = xa + step;
+      const yb = ya + step;
+      const z00 = z(xa, ya);
+      const z10 = z(xb, ya);
+      const z01 = z(xa, yb);
+      const z11 = z(xb, yb);
+      if (Math.min(z00, z10, z01, z11) >= seaZ) continue;
+      const alongMain = Math.abs(z00 - z11) <= Math.abs(z10 - z01);
+      const tris: [V3, V3, V3][] = alongMain
+        ? [
+            [[xa, ya, z00], [xb, ya, z10], [xb, yb, z11]],
+            [[xa, ya, z00], [xb, yb, z11], [xa, yb, z01]],
+          ]
+        : [
+            [[xa, ya, z00], [xb, ya, z10], [xa, yb, z01]],
+            [[xb, ya, z10], [xb, yb, z11], [xa, yb, z01]],
+          ];
+      for (const tri of tris) {
+        const wet = underPlane(tri, seaZ);
+        if (wet.length >= 3) out.push({ rings: [ringOf(wet)], fill: SEA });
+      }
+    }
+  }
+}
+
+/** The part of a triangle below height `seaZ` (one clip by the plane), raised to it. */
+function underPlane(tri: readonly V3[], seaZ: number): V3[] {
+  const out: V3[] = [];
+  for (let k = 0; k < tri.length; k += 1) {
+    const a = tri[k]!;
+    const b = tri[(k + 1) % tri.length]!;
+    const aIn = a[2] < seaZ;
+    const bIn = b[2] < seaZ;
+    if (aIn) out.push([a[0], a[1], seaZ]);
+    if (aIn !== bIn) {
+      const s = (seaZ - a[2]) / (b[2] - a[2]);
+      out.push([a[0] + s * (b[0] - a[0]), a[1] + s * (b[1] - a[1]), seaZ]);
+    }
+  }
+  return out;
+}
+
+/** The view's water plane to the 200th of a tile - drawn, and keyed, at that grain - or nulls with no sea to draw. */
+function seaLevels(view: CityView): { inner: number | null; outer: number | null } {
+  const sea = view.sea ?? null;
+  if (sea === null) return { inner: null, outer: null };
+  const q = (v: number): number => Math.round(v * 200) / 200;
+  const inner = q(sea.inner);
+  const outer = q(sea.outer);
+  // Nothing to draw while the sea lies below the lowest ground of the grid, or of the world round it.
+  return { inner: inner > groundRange(view).lo - 0.05 ? inner : null, outer: outer > worldLow(view) - 0.05 ? outer : null };
+}
+
+/** The lowest height of the world round the grid, in tiles: its corners and half-tile samples. */
+const worldLows = new WeakMap<readonly number[], number>();
+function worldLow(view: CityView): number {
+  const corners = view.world.corners;
+  let lo = worldLows.get(corners);
+  if (lo === undefined) {
+    lo = Infinity;
+    for (const z of corners) lo = Math.min(lo, z);
+    for (const z of view.world.fine ?? []) lo = Math.min(lo, z);
+    if (!Number.isFinite(lo)) lo = groundRange(view).lo;
+    worldLows.set(corners, lo);
+  }
+  return lo;
+}
+
+/** Each layout's tiles of sea, kept for one waterline: a new waterline makes them again. */
+const waterKeptBy = new WeakMap<object, { z: number | null; tiles: Map<number, Shape[]> }>();
+function waterKept(layout: object, seaZ: number | null): Map<number, Shape[]> {
+  let kept = waterKeptBy.get(layout);
+  if (kept === undefined || kept.z !== seaZ) {
+    kept = { z: seaZ, tiles: new Map() };
+    waterKeptBy.set(layout, kept);
+  }
+  return kept.tiles;
+}
+
+/** The water plane's part of a chunk's signature (Batch 38): a waterline moved redraws the chunks it shows in. */
+function seaKey(view: CityView): string {
+  const { inner, outer } = seaLevels(view);
+  return inner === null && outer === null ? "" : `sea${inner ?? "-"},${outer ?? "-"}`;
+}
+
 /**
  * Ground as a mesh over [x0, x0 + w] x [y0, y0 + w], a vertex every `step`
  * tiles, far to near: each triangle lit by its slope and coloured at its
@@ -2583,6 +2687,9 @@ interface WorldCell {
   readonly s: number;
   shapes: Shape[] | null;
   readonly make: () => Shape[];
+  /** Batch 38: the sea over it at a waterline, kept for the last waterline asked. */
+  water: { readonly z: number; readonly shapes: Shape[] } | null;
+  readonly makeWater: (seaZ: number) => Shape[];
   readonly minX: number;
   readonly maxX: number;
   readonly minY: number;
@@ -2689,6 +2796,13 @@ function worldCell(view: CityView, quality: CityQuality, shared: WorldShared, x:
     s,
     shapes: null,
     make,
+    water: null,
+    // The sea over the cell's ground, on the mesh the ground is drawn with.
+    makeWater: (seaZ: number): Shape[] => {
+      const shapes: Shape[] = [];
+      waterMesh(x, y, s, quality === "high" ? 0.5 : s, quality === "high" ? fineZ : coarseZ, seaZ, shapes);
+      return shapes;
+    },
     minX: ((x - (y + s)) * TILE_W) / 2,
     maxX: ((x + s - y) * TILE_W) / 2,
     minY: ((x + y) * TILE_H) / 2 - top * Z_PX,
@@ -2899,7 +3013,7 @@ function chunkSignature(view: CityView, options: CitySceneOptions, size: number,
   const quality: CityQuality = options.quality ?? "high";
   const scene = viewScene(view, quality);
   const rockets = quality === "high" ? rocketsAt(view, options.sinceYears ?? 0) : null;
-  const parts = [String(scene.id), quality, options.seeThrough === true ? "see" : ""];
+  const parts = [String(scene.id), quality, options.seeThrough === true ? "see" : "", seaKey(view)];
   for (const k of anchorsOf(view, scene, size).get(chunkId(cx, cy)) ?? []) {
     const b = view.buildings[k]!;
     const rocket: RocketState = b.type === "spaceport" && rockets !== null ? rockets.get(b.ty * view.tiles + b.tx) ?? null : null;
@@ -4200,12 +4314,30 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
   };
   // Up close the ground is drawn through the half-tile samples; further away through tile corners.
   const gridZ = heightAt(view, quality === "high");
+  // Batch 38 - detail §4.6: the water plane, behind the Seawall and beyond it, to the 200th of a tile.
+  const { inner: seaInner, outer: seaOuter } = seaLevels(view);
+  const wetKept = waterKept(ground, seaInner);
+  /** A tile (or patch) of ground's sea, kept while the waterline stands. */
+  const waterShapes = (i: number, o: Occupant): readonly Shape[] => {
+    if (seaInner === null) return EMPTY_SHAPES;
+    const kept = wetKept.get(i);
+    if (kept !== undefined) return kept;
+    const made: Shape[] = [];
+    waterMesh(o.tx, o.ty, o.w, o.w > 1 ? o.w : quality === "high" ? 0.5 : 1, gridZ, seaInner, made);
+    wetKept.set(i, made);
+    return made;
+  };
   const drawWorld = (cells: readonly WorldCell[]): void => {
     if (!drawStatic) return;
     for (const c of cells) {
       if (vp !== undefined && (c.maxX < vp.minX || c.minX > vp.maxX || c.maxY < vp.minY || c.minY > vp.maxY)) continue;
       c.shapes ??= c.make();
       for (const shape of c.shapes) out.push(shape);
+      // Batch 38: the open sea over it, before what stands nearer.
+      if (seaOuter !== null) {
+        if (c.water === null || c.water.z !== seaOuter) c.water = { z: seaOuter, shapes: c.makeWater(seaOuter) };
+        for (const shape of c.water.shapes) out.push(shape);
+      }
     }
   };
   /** A tile (or patch) of ground's shapes, made once per layout and kept (Batch 22 - rebuilding ~1,000 columns cost most of a 9 ms frame). */
@@ -4253,6 +4385,8 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
       } else {
         out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + bd, b.baseZ)], fill: { ...groundColour(b.tx + b.size / 2, b.ty + bd / 2, b.baseZ, 0, view.greenery), a: 1 } });
       }
+      // Batch 38: the sea over its footprint, under its body - it stands in the water until the water takes it.
+      if (seaInner !== null && seaInner > b.baseZ) out.push({ rings: [diamond(b.tx, b.ty, b.tx + b.size, b.ty + bd, seaInner)], fill: SEA });
     }
     const rocket: RocketState = b.type === "spaceport" ? rockets.get(b.ty * n + b.tx) ?? null : null;
     const site = b.construction ?? null;
@@ -4282,7 +4416,7 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
           if (!touching(patch.box, im)) continue;
           const from = out.length;
           if (b !== null) buildingShapes(b, "all");
-          else for (const shape of groundShapes(i, o)) out.push(shape);
+          else for (const shape of [...groundShapes(i, o), ...waterShapes(i, o)]) out.push(shape);
           const clipTo = outlinesOf(patch);
           for (let k = from; k < out.length; k += 1) out[k] = { ...out[k]!, clip: patch.box, clipTo };
         }
@@ -4291,6 +4425,7 @@ function drawSource(view: CityView, options: CitySceneOptions, src: SceneSource,
       if (built !== null && quality === "high") out.push(...built.extras);
     } else if (b === null) {
       for (const shape of groundShapes(i, o)) out.push(shape);
+      for (const shape of waterShapes(i, o)) out.push(shape);
       // Whatever moves over it: a patch of merged ground further away carries its rovers and trains too.
       vehiclesOn(o);
       continue;

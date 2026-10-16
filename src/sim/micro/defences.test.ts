@@ -29,6 +29,7 @@ import { foundSettlement } from "./registry.js";
 import { siteGround } from "./rocks.js";
 import { checkPlacement, housing, placeBuilding, upgradeBuilding } from "./settlement.js";
 import { tileKey } from "./space.js";
+import { cityView } from "./view.js";
 import { LOW, channels, fixture, rising, t } from "../../testkit/flood.js";
 
 const START = fixture();
@@ -130,6 +131,19 @@ describe("the Seawall raises the city's datum (detail §4.2, §4.5)", () => {
     expect(shift).toBeGreaterThan(10.5);
     expect(Math.abs(shift - (fallAt(walled) - fallAt(START)))).toBeLessThanOrEqual(1);
     expect((held.yearsToBase! - bare.yearsToBase!) / t.SUBSTEP_YEARS).toBeCloseTo(shift, 0);
+  });
+
+  it("gives the city view its water plane: the open sea, and behind the wall the sea less the wall's height", () => {
+    let s = START;
+    for (let i = 0; i < 26; i += 1) s = advance(s, 1, rising);
+    const walled = withWall(2, s);
+    const sea = channels(walled).seaLevelM;
+    const v = cityView(low(walled), channels(walled), t).sea!;
+    expect(v.outer).toBeCloseTo((sea - BASE) / t.TILE_METRES, 9);
+    expect(v.inner).toBeCloseTo((sea - BASE - 8) / t.TILE_METRES, 9);
+    expect(cityView(low(s), channels(s), t).sea!.inner).toBeCloseTo((sea - BASE) / t.TILE_METRES, 9);
+    // With flooding off there is no plane to draw.
+    expect(cityView(low(s), channels(s), makeTuning({ ...t, FLOODING_ENABLED: 0 })).sea).toBeNull();
   });
 
   it("counts only once built: a worksite holds nothing back, an upgrade on its way keeps the level it has", () => {

@@ -62,6 +62,8 @@ export const NEW_WORLD_OVERRIDES: TuningOverrides = {
   NEEDS_ENABLED: 1,
   // Deposits on the ground - ore, ice, vents, sunny flats - and more from the building sited on its own (Batch 37).
   DEPOSITS_ENABLED: 1,
+  // The rising sea floods cities (Batches 24-25), with the defences against it (Batch 38). A sandbox turns it off.
+  FLOODING_ENABLED: 1,
 };
 
 /**

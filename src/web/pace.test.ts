@@ -236,11 +236,13 @@ describe("a world's pace is its tuning", () => {
     expect(MODE_OVERRIDES.sandbox).toEqual({});
     expect(BROWSER_TUNING.DECISIONS_ENABLED).toBe(0);
     expect(BROWSER_TUNING.EARTH_ENABLED).toBe(0);
-    // What every new world has since: the rovers' routes (Batch 29), the people's needs (Batch 32) and the deposits (Batch 37). The worlds before worlds never had them.
-    expect(NEW_WORLD_OVERRIDES).toEqual({ ROVER_ROUTES_ENABLED: 1, NEEDS_ENABLED: 1, DEPOSITS_ENABLED: 1 });
+    // What every new world has since: the rovers' routes (Batch 29), the people's needs (Batch 32), the deposits (Batch 37) and the
+    // rising sea (Batch 38). The worlds before worlds never had them.
+    expect(NEW_WORLD_OVERRIDES).toEqual({ ROVER_ROUTES_ENABLED: 1, NEEDS_ENABLED: 1, DEPOSITS_ENABLED: 1, FLOODING_ENABLED: 1 });
     expect(BROWSER_TUNING.ROVER_ROUTES_ENABLED).toBe(0);
     expect(BROWSER_TUNING.NEEDS_ENABLED).toBe(0);
     expect(BROWSER_TUNING.DEPOSITS_ENABLED).toBe(0);
+    expect(BROWSER_TUNING.FLOODING_ENABLED).toBe(0);
   });
 
   it("offers a Standard world slow speeds, a sandbox and the debug setting every speed, a Classic world its own", () => {
