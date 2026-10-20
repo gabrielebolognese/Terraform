@@ -77,8 +77,11 @@ describe("the scene in chunks", () => {
       const again = all.length - whole.length;
       if (quality !== "low") expect(again, "vacuity: something was drawn again over a vehicle").toBeGreaterThan(0);
       else expect(again, "furthest out nothing moves").toBe(0);
-      // A few hundred shapes against the whole metropolis: measured in the batch note.
-      expect(again).toBeLessThan(whole.length / 100);
+      // Only what overlaps a vehicle is drawn again. Measured: 902 shapes at high detail (of 1,269,060) and 233 at
+      // medium (of 127,265); drawing again everything after a vehicle in its chunk, overlapping it or not, 1,885 and
+      // 448 - which a bound of 1% of the whole scene let through.
+      const measured = { high: 902, medium: 233, low: 0 }[quality];
+      expect(again, "drawn again over the vehicles").toBeLessThanOrEqual(Math.ceil(1.25 * measured));
     });
   }
 
