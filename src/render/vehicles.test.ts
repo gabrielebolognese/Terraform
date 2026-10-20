@@ -159,7 +159,7 @@ describe("a scripted day in the reference city: two hours of the scripted player
         expect(onRails(view, c), `a car at ${c.x.toFixed(2)},${c.y.toFixed(2)} at ${time} s`).toBe(true);
       }
     }
-    // Measured: 38,400 car-frames on four loops.
+    // Measured: 48,000 car-frames on four loops.
     expect(cars, "vacuity: trains ran").toBeGreaterThan(10_000);
   });
 });
@@ -200,7 +200,7 @@ describe("a metropolis with every rover out and its railways", () => {
     }
     expect(metro.sent, "vacuity: every rover out (14)").toBeGreaterThan(10);
     expect(frames).toBeGreaterThan(2000);
-    // The straight line: 2,514 of 3,186 frames inside a building, measured.
+    // The straight line: 2,549 of 3,192 frames inside a building, measured.
     expect(old).toBeGreaterThan(1000);
   });
 
@@ -215,7 +215,7 @@ describe("a metropolis with every rover out and its railways", () => {
       }
       for (const f of batch28Cars(metroView, time)) if (inBuilding(metroView, owner, f)) before += 1;
     }
-    // Measured: 254,400 car-frames.
+    // Measured: 330,000 car-frames.
     expect(cars).toBeGreaterThan(100_000);
     // Vacuity: Batch 28's trains, the same check - 17 noses into a station or another building at a line's end, measured.
     expect(before).toBeGreaterThan(0);

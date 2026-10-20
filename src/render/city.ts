@@ -3517,6 +3517,50 @@ function railDetail(view: CityView, tx: number, ty: number, z: number, quality: 
   const out: Part[] = [];
   const cx = tx + 0.5;
   const cy = ty + 0.5;
+  // A bend - rails out of two sides at right angles, and nothing else - is laid round the quarter circle the
+  // trains ride (Batch 29): drawn as two straight halves, a train on its curve looked to cut the corner.
+  const railAt = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < n && y < n && view.rails?.[y * n + x] === true;
+  const ways = SIDES.filter(([dx, dy]) => railAt(tx + dx, ty + dy));
+  const stationSide = SIDES.some(([dx, dy]) => stationAt(tx + dx, ty + dy));
+  if (ways.length === 2 && !stationSide && ways[0]![0] * ways[1]![0] + ways[0]![1] * ways[1]![1] === 0) {
+    const [a, b] = ways as [readonly [number, number], readonly [number, number]];
+    // The corner both sides meet at, and the bed's height at each side's edge.
+    const ox = cx + 0.5 * (a[0] + b[0]);
+    const oy = cy + 0.5 * (a[1] + b[1]);
+    const za = (zc + railZ(view, tx + a[0], ty + a[1])) / 2;
+    const zb = (zc + railZ(view, tx + b[0], ty + b[1])) / 2;
+    const a0 = Math.atan2(cy + 0.5 * a[1] - oy, cx + 0.5 * a[0] - ox);
+    let a1 = Math.atan2(cy + 0.5 * b[1] - oy, cx + 0.5 * b[0] - ox);
+    while (a1 - a0 > Math.PI) a1 -= 2 * Math.PI;
+    while (a0 - a1 > Math.PI) a1 += 2 * Math.PI;
+    const steps = 6;
+    const at = (f: number, r: number, lift: number): V3 => {
+      const ang = a0 + (a1 - a0) * f;
+      const zz = f < 0.5 ? za + (zc - za) * f * 2 : zc + (zb - zc) * (f - 0.5) * 2;
+      return [ox + r * Math.cos(ang), oy + r * Math.sin(ang), zz + lift];
+    };
+    /** A strip round the curve between radii r0 and r1, `lift` over the bed, in `steps` pieces. */
+    const band = (r0: number, r1: number, lift: number, colour: Rgb): void => {
+      for (let k = 0; k < steps; k += 1) {
+        const f0 = k / steps;
+        const f1 = (k + 1) / steps;
+        out.push(part(sheet([at(f0, r0, lift), at(f1, r0, lift), at(f1, r1, lift), at(f0, r1, lift)]), colour, { twoSided: true }));
+      }
+    };
+    if (deck > 0 || za > z + 0.001 || zb > z + 0.001) band(0.16, 0.84, -0.06, CONCRETE);
+    band(0.18, 0.82, 0.02, BALLAST);
+    if (quality === "low") return out;
+    if (quality === "high") {
+      for (const f of [1 / 6, 1 / 2, 5 / 6]) {
+        const p0 = at(f, 0.24, 0.02);
+        const p1 = at(f, 0.76, 0.02);
+        out.push(part(turnedBox((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, 0.26, 0.05, Math.atan2(p1[1] - p0[1], p1[0] - p0[0]), p0[2], p0[2] + 0.03), SLEEPER));
+      }
+    }
+    // Two tracks, a train each way: each its two rails either side of the track's middle.
+    for (const r of [0.5 - TRAIN_LANE - 0.06, 0.5 - TRAIN_LANE + 0.06, 0.5 + TRAIN_LANE - 0.06, 0.5 + TRAIN_LANE + 0.06]) band(r - 0.018, r + 0.018, 0.08, RAIL_STEEL);
+    return out;
+  }
   let any = false;
   SIDES.forEach(([dx, dy]) => {
     const x = tx + dx;
@@ -3566,6 +3610,13 @@ function railDetail(view: CityView, tx: number, ty: number, z: number, quality: 
     }
   }
   return out;
+}
+
+/** The steel rails drawn on a railway tile, each strip's corners: for the test that trains ride on them. */
+export function railsDrawn(view: CityView, tx: number, ty: number): (readonly V3[])[] {
+  return railDetail(view, tx, ty, view.groundZ[ty * view.tiles + tx] ?? 0, "medium")
+    .filter((p) => p.colour === RAIL_STEEL)
+    .map((p) => p.faces[0]!.pts);
 }
 
 // ---------------------------------------------------------------------------

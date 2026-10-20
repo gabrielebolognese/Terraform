@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { flatten, referenceCity, renderCity } from "../harness/city-frames.js";
 import type { CityView, Rock } from "../sim/index.js";
 import type { CityQuality, CitySceneOptions } from "./city.js";
-import { BRIDGE_Z, cityLiveChunks, railDeck, resetSceneCache, trainLapsOf, trainLinesOf, trainsAt } from "./city.js";
+import { BRIDGE_Z, cityLiveChunks, railDeck, railsDrawn, resetSceneCache, trainLapsOf, trainLinesOf, trainsAt } from "./city.js";
 import { TRAIN_CARS } from "./vehicles.js";
 import { frameDifference } from "./planet.js";
 
@@ -162,6 +162,63 @@ describe("trains", () => {
       }
     }
     expect(over, "vacuity: a car crossed the bridge").toBeGreaterThan(0);
+  });
+
+  it("ride on the rails drawn: a rail either side of each car's middle, round the bends too", () => {
+    // How far a point is from a strip of rail, across the ground (0 on it).
+    const away = (px: number, py: number, pts: readonly (readonly number[])[]): number => {
+      let inside = true;
+      let best = Infinity;
+      pts.forEach((a, k) => {
+        const b = pts[(k + 1) % pts.length]!;
+        const ex = b[0]! - a[0]!;
+        const ey = b[1]! - a[1]!;
+        const crossed = ex * (py - a[1]!) - ey * (px - a[0]!);
+        const next = pts[(k + 2) % pts.length]!;
+        if (Math.sign(crossed) !== Math.sign(ex * (next[1]! - a[1]!) - ey * (next[0]! - a[0]!))) inside = false;
+        const f = Math.max(0, Math.min(1, ((px - a[0]!) * ex + (py - a[1]!) * ey) / (ex * ex + ey * ey)));
+        best = Math.min(best, Math.hypot(a[0]! + ex * f - px, a[1]! + ey * f - py));
+      });
+      return inside ? 0 : best;
+    };
+    const rails = new Map<number, (readonly (readonly number[])[])[]>();
+    const railsNear = (x: number, y: number): (readonly (readonly number[])[])[] => {
+      const out: (readonly (readonly number[])[])[] = [];
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          const tx = Math.floor(x) + dx;
+          const ty = Math.floor(y) + dy;
+          if (ring.rails?.[ty * n + tx] !== true) continue;
+          if (!rails.has(ty * n + tx)) rails.set(ty * n + tx, railsDrawn(ring, tx, ty));
+          out.push(...rails.get(ty * n + tx)!);
+        }
+      }
+      return out;
+    };
+    const [lap] = trainLapsOf(ring);
+    let probes = 0;
+    let onBends = 0;
+    for (let time = 0; time < lap!; time += 0.2) {
+      for (const car of [...trainsAt(ring, time).values()].flat()) {
+        const ux = Math.cos(car.angle);
+        const uy = Math.sin(car.angle);
+        // Either side of the car's middle, 0.06 out: over its track's two rails.
+        for (const across of [-0.06, 0.06]) {
+          const wx = car.x - uy * across;
+          const wy = car.y + ux * across;
+          const d = Math.min(...railsNear(wx, wy).map((pts) => away(wx, wy, pts)));
+          probes += 1;
+          const tx = Math.floor(wx);
+          const ty = Math.floor(wy);
+          if ((tx === 1 || tx === 30) && (ty === 1 || ty === 30)) onBends += 1;
+          // Measured: 0.028 at most, on the outer track round a bend (a car's middle is inside the curve its bogies
+          // ride); 0.079 with a bend drawn as two straight halves, as before Batch 29.
+          expect(d, `the car at ${car.x.toFixed(3)},${car.y.toFixed(3)} at ${time.toFixed(1)} s is off its rails`).toBeLessThan(0.05);
+        }
+      }
+    }
+    expect(onBends, "vacuity: cars went round the bends").toBeGreaterThan(100);
+    expect(probes).toBeGreaterThan(10_000);
   });
 
   it("are drawn moving: the picture changes with the clock where trains run, and not where none do", () => {
