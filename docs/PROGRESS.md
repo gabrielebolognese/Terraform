@@ -57,15 +57,17 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     a new headquarters' rovers nowhere to go.
   - Routes do not change old saves' trip times: ROVER_ROUTES_ENABLED is on in every new world and
     off in the worlds before; a job under way keeps its time.
-  - Steep-ground fault left as an equivalent mutant: every steep tile carries a crag (0 of 15 rough
-    sites without one), so the check is a guard no test can see.
+  - (Corrected by review 1.) The steep-ground fault was first left as an equivalent mutant, on the
+    claim that every steep tile carries a crag (0 of 15 rough sites without one). That was wrong:
+    levelling makes steep tiles with no crag. It is now tested, and the injection is caught.
   - The redraw over a vehicle clipped to its outlines, not its box: the box blended a dome's glass
     twice (786 px), worse than no redraw (104 px); about 1 ms more shape generation at medium.
 - verification: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 102 files, 1,196
   tests, all passed (374 s); build:web green (471.7 kB JS, 162.1 kB gzip); build green; the built
   page served and its bundle fetched over HTTP
-- injections: 41, one at a time; 38 caught, 3 change no behaviour (steep ground, the v15 version
-  stamp, the clip box now that outlines decide)
+- injections: 48, one at a time (41 in the batch, 7 more in review 1's round); 46 caught, 2 change
+  no behaviour (the v15 version stamp, the clip box now that outlines decide). Steep ground, first
+  counted as changing nothing, is caught since review 1.
 - review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch29-vehicles.md
   docs/design/macro-world.md docs/manual/README.md docs/manual/buildings.md docs/manual/cities.md
   docs/manual/getting-started.md docs/manual/update-notes.md src/harness/metropolis.ts
@@ -123,3 +125,34 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - Three statements in the manual match the code: half a second a tile at 1x, a 4 s stand at
     a platform, white maglevs and orange freight.
   - No decision deletes or overwrites player data.
+- fix 1: done
+  1. Steep ground: a test levels a row of seven tiles south of the garage, a rover at a time. That
+     leaves 14 steep tiles with no crag, and it checks the 164 ways to the tiles round them. With
+     the steep check removed, 97 of the 164 drove up steep ground; as committed, none. The wrong
+     claim is corrected in the note (what went wrong, the injection table and total), in GAME_PLAN
+     and in this entry's decisions and injections.
+  2. Every listed test broken once, one fault at a time, the tree checked clean after each. Three
+     could not see their fault and were strengthened:
+     - the same route every time: missed random ties; now 81 sites, flat and rough, asked in both
+       orders and on a copy (7 and 3 routes differ);
+     - two rovers kept apart: missed the wait removed (no two follow each other on the scripted
+       day); now the metropolis too (23 touching);
+     - the chunked drawing as the whole scene: missed everything redrawn (1% bound); now the
+       measured count plus a quarter (1,885 against 1,128).
+     Caught as they were: chunk-independent (the queue sent once a call), metropolis rovers (lane
+     0.3 out; stopping 0.6 into the site), both train tests (tracks 0.45 out, as off the rails),
+     and the chunked drawing's vacuity check and missing shapes. One fault no test caught (rovers
+     down the middle of the way) has a new test. 48 faults in all: 46 caught, 2 change no
+     behaviour.
+  3. GAME_PLAN's five Batch 29 deliverables ticked.
+  - Also recorded (note's Open, manual's known issues): levelling leaves steep tiles with no crag,
+    where laying a corridor, cable or railway says to break a crag that is not there. The message
+    predates Batch 29; no game code changed in this fix.
+  - verification: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 102 files, 1,198
+    tests, all passed (331 s; the Known-red opening test passed this run); build:web green
+    (471.7 kB JS, 162.1 kB gzip); build green
+  - manual: docs/manual/update-notes.md (Update 29's known issues and the current list: the steep
+    ground message)
+  - changed: src/sim/micro/drive.test.ts src/render/vehicles.test.ts
+    src/render/city-chunks.test.ts docs/balance/batch29-vehicles.md GAME_PLAN.md
+    docs/manual/update-notes.md docs/PROGRESS.md
