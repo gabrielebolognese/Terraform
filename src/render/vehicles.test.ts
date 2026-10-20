@@ -366,7 +366,7 @@ describe("a rover", () => {
 
 describe("depth: a vehicle behind a building is hidden by it", () => {
   /** The shapes the browser fills for a part of the city: each chunk's still picture, then what moves in it, back to front; then the overlays. */
-  function asTheBrowserDraws(view: CityView, o: CitySceneOptions, size: number): Shape[] {
+  function asTheBrowserDraws(view: CityView, o: CitySceneOptions, size: number, redrawn = true): Shape[] {
     const r = cityChunkRange(view, size);
     const vp = o.viewport!;
     const chunks: [number, number][] = [];
@@ -381,7 +381,9 @@ describe("depth: a vehicle behind a building is hidden by it", () => {
     const out: Shape[] = [];
     for (const [cx, cy] of chunks) {
       const chunk = { x0: cx * size, y0: cy * size, size };
-      out.push(...cityScene(view, { ...o, chunk, layer: "static" }), ...cityScene(view, { ...o, chunk, layer: "live" }));
+      // Without `redrawn`, the moving layer as it was before Batch 29: what moves, and nothing drawn again over it.
+      const live = cityScene(view, { ...o, chunk, layer: "live" });
+      out.push(...cityScene(view, { ...o, chunk, layer: "static" }), ...(redrawn ? live : live.filter((shape) => shape.clip === undefined)));
     }
     out.push(...cityScene(view, { ...o, layer: "overlay" }));
     return out;
@@ -390,53 +392,67 @@ describe("depth: a vehicle behind a building is hidden by it", () => {
   for (const [quality, size] of [["medium", 16], ["high", 8]] as [CityQuality, number][]) it(`in the browser's chunked drawing as in the whole scene, at ${quality} detail - a metropolis's trains passing behind its towers`, () => {
     const n = metroView.tiles;
     const owner = owners(metroView);
-    // A moment and a car behind a building of its own chunk: the case the still picture under the moving layer got wrong.
-    let found: { time: number; car: TrainCar } | null = null;
-    for (let time = 0; time < 60 && found === null; time += 1) {
+    // Moments and cars behind a tall building of their own chunk: the case the still picture under the moving layer
+    // got wrong.
+    const candidates: { time: number; car: TrainCar }[] = [];
+    for (let time = 0; time < 60 && candidates.length < 24; time += 1) {
       for (const c of trainCars(metroView, time)) {
         const tx = Math.floor(c.x);
         const ty = Math.floor(c.y);
-        for (let y = ty - 1; y <= ty + 6 && found === null; y += 1) {
-          for (let x = tx - 6; x <= tx + 6 && found === null; x += 1) {
+        let behind = false;
+        for (let y = ty - 1; y <= ty + 6 && !behind; y += 1) {
+          for (let x = tx - 6; x <= tx + 6 && !behind; x += 1) {
             if (x < 0 || y < 0 || x >= n || y >= n) continue;
             const o = owner[y * n + x]!;
             if (o < 0) continue;
             const b = metroView.buildings[o]!;
             const same = Math.floor(b.tx / size) === Math.floor(tx / size) && Math.floor(b.ty / size) === Math.floor(ty / size);
             if (!same || buildingTop(b.type) < 1.5 || !drawsBefore({ tx, ty, w: 1, h: 1 }, { tx: b.tx, ty: b.ty, w: b.size, h: b.depth ?? b.size })) continue;
-            // In front on screen too: its image covers the car's.
+            // In front on screen too: its image across the car's.
             const sx = ((c.x - c.y) * TILE_W) / 2;
             const bx0 = ((b.tx - b.ty - (b.depth ?? b.size)) * TILE_W) / 2;
             const bx1 = ((b.tx + b.size - b.ty) * TILE_W) / 2;
-            if (sx > bx0 + 8 && sx < bx1 - 8) found = { time, car: c };
+            behind = sx > bx0 + 8 && sx < bx1 - 8;
           }
         }
-        if (found !== null) break;
+        if (behind) {
+          candidates.push({ time, car: c });
+          break;
+        }
       }
     }
-    expect(found, "vacuity: a car passes behind a tower of its own chunk").not.toBeNull();
-    const { time, car } = found!;
-    const cx = ((car.x - car.y) * TILE_W) / 2;
-    const cy = ((car.x + car.y) * TILE_H) / 2 - car.z * Z_PX;
     const w = 320;
     const h = 200;
-    const viewport = { minX: cx - w / 2, maxX: cx + w / 2, minY: cy - h / 2, maxY: cy + h / 2 };
-    const o: CitySceneOptions = { time, selected: null, ghost: null, quality, viewport, sinceYears: 0 };
-    const frame = (shapes: readonly Shape[]) => rasterize(shapes, w, h, { scale: 1, offsetX: w / 2 - cx, offsetY: h / 2 - cy }, CITY_BACKGROUND);
-    const whole = frame(cityScene(metroView, o));
-    const chunked = frame(asTheBrowserDraws(metroView, o, size));
-    const noCars = frame(cityScene({ ...metroView, rails: (metroView.rails ?? []).map(() => false) }, o));
-    let differ = 0;
-    let carPixels = 0;
-    for (let i = 0; i < w * h; i += 1) {
-      const d = Math.max(...[0, 1, 2].map((k) => Math.abs(whole.pixels[i * 4 + k]! - chunked.pixels[i * 4 + k]!)));
-      if (d > 2) differ += 1;
-      if (Math.max(...[0, 1, 2].map((k) => Math.abs(whole.pixels[i * 4 + k]! - noCars.pixels[i * 4 + k]!))) > 2) carPixels += 1;
+    const differing = (a: { pixels: Uint8ClampedArray | Uint8Array }, b: { pixels: Uint8ClampedArray | Uint8Array }): number => {
+      let count = 0;
+      for (let i = 0; i < w * h; i += 1) if (Math.max(...[0, 1, 2].map((k) => Math.abs(a.pixels[i * 4 + k]! - b.pixels[i * 4 + k]!))) > 2) count += 1;
+      return count;
+    };
+    // Those where something of the car's own chunk does cover it on screen (most do not): drawn as the browser drew
+    // it before this batch - each chunk's still picture, then only what moves in it, none of it drawn again over a
+    // vehicle - the picture is not the whole scene. At each, the browser's drawing now is.
+    let checked = 0;
+    let most = 0;
+    for (const { time, car } of candidates) {
+      const cx = ((car.x - car.y) * TILE_W) / 2;
+      const cy = ((car.x + car.y) * TILE_H) / 2 - car.z * Z_PX;
+      const viewport = { minX: cx - w / 2, maxX: cx + w / 2, minY: cy - h / 2, maxY: cy + h / 2 };
+      const o: CitySceneOptions = { time, selected: null, ghost: null, quality, viewport, sinceYears: 0 };
+      const frame = (shapes: readonly Shape[]) => rasterize(shapes, w, h, { scale: 1, offsetX: w / 2 - cx, offsetY: h / 2 - cy }, CITY_BACKGROUND);
+      const whole = frame(cityScene(metroView, o));
+      const before = differing(whole, frame(asTheBrowserDraws(metroView, o, size, false)));
+      if (before === 0) continue;
+      checked += 1;
+      most = Math.max(most, before);
+      const noCars = frame(cityScene({ ...metroView, rails: (metroView.rails ?? []).map(() => false) }, o));
+      expect(differing(whole, noCars), "vacuity: trains in the picture").toBeGreaterThan(20);
+      // Measured: no pixel differs, at either detail. Before, at the first such moment (4 s): 104 pixels at medium and
+      // 131 at high, the cars over a dome's glass. Drawing again what covered them clipped to the train's box, not its
+      // outline, blended the glass twice round it: 786 and 735 (the version this batch first shipped).
+      expect(differing(whole, frame(asTheBrowserDraws(metroView, o, size))), `at ${time} s`).toBe(0);
     }
-    expect(carPixels, "vacuity: trains in the picture").toBeGreaterThan(20);
-    // Measured: no pixel differs, at either detail. Drawing the moving layer over the still picture as it was (only
-    // what moves) put the cars over the tower: 484 pixels at medium; drawing again only what covered them, without
-    // what stood in front of that, put a ground tile over a dome (measured on the way to this).
-    expect(differ).toBe(0);
+    // Measured: 6 moments of 24 at medium, the most 104 pixels covered; 9 at high, the most 131.
+    expect(checked, `vacuity: cars hidden on screen by a building of their own chunk (of ${candidates.length} behind one)`).toBeGreaterThan(0);
+    expect(most, "vacuity: one well hidden").toBeGreaterThan(20);
   });
 });

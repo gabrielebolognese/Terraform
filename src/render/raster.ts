@@ -35,6 +35,14 @@ export interface Shape {
    * own patch of the picture.
    */
   readonly clip?: ClipBox;
+  /**
+   * And only inside these outlines, if given: rings in iso pixel space, a
+   * pixel inside any one of them is inside (the vehicle's own shapes, within
+   * `clip`). Drawn again inside the box but outside the vehicle, a pane of
+   * glass in front of it was blended twice over the still picture (Batch 29:
+   * 786 pixels of a dome darkened round a train, measured).
+   */
+  readonly clipTo?: readonly (readonly number[])[];
 }
 
 /** An upright box in iso pixel space. */
@@ -67,6 +75,40 @@ export function rasterize(
   }
   const { scale, offsetX, offsetY } = transform;
   const xs: number[] = [];
+  // Each set of outlines filled once into a mask over its rows and columns: shapes drawn again share them.
+  const masks = new Map<readonly (readonly number[])[], { col0: number; row0: number; w: number; h: number; inside: Uint8Array }>();
+  const maskOf = (outlines: readonly (readonly number[])[], col0: number, col1: number, row0: number, row1: number) => {
+    const kept = masks.get(outlines);
+    if (kept !== undefined) return kept;
+    const w = Math.max(0, col1 - col0 + 1);
+    const h = Math.max(0, row1 - row0 + 1);
+    const inside = new Uint8Array(w * h);
+    const crossings: number[] = [];
+    for (const ring of outlines) {
+      const count = ring.length / 2;
+      for (let row = row0; row <= row1; row += 1) {
+        const yc = row + 0.5;
+        crossings.length = 0;
+        for (let k = 0; k < count; k += 1) {
+          const x0 = ring[2 * k]! * scale + offsetX;
+          const y0 = ring[2 * k + 1]! * scale + offsetY;
+          const next = (k + 1) % count;
+          const x1 = ring[2 * next]! * scale + offsetX;
+          const y1 = ring[2 * next + 1]! * scale + offsetY;
+          if ((y0 <= yc && yc < y1) || (y1 <= yc && yc < y0)) crossings.push(x0 + ((yc - y0) / (y1 - y0)) * (x1 - x0));
+        }
+        crossings.sort((p, q) => p - q);
+        for (let k = 0; k + 1 < crossings.length; k += 2) {
+          const from = Math.max(col0, Math.ceil(crossings[k]! - 0.5));
+          const to = Math.min(col1, Math.ceil(crossings[k + 1]! - 0.5) - 1);
+          for (let col = from; col <= to; col += 1) inside[(row - row0) * w + col - col0] = 1;
+        }
+      }
+    }
+    const made = { col0, row0, w, h, inside };
+    masks.set(outlines, made);
+    return made;
+  };
 
   for (const shape of shapes) {
     const a = Math.min(1, Math.max(0, shape.fill.a));
@@ -93,6 +135,11 @@ export function rasterize(
     const cx1 = clip === undefined ? width - 1 : Math.min(width - 1, Math.ceil(clip.maxX * scale + offsetX - 0.5) - 1);
     const rowFrom = Math.max(0, Math.floor(minY), clip === undefined ? 0 : Math.ceil(clip.minY * scale + offsetY - 0.5));
     const rowTo = Math.min(height - 1, Math.ceil(maxY), clip === undefined ? height - 1 : Math.ceil(clip.maxY * scale + offsetY - 0.5) - 1);
+    // Outlines: the mask over the whole clip box (or picture), so every shape sharing them shares one mask.
+    const mask =
+      shape.clipTo === undefined
+        ? null
+        : maskOf(shape.clipTo, cx0, cx1, clip === undefined ? 0 : Math.max(0, Math.ceil(clip.minY * scale + offsetY - 0.5)), clip === undefined ? height - 1 : Math.min(height - 1, Math.ceil(clip.maxY * scale + offsetY - 0.5) - 1));
     for (let row = rowFrom; row <= rowTo; row += 1) {
       const yc = row + 0.5;
       xs.length = 0;
@@ -116,6 +163,7 @@ export function rasterize(
         const from = Math.max(cx0, Math.ceil(xs[k]! - 0.5));
         const to = Math.min(cx1, Math.ceil(xs[k + 1]! - 0.5) - 1);
         for (let col = from; col <= to; col += 1) {
+          if (mask !== null && mask.inside[(row - mask.row0) * mask.w + col - mask.col0] !== 1) continue;
           const o = (row * width + col) * 3;
           acc[o] = shape.fill.r * a + acc[o]! * (1 - a);
           acc[o + 1] = shape.fill.g * a + acc[o + 1]! * (1 - a);

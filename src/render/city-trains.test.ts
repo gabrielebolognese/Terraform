@@ -10,7 +10,10 @@ import { describe, expect, it } from "vitest";
 import { flatten, referenceCity, renderCity } from "../harness/city-frames.js";
 import type { CityView, Rock } from "../sim/index.js";
 import type { CityQuality, CitySceneOptions } from "./city.js";
-import { BRIDGE_Z, cityLiveChunks, railDeck, railsDrawn, resetSceneCache, trainLapsOf, trainLinesOf, trainsAt } from "./city.js";
+import { BRIDGE_Z, CITY_BACKGROUND, cityLiveChunks, cityScene, drawCarShapes, railDeck, railsDrawn, resetSceneCache, trainLapsOf, trainLinesOf, trainsAt } from "./city.js";
+import { TILE_H } from "./iso.js";
+import type { Rgba } from "./raster.js";
+import { rasterize } from "./raster.js";
 import { TRAIN_CARS } from "./vehicles.js";
 import { frameDifference } from "./planet.js";
 
@@ -219,6 +222,36 @@ describe("trains", () => {
     }
     expect(onBends, "vacuity: cars went round the bends").toBeGreaterThan(100);
     expect(probes).toBeGreaterThan(10_000);
+  });
+
+  it("are drawn whole on open ground: nothing under a car is drawn over it", () => {
+    // One train, there and back along a line over open ground: nothing stands in front of it, so every pixel a car
+    // covers on its own is the car's in the city's picture too - the ground under it all drawn before it.
+    const line = laid(open, "rails", row(12, 4, 20), "a short line");
+    const w = 480;
+    const h = 300;
+    const t = { scale: 1, offsetX: w / 2, offsetY: h / 2 - (25 * TILE_H) / 2 };
+    const NONE: Rgba = { r: 1, g: 0, b: 1, a: 1 };
+    let pixels = 0;
+    let wrong = 0;
+    for (let time = 0; time < 30; time += 0.7) {
+      const scene = rasterize(cityScene(line, { ...at("medium", time), sinceYears: 0 }), w, h, t, CITY_BACKGROUND);
+      const cars = [...trainsAt(line, time).values()].flat();
+      const alone = cars.map((car) => rasterize(drawCarShapes(car, time), w, h, t, NONE));
+      const covered = (img: { pixels: Uint8ClampedArray }, i: number): boolean => img.pixels[i * 4] !== 255 || img.pixels[i * 4 + 1] !== 0 || img.pixels[i * 4 + 2] !== 255;
+      for (let i = 0; i < w * h; i += 1) {
+        // Only pixels one car covers: where two do, the nearer is drawn over the other.
+        const mine = alone.filter((img) => covered(img, i));
+        if (mine.length !== 1) continue;
+        pixels += 1;
+        const d = Math.max(...[0, 1, 2].map((k) => Math.abs(scene.pixels[i * 4 + k]! - mine[0]!.pixels[i * 4 + k]!)));
+        if (d > 2) wrong += 1;
+      }
+    }
+    expect(pixels, "vacuity: cars in the picture").toBeGreaterThan(5000);
+    // Measured: none of 55,595; drawn with the tile it is over furthest from the viewer, the ground of the tiles
+    // nearer over it: 4,320.
+    expect(wrong).toBe(0);
   });
 
   it("are drawn moving: the picture changes with the clock where trains run, and not where none do", () => {

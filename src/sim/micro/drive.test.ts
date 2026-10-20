@@ -19,7 +19,7 @@ import { BUILDING_DEFS, keySet } from "./buildings.js";
 import { DOOR_KEPT_CLEAR, NO_ROUTE, ROVER_PASSING, buildingSite, drive, expandRoute, garageDoor, garageLeg, roverRoute, tileSite } from "./drive.js";
 import { foundSettlement } from "./registry.js";
 import { garage, rocksOf, siteGround } from "./rocks.js";
-import { checkPlacement, claimLand, claimableChunks, placeBuilding, placeLink, upgradeBuilding } from "./settlement.js";
+import { checkPlacement, claimLand, claimableChunks, levelGround, placeBuilding, placeLink, sendRover, upgradeBuilding } from "./settlement.js";
 import { claimTest, keyTile, tileKey } from "./space.js";
 
 const BASE = { SETTLEMENTS_ENABLED: 1, HEADQUARTERS_ENABLED: 1, BUILD_TIME_ENABLED: 1, CITY_GRID_TILES: 64 } as const;
@@ -270,6 +270,44 @@ describe("a job no rover can get to", () => {
     expect(near.ok, `vacuity: one that can be reached is not refused (${near.reason})`).toBe(true);
     // Not vacuous: with routes off the same building is placed - the old straight line goes through anything.
     expect(placeBuilding(s, sid(s), "solar_array", door.tx + 10, door.ty + 10, OFF).ok).toBe(true);
+  });
+
+  it("is refused, with the reason: a rock, and ground to level", () => {
+    // On rough ground, a rock with a depot on each side of it a rover could drive (laid with routes off): no tile
+    // beside it is one a rover can get to.
+    const OFF_ROUGH = makeTuning({ ...BASE, TERRAIN_RELIEF_M: 12, ROCK_CLUSTER_CHANCE: 0.65, CITY_GRID_TILES: 96 });
+    const s0 = city(ROUGH, 1e6, 3000);
+    const id = sid(s0);
+    const door = garageDoor(first(s0))!;
+    const rocks = rocksOf(first(s0), ROUGH);
+    const n = siteGround(first(s0), ROUGH).tiles;
+    let tried = 0;
+    let refused = 0;
+    for (let i = 0; i < n * n && refused < 3; i += 1) {
+      const x = i % n;
+      const y = (i - x) / n;
+      if (rocks[i] === "none" || Math.hypot(x - door.tx, y - door.ty) < 8) continue;
+      let s: SimState | null = s0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        if (s === null || !driveable(first(s), x + dx, y + dy, ROUGH)) continue;
+        const o = placeBuilding(s, id, "storage_depot", x + dx, y + dy, OFF_ROUGH);
+        s = o.ok ? o.state : null;
+      }
+      if (s === null) continue;
+      // Every rover home, nothing waiting.
+      s = { ...s, settlements: s.settlements.map((c) => ({ ...c, jobs: [], buildQueue: [] })) };
+      // Not vacuous: with routes off, the straight line goes through anything, and the rover is sent.
+      if (!sendRover(s, id, x, y, OFF_ROUGH).ok || !levelGround(s, id, x, y, OFF_ROUGH).ok) continue;
+      tried += 1;
+      const rock = sendRover(s, id, x, y, ROUGH);
+      expect(rock.ok, `the rock at ${x},${y}`).toBe(false);
+      expect(rock.reason).toBe(NO_ROUTE);
+      const level = levelGround(s, id, x, y, ROUGH);
+      expect(level.ok, `levelling ${x},${y}`).toBe(false);
+      expect(level.reason).toBe(NO_ROUTE);
+      refused += 1;
+    }
+    expect(tried, "vacuity: rocks walled in").toBeGreaterThan(0);
   });
 
   it("keeps its place in the queue while walled in, and the next goes instead", () => {
