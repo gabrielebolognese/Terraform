@@ -18,7 +18,7 @@ This manual describes the game as it is today. What changed in each update is in
 |---|---|
 | [Getting started](getting-started.md) | The title screen, making your first world, and your first half hour |
 | [The planet](the-planet.md) | The view from orbit: phases, the machines you order, credits, the goal |
-| [Cities](cities.md) | Founding a settlement, building, rovers, the build queue, upgrades, people, land, railways |
+| [Cities](cities.md) | Founding a settlement, building, how rovers drive, the build queue, upgrades, people, land, railways and trains |
 | [Buildings](buildings.md) | Every structure: what it costs, what it does, how long it takes |
 | [Controls](controls.md) | Mouse, keyboard and game speed in every view |
 | [Worlds and saving](worlds-and-saving.md) | Keeping several worlds, saving, backups, and what happens while you are away |
