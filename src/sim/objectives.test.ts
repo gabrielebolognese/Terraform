@@ -10,7 +10,7 @@
  *
  * The scripted playthroughs (the guided player, every objective reached,
  * nothing in the first minute, rewards that matter) are in
- * `src/harness/first-hour.test.ts`.
+ * `src/web/first-hour.test.ts`.
  */
 
 import { describe, expect, it } from "vitest";
@@ -21,6 +21,7 @@ import { deserialize, fromSave, serialize, toSave } from "./save.js";
 import { DEFAULT_TUNING, makeTuning } from "./tuning.js";
 import type { BuildingType, Settlement, SimState } from "./types.js";
 import { NEUTRAL_ENV } from "./types.js";
+import { derive } from "./derive.js";
 import { foundSettlement } from "./micro/registry.js";
 import { roverCount } from "./micro/rocks.js";
 import * as flood from "../testkit/flood.js";
@@ -187,7 +188,7 @@ describe("objectives", () => {
   it("derive their progress from the state, exactly what each counts", () => {
     let s = withCity(founded(), { population: 63.7 });
     const of = (x: SimState, oid: string) => objectiveStatus(x, T).find((o) => o.def.id === oid)!.progress;
-    expect(of(s, "city_first")).toEqual({ now: 63, target: T.GOAL_FIRST_PEOPLE, done: false });
+    expect(of(s, "city_first")).toEqual({ now: 63, from: 0, target: T.GOAL_FIRST_PEOPLE, done: false });
     s = withCity(s, { population: 100 });
     expect(of(s, "city_first").done).toBe(true);
     // The air, in mbar: Mars starts at about 6.
@@ -195,7 +196,14 @@ describe("objectives", () => {
     expect(of(s, "planet_pressure").now).toBeLessThan(T.GOAL_PRESSURE_MBAR);
     // A phase goal: the temperature against the phase's, done once the latched phase is reached.
     expect(of(s, "planet_runaway").target).toBe(T.T_SUBL_CAP);
-    expect(of({ ...s, phaseReached: 2 }, "planet_runaway")).toEqual({ now: T.T_SUBL_CAP, target: T.T_SUBL_CAP, done: true });
+    expect(of({ ...s, phaseReached: 2 }, "planet_runaway")).toMatchObject({ now: T.T_SUBL_CAP, target: T.T_SUBL_CAP, done: true });
+    // Measured from the planet as the world began, not from absolute zero: a new world (no weather here) has come none of the way.
+    const began = derive(marsStart(undefined, T).reservoirs, NEUTRAL_ENV, T).T;
+    for (const oid of ["planet_runaway", "planet_water"]) {
+      expect(of(s, oid).from, oid).toBe(began);
+      expect(of(s, oid).now, oid).toBe(began);
+    }
+    expect(of(s, "planet_pressure").from).toBe(0);
   });
 
   it("refuse a claim with objectives off, unknown, not open, not done or claimed already - changing nothing", () => {
