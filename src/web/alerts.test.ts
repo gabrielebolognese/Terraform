@@ -245,8 +245,8 @@ describe("each alert fires in a run that causes it, and not in one that does not
     const base = powered();
     const grown = (s: SimState, n: number) => ({ ...s, settlements: s.settlements.map((c) => ({ ...c, population: n })) });
     const watch = new AlertWatch();
-    play(grown(base, 90), 1, T, watch);
-    const done = play(grown(base, 100), 1, T, watch);
+    play(grown(base, 90), 0, T, watch);
+    const done = play(grown(base, 100), 0, T, watch);
     expect(done.first.fresh.filter((a) => a.kind === "objective").map((a) => a.title)).toEqual(["Objective done: A hundred people"]);
     expect(done.first.fresh.find((a) => a.kind === "objective")!.target).toEqual({ kind: "objectives" });
     const short = new AlertWatch();
@@ -257,9 +257,22 @@ describe("each alert fires in a run that causes it, and not in one that does not
     const s = settle(connect(place(place(founded(off), "solar_array", [46, 46], off), "habitat_dome", [46, 46], off), off), off);
     play(grown(s, 90), 1, off, sandbox);
     expect(kinds(play(grown(s, 100), 1, off, sandbox).first.fresh)).not.toContain("objective");
-    // Claimed, it is not done again.
+    // Seen once: another look at the same world does not announce it again, and once claimed it is gone.
+    expect(kinds(play(grown(base, 100), 0, T, watch).first.fresh)).not.toContain("objective");
     const claimed = claimObjective(grown(base, 100), "city_first", T);
     expect(claimed.ok).toBe(true);
+    expect(play(claimed.state, 0, T, watch).first.fresh.map((a) => a.key)).not.toContain("objective:city_first");
+  });
+
+  it("reads the planet afresh for the same city: a blackout under half the sunlight, none under the whole", () => {
+    // One array's 6 against the dome's 3 and the spaceport's 2; at half the sunlight, 3 against 5.
+    const s = stores(powered(), { power: 0 });
+    const sun = envOf(s, T);
+    const dim = { ...sun, insolation: sun.insolation / 2 };
+    const dark = (env: HabitatChannels) => conditions(s, env, 0, T).some((a) => a.kind === "blackout");
+    expect(dark(sun)).toBe(false);
+    expect(dark(dim)).toBe(true);
+    expect(dark(sun), "and back").toBe(false);
   });
 });
 
