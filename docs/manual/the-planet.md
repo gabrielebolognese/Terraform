@@ -107,8 +107,9 @@ liquid water and breathable air.
 ## Settlements
 
 The **Settlements** section lists your cities and outposts. **Found a city** and **Found an
-outpost** start a new one (type a name first if you like, then click the planet), **Open** takes
-you down to one, and **World map** shows the whole planet. See [Cities](cities.md).
+outpost** (and **Found a metropolis**, once unlocked) start a new one: type a name first if you
+like, then click the planet. **Open** takes you down to one, and **World map** shows the whole
+planet. See [Cities](cities.md).
 
 ## Instruments
 

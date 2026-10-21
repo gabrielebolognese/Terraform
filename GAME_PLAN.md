@@ -48,7 +48,7 @@ What is missing, in the user's words (2026-10-11):
 | 27 | The front door: title screen and worlds | **COMPLETE** - [note](docs/balance/batch27-worlds.md) - title screen, worlds with their own saves and seeds, Standard / Sandbox / Terraformed start; a world that will not load is kept, never saved over |
 | 28 | Time that means something: real build and upgrade times | **COMPLETE** - [note](docs/balance/batch28-build-times.md) - the curve (20 s to 8 h), a build queue, a Standard pace (planet 8x slower, cities on their own clock) beside Classic; first upgrade misses 4-8 min |
 | 29 | Vehicles that use the city: rovers on the ground, trains on the line | **COMPLETE** - [note](docs/balance/batch29-vehicles.md) - rovers drive routes round the city (new worlds; their length sets the trip), trains ride car by car on a track each way and stop at stations; every vehicle drawn behind what stands in front of it; no vehicle inside a building, measured |
-| 30 | The first hour: onboarding and objectives | NOT STARTED |
+| 30 | The first hour: onboarding and objectives | **COMPLETE** - [note](docs/balance/batch30-first-hour.md) - a guide through seven first steps, driven by the state; nine objectives in three chains with rewards (settlers, rovers, materials, credits, the metropolis, gold markers); milestone cards and a chime; the guide takes 42 min (claiming land waits for 200 people) |
 | 31 | Knowing what is happening: alerts, notifications and statistics | NOT STARTED |
 | 32 | People, not a number: needs, services and happiness | NOT STARTED |
 | 33 | Events that ask for decisions | NOT STARTED |
@@ -395,7 +395,7 @@ faults caught, the other 2 change nothing.
 next goal worth reaching and a reward for reaching it.
 
 **Deliverables:**
-- [ ] **Guided first steps** in Standard, on a new world. Skippable, and never shown again once
+- [x] **Guided first steps** in Standard, on a new world. Skippable, and never shown again once
   done. In order:
   1. found a city;
   2. place power;
@@ -407,15 +407,15 @@ next goal worth reaching and a reward for reaching it.
 
   Each step highlights what to press and waits for the player to do it. Driven by the state, not by
   a script that can fall out of step.
-- [ ] **Objectives.** A chain of goals with rewards (materials, credits, an unlock, a cosmetic),
+- [x] **Objectives.** A chain of goals with rewards (materials, credits, an unlock, a cosmetic),
   shown in a panel.
   - **City:** reach 500 people; run a week without a shortage.
   - **Planet:** raise the pressure to 100 mbar; first liquid water.
   - **Network:** three cities joined.
   - Later goals open as earlier ones finish. Each says exactly what counts and how far along it is.
-- [ ] **Milestones:** a moment, a card and a sound when a phase is reached, a city is founded, a
+- [x] **Milestones:** a moment, a card and a sound when a phase is reached, a city is founded, a
   great structure is finished.
-- [ ] **Rewards that matter.** What an objective pays is tuned against Batch 28's pacing: a reward
+- [x] **Rewards that matter.** What an objective pays is tuned against Batch 28's pacing: a reward
   must shorten the road to the next goal by a stated amount.
 
 **Exit gate:**
@@ -431,6 +431,43 @@ next goal worth reaching and a reward for reaching it.
 
 **Decisions for Phase 1:** the objective list itself and its rewards, written out in full before
 building.
+
+**Done** - see [the note](docs/balance/batch30-first-hour.md). Built unattended (`/next-batch auto`)
+in one session. All 45 injected faults caught, one only after a new test (the guide latched once a call
+rather than every substep: seen only when a city is lost to the sea within one call).
+
+**Decisions taken:**
+1. **The list,** measured and tuned, each opening when the one before it in its chain is claimed:
+   - City: a hundred people (50 settlers); steady supply, 20 city-years in a row at 200+ people with
+     nothing short (75 settlers); a town of 500 (2 rovers for good); a city of 1,000 (2,000 credits
+     and the metropolis unlocked).
+   - Planet: the caps let go, Phase 2 (1,000 credits); thicker air, 100 mbar (2,000); first water,
+     Phase 3 (3,000).
+   - Network: joined by rail (200 materials); three cities joined (2,000 credits and gold markers).
+2. **The guide's progress is a latch in the world,** set in `advance` from the state like the
+   phase; the card shows it carried forward through what the state shows now. Skip is an action.
+3. **On in new Standard worlds only** (`GUIDE_ENABLED`, `OBJECTIVES_ENABLED`, 0 by default): not in
+   a sandbox (the spec), a Terraformed start (every goal met) or any world made before.
+4. **Claims are the player's** (a Claim button); rewards land in the largest city, as far as it has
+   homes and room. The unlock is founding a metropolis, which the browser never offered; the
+   cosmetic is gold markers; the sound is a procedural chime.
+
+**What changed from the plan, and why:**
+- **The guided steps take 42 minutes, not 10-20.** Claiming land waits for 200 people (the user's
+  rule), and a city grows from 4 settlers at a tenth a year: 22 minutes at the very least. The first
+  five steps take 50 seconds.
+- **"A week without a shortage" became 20 city-years in a row** (about 11 minutes at 1x): the
+  city's record is kept a year a sample, and a week is no unit the game has.
+- **City goals pay settlers and rovers, not materials.** A growing city's materials store is full
+  from about 15 minutes in; the first claims landed 9 of 150 materials. Two rovers bring the city of
+  1,000 ten minutes sooner; one, a minute.
+- **A rover reward is saved state** (`extraRovers` on the settlement), so the save change is wider
+  than the claims alone. Save v16.
+- **Milestones include an objective done,** so a reward waiting is never missed.
+- **The metropolis gate broke Batch 29's vehicle tests** (their scene founded a metropolis in a new
+  Standard world, unchecked); the scene's world now holds the unlock.
+- **Batch 28's open item, the first upgrade at 4-8 minutes, is met for a taught player** (the
+  guide's fifth step; 1.8 minutes). The untaught script is unchanged (21.5 minutes).
 
 ---
 

@@ -48,6 +48,7 @@ that state.
 | [`docs/balance/batch27-worlds.md`](docs/balance/batch27-worlds.md) | The front door: a title screen, any number of worlds each with its own save and seed (the seed turns the terrain), Standard / Sandbox / Terraformed start, export and import - and a world that will not load is kept, never saved over. |
 | [`docs/balance/batch28-build-times.md`](docs/balance/batch28-build-times.md) | Real build times: a curve from 20 seconds to 8 hours, a build queue, and a Standard pace where the planet runs 8x slower while the cities keep their rhythm - measured on a scripted playthrough, with the one target it misses and why. |
 | [`docs/balance/batch29-vehicles.md`](docs/balance/batch29-vehicles.md) | Vehicles that use the city: rovers on routes round the buildings (their length sets the trip), trains car by car on a track each way with stations and freight, every vehicle drawn behind what stands in front of it, glass too - no vehicle inside a building over a scripted day and a metropolis, measured; about 1 ms more a frame at medium detail. |
+| [`docs/balance/batch30-first-hour.md`](docs/balance/batch30-first-hour.md) | The first hour: a guide through seven first steps driven by the state, nine objectives with rewards each measured to shorten the road to the next goal, milestones; the guide takes 42 min, claiming land waiting for 200 people. |
 | [`docs/balance/detail-pass-buildings.md`](docs/balance/detail-pass-buildings.md) | The ten buildings rebuilt with far more detail; a close-up of all ten is `docs/frames/city-buildings.png`. |
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
@@ -101,6 +102,15 @@ up where a rover is driving. Trains run a track each way, ride the curve of the 
 for bends and stand at station platforms and at the end of a line; a line past no station carries
 freight. Every vehicle is drawn behind whatever stands in front of it. A world made before keeps its
 straight-line trip times, but its rovers are drawn round the buildings too.
+
+**The first hour** (Batch 30). A new Standard world has a guide: a card at the top of the screen that
+takes the player through seven first steps (found a city, place power, a dome, connect them, raise a
+level, claim land, a railway to a second settlement), with the control to press glowing. A step counts
+when the world shows it done - the simulation latches it every substep - so the guide cannot fall out
+of step. **Objectives** hold three chains of goals (the city, the planet, the network) with derived
+progress and rewards claimed by the player: settlers, rovers, materials, credits, the right to found a
+metropolis, gold markers. Milestones (a phase, a city, a great structure, an objective done) bring a
+card, a moment of light and a chime. None of it is in a sandbox, a Terraformed start or an older world.
 
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
