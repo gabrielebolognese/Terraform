@@ -49,6 +49,7 @@ that state.
 | [`docs/balance/batch28-build-times.md`](docs/balance/batch28-build-times.md) | Real build times: a curve from 20 seconds to 8 hours, a build queue, and a Standard pace where the planet runs 8x slower while the cities keep their rhythm - measured on a scripted playthrough, with the one target it misses and why. |
 | [`docs/balance/batch29-vehicles.md`](docs/balance/batch29-vehicles.md) | Vehicles that use the city: rovers on routes round the buildings (their length sets the trip), trains car by car on a track each way with stations and freight, every vehicle drawn behind what stands in front of it, glass too - no vehicle inside a building over a scripted day and a metropolis, measured; about 1 ms more a frame at medium detail. |
 | [`docs/balance/batch30-first-hour.md`](docs/balance/batch30-first-hour.md) | The first hour: a guide through seven first steps driven by the state, nine objectives with rewards each measured to shorten the road to the next goal, milestones; the guide takes 42 min, claiming land waiting for 200 people. |
+| [`docs/balance/batch31-alerts.md`](docs/balance/batch31-alerts.md) | Knowing what is happening: alerts derived at the readout (each type fired by a scripted run that causes it, and not by one beside it), toasts by priority, the alert centre, the planet's bounded record in the save (125 samples, 25 kB after 1,000 sim-years), statistics, each city at a glance; a look over the example planet cut from 2.8 s to a few ms. |
 | [`docs/balance/detail-pass-buildings.md`](docs/balance/detail-pass-buildings.md) | The ten buildings rebuilt with far more detail; a close-up of all ten is `docs/frames/city-buildings.png`. |
 | [`docs/balance/detail-pass-lod.md`](docs/balance/detail-pass-lod.md) | Three levels of detail, so a zoomed-out metropolis stays smooth, and loose rocks on open ground. |
 | [`docs/balance/detail-pass-roads.md`](docs/balance/detail-pass-roads.md) | Roads, connection points and rovers: a building runs only when its network holds a producer of what it draws. |
@@ -111,6 +112,16 @@ of step. **Objectives** hold three chains of goals (the city, the planet, the ne
 progress and rewards claimed by the player: settlers, rovers, materials, credits, the right to found a
 metropolis, gold markers. Milestones (a phase, a city, a great structure, an objective done) bring a
 card, a moment of light and a chime. None of it is in a sandbox, a Terraformed start or an older world.
+
+**Knowing what is happening** (Batch 31). Alerts are derived from the state at the readout, never
+stored: a blackout, a shortage, buildings offline and why (grouped, so a hundred offline for one
+reason in one city are one line), a dust storm forecast from the seeded weather, builds and upgrades
+finished, an objective done. Urgent and notice alerts pop up as toasts, the urgent first; the
+**Alerts** centre lists what holds now and what happened. Every alert clicks through: down to the
+city, its building selected and centred. **Statistics** chart the planet (its six axes, progress,
+credits, people) over the whole game from a record the simulation keeps in the save, bounded by
+halving, and each city's record, now with what it made and used of each resource. Each city's line in
+the HUD and the world map says its people, what is short and what is being built.
 
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —

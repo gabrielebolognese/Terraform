@@ -19,6 +19,7 @@ This manual describes the game as it is today. What changed in each update is in
 | [Getting started](getting-started.md) | The title screen, making your first world, and your first half hour |
 | [The planet](the-planet.md) | The view from orbit: phases, the machines you order, credits, the goal |
 | [Goals](goals.md) | The guide through your first steps, the objectives and their rewards, and milestones |
+| [Alerts and statistics](alerts-and-statistics.md) | What needs you and where, pop-up messages, the Alerts button, the charts of your planet and cities, and each city at a glance |
 | [Cities](cities.md) | Founding a settlement, building, how rovers drive, the build queue, upgrades, people, land, railways and trains |
 | [Buildings](buildings.md) | Every structure: what it costs, what it does, how long it takes |
 | [Controls](controls.md) | Mouse, keyboard and game speed in every view |
@@ -36,6 +37,9 @@ This manual describes the game as it is today. What changed in each update is in
    to build habitats, power, water, oxygen and food, and people will come.
 4. **Keep both going.** The planet's machines cost credits; your cities' research earns more. As
    the planet passes each phase, new machines unlock, until Mars is a living world.
+5. **Watch for alerts.** A blackout, a shortage or a building that cannot run pops up at the top
+   right; click it to go straight there. **Statistics** charts how the planet and each city are
+   doing.
 
 A full terraforming is a long game: several days of play at normal speed. Cities move faster,
 with buildings that go up in seconds or minutes at first and take hours at their highest levels.

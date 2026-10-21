@@ -172,13 +172,15 @@ time. A Spaceport also brings in a trickle of materials, water, oxygen and food 
 - **Road (corridor)**, **Power line** and **Railway** draw plans that crews build as materials
   allow. **Cancel plans** drops plans not yet built.
 - You can rename the city here.
-- **Charts** show population, growth and deaths, shortages, stores, and what the city makes
-  against what it uses, year by year.
+- **Charts** show population, growth and deaths, shortages, stores, what the city makes less what
+  it uses, and, for each of power, water, oxygen, food and materials, what it made and what it
+  used, year by year. The same charts are in **Statistics** (see
+  [Alerts and statistics](alerts-and-statistics.md)).
 
 ## The world map and railways
 
-**World map** shows the whole planet flat, with every settlement. Click a settlement to see it and
-its railways.
+**World map** shows the whole planet flat, with every settlement. Click a settlement to see it,
+how it is doing (its people, anything running short, and what is being built), and its railways.
 
 - **Lay a railway to...** then choose another settlement to connect them. A railway costs 5
   materials a kilometre, half paid by each end.
