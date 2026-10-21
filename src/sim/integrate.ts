@@ -31,6 +31,7 @@ import type { ForcingFn } from "./rates/index.js";
 import { computeStep } from "./rates/index.js";
 import { flowRoutes } from "./micro/routes.js";
 import { latchGuide } from "./objectives.js";
+import { planetSample, recordPlanet, samplesAt } from "./history.js";
 import { liquidWaterRate } from "./sea-level.js";
 import type { Tuning } from "./tuning.js";
 import type {
@@ -371,6 +372,11 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
     };
     // The guided first steps (Batch 30), latched like the phase: every substep, from the state it leaves.
     if (t.GUIDE_ENABLED) working = latchGuide(working, t);
+    // The planet's record (Batch 31): the planet as the HUD shows it, weather included, on the substep grid.
+    if (samplesAt(working.history, working.steps, t)) {
+      const now = derive(working.reservoirs, worldEnv(working, cfg.env, t), t);
+      working = { ...working, history: recordPlanet(working.history, planetSample(working, now, t), t) };
+    }
   }
 
   if (checking) {

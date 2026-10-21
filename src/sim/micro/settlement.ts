@@ -65,7 +65,7 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
 }
 
 /** A settlement's record before anything has happened. */
-export const EMPTY_HISTORY: History = Object.freeze({ acc: { substeps: 0, births: 0, deaths: 0, short: [0, 0, 0, 0, 0], net: [0, 0, 0, 0, 0] }, taken: 0, samples: [] });
+export const EMPTY_HISTORY: History = Object.freeze({ acc: { substeps: 0, births: 0, deaths: 0, short: [0, 0, 0, 0, 0], net: [0, 0, 0, 0, 0], made: [0, 0, 0, 0, 0], drawn: [0, 0, 0, 0, 0] }, taken: 0, samples: [] });
 
 /**
  * Where the headquarters stands on an `n`-tile grid: its 5 x 5 footprint
@@ -978,7 +978,7 @@ function sendLevellers(s: Settlement, t: Tuning): Settlement {
 /** A substep's worth of record: gathered, and every HISTORY_EVERY substeps a sample taken. */
 function record(
   h: History,
-  now: { births: number; deaths: number; short: readonly number[]; net: readonly number[]; stores: readonly number[]; population: number; housing: number },
+  now: { births: number; deaths: number; short: readonly number[]; net: readonly number[]; made: readonly number[]; drawn: readonly number[]; stores: readonly number[]; population: number; housing: number },
   t: Tuning,
 ): History {
   const acc = {
@@ -987,6 +987,9 @@ function record(
     deaths: h.acc.deaths + now.deaths,
     short: h.acc.short.map((v, i) => v + (now.short[i] ?? 0)),
     net: h.acc.net.map((v, i) => v + (now.net[i] ?? 0)),
+    // Made and drawn (Batch 31): a sample begun before they were kept stays without them.
+    made: h.acc.made === null ? null : h.acc.made.map((v, i) => v + (now.made[i] ?? 0)),
+    drawn: h.acc.drawn === null ? null : h.acc.drawn.map((v, i) => v + (now.drawn[i] ?? 0)),
   };
   if (acc.substeps < t.HISTORY_EVERY) return { ...h, acc };
   const k = acc.substeps;
@@ -999,6 +1002,7 @@ function record(
     short: acc.short.map((v) => v / k),
     stores: [...now.stores],
     net: acc.net.map((v) => v / k),
+    ...(acc.made === null || acc.drawn === null ? {} : { made: acc.made.map((v) => v / k), drawn: acc.drawn.map((v) => v / k) }),
   };
   const samples = [...h.samples, sample];
   return { acc: EMPTY_HISTORY.acc, taken: h.taken + 1, samples: samples.length > t.HISTORY_SAMPLES ? samples.slice(samples.length - t.HISTORY_SAMPLES) : samples };
@@ -1274,6 +1278,6 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   next = buildPlanned(next, t, h);
   next = sendBuilders(next, t);
   next = sendLevellers(next, t);
-  next = { ...next, history: record(s.history, { births: birthsNow, deaths: deathsNow, short: MICRO_RESOURCES.map((r) => (shortAny.has(r) ? 1 : 0)), net: MICRO_RESOURCES.map((r) => prod[r] - cons[r]), stores: MICRO_RESOURCES.map((r) => next.stores[r]), population: next.population, housing: isCityKind(s.kind) ? housing(next, t) : 0 }, t) };
+  next = { ...next, history: record(s.history, { births: birthsNow, deaths: deathsNow, short: MICRO_RESOURCES.map((r) => (shortAny.has(r) ? 1 : 0)), net: MICRO_RESOURCES.map((r) => prod[r] - cons[r]), made: MICRO_RESOURCES.map((r) => prod[r]), drawn: MICRO_RESOURCES.map((r) => cons[r]), stores: MICRO_RESOURCES.map((r) => next.stores[r]), population: next.population, housing: isCityKind(s.kind) ? housing(next, t) : 0 }, t) };
   return { next, research, operable, supported, planetaryCo2, production: prod, consumption: cons, shortages: MICRO_RESOURCES.filter((r) => shortAny.has(r)), flood, network: issues };
 }

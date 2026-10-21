@@ -1142,6 +1142,17 @@ export const BASE_TUNING = Object.freeze({
   REWARD_WATER_CREDITS: 3000,
   REWARD_RAIL_MATERIALS: 200,
   REWARD_JOINED_CREDITS: 2000,
+  /**
+   * The planet's record (Batch 31): a sample of the planet - its six axes,
+   * progress, the bank and the people - every PLANET_HISTORY_EVERY substeps,
+   * taken in `advance` so it is the same played, offline or chunked. Once it
+   * holds PLANET_HISTORY_SAMPLES it keeps every other sample and samples half
+   * as often, so it always spans the whole game in a bounded size. It only
+   * records: nothing reads it back into the simulation, so it is on by
+   * default and in every world (0 turns it off).
+   */
+  PLANET_HISTORY_EVERY: 4,
+  PLANET_HISTORY_SAMPLES: 240,
 
   /** Habitat Dome: people housed, and life support drawn per year. */
   DOME_HOUSING: 40,
@@ -1309,6 +1320,9 @@ export function validateTuning(t: Tuning): void {
   if (!(t.LINK_BUILD_PER_YEAR >= 0)) fail("LINK_BUILD_PER_YEAR must be >= 0");
   if (!(Number.isInteger(t.HISTORY_EVERY) && t.HISTORY_EVERY >= 1)) fail("HISTORY_EVERY must be a whole number >= 1");
   if (!(Number.isInteger(t.HISTORY_SAMPLES) && t.HISTORY_SAMPLES >= 2)) fail("HISTORY_SAMPLES must be a whole number >= 2");
+  if (!(Number.isInteger(t.PLANET_HISTORY_EVERY) && t.PLANET_HISTORY_EVERY >= 0)) fail("PLANET_HISTORY_EVERY must be a whole number >= 0 (0 records nothing)");
+  // Halving keeps the samples on multiples of twice the gap: an even, roomy record keeps that well-defined.
+  if (!(Number.isInteger(t.PLANET_HISTORY_SAMPLES) && t.PLANET_HISTORY_SAMPLES >= 4 && t.PLANET_HISTORY_SAMPLES % 2 === 0)) fail("PLANET_HISTORY_SAMPLES must be an even whole number >= 4");
   for (const k of ["GUIDE_ENABLED", "OBJECTIVES_ENABLED"] as const) if (t[k] !== 0 && t[k] !== 1) fail(`${k} must be 0 or 1`);
   // The steady run is counted in the city's record, which keeps HISTORY_SAMPLES years: a longer run could never be seen.
   if (!(Number.isInteger(t.GOAL_STEADY_YEARS) && t.GOAL_STEADY_YEARS >= 1 && t.GOAL_STEADY_YEARS <= t.HISTORY_SAMPLES)) fail("GOAL_STEADY_YEARS must be a whole number from 1 to HISTORY_SAMPLES");

@@ -260,3 +260,5 @@ export {
 export type { ClaimOutcome, Cosmetic, GuideStep, GuideStepId, ObjectiveChain, ObjectiveDef, ObjectiveStatus, Progress, Reward, Unlock } from "./objectives.js";
 export { NO_GOALS } from "./planets/mars.js";
 export type { Goals } from "./types.js";
+export type { PlanetHistory, PlanetSample } from "./types.js";
+export { emptyPlanetHistory, planetSample, recordPlanet, samplesAt } from "./history.js";

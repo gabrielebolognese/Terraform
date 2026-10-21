@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 16;
+  readonly schemaVersion: 17;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -358,6 +358,44 @@ export interface SimState {
   readonly routes: readonly Route[];
   /** The first hour (v16, Batch 30): how far the guided steps have come, and which objectives are claimed. */
   readonly goals: Goals;
+  /** The planet's record (v17, Batch 31): what the statistics chart. A record, never read back into the simulation. */
+  readonly history: PlanetHistory;
+}
+
+/**
+ * One look at the planet, as the HUD shows it (Batch 31): taken at the end of
+ * a substep, weather included. A record of what was, never the truth of what
+ * is - the reservoirs stay that (invariant #3).
+ */
+export interface PlanetSample {
+  /** The substep it was taken at: its time, sim-years, is `steps * SUBSTEP_YEARS`. */
+  readonly steps: number;
+  /** Kelvin, mbar, mbar of oxygen, the share of the surface under water, biomass, mbar of CO2. */
+  readonly T: number;
+  readonly P: number;
+  readonly o2: number;
+  readonly ocean: number;
+  readonly biomass: number;
+  readonly co2: number;
+  /** The section 8.1 composite, 0..1. */
+  readonly progress: number;
+  /** The bank. */
+  readonly credits: number;
+  /** People in every settlement still standing. */
+  readonly people: number;
+}
+
+/**
+ * The planet's record: a sample every `every` substeps, the whole game long.
+ * Full (PLANET_HISTORY_SAMPLES), it keeps the samples on multiples of twice
+ * the gap and samples half as often - so it is bounded, and still begins at
+ * the beginning.
+ */
+export interface PlanetHistory {
+  /** Substeps between samples: PLANET_HISTORY_EVERY, doubled each time the record filled. */
+  readonly every: number;
+  /** Oldest first. */
+  readonly samples: readonly PlanetSample[];
 }
 
 /**
@@ -508,11 +546,26 @@ export interface HistorySample {
   readonly stores: readonly number[];
   /** Made less drawn, per year, averaged. */
   readonly net: readonly number[];
+  /**
+   * What was made and what was drawn, per year, averaged (Batch 31: the
+   * statistics' production and use). Absent from samples taken before it.
+   */
+  readonly made?: readonly number[];
+  readonly drawn?: readonly number[];
 }
 
 export interface History {
   /** What is gathering toward the next sample. */
-  readonly acc: { readonly substeps: number; readonly births: number; readonly deaths: number; readonly short: readonly number[]; readonly net: readonly number[] };
+  readonly acc: {
+    readonly substeps: number;
+    readonly births: number;
+    readonly deaths: number;
+    readonly short: readonly number[];
+    readonly net: readonly number[];
+    /** Made and drawn so far (Batch 31); null while the sample gathering began before they were kept, so it is left without. */
+    readonly made: readonly number[] | null;
+    readonly drawn: readonly number[] | null;
+  };
   /** Samples taken ever: the next sample's index. */
   readonly taken: number;
   /** The latest samples, oldest first, at most HISTORY_SAMPLES. */

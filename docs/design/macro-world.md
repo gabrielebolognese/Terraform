@@ -675,6 +675,7 @@ GOAL_PRESSURE_MBAR = 100     GOAL_CITIES_JOINED = 3      # what the objectives a
 REWARD_FIRST_PEOPLE = 50     REWARD_STEADY_PEOPLE = 75   REWARD_TOWN_ROVERS = 2    REWARD_CITY_CREDITS = 2000
 REWARD_RUNAWAY_CREDITS = 1000  REWARD_PRESSURE_CREDITS = 2000  REWARD_WATER_CREDITS = 3000  REWARD_RAIL_MATERIALS = 200  REWARD_JOINED_CREDITS = 2000
                              # what they pay: settlers and materials into the largest city (as many as it has homes and room for), credits to the bank
+PLANET_HISTORY_EVERY = 4     PLANET_HISTORY_SAMPLES = 240  # Batch 31: the planet's record, a sample every this many substeps; full, it keeps every other and samples half as often
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75
 SOLAR_POWER = 6            GEOTHERMAL_POWER = 8       REACTOR_POWER = 24

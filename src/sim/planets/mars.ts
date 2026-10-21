@@ -19,6 +19,7 @@
  */
 
 import { startingEconomy } from "../economy.js";
+import { emptyPlanetHistory } from "../history.js";
 import { unlockedFor } from "../tech.js";
 import { DEFAULT_TUNING } from "../tuning.js";
 import type { Tuning } from "../tuning.js";
@@ -76,7 +77,7 @@ export const MARS_RADIUS_M = 3_389_500;
 /** A fresh, unplayed Mars. */
 export function marsStart(seed = 123456, t: Tuning = DEFAULT_TUNING): SimState {
   return {
-    schemaVersion: 16,
+    schemaVersion: 17,
     planetId: "mars",
     seed,
     steps: 0,
@@ -98,6 +99,7 @@ export function marsStart(seed = 123456, t: Tuning = DEFAULT_TUNING): SimState {
     settlements: [],
     routes: [],
     goals: NO_GOALS,
+    history: emptyPlanetHistory(t),
   };
 }
 
