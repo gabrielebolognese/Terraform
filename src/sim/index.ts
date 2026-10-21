@@ -225,6 +225,8 @@ export { DOOR_KEPT_CLEAR, NO_ROUTE, ROVER_PASSING, buildingSite, drive, expandRo
 export type { RoverRoute, Site } from "./micro/drive.js";
 export type { Rock } from "./micro/rocks.js";
 export type { PlaceOutcome, SettlementStep } from "./micro/settlement.js";
+export { NEEDS, NEED_BY_ID, happinessOf, needAskedFrom, needCoverage, peopleReached, reachSide, readNeeds, walkNetwork } from "./micro/needs.js";
+export type { NeedDef, NeedId, NeedReading, NeedsReading, NeedTier } from "./micro/needs.js";
 export { microStep } from "./micro/coupling.js";
 export type { MicroContribution } from "./micro/coupling.js";
 export { groundOf, isSteep, slopeAt, terrainReady, worldOf } from "./micro/terrain.js";

@@ -1153,6 +1153,36 @@ export const BASE_TUNING = Object.freeze({
    */
   PLANET_HISTORY_EVERY: 4,
   PLANET_HISTORY_SAMPLES: 240,
+  /**
+   * People's needs and happiness (Batch 32). A city asks for more than life
+   * support as it grows: comfort - green space (a Park or a Biosphere) and
+   * food variety (kinds of food grown) - from NEEDS_COMFORT_PEOPLE; services -
+   * medical care, research, transport (a Station) and shops (a Mega Mall) -
+   * from NEEDS_SERVICES_PEOPLE, and never before their building may be built.
+   * A running provider reaches the homes whose middle is in the square
+   * NEED_REACH_TILES a side about its own (NEED_REACH_PER_LEVEL more a level)
+   * and, with the network on, on the same corridors. Each asked need weighs
+   * NEED_WEIGHT_* (all six weigh 1): met, the city's mood gains its weight;
+   * unmet, loses it; half met, neither (the mood runs -1 to 1). Food variety
+   * is met by FOOD_VARIETY_KINDS kinds of food grown. Growth runs
+   * x(1 + HAPPINESS_GROWTH x mood) and every building makes
+   * x(1 + HAPPINESS_OUTPUT x mood). Derived every substep, never stored. OFF
+   * (0) by default and in every world made before it; new worlds turn it on.
+   */
+  NEEDS_ENABLED: 0,
+  NEEDS_COMFORT_PEOPLE: 500,
+  NEEDS_SERVICES_PEOPLE: 2000,
+  NEED_REACH_TILES: 33,
+  NEED_REACH_PER_LEVEL: 6,
+  NEED_WEIGHT_GREEN: 0.15,
+  NEED_WEIGHT_VARIETY: 0.1,
+  NEED_WEIGHT_MEDICAL: 0.2,
+  NEED_WEIGHT_RESEARCH: 0.15,
+  NEED_WEIGHT_TRANSPORT: 0.2,
+  NEED_WEIGHT_SHOPS: 0.2,
+  FOOD_VARIETY_KINDS: 2,
+  HAPPINESS_GROWTH: 0.5,
+  HAPPINESS_OUTPUT: 0.1,
 
   /** Habitat Dome: people housed, and life support drawn per year. */
   DOME_HOUSING: 40,
@@ -1323,7 +1353,15 @@ export function validateTuning(t: Tuning): void {
   if (!(Number.isInteger(t.PLANET_HISTORY_EVERY) && t.PLANET_HISTORY_EVERY >= 0)) fail("PLANET_HISTORY_EVERY must be a whole number >= 0 (0 records nothing)");
   // Halving keeps the samples on multiples of twice the gap: an even, roomy record keeps that well-defined.
   if (!(Number.isInteger(t.PLANET_HISTORY_SAMPLES) && t.PLANET_HISTORY_SAMPLES >= 4 && t.PLANET_HISTORY_SAMPLES % 2 === 0)) fail("PLANET_HISTORY_SAMPLES must be an even whole number >= 4");
-  for (const k of ["GUIDE_ENABLED", "OBJECTIVES_ENABLED"] as const) if (t[k] !== 0 && t[k] !== 1) fail(`${k} must be 0 or 1`);
+  for (const k of ["GUIDE_ENABLED", "OBJECTIVES_ENABLED", "NEEDS_ENABLED"] as const) if (t[k] !== 0 && t[k] !== 1) fail(`${k} must be 0 or 1`);
+  // Batch 32: the weights keep the mood within -1 to 1, so growth never runs backwards.
+  const needWeights = [t.NEED_WEIGHT_GREEN, t.NEED_WEIGHT_VARIETY, t.NEED_WEIGHT_MEDICAL, t.NEED_WEIGHT_RESEARCH, t.NEED_WEIGHT_TRANSPORT, t.NEED_WEIGHT_SHOPS];
+  if (!needWeights.every((w) => w >= 0) || !(needWeights.reduce((a, w) => a + w, 0) <= 1 + 1e-9)) fail("the NEED_WEIGHT_* must be >= 0 and sum to at most 1");
+  if (!(t.HAPPINESS_GROWTH >= 0 && t.HAPPINESS_GROWTH <= 1)) fail("HAPPINESS_GROWTH must be in [0, 1]");
+  if (!(t.HAPPINESS_OUTPUT >= 0 && t.HAPPINESS_OUTPUT < 1)) fail("HAPPINESS_OUTPUT must be in [0, 1)");
+  if (!(t.NEED_REACH_TILES > 0 && t.NEED_REACH_PER_LEVEL >= 0)) fail("NEED_REACH_TILES must be > 0 and NEED_REACH_PER_LEVEL >= 0");
+  if (!(t.NEEDS_COMFORT_PEOPLE >= 0 && t.NEEDS_SERVICES_PEOPLE >= 0)) fail("NEEDS_COMFORT_PEOPLE and NEEDS_SERVICES_PEOPLE must be >= 0");
+  if (!(Number.isInteger(t.FOOD_VARIETY_KINDS) && t.FOOD_VARIETY_KINDS >= 1)) fail("FOOD_VARIETY_KINDS must be a whole number >= 1");
   // The steady run is counted in the city's record, which keeps HISTORY_SAMPLES years: a longer run could never be seen.
   if (!(Number.isInteger(t.GOAL_STEADY_YEARS) && t.GOAL_STEADY_YEARS >= 1 && t.GOAL_STEADY_YEARS <= t.HISTORY_SAMPLES)) fail("GOAL_STEADY_YEARS must be a whole number from 1 to HISTORY_SAMPLES");
   if (!(Number.isInteger(t.GOAL_CITIES_JOINED) && t.GOAL_CITIES_JOINED >= 2)) fail("GOAL_CITIES_JOINED must be a whole number >= 2");
