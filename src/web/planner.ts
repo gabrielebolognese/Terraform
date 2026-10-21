@@ -635,7 +635,7 @@ export class PlannerScreen {
     const last = s.history.samples[s.history.samples.length - 1];
     const lines: [string, string][] = [
       ["People", `${Math.floor(s.population).toLocaleString("en")} of ${Math.round(view.housing).toLocaleString("en")} homes`],
-      ["Needs", view.shortages.length === 0 ? "every need met" : `short of ${view.shortages.join(", ")}`],
+      [(view.needs ?? null) !== null ? "Life support" : "Needs", view.shortages.length === 0 ? (view.needs ?? null) !== null ? "all of it met" : "every need met" : `short of ${view.shortages.join(", ")}`],
       ["Last year", last === undefined ? "no record yet" : `${fmt(last.births)} born, ${fmt(last.deaths)} lost; blackout ${Math.round((last.short[0] ?? 0) * 100)}% of the year, food short ${Math.round((last.short[3] ?? 0) * 100)}%`],
       ["Buildings", `${s.buildings.length.toLocaleString("en")}`],
       ["Corridors, cables, rails", `${s.corridors.length}, ${s.cables.length}, ${s.rails.length} tiles`],

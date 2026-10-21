@@ -19,9 +19,10 @@
  * buildings only, a park found room for 58% of a city's homes, measured.)
  * The rectangle is chosen where the most homes not yet reached come into
  * reach, for the fewest homes lost. The example's own rules are kept: a
- * street of two tiles round a building on a city's founding square, sixteen
- * buildings at least on a grown chunk that had them, every building in a zone
- * (a provider joins the zone of what it replaced).
+ * street of two tiles round a building on a city's founding square, 16 to 50
+ * buildings on a chunk (or what it had), every building in a zone (a
+ * provider joins the zone of what it replaced), and every station on the
+ * railway (a station goes only beside a rail, which it boards).
  *
  * Then what the replaced buildings made, and what the providers draw, is made
  * good by turning stores into producers in place (a 2 x 2 for a 2 x 2: no
@@ -77,8 +78,9 @@ const MAKES: Readonly<Record<Exclude<MicroResource, "materials">, { into: Buildi
 const GROWN = new RegExp(`^(Works and stores|${Object.values(PURPOSES).map((p) => p.name).join("|")}) ?\\d*$`);
 /** The street kept clear round a building on a city's founding square, tiles (`example.ts`'s STREET). */
 const STREET = 2;
-/** The fewest buildings a grown chunk with room holds (`metropolis-outer.ts`: 16 to 50 a chunk). */
+/** The fewest and the most buildings a grown chunk with room holds (`metropolis-outer.ts`: 16 to 50 a chunk). */
 const CHUNK_LEAST = 16;
+const CHUNK_MOST = 50;
 
 export interface ServiceReport {
   /** Providers placed, by type. */
@@ -140,8 +142,14 @@ export function serveCity(s0: Settlement, env: HabitatChannels, t: Tuning, log?:
     if (b.tx >= 0 && b.ty >= 0 && b.tx < n && b.ty < n) inChunk[chunkOf(b)] = inChunk[chunkOf(b)]! + 1;
   };
   standing.forEach((b, k) => own(b!, k));
-  // A chunk keeps the sixteen it had (a city's grown chunks hold 16 to 50).
+  // A chunk keeps the sixteen it had, and holds no more than fifty or what it had (a city's grown chunks hold 16 to 50).
   const least = Int32Array.from(inChunk, (c) => Math.min(c, CHUNK_LEAST));
+  const most = Int32Array.from(inChunk, (c) => Math.max(c, CHUNK_MOST));
+  const rail = new Uint8Array(n * n);
+  for (const k of s.rails) {
+    const { tx, ty } = keyTile(k);
+    if (tx >= 0 && ty >= 0 && tx < n && ty < n) rail[ty * n + tx] = 1;
+  }
 
   // The city's own laid-out ground - its founding square, but for the districts it grew - keeps its street.
   const zoneAt = new Map<number, number>();
@@ -165,11 +173,18 @@ export function serveCity(s0: Settlement, env: HabitatChannels, t: Tuning, log?:
    * What a provider of `w` x `d` with its corner at (x0, y0) would replace -
    * the buildings under it - or null where it may not go: blocked ground, no
    * building under it (whose networks it takes over), the city's people
-   * below what it needs, a chunk thinned below its sixteen, or a laid-out
-   * building within the street.
+   * below what it needs, a chunk thinned below its sixteen or filled past
+   * its fifty, a laid-out building within the street - or, for a station, no
+   * rail beside it to board.
    */
-  const under = (x0: number, y0: number, w: number, d: number): { gone: number[]; loss: number; tiles: number } | null => {
+  const under = (x0: number, y0: number, w: number, d: number, station = false): { gone: number[]; loss: number; tiles: number } | null => {
     if (x0 < 0 || y0 < 0 || x0 + w > n || y0 + d > n) return null;
+    if (station) {
+      let board = false;
+      for (let x = x0; x < x0 + w && !board; x += 1) board = (y0 > 0 && rail[(y0 - 1) * n + x] === 1) || (y0 + d < n && rail[(y0 + d) * n + x] === 1);
+      for (let y = y0; y < y0 + d && !board; y += 1) board = (x0 > 0 && rail[y * n + x0 - 1] === 1) || (x0 + w < n && rail[y * n + x0 + w] === 1);
+      if (!board) return null;
+    }
     const gone: number[] = [];
     let loss = 0;
     let tiles = 0;
@@ -193,7 +208,7 @@ export function serveCity(s0: Settlement, env: HabitatChannels, t: Tuning, log?:
       const c = chunkOf(standing[k]!);
       change.set(c, (change.get(c) ?? 0) - 1);
     }
-    for (const [c, dc] of change) if (dc < 0 && inChunk[c]! + dc < least[c]!) return null;
+    for (const [c, dc] of change) if ((dc < 0 && inChunk[c]! + dc < least[c]!) || (dc > 0 && inChunk[c]! + dc > most[c]!)) return null;
     if (laidOut(x0, y0)) {
       for (let y = y0 - STREET; y < y0 + d + STREET; y += 1) {
         for (let x = x0 - STREET; x < x0 + w + STREET; x += 1) {
@@ -302,7 +317,7 @@ export function serveCity(s0: Settlement, env: HabitatChannels, t: Tuning, log?:
       // Every corner that puts the target's middle within the provider's square.
       for (let y0 = Math.ceil(hy[ti]! - half - d / 2); y0 <= Math.floor(hy[ti]! + half - d / 2); y0 += 1) {
         for (let x0 = Math.ceil(hx[ti]! - half - w / 2); x0 <= Math.floor(hx[ti]! + half - w / 2); x0 += 1) {
-          const u = under(x0, y0, w, d);
+          const u = under(x0, y0, w, d, type === "station");
           if (u === null) continue;
           const cx = x0 + w / 2;
           const cy = y0 + d / 2;
