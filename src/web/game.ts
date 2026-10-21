@@ -26,7 +26,7 @@ import { examplePlanet } from "../harness/example.js";
 import type { TerrainRotation } from "../shared/planet-terrain.js";
 import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.js";
 import { floodWarnings } from "./flood-warning.js";
-import type { FacilityType, HabitatChannels, SettlementKind, SimConfig, SimState, Tuning, VisualChannels } from "../sim/index.js";
+import type { FacilityType, HabitatChannels, MicroResource, SettlementKind, SimConfig, SimState, Tuning, VisualChannels } from "../sim/index.js";
 import {
   DEFAULT_TUNING,
   FACILITY_LIST,
@@ -77,7 +77,7 @@ import {
   skipGuide,
 } from "../sim/index.js";
 import type { BuildingType } from "../sim/index.js";
-import { ALERT_HZ, READOUT_HZ, SPARK_CAPACITY, SPARK_HZ, speedsFor } from "./config.js";
+import { ALERT_BUDGET_MS, ALERT_HZ, READOUT_HZ, SPARK_CAPACITY, SPARK_HZ, speedsFor } from "./config.js";
 import type { Speed } from "./config.js";
 import { EventLog } from "./events.js";
 import { advise, withAffordability } from "./guidance.js";
@@ -89,7 +89,7 @@ import { Ring } from "./ring.js";
 import { GuidePanel, ObjectivesPanel, guideHint, rewardWords } from "./onboarding.js";
 import type { GuideContext } from "./onboarding.js";
 import { MilestoneCards, MilestoneWatch } from "./milestones.js";
-import { AlertWatch, buildingAt } from "./alerts.js";
+import { AlertWatch, buildingAt, shortagesOf } from "./alerts.js";
 import type { AlertTarget } from "./alerts.js";
 import { AlertCentre, AlertToasts } from "./alert-centre.js";
 import { StatisticsScreen } from "./statistics.js";
@@ -613,6 +613,8 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   bar.append(statistics.toggle, alertCentre.toggle);
   root.append(bar);
   let lastAlerts = -Infinity;
+  /** What each settlement is short of at the last look: the overview cards read it. */
+  let shortBy: ReadonlyMap<string, readonly MicroResource[]> = new Map();
 
   /** Where the player is looking, for the guide's words. */
   function guideContext(): GuideContext {
@@ -629,6 +631,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     toasts.clear();
     pendingShow = null;
     lastAlerts = -Infinity;
+    shortBy = new Map();
     journey.abort();
     travelPrompt.close();
     seedMessage = null;
@@ -913,7 +916,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
           state.settlements
             .filter((s) => s.lostAtSeaLevelM === null)
             .map((s) => {
-              const o = cityOverview(s, hab, tuning);
+              const o = cityOverview(s, shortBy.get(s.id) ?? [], tuning);
               return [s.id, { words: overviewWords(o, s), short: o.short.length > 0 }] as const;
             }),
         ),
@@ -933,9 +936,11 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       // The alerts, a couple of times a second (`ALERT_HZ`); none while the example planet shows.
       if (mine && timestamp - lastAlerts >= 1000 / ALERT_HZ) {
         lastAlerts = timestamp;
-        const look = alertWatch.observe({ state, env: hab, liquidRatePerYear: liquidRate, tuning, now: timestamp, speed });
+        const look = alertWatch.observe({ state, env: hab, liquidRatePerYear: liquidRate, tuning, now: timestamp, speed, budgetMs: ALERT_BUDGET_MS, clock: () => performance.now() });
         alertCentre.update(look.now, look.fresh, year);
         toasts.push(look.fresh);
+        shortBy = shortagesOf(look.now);
+        worldMap.shortages = shortBy;
       }
       inspector.update(
         {

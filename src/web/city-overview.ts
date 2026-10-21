@@ -2,16 +2,16 @@
  * A city at a glance (Batch 31): "people, shortages, builds in progress" -
  * the card the HUD's settlement list and the world map both show.
  *
- * From the state and the settlement's next substep (the same one the city
- * view and the alerts read, kept between steps), so the card, the alerts and
- * the city can never disagree about what is short.
+ * From the state, and what is short from the alerts' own conditions (the
+ * settlement's next substep, the one the city view draws from too) - never a
+ * step of its own, so the card and the alerts can never disagree about what
+ * is short, and a planet of forty settlements is not stepped twice over.
  */
 
-import type { HabitatChannels, MicroResource, Settlement, Tuning } from "../sim/index.js";
+import type { MicroResource, Settlement, Tuning } from "../sim/index.js";
 import { constructionOf, housing } from "../sim/index.js";
 
 const isCityKind = (kind: Settlement["kind"]): boolean => kind === "city" || kind === "metropolis";
-import { stepOf } from "./alerts.js";
 import { RESOURCE_NAMES } from "./offline-words.js";
 
 export interface CityOverview {
@@ -26,7 +26,7 @@ export interface CityOverview {
   readonly waiting: number;
 }
 
-export function cityOverview(s: Settlement, env: HabitatChannels, t: Tuning): CityOverview {
+export function cityOverview(s: Settlement, short: readonly MicroResource[], t: Tuning): CityOverview {
   // A new building stands once its rover's work is done (the drive home is the rover's); an upgrade takes its
   // level when the rover is home. Going up is what `constructionOf` holds, less what still waits for a rover.
   const queuedNew = new Set(s.buildQueue.filter((q) => !q.upgrade).map((q) => q.tile));
@@ -37,7 +37,7 @@ export function cityOverview(s: Settlement, env: HabitatChannels, t: Tuning): Ci
   return {
     people: s.population,
     homes: isCityKind(s.kind) ? housing(s, t) : 0,
-    short: standing ? stepOf(s, env, t).shortages : [],
+    short: standing ? short : [],
     building,
     upgrading,
     waiting: s.buildQueue.length,

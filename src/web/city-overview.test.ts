@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import type { BuildingType, HabitatChannels, SimState } from "../sim/index.js";
 import { NEUTRAL_ENV, advance, constructionOf, derive, foundSettlement, habitat, marsStart, placeBuilding, upgradeBuilding, worldEnv } from "../sim/index.js";
+import { conditions, shortagesOf } from "./alerts.js";
 import { cityOverview, overviewWords } from "./city-overview.js";
 import { worldTuning } from "./game-tuning.js";
 import { WorldMapScreen } from "./world-map.js";
@@ -36,13 +37,15 @@ function settle(s: SimState): SimState {
   for (let i = 0; i < 600 && (constructionOf(out.settlements[0]!).size > 0 || out.settlements[0]!.jobs.length > 0); i += 1) out = advance(out, 1, cfg);
   return out;
 }
-const words = (s: SimState): string => overviewWords(cityOverview(s.settlements[0]!, envOf(s), T), s.settlements[0]!);
+/** What is short, as the alerts see it: the overview reads the alerts' conditions, as the game does. */
+const shortOf = (s: SimState) => shortagesOf(conditions(s, envOf(s), 0, T)).get("settlement-1") ?? [];
+const words = (s: SimState): string => overviewWords(cityOverview(s.settlements[0]!, shortOf(s), T), s.settlements[0]!);
 
 describe("a city at a glance", () => {
   it("counts what is going up and what waits: four placed with the headquarters' three rovers", () => {
     let s = founded();
     for (let k = 0; k < 4; k += 1) s = place(s, "solar_array");
-    const o = cityOverview(s.settlements[0]!, envOf(s), T);
+    const o = cityOverview(s.settlements[0]!, shortOf(s), T);
     expect([o.building, o.waiting, o.upgrading]).toEqual([3, 1, 0]);
     expect(words(s)).toBe("0 of 0 people - nothing short - 3 going up, 1 waiting for a rover");
     // Built: nothing being built.
@@ -68,6 +71,7 @@ describe("a city at a glance", () => {
     document.body.append(host);
     const screen = new WorldMapScreen(host, { onOpen: () => {}, onConnect: () => ({ ok: false, reason: "no", state: s }) as never, onClose: () => {} }, T, () => 0);
     screen.open();
+    screen.shortages = shortagesOf(conditions(s, envOf(s), 0, T));
     let now = 0;
     for (let i = 0; i < 500 && /Drawing the map|^$/.test(host.querySelector(".worldmap-hint")!.textContent ?? ""); i += 1) screen.frame(s, envOf(s), (now += 16));
     const at = screen.screenOf(s.settlements[0]!);
