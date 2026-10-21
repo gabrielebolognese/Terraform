@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 30
-in_progress_batch: none
+in_progress_batch: 31
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -370,3 +370,7 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - The fix's three decisions (the bar keeps the weather; both temperature goals count from the
     world's start; Thicker air stays counted from 0 mbar) are ones a bare "Go" would accept. None
     deletes or overwrites player data.
+
+### Batch 31 - Knowing what is happening: alerts, notifications and statistics
+- status: in progress
+- sessions: 1 (started 2026-10-15)
