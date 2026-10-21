@@ -438,6 +438,18 @@ describe("the first hour in the assembled game", () => {
     }
   });
 
+  it("turns every city's marker on the planet gold once three cities joined is claimed, and not before", async () => {
+    const s = foundSettlement(marsStart(undefined, T), "city", SITE.lat, SITE.lon, T).state;
+    const before = play(s);
+    await frames();
+    expect(before.root.querySelector(".globe-markers")!.hasAttribute("data-gold")).toBe(false);
+    before.handle.stop();
+    const after = play({ ...s, goals: { ...s.goals, claimed: ["network_rail", "network_three"] } });
+    await frames();
+    expect(after.root.querySelector(".globe-markers")!.hasAttribute("data-gold")).toBe(true);
+    after.handle.stop();
+  });
+
   it("offers a metropolis once one is unlocked, and not before", async () => {
     const s = withCity(foundSettlement(marsStart(undefined, T), "city", SITE.lat, SITE.lon, T).state, {});
     const before = play(s);
