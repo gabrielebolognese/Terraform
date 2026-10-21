@@ -64,6 +64,8 @@ export interface HudView {
   readonly founding: SettlementKind | null;
   /** Batch 22: while founding, the site under the cursor and its elevation, in words - or null. */
   readonly foundingSite?: string | null;
+  /** Batch 30: a metropolis may be founded - unlocked by an objective, or a sandbox. Absent or false, no button. */
+  readonly canFoundMetropolis?: boolean;
 }
 
 export interface HudHooks {
@@ -297,6 +299,7 @@ export class Hud {
   private readonly foundPrompt: HTMLElement;
   private readonly foundPromptText: HTMLElement;
   private readonly foundButtons: readonly HTMLButtonElement[];
+  private readonly foundMetropolis: HTMLButtonElement;
   /** null until first drawn: an empty registry keys to "", which must still draw "None yet". */
   private renderedSettlements: string | null = null;
 
@@ -493,7 +496,16 @@ export class Hud {
     const foundOutpost = el("button", "hud-found", "Found an outpost");
     foundOutpost.type = "button";
     foundOutpost.addEventListener("click", () => found("outpost"));
-    foundRow.append(foundName, foundCity, foundOutpost);
+    // Batch 30: the reward of "A city of 1,000" (and everything is open in a sandbox).
+    const foundMetropolis = el("button", "hud-found", "Found a metropolis");
+    foundMetropolis.type = "button";
+    foundMetropolis.hidden = true;
+    foundMetropolis.addEventListener("click", () => found("metropolis"));
+    foundCity.dataset["kind"] = "city";
+    foundOutpost.dataset["kind"] = "outpost";
+    foundMetropolis.dataset["kind"] = "metropolis";
+    this.foundMetropolis = foundMetropolis;
+    foundRow.append(foundName, foundCity, foundOutpost, foundMetropolis);
     const onWorldMap = hooks.onWorldMap;
     if (onWorldMap !== undefined) {
       const map = el("button", "hud-world-map", "World map");
@@ -501,7 +513,7 @@ export class Hud {
       map.addEventListener("click", () => onWorldMap());
       foundRow.append(map);
     }
-    this.foundButtons = [foundCity, foundOutpost];
+    this.foundButtons = [foundCity, foundOutpost, foundMetropolis];
     this.foundPrompt = el("div", "hud-found-prompt");
     this.foundPrompt.setAttribute("role", "status");
     this.foundPrompt.hidden = true;
@@ -718,6 +730,7 @@ export class Hud {
   private updateSettlements(view: HudView): void {
     const choosing = view.founding !== null;
     for (const b of this.foundButtons) b.disabled = choosing;
+    this.foundMetropolis.hidden = view.canFoundMetropolis !== true;
     this.foundPrompt.hidden = !choosing;
     if (choosing) {
       const site = view.foundingSite ?? null;

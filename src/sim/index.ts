@@ -237,3 +237,26 @@ export { cityView, prepareCity } from "./micro/view.js";
 export type { CityBuildingView, CityJobView, CityView } from "./micro/view.js";
 export { BUILDING_TYPES, MICRO_RESOURCES } from "./types.js";
 export type { BuildingType, MicroResource, PlacedBuilding } from "./types.js";
+
+// ---- the first hour, Batch 30 -----------------------------------------------
+export {
+  GUIDE_STEPS,
+  OBJECTIVES,
+  OBJECTIVE_CHAINS,
+  citiesJoined,
+  claimObjective,
+  guideActive,
+  guideReached,
+  hasCosmetic,
+  hasUnlock,
+  largestCity,
+  latchGuide,
+  metropolisAllowed,
+  objectiveById,
+  objectiveStatus,
+  skipGuide,
+  steadyYears,
+} from "./objectives.js";
+export type { ClaimOutcome, Cosmetic, GuideStep, GuideStepId, ObjectiveChain, ObjectiveDef, ObjectiveStatus, Progress, Reward, Unlock } from "./objectives.js";
+export { NO_GOALS } from "./planets/mars.js";
+export type { Goals } from "./types.js";

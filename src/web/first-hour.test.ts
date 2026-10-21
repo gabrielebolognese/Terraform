@@ -14,8 +14,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { NEUTRAL_ENV, advance, foundSettlement, marsStart } from "../sim/index.js";
-import { GUIDE_STEPS, OBJECTIVES, claimObjective, guideActive, objectiveStatus } from "../sim/objectives.js";
+import { GUIDE_STEPS, NEUTRAL_ENV, OBJECTIVES, advance, claimObjective, foundSettlement, guideActive, marsStart, objectiveStatus } from "../sim/index.js";
 import { PACING_SITE, playPacing, playPlanet } from "../harness/pacing.js";
 import { MODE_OVERRIDES, worldTuning } from "./game-tuning.js";
 

@@ -388,6 +388,11 @@ export class CityScreen {
     return this.settlementId;
   }
 
+  /** A building is selected, its panel open (the guide's upgrade step asks for one). */
+  get hasSelection(): boolean {
+    return this.selected !== null;
+  }
+
   open(settlementId: string): void {
     this.settlementId = settlementId;
     this.preparing = null;
