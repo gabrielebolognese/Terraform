@@ -669,6 +669,12 @@ CITY_CLOCK = 1               # settlement sim-years per planet sim-year; the Sta
 ROVER_ROUTES_ENABLED = 0     # rovers drive a route round buildings, kept with the job; its length sets the drive; new worlds use 1
 ROVER_CORRIDOR_SPEEDUP = 2   # a rover drives along a corridor this many times faster than over open ground
 INTERCITY_ENABLED = 0        INTERCITY_COST_PER_KM = 5   INTERCITY_CARRY = 300   # railways between settlements: off by default; materials a km; a year's carry
+GUIDE_ENABLED = 0            OBJECTIVES_ENABLED = 0      # the first hour (Batch 30): guided first steps, objectives with rewards; new Standard worlds use 1
+GOAL_FIRST_PEOPLE = 100      GOAL_STEADY_YEARS = 20      GOAL_STEADY_PEOPLE = 200    GOAL_TOWN_PEOPLE = 500     GOAL_CITY_PEOPLE = 1000
+GOAL_PRESSURE_MBAR = 100     GOAL_CITIES_JOINED = 3      # what the objectives ask: people in one city; years in a row with nothing short; mbar; cities on one line
+REWARD_FIRST_PEOPLE = 50     REWARD_STEADY_PEOPLE = 75   REWARD_TOWN_ROVERS = 2    REWARD_CITY_CREDITS = 2000
+REWARD_RUNAWAY_CREDITS = 1000  REWARD_PRESSURE_CREDITS = 2000  REWARD_WATER_CREDITS = 3000  REWARD_RAIL_MATERIALS = 200  REWARD_JOINED_CREDITS = 2000
+                             # what they pay: settlers and materials into the largest city (as many as it has homes and room for), credits to the bank
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75
 SOLAR_POWER = 6            GEOTHERMAL_POWER = 8       REACTOR_POWER = 24

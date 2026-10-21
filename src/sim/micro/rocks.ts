@@ -220,7 +220,7 @@ export function roversOut(s: Settlement): number {
 
 export function roverCount(s: Settlement, t: Tuning): number {
   if (garage(s) === null) return 0;
-  return t.ROVERS_PER_HQ + s.buildings.filter((b) => b.type === "rover_post").length;
+  return t.ROVERS_PER_HQ + s.buildings.filter((b) => b.type === "rover_post").length + s.extraRovers;
 }
 
 // How long a rover takes to break a rock - its drive, straight or along its route - is `roverYears` in drive.ts (Batch 29).

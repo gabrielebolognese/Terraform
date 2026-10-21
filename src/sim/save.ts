@@ -65,7 +65,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 15;
+export const SAVE_SCHEMA_VERSION = 16;
 
 export interface SavedFacility {
   readonly type: string;
@@ -106,6 +106,12 @@ export interface SaveFile {
   readonly settlements?: readonly SavedSettlement[];
   /** Added in v13: railways between settlements. */
   readonly routes?: readonly { readonly a: string; readonly b: string; readonly km: number }[];
+  /**
+   * Added in v16 (Batch 30, the first hour): the guided steps done, whether
+   * the guide was skipped, and the objectives claimed. Never any progress -
+   * that is derived from the rest of the save on load.
+   */
+  readonly goals?: { readonly guide: number; readonly guide_skipped: boolean; readonly claimed: readonly string[] };
 }
 
 export interface SavedSettlement {
@@ -165,6 +171,8 @@ export interface SavedSettlement {
   readonly history?: Record<string, unknown>;
   /** Added in v14 (real build times): builds and upgrades waiting for a rover, `{ tile, upgrade, paid }`. */
   readonly build_queue?: readonly { readonly tile: number; readonly upgrade: boolean; readonly paid: number }[];
+  /** Added in v16 (the first hour): rovers landed as an objective's reward. */
+  readonly extra_rovers?: number;
 }
 
 /**
@@ -253,10 +261,12 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       zones: s.zones.map((z) => ({ id: z.id, name: z.name, colour: z.colour, tiles: [...z.tiles] })),
       level_queue: s.levelQueue.map((q) => ({ tile: q.tile, level_m: q.levelM })),
       build_queue: s.buildQueue.map((q) => ({ tile: q.tile, upgrade: q.upgrade, paid: q.paid })),
+      extra_rovers: s.extraRovers,
       planned: s.planned.map((p) => ({ layer: p.layer, tile: p.tile })),
       history: { acc: { ...s.history.acc, short: [...s.history.acc.short], net: [...s.history.acc.net] }, taken: s.history.taken, samples: s.history.samples.map((x) => ({ ...x, short: [...x.short], stores: [...x.stores], net: [...x.net] })) },
     })),
     routes: state.routes.map((r) => ({ a: r.a, b: r.b, km: r.km })),
+    goals: { guide: state.goals.guide, guide_skipped: state.goals.guideSkipped, claimed: [...state.goals.claimed] },
   };
 }
 
@@ -308,6 +318,7 @@ export function fromSave(raw: unknown, t: Tuning): SimState {
     economy: readEconomy(save),
     settlements,
     routes: readRoutes(save, settlements),
+    goals: readGoals(save),
   };
 
   assertFiniteState(state, "fromSave");
@@ -346,7 +357,32 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   // v14 -> v15: a job may carry its route (Batch 29). Nothing to add: a job under way before routes keeps the
   // straight drive its time was set by (`readJobs` takes a job without one as that).
   if (version < 15) current = { ...current, schema_version: 15 };
+  // v15 -> v16: the first hour (Batch 30). Nothing of it was done: a world made before it has the guide and the
+  // objectives off in its recorded tuning, so this is what it keeps.
+  if (version < 16) current = migrateV15toV16(current);
   return current;
+}
+
+/** v15 -> v16: nothing of the first hour done - no guided step, no claim, no rover landed as a reward. */
+function migrateV15toV16(save: Record<string, unknown>): Record<string, unknown> {
+  const list = save["settlements"];
+  const settlements = Array.isArray(list) ? list.map((raw) => (typeof raw !== "object" || raw === null ? raw : { ...(raw as Record<string, unknown>), extra_rovers: 0 })) : list;
+  return { ...save, schema_version: 16, goals: { guide: 0, guide_skipped: false, claimed: [] }, settlements };
+}
+
+/** v16: the guided steps done (a whole number), skipped or not, and the objectives claimed (ids, each once). */
+function readGoals(save: Record<string, unknown>): SimState["goals"] {
+  const raw = asRecord(save["goals"], "goals");
+  const guide = numberAt(raw, "guide", "goals.guide");
+  if (!Number.isInteger(guide) || guide < 0) throw new SaveError(`goals.guide must be a whole number >= 0, got ${guide}`);
+  const skipped = raw["guide_skipped"];
+  if (typeof skipped !== "boolean") throw new SaveError(`goals.guide_skipped must be true or false, got ${describe(skipped)}`);
+  const claimed = asArray(raw["claimed"], "goals.claimed").map((id, i) => {
+    if (typeof id !== "string") throw new SaveError(`goals.claimed[${i}] must be an objective's id, got ${describe(id)}`);
+    return id;
+  });
+  if (new Set(claimed).size !== claimed.length) throw new SaveError("goals.claimed names an objective twice");
+  return { guide, guideSkipped: skipped, claimed };
 }
 
 /** v13 -> v14: the build queue (real build times). Nothing waited: a build with no rover free was refused. */
@@ -750,7 +786,9 @@ function readSettlements(save: Record<string, unknown>, t: Tuning): readonly Set
     const cleared = readKeys(s, "cleared", where, "rock", new Set());
     const jobs = readJobs(s, where);
     const under = underBuildings(buildings);
-    let settled: Settlement = { ...standing, cleared, jobs, rails: readKeys(s, "rails", where, "railway", under), ...readPlanner(s, where) };
+    const extraRovers = numberAt(s, "extra_rovers", `${where}.extra_rovers`);
+    if (!Number.isInteger(extraRovers) || extraRovers < 0) throw new SaveError(`${where}.extra_rovers must be a whole number >= 0, got ${extraRovers}`);
+    let settled: Settlement = { ...standing, cleared, jobs, rails: readKeys(s, "rails", where, "railway", under), ...readPlanner(s, where), extraRovers };
     // v8: corridors and cables; null only for a settlement carried forward from v6.
     for (const layer of LAYERS) {
       settled = { ...settled, [layer]: s[layer] === null ? [] : readKeys(s, layer, where, LINK_WORDS[layer], under) };

@@ -13,7 +13,7 @@ import { NEUTRAL_ENV, advance, foundSettlement, launchRocket, makeTuning, marsSt
 import type { Tuning } from "../sim/index.js";
 import { playPacing } from "../harness/pacing.js";
 import { ALL_SPEEDS, CLASSIC_SPEEDS, STANDARD_SPEEDS, speedsFor } from "./config.js";
-import { BROWSER_OVERRIDES, BROWSER_TUNING, NEW_WORLD_OVERRIDES, PACE_OVERRIDES, paceOf, worldTuning } from "./game-tuning.js";
+import { BROWSER_OVERRIDES, BROWSER_TUNING, MODE_OVERRIDES, NEW_WORLD_OVERRIDES, PACE_OVERRIDES, paceOf, worldTuning } from "./game-tuning.js";
 
 /** What a new world plays at each pace (since Batch 29, with the rovers' routes). */
 const STANDARD = worldTuning("standard", 0, "standard");
@@ -120,8 +120,11 @@ describe("a world's pace is its tuning", () => {
     expect(paceOf(BROWSER_TUNING)).toBe("classic");
   });
 
-  it("leaves a Classic world exactly the browser's tuning it always was, but for its seed and what every new world has since", () => {
-    expect({ ...worldTuning("standard", 0, "classic") }).toEqual({ ...makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES }) });
+  it("leaves a Classic world exactly the browser's tuning it always was, but for its seed, what every new world has since, and its mode's first hour", () => {
+    expect({ ...worldTuning("standard", 0, "classic") }).toEqual({ ...makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES, ...MODE_OVERRIDES.standard }) });
+    // Batch 30: the guide and the objectives are a Standard world's, never in the tuning of the worlds before.
+    expect(MODE_OVERRIDES.standard).toEqual({ GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1 });
+    expect(BROWSER_TUNING.GUIDE_ENABLED + BROWSER_TUNING.OBJECTIVES_ENABLED).toBe(0);
     // Batch 29: what every new world has since is the rovers' routes, and the worlds before worlds never had them.
     expect(NEW_WORLD_OVERRIDES).toEqual({ ROVER_ROUTES_ENABLED: 1 });
     expect(BROWSER_TUNING.ROVER_ROUTES_ENABLED).toBe(0);

@@ -60,6 +60,18 @@ export const NEW_WORLD_OVERRIDES: TuningOverrides = {
   ROVER_ROUTES_ENABLED: 1,
 };
 
+/**
+ * What a mode adds besides a sandbox's rules. The first hour (Batch 30) - the
+ * guided first steps and the objectives - is Standard's: a sandbox has
+ * neither (no losses, nothing to earn), and a Terraformed start begins with
+ * every objective already met.
+ */
+export const MODE_OVERRIDES: Readonly<Record<WorldMode, TuningOverrides>> = {
+  standard: { GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1 },
+  sandbox: {},
+  terraformed: {},
+};
+
 /** "Standard", today's game; "Sandbox"; "Terraformed start", the example planet as a start that saves. */
 export type WorldMode = "standard" | "sandbox" | "terraformed";
 export const WORLD_MODES: readonly WorldMode[] = ["standard", "sandbox", "terraformed"];
@@ -116,7 +128,7 @@ export function paceOf(t: Tuning): WorldPace {
  */
 export function worldTuning(mode: WorldMode, seed: number, pace: WorldPace = "standard"): Tuning {
   const sandbox: TuningOverrides = mode === "sandbox" ? { SANDBOX_ENABLED: 1, TECH_GATE_ENABLED: 0, FLOODING_ENABLED: 0 } : {};
-  const t = makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES, ...PACE_OVERRIDES[pace], TERRAIN_SEED: seed, ...sandbox });
+  const t = makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES, ...PACE_OVERRIDES[pace], TERRAIN_SEED: seed, ...MODE_OVERRIDES[mode], ...sandbox });
   validateTuning(t);
   return t;
 }

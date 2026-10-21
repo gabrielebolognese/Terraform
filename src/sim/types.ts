@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 15;
+  readonly schemaVersion: 16;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -356,6 +356,23 @@ export interface SimState {
   readonly settlements: readonly Settlement[];
   /** Railways between settlements (v13, at the user's request: "interconnected cities"), in the order laid. */
   readonly routes: readonly Route[];
+  /** The first hour (v16, Batch 30): how far the guided steps have come, and which objectives are claimed. */
+  readonly goals: Goals;
+}
+
+/**
+ * What the player has done of the guided first steps and the objectives
+ * (Batch 30). Only what cannot be derived: a step's condition can stop
+ * holding (a building removed), the latch cannot; a claim pays once. Each
+ * objective's progress is derived from the rest of the state, never kept.
+ */
+export interface Goals {
+  /** Guided steps done, in order: latched in `advance` from the state, never set by the shell. */
+  readonly guide: number;
+  /** The player skipped the guide: it is never shown again. */
+  readonly guideSkipped: boolean;
+  /** Objectives whose reward was taken, by id, in the order claimed. */
+  readonly claimed: readonly string[];
 }
 
 /** A railway from one settlement to another: which two, and how long, kilometres. */
@@ -445,6 +462,8 @@ export interface Settlement {
   readonly planned: readonly PlannedLink[];
   /** The city's record, for the planner's charts: what has happened, a sample a year. */
   readonly history: History;
+  /** Rovers landed from Earth as an objective's reward (v16, Batch 30), on top of the headquarters' and the posts'. */
+  readonly extraRovers: number;
 }
 
 export interface Zone {

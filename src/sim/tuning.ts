@@ -1112,6 +1112,36 @@ export const BASE_TUNING = Object.freeze({
   INTERCITY_ENABLED: 0,
   INTERCITY_COST_PER_KM: 5,
   INTERCITY_CARRY: 300,
+  /**
+   * The first hour (Batch 30). GUIDE_ENABLED: the guided first steps - found
+   * a city, place power, a dome, connect them, raise a building a level, claim
+   * land, a railway to a second settlement - each latched in `advance` once
+   * the state shows it done. OBJECTIVES_ENABLED: three chains of goals with
+   * rewards, their progress derived from the state and only the claims kept.
+   * Both OFF (0) by default and in every world made before them; a new
+   * Standard world turns both on; a Terraformed start (every goal met) and
+   * a sandbox have neither. What each goal asks (GOAL_*) and pays (REWARD_*):
+   * people and materials go to the player's largest city, as many as it has
+   * homes and room for.
+   */
+  GUIDE_ENABLED: 0,
+  OBJECTIVES_ENABLED: 0,
+  GOAL_FIRST_PEOPLE: 100,
+  GOAL_STEADY_YEARS: 20,
+  GOAL_STEADY_PEOPLE: 200,
+  GOAL_TOWN_PEOPLE: 500,
+  GOAL_CITY_PEOPLE: 1000,
+  GOAL_PRESSURE_MBAR: 100,
+  GOAL_CITIES_JOINED: 3,
+  REWARD_FIRST_PEOPLE: 50,
+  REWARD_STEADY_PEOPLE: 75,
+  REWARD_TOWN_ROVERS: 2,
+  REWARD_CITY_CREDITS: 2000,
+  REWARD_RUNAWAY_CREDITS: 1000,
+  REWARD_PRESSURE_CREDITS: 2000,
+  REWARD_WATER_CREDITS: 3000,
+  REWARD_RAIL_MATERIALS: 200,
+  REWARD_JOINED_CREDITS: 2000,
 
   /** Habitat Dome: people housed, and life support drawn per year. */
   DOME_HOUSING: 40,
@@ -1279,6 +1309,12 @@ export function validateTuning(t: Tuning): void {
   if (!(t.LINK_BUILD_PER_YEAR >= 0)) fail("LINK_BUILD_PER_YEAR must be >= 0");
   if (!(Number.isInteger(t.HISTORY_EVERY) && t.HISTORY_EVERY >= 1)) fail("HISTORY_EVERY must be a whole number >= 1");
   if (!(Number.isInteger(t.HISTORY_SAMPLES) && t.HISTORY_SAMPLES >= 2)) fail("HISTORY_SAMPLES must be a whole number >= 2");
+  for (const k of ["GUIDE_ENABLED", "OBJECTIVES_ENABLED"] as const) if (t[k] !== 0 && t[k] !== 1) fail(`${k} must be 0 or 1`);
+  // The steady run is counted in the city's record, which keeps HISTORY_SAMPLES years: a longer run could never be seen.
+  if (!(Number.isInteger(t.GOAL_STEADY_YEARS) && t.GOAL_STEADY_YEARS >= 1 && t.GOAL_STEADY_YEARS <= t.HISTORY_SAMPLES)) fail("GOAL_STEADY_YEARS must be a whole number from 1 to HISTORY_SAMPLES");
+  if (!(Number.isInteger(t.GOAL_CITIES_JOINED) && t.GOAL_CITIES_JOINED >= 2)) fail("GOAL_CITIES_JOINED must be a whole number >= 2");
+  if (!Number.isInteger(t.REWARD_TOWN_ROVERS)) fail("REWARD_TOWN_ROVERS must be a whole number of rovers");
+  for (const k of TUNING_SCALAR_KEYS) if ((k.startsWith("GOAL_") || k.startsWith("REWARD_")) && !(t[k] >= 0)) fail(`${k} must be >= 0`);
   if (!(t.P_LIFE_OK > t.P_LIFE_MIN)) fail("P_LIFE_OK must exceed P_LIFE_MIN");
   if (!(t.T_CEIL_K > t.T_FLOOR_K)) fail("T_CEIL_K must exceed T_FLOOR_K");
   if (!(t.ALBEDO_MAX > t.ALBEDO_MIN)) fail("ALBEDO_MAX must exceed ALBEDO_MIN");
