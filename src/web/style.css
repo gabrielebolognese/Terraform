@@ -1423,6 +1423,57 @@ button:hover {
   background: var(--warn-bg);
 }
 
+/* Batch 32: the people's happiness and their needs. */
+.city-people[hidden] {
+  display: none;
+}
+
+.city-happiness {
+  margin: 0 0 6px;
+  font-size: 13px;
+  padding-left: 9px;
+  border-left: 3px solid var(--line-strong);
+}
+
+.city-happiness[data-mood="happy"] {
+  border-left-color: var(--good);
+}
+
+.city-happiness[data-mood="unhappy"] {
+  border-left-color: var(--warn);
+}
+
+.city-need-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+
+.city-need {
+  display: grid;
+  grid-template-columns: 7.5em 1fr;
+  gap: 8px;
+  padding: 2px 0;
+  color: var(--text-2);
+}
+
+.city-need-name {
+  color: var(--text);
+}
+
+.city-need[data-state="unmet"] .city-need-name {
+  color: var(--warn);
+}
+
+.city-need[data-state="later"] {
+  color: var(--text-3);
+}
+
+.city-need[data-state="later"] .city-need-name {
+  color: var(--text-3);
+}
+
 .city-section-title {
   margin: 20px 0 8px;
   font-size: 12px;
@@ -1880,10 +1931,11 @@ button:hover {
   z-index: 5;
   display: grid;
   grid-template-columns: minmax(0, 1fr) min(400px, 40vw);
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   grid-template-areas:
     "top top"
     "tools side"
+    "coverage side"
     "stage side"
     "hint side"
     "legend side";
@@ -1949,6 +2001,29 @@ button:hover {
 
 .planner-cancel {
   margin-left: auto;
+}
+
+/* Batch 32: which service's reach is shown over the map. */
+.planner-coverage {
+  grid-area: coverage;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.planner-coverage[hidden] {
+  display: none;
+}
+
+.planner-coverage-label {
+  color: var(--text-3);
+}
+
+.planner-coverage-button[aria-pressed="true"] {
+  border-color: var(--good);
+  color: var(--good);
 }
 
 .planner-stage {
@@ -2130,8 +2205,8 @@ button:hover {
 @media (max-width: 760px) {
   .planner {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(300px, 1fr) auto auto minmax(0, 40vh);
-    grid-template-areas: "top" "tools" "stage" "hint" "legend" "side";
+    grid-template-rows: auto auto auto minmax(300px, 1fr) auto auto minmax(0, 40vh);
+    grid-template-areas: "top" "tools" "coverage" "stage" "hint" "legend" "side";
     padding: 10px 16px;
   }
 }

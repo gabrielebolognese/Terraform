@@ -15,9 +15,12 @@ import { playPacing } from "../harness/pacing.js";
 import { ALL_SPEEDS, CLASSIC_SPEEDS, STANDARD_SPEEDS, speedsFor } from "./config.js";
 import { BROWSER_OVERRIDES, BROWSER_TUNING, MODE_OVERRIDES, NEW_WORLD_OVERRIDES, PACE_OVERRIDES, paceOf, worldTuning } from "./game-tuning.js";
 
-/** What a new world plays at each pace (since Batch 29, with the rovers' routes). */
+/** What a new world plays at each pace (since Batch 29, with the rovers' routes; since Batch 32, with the people's needs). */
 const STANDARD = worldTuning("standard", 0, "standard");
 const CLASSIC = worldTuning("standard", 0, "classic");
+/** The same without the needs: Batch 29's new world, to measure the routes and the needs each alone. */
+const STANDARD_29 = makeTuning({ ...STANDARD, NEEDS_ENABLED: 0 });
+const CLASSIC_29 = makeTuning({ ...CLASSIC, NEEDS_ENABLED: 0 });
 /** The two paces as Batch 28 made them, before routes: the cities' clock alone. */
 const STANDARD_28 = makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES.standard });
 const CLASSIC_28 = makeTuning({ ...BROWSER_OVERRIDES, ...PACE_OVERRIDES.classic });
@@ -31,8 +34,12 @@ describe("the scripted playthrough, in real time at 1x", () => {
   // Standard 33 s / 19.9 min / 1.79 h / 8 s / 1.65 h.
   // Measured (Batch 29, a new world, routes on): Classic 8 s / 19.9 min / 1.66 h / 8 s / 12.4 min;
   // Standard 33 s / 21.5 min / 2.02 h / 8 s / 1.65 h.
+  // Measured (Batch 32, needs on too): Classic 8 s / 19.9 min / 1.74 h / 8 s / 12.4 min;
+  // Standard 33 s / 21.5 min / 2.16 h / 8 s / 1.65 h.
   const classic = playPacing(CLASSIC, 4 * HOUR).moments;
   const standard = playPacing(STANDARD, 4 * HOUR).moments;
+  const classic29 = playPacing(CLASSIC_29, 4 * HOUR).moments;
+  const standard29 = playPacing(STANDARD_29, 4 * HOUR).moments;
   const classic28 = playPacing(CLASSIC_28, 4 * HOUR).moments;
   const standard28 = playPacing(STANDARD_28, 4 * HOUR).moments;
 
@@ -41,7 +48,7 @@ describe("the scripted playthrough, in real time at 1x", () => {
     expect(standard.firstBuilding!).toBeLessThan(MIN);
   });
 
-  it("Standard: a city of 1,000 at 1-3 h (2.02 h)", () => {
+  it("Standard: a city of 1,000 at 1-3 h (2.16 h)", () => {
     expect(standard.city1000! / HOUR).toBeGreaterThanOrEqual(1);
     expect(standard.city1000! / HOUR).toBeLessThanOrEqual(3);
   });
@@ -71,10 +78,26 @@ describe("the scripted playthrough, in real time at 1x", () => {
     // Batch 29: the scripted city packs its buildings edge to edge round the headquarters, with 13 tiles of
     // corridor, so a rover's way round them is 4x the straight line (50 tiles against 12, measured). At the
     // Standard pace rovers are what the city waits for most (its builds are long). Measured 1.128 and 1.057.
-    expect(standard.city1000! / standard28.city1000!).toBeGreaterThan(1.05);
-    expect(standard.city1000! / standard28.city1000!).toBeLessThan(1.2);
-    expect(classic.city1000! / classic28.city1000!).toBeGreaterThan(1);
-    expect(classic.city1000! / classic28.city1000!).toBeLessThan(1.1);
+    // (Without the needs, which a new world has since Batch 32: the routes alone.)
+    expect(standard29.city1000! / standard28.city1000!).toBeGreaterThan(1.05);
+    expect(standard29.city1000! / standard28.city1000!).toBeLessThan(1.2);
+    expect(classic29.city1000! / classic28.city1000!).toBeGreaterThan(1);
+    expect(classic29.city1000! / classic28.city1000!).toBeLessThan(1.1);
+  });
+
+  it("the needs, unmet, cost the scripted city of 1,000 a fifteenth at Standard (2.02 h to 2.16 h), a twentieth at Classic (1.66 h to 1.74 h)", () => {
+    // Batch 32: the script builds no services. Past 500 people its city asks for green space and food variety, has
+    // neither (a mood of -0.15: growth -7.5%), and fills its homes slower. Measured 1.069 and 1.048. Before 500
+    // people nothing changes: the first building, the first upgrade and the phases come to the second.
+    expect(standard.city1000! / standard29.city1000!).toBeGreaterThan(1.03);
+    expect(standard.city1000! / standard29.city1000!).toBeLessThan(1.12);
+    expect(classic.city1000! / classic29.city1000!).toBeGreaterThan(1.02);
+    expect(classic.city1000! / classic29.city1000!).toBeLessThan(1.1);
+    for (const [a, b] of [[standard, standard29], [classic, classic29]] as const) {
+      expect(a.firstBuilding).toBe(b.firstBuilding);
+      expect(a.firstUpgrade).toBe(b.firstUpgrade);
+      expect(a.phase2).toBe(b.phase2);
+    }
   });
 });
 
@@ -125,9 +148,10 @@ describe("a world's pace is its tuning", () => {
     // Batch 30: the guide and the objectives are a Standard world's, never in the tuning of the worlds before.
     expect(MODE_OVERRIDES.standard).toEqual({ GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1 });
     expect(BROWSER_TUNING.GUIDE_ENABLED + BROWSER_TUNING.OBJECTIVES_ENABLED).toBe(0);
-    // Batch 29: what every new world has since is the rovers' routes, and the worlds before worlds never had them.
-    expect(NEW_WORLD_OVERRIDES).toEqual({ ROVER_ROUTES_ENABLED: 1 });
+    // What every new world has since: the rovers' routes (Batch 29) and the people's needs (Batch 32). The worlds before worlds never had them.
+    expect(NEW_WORLD_OVERRIDES).toEqual({ ROVER_ROUTES_ENABLED: 1, NEEDS_ENABLED: 1 });
     expect(BROWSER_TUNING.ROVER_ROUTES_ENABLED).toBe(0);
+    expect(BROWSER_TUNING.NEEDS_ENABLED).toBe(0);
   });
 
   it("offers a Standard world slow speeds, a sandbox and the debug setting every speed, a Classic world its own", () => {

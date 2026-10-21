@@ -29,6 +29,11 @@ import { buildingSite, garageDoor, garageLeg, roverRoute, tileSite } from "./dri
 import { keySet } from "./buildings.js";
 import type { World } from "./terrain.js";
 import { worldOf } from "./terrain.js";
+import type { NeedsReading } from "./needs.js";
+import { NEEDS, peopleReached, walkNetwork } from "./needs.js";
+
+/** The buildings that meet a need in reach of homes. */
+const PROVIDERS: ReadonlySet<BuildingType> = new Set<BuildingType>(NEEDS.flatMap((n) => (n.reach ? n.providers : [])));
 
 export interface CityBuildingView {
   /** Index into the settlement's `buildings`. */
@@ -59,6 +64,12 @@ export interface CityBuildingView {
    * when not operable.
    */
   readonly activity: number;
+  /**
+   * Batch 32, with needs on: for a building that meets a need in reach of
+   * homes (a park, a station, a medical center...), the people in the homes
+   * it reaches while it runs. Absent for anything else, and with needs off.
+   */
+  readonly reaches?: number;
 }
 
 export interface CityView {
@@ -140,6 +151,8 @@ export interface CityView {
   readonly garage: { readonly x: number; readonly y: number } | null;
   /** Rovers and rockets under way: where to, and how far through, in sim-years. */
   readonly jobs: readonly CityJobView[];
+  /** Batch 32: the people's needs this substep and the mood they make; null (or absent, in a hand-made view) with needs off and for an outpost. */
+  readonly needs?: NeedsReading | null;
 }
 
 export interface CityClaimsView {
@@ -178,6 +191,8 @@ export interface CityJobView {
 }
 
 const POWER_PLANTS: ReadonlySet<BuildingType> = new Set<BuildingType>(["solar_array", "geothermal_plant", "reactor"]);
+/** What a building's lights show of how full the homes are (Batch 32 adds the towers, with needs on). */
+const HOMES_LIT: ReadonlySet<BuildingType> = new Set<BuildingType>(["habitat_dome", "skyscraper"]);
 
 /**
  * The world in tiles, kept with the world it was made from: a view is
@@ -326,6 +341,8 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
   }
   const chunk = t.CLAIM_CHUNK_TILES;
   const building = constructionOf(s);
+  // Batch 32: the people each service reaches - a crowd at a station or a park.
+  const reached = step.needs === null ? null : peopleReached(s, step.operable, new Set(building.keys()), walkNetwork(s, t), t);
   // Where each building stands: the highest corner under it - kept per building list and ground.
   const bases = kept(s.buildings, n, t, ground, () =>
     s.buildings.map((b) => {
@@ -365,7 +382,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
         ? 0
         : POWER_PLANTS.has(b.type)
           ? powerLoad
-          : b.type === "habitat_dome"
+          : b.type === "habitat_dome" || (step.needs !== null && HOMES_LIT.has(b.type))
             ? occupancy
             : 1;
       const size = BUILDING_DEFS[b.type].footprint;
@@ -375,7 +392,8 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
       // concrete foundations under it").
       const baseZ = bases[index]!;
       const drowned = step.flood !== null && submerged(b, step.flood);
-      return { index, type: b.type, tx: b.tx, ty: b.ty, size, ...(depth === size ? {} : { depth }), operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null };
+      const reaches = reached !== null && PROVIDERS.has(b.type) ? reached[index]! : undefined;
+      return { index, type: b.type, tx: b.tx, ty: b.ty, size, ...(depth === size ? {} : { depth }), operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null, ...(reaches === undefined ? {} : { reaches }) };
     }),
     population: s.population,
     housing: home,
@@ -395,6 +413,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     garage: garage(s),
     // A rover building is drawn as any rover at work: out, at the site, and back.
     jobs: s.jobs.map((j) => jobView(s, j, t)),
+    needs: step.needs,
   };
 }
 

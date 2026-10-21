@@ -21,7 +21,7 @@ import { MODE_OVERRIDES, worldTuning } from "./game-tuning.js";
 const T = worldTuning("standard", 0, "standard");
 const MIN = 60;
 const HOUR = 3600;
-/** Long enough for the city's and the network's chains with every reward taken (a city of 1,000 at 1.66 h). */
+/** Long enough for the city's and the network's chains with every reward taken (a city of 1,000 at 1.67 h; 1.66 before Batch 32's needs). */
 const RUN = 2.2 * HOUR;
 
 const taught = playPacing(T, RUN, false, undefined, { guided: true, claim: true });
@@ -55,7 +55,7 @@ describe("the guided first steps, played by a scripted new player", () => {
 
 describe("objectives on a scripted run", () => {
   it("are every one reached in Standard: the city's and the network's by the taught player, the planet's by the planet played alone", () => {
-    // Measured: first 34.9 min, steady 52.8 min, town 69.4 min, a city of 1,000 1.66 h; a railway 42.4 min,
+    // Measured: first 34.9 min, steady 52.8 min, town 69.4 min, a city of 1,000 1.67 h; a railway 42.4 min,
     // three cities joined 42.6 min. The planet: Phase 2 at 1.65 h, 100 mbar at 16.7 h, first water at 28.3 h.
     const done = taught.goals.done;
     for (const id of ["city_first", "city_steady", "city_town", "city_thousand", "network_rail", "network_three"]) expect(done[id], id).not.toBeNull();
@@ -78,13 +78,17 @@ describe("objectives on a scripted run", () => {
 
   it("each reward shortens the road to the next goal, by the measured amount", () => {
     const all = taught.goals.done;
-    // Fifty settlers at 100 people: the steady supply (20 clean years at 200 people) at 52.8 min, not 2.30 h.
-    expect(withheld("city_first")["city_steady"]).toBeNull();
+    // Fifty settlers at 100 people: the steady supply (20 clean years at 200 people) at 52.8 min, not 1.82 h.
+    // (Batch 32: a new world's people need more past 500, and the city without the reward, growing slower from
+    // there - 1,095 people at the end, not 1,205 - finds its 20 clean years at 1.82 h; with needs off, not within
+    // the run at all, measured.)
+    expect(withheld("city_first")["city_steady"]! - all["city_steady"]!).toBeGreaterThan(50 * MIN);
     expect(all["city_steady"]! / MIN).toBeLessThan(55);
     // 75 settlers: the town of 500 at 69.4 min, not 72.6.
     expect(withheld("city_steady")["city_town"]! - all["city_town"]!).toBeGreaterThan(3 * MIN);
-    // Two rovers: the city of 1,000 at 1.66 h, not 1.83 h (10 minutes, a quarter of the road).
-    expect(withheld("city_town")["city_thousand"]! - all["city_thousand"]!).toBeGreaterThan(9 * MIN);
+    // Two rovers: the city of 1,000 at 1.67 h, 8.3 minutes sooner (about 10 before Batch 32's needs, which slow
+    // both cities past 500 people alike).
+    expect(withheld("city_town")["city_thousand"]! - all["city_thousand"]!).toBeGreaterThan(7 * MIN);
     // 200 materials for the first railway: three cities joined at 42.6 min, not 55.7.
     expect(withheld("network_rail")["network_three"]! - all["network_three"]!).toBeGreaterThan(12 * MIN);
     // 2,000 credits for three cities joined: the planet's Phase 2 at 78.5 min, not 1.65 h.

@@ -58,6 +58,8 @@ validateTuning(BROWSER_TUNING);
 export const NEW_WORLD_OVERRIDES: TuningOverrides = {
   // Rovers drive round the city, not through it, and the way they drive sets their trips (Batch 29).
   ROVER_ROUTES_ENABLED: 1,
+  // People need more than life support as a city grows, and how happy they are moves growth and output (Batch 32).
+  NEEDS_ENABLED: 1,
 };
 
 /**

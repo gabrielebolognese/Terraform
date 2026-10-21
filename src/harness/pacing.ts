@@ -18,6 +18,8 @@ import type { HabitatChannels } from "../sim/habitat.js";
 import type { BuildingType, MicroResource, Settlement, SimState, Tuning } from "../sim/index.js";
 import {
   BUILDING_DEFS,
+  NEED_BY_ID,
+  capacities,
   NEUTRAL_ENV,
   advance,
   connectAll,
@@ -74,6 +76,12 @@ export interface PacingScript {
   readonly claim?: boolean;
   /** With `claim`, the one objective never claimed: what its reward is worth, by its absence. */
   readonly withhold?: string;
+  /**
+   * Batch 32: looks after its people - once the city asks for a need beyond
+   * life support and less than half its homes have it, builds what meets it
+   * (the first of its buildings the city may place).
+   */
+  readonly needs?: boolean;
 }
 
 /** When the first hour's moments came (Batch 30), real seconds at 1x; null if not within the run. */
@@ -277,6 +285,30 @@ export function playPacing(t: Tuning, seconds: number, stopWhenDone = true, onSt
     if (c.population >= 0.8 * housing(c, t)) {
       if (place("habitat_dome")) placedAny = true;
       return;
+    }
+    // Batch 32: a need the city asks for, met for less than half its homes - what meets it.
+    if (script.needs && probe.needs !== null) {
+      for (const n of probe.needs.needs) {
+        if (!n.asked || n.met >= 0.5) continue;
+        for (const type of NEED_BY_ID[n.id].providers) {
+          if (n.id === "variety" && c.buildings.some((b) => b.type === type)) continue;
+          // Dearer than the stores can hold (a biosphere's 800 against a young city's 400): room for materials first.
+          if (BUILDING_DEFS[type].cost(t) > capacities(c, t).materials) {
+            // One at a time: a depot still going up adds no room yet.
+            const going = constructionOf(c);
+            if (c.buildings.some((b) => b.type === "materials_depot" && going.has(tileKey(b.tx, b.ty)))) return;
+            if (place("materials_depot")) {
+              placedAny = true;
+              return;
+            }
+            continue;
+          }
+          if (place(type)) {
+            placedAny = true;
+            return;
+          }
+        }
+      }
     }
     // Otherwise raise the lowest building a level.
     const candidates = c.buildings

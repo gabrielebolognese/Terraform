@@ -16,8 +16,9 @@
  * hooks, to change anything.
  */
 
-import type { BuildingType, CityView, HabitatChannels, PlannedLink, Settlement, Tuning } from "../sim/index.js";
-import { BUILDING_DEFS, NAME_MAX, cityView, keyTile, roverCount, tileKey } from "../sim/index.js";
+import type { BuildingType, CityView, HabitatChannels, NeedId, PlannedLink, Settlement, Tuning } from "../sim/index.js";
+import { BUILDING_DEFS, NAME_MAX, NEEDS, NEED_BY_ID, cityView, keyTile, needCoverage, roverCount, tileKey } from "../sim/index.js";
+import { happinessWords, needLines } from "./needs-words.js";
 import { settlementLabel } from "./settlement-label.js";
 import { chartFigure, cityCharts, fmt } from "./charts.js";
 
@@ -33,6 +34,23 @@ export interface PlannerHooks {
 }
 
 export type PlannerTool = "pan" | "zone" | "erase" | "corridors" | "cables" | "rails";
+
+/** Batch 32: the needs whose coverage the planner can show - those met in reach of homes. */
+export const COVERAGE_NEEDS: readonly NeedId[] = NEEDS.filter((n) => n.reach).map((n) => n.id);
+
+/** A coverage overlay: where a need's running providers reach, and which homes they reach. */
+export interface CoverageOverlay {
+  readonly squares: readonly { readonly index: number; readonly x0: number; readonly y0: number; readonly x1: number; readonly y1: number; readonly running: boolean }[];
+  readonly homes: readonly { readonly index: number; readonly reached: boolean }[];
+}
+
+/** The overlay's colours: the reach, homes reached, homes not reached, a provider. */
+export const COVERAGE_COLOURS = { reach: [120, 230, 140], reached: [80, 200, 110], gap: [232, 72, 60], provider: [255, 255, 255] } as const;
+
+/** A need's coverage, from what the view says runs. */
+export function coverageOf(s: Settlement, view: CityView, id: NeedId, t: Tuning): CoverageOverlay {
+  return needCoverage(s, id, view.buildings.map((b) => b.operable), t);
+}
 
 /** What each building reads as on the map, by what it does. */
 export const MAP_COLOURS: Readonly<Record<"home" | "green" | "power" | "industry" | "civic" | "commerce" | "port" | "hq", readonly [number, number, number]>> = {
@@ -66,7 +84,7 @@ const hex = (c: string): [number, number, number] => [parseInt(c.slice(1, 3), 16
  * their colour, corridors, cables and rails, buildings on top, and what is
  * planned or waiting for a rover marked. Pure: tested without a canvas.
  */
-export function plannerPixels(view: CityView, s: Settlement): Uint8ClampedArray<ArrayBuffer> {
+export function plannerPixels(view: CityView, s: Settlement, coverage: CoverageOverlay | null = null): Uint8ClampedArray<ArrayBuffer> {
   const n = view.tiles;
   const px = new Uint8ClampedArray(new ArrayBuffer(n * n * 4));
   let lo = Infinity;
@@ -126,6 +144,22 @@ export function plannerPixels(view: CityView, s: Settlement): Uint8ClampedArray<
         set(y * n + x, edge ? [c[0] * 0.7, c[1] * 0.7, c[2] * 0.7] : c);
       }
     }
+  }
+  if (coverage !== null) {
+    // Batch 32: the ground a running provider reaches washed green, its own footprint white; the homes over it,
+    // green where one reaches them and red where none does - the gaps.
+    for (const q of coverage.squares) {
+      if (!q.running) continue;
+      for (let y = Math.max(0, Math.ceil(q.y0)); y < Math.min(n, Math.ceil(q.y1)); y += 1) for (let x = Math.max(0, Math.ceil(q.x0)); x < Math.min(n, Math.ceil(q.x1)); x += 1) set(y * n + x, COVERAGE_COLOURS.reach, 0.3);
+    }
+    const paint = (index: number, c: readonly [number, number, number]): void => {
+      const b = view.buildings[index];
+      if (b === undefined) return;
+      const d = b.depth ?? b.size;
+      for (let y = b.ty; y < b.ty + d; y += 1) for (let x = b.tx; x < b.tx + b.size; x += 1) if (x >= 0 && y >= 0 && x < n && y < n) set(y * n + x, c);
+    };
+    for (const h of coverage.homes) paint(h.index, h.reached ? COVERAGE_COLOURS.reached : COVERAGE_COLOURS.gap);
+    for (const q of coverage.squares) paint(q.index, COVERAGE_COLOURS.provider);
   }
   return px;
 }
@@ -216,6 +250,10 @@ export class PlannerScreen {
   private zonesKey = "";
   private chartsKey = -1;
   private tab = "zones";
+  /** Batch 32: the need whose coverage is shown over the map, or null for none. */
+  coverage: NeedId | null = null;
+  private readonly coverageBar: HTMLElement;
+  private readonly coverageButtons = new Map<NeedId | "none", HTMLButtonElement>();
 
   constructor(
     host: HTMLElement,
@@ -244,6 +282,20 @@ export class PlannerScreen {
       tools.append(b);
     }
     tools.append(button("planner-cancel", "Cancel plans", () => this.cancelPlans()));
+
+    // Batch 32: where each service reaches, and the gaps - shown with needs on.
+    this.coverageBar = el("div", "planner-coverage");
+    this.coverageBar.setAttribute("role", "toolbar");
+    this.coverageBar.setAttribute("aria-label", "Coverage");
+    this.coverageBar.hidden = true;
+    this.coverageBar.append(el("span", "planner-coverage-label", "Coverage:"));
+    for (const id of ["none", ...COVERAGE_NEEDS] as const) {
+      const b = button("planner-coverage-button", id === "none" ? "Off" : NEED_BY_ID[id].name, () => this.showCoverage(id === "none" ? null : id));
+      b.dataset["need"] = id;
+      b.title = id === "none" ? "Hide the coverage." : `Where ${NEED_BY_ID[id].meets.replace(/ in reach of the homes$/, "")} reach${NEED_BY_ID[id].providers.length > 1 ? "" : "es"}: homes reached in green, homes no one reaches in red.`;
+      this.coverageButtons.set(id, b);
+      this.coverageBar.append(b);
+    }
 
     const stage = el("div", "planner-stage");
     this.map = el("canvas", "planner-map");
@@ -276,10 +328,11 @@ export class PlannerScreen {
       item.prepend(sw);
       legend.append(item);
     }
-    this.root.append(top, tools, stage, this.hint, legend, side);
+    this.root.append(top, tools, this.coverageBar, stage, this.hint, legend, side);
     host.append(this.root);
     this.showTab("zones");
     this.setTool("pan");
+    this.showCoverage(null);
     this.bindInput();
   }
 
@@ -312,6 +365,13 @@ export class PlannerScreen {
     this.hint.textContent = TOOLS.find((t) => t.tool === tool)?.hint ?? "";
   }
 
+  /** Show a need's coverage over the map, or none. */
+  showCoverage(id: NeedId | null): void {
+    this.coverage = id;
+    for (const [k, b] of this.coverageButtons) b.setAttribute("aria-pressed", String(k === (id ?? "none")));
+    this.pixels = null;
+  }
+
   /** Say what happened, at once - not at the panel's next refresh. */
   private say(text: string): void {
     this.notice = text;
@@ -339,6 +399,8 @@ export class PlannerScreen {
       this.viewKey = key;
       this.pixels = null;
     }
+    // The coverage bar with needs on (Batch 32); the overlay with it, remade with the view.
+    this.coverageBar.hidden = (this.view.needs ?? null) === null;
     this.draw(this.view, s);
     if (now - this.panelAt > 250) {
       this.panelAt = now;
@@ -366,7 +428,8 @@ export class PlannerScreen {
     const ctx = this.map.getContext("2d");
     if (ctx === null) return;
     if (this.pixels === null || this.image === null || this.image.width !== n) {
-      this.pixels = plannerPixels(view, s);
+      const coverage = this.coverage !== null && (view.needs ?? null) !== null ? coverageOf(s, view, this.coverage, this.tuning) : null;
+      this.pixels = plannerPixels(view, s, coverage);
       this.image ??= document.createElement("canvas");
       this.image.width = n;
       this.image.height = n;
@@ -580,6 +643,12 @@ export class PlannerScreen {
       ["Rovers out", `${rovers} of ${roverCount(s, this.tuning)}${s.levelQueue.length > 0 ? `, ${s.levelQueue.length} tiles queued to level` : ""}`],
       ["Zones", `${s.zones.length}`],
     ];
+    // Batch 32: how happy, and each need, with needs on.
+    const needs = view.needs ?? null;
+    if (needs !== null) {
+      lines.splice(1, 0, ["Happiness", happinessWords(needs).replace(/^Happiness /, "")]);
+      for (const l of needLines(needs, this.tuning)) lines.splice(lines.length - 6, 0, [l.name, l.text]);
+    }
     const table = el("dl", "planner-facts");
     for (const [k, v] of lines) table.append(el("dt", "", k), el("dd", "", v));
     const types = el("ul", "planner-types");

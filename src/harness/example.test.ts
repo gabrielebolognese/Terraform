@@ -137,6 +137,32 @@ describe("the example planet", () => {
     }
   });
 
+  it("meets its people's needs (Batch 32): every asked need in reach of nearly every home, and perfect stats with needs on", () => {
+    // Rebuilt for the needs (see `services.ts`): laid out before them, a metropolis's homes were 1-10% in reach of
+    // each service, its mood -0.74, and 13 cities ran short for it. Measured since: every asked need met for at
+    // least 86.7% of a city's homes (research, in the city of 10,764), the least mood of a city asking anything
+    // 0.799 (one not yet asking for shops has at most 0.8), the metropolises 0.995 to 0.996.
+    const on = makeTuning({ ...game, NEEDS_ENABLED: 1 });
+    let asking = 0;
+    for (const s of state.settlements) {
+      if (s.kind === "outpost") continue;
+      const step = settlementStep(s, env, on, on.SUBSTEP_YEARS);
+      const needs = step.needs!;
+      if (needs.needs.some((x) => x.asked)) {
+        asking += 1;
+        for (const x of needs.needs) if (x.asked) expect(x.met, `${s.id}: ${x.id}`).toBeGreaterThan(0.85);
+        expect(needs.mood, s.id).toBeGreaterThan(0.75);
+      }
+      // Perfect with them on, as with them off: every need of life met, nothing made at a loss, nothing idle.
+      expect(step.supported, `${s.id} short of ${step.shortages.join(", ")}`).toBe(true);
+      for (const r of ["power", "water", "oxygen", "food"] as const) expect(step.production[r] - step.consumption[r], `${s.id}: ${r}`).toBeGreaterThanOrEqual(0);
+      s.buildings.forEach((b, i) => {
+        if (b.type !== "atmosphere_processor") expect(step.operable[i], `${s.id}: ${b.type} at ${b.tx},${b.ty}`).toBe(true);
+      });
+    }
+    expect(asking, "vacuity: cities big enough to ask").toBeGreaterThan(15);
+  });
+
   it("stands every settlement high above the sea", () => {
     for (const s of state.settlements) expect(siteElevation(s.lat, s.lon, game) - env.seaLevelM, s.id).toBeGreaterThan(300);
   });

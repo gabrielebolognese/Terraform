@@ -28,6 +28,7 @@ import { generateStructure, structureSeed, variantOf } from "./structures.js";
 import type { RailHeight, Rover, TrainCar } from "./vehicles.js";
 import type { Footprint } from "./vehicles.js";
 import { TRAIN_LANE, cornersOf, jobProgress, roversAt, trainCarsOf, trainLaps, trainsAt as carsByTile } from "./vehicles.js";
+import { figureAt, figuresAt } from "./people.js";
 
 export { trainLinesOf } from "./vehicles.js";
 export type { TrainLine } from "./vehicles.js";
@@ -767,6 +768,31 @@ function greebleParts(g: Instance, ox: number, oy: number): Part[] {
   }
 }
 
+/** Clothes the figures wear, in turn. */
+const CLOTHES: readonly Rgb[] = [rgb(0.82, 0.3, 0.28), rgb(0.25, 0.45, 0.8), rgb(0.9, 0.78, 0.3), rgb(0.3, 0.62, 0.4), rgb(0.92, 0.92, 0.9), rgb(0.55, 0.35, 0.65)];
+const SKIN = rgb(0.86, 0.68, 0.55);
+
+/**
+ * Batch 32: the crowd at a running station or park, live - a figure for every
+ * few people there, each a body and a head, strolling (see `people.ts`).
+ * Nothing with needs off: the view carries no `reaches`.
+ */
+function crowd(b: CityBuildingView, type: "station" | "park", size: number, depth: number, floor: number, time: number, live: (make: () => Part | readonly Part[]) => void): void {
+  const count = figuresAt(b);
+  if (count === 0) return;
+  live(() => {
+    const out: Part[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const { x, y } = figureAt(type, size, depth, i, time);
+      const px = b.tx + x;
+      const py = b.ty + y;
+      out.push(part(box(px - 0.035, py - 0.035, floor, px + 0.035, py + 0.035, floor + 0.13), CLOTHES[i % CLOTHES.length]!));
+      out.push(part(box(px - 0.025, py - 0.025, floor + 0.13, px + 0.025, py + 0.025, floor + 0.18), SKIN));
+    }
+    return out;
+  });
+}
+
 /**
  * A building up close: its signature (seeded), then its greebles - still,
  * built once with the rest of its still parts - and the antennas' blinking
@@ -1430,6 +1456,7 @@ function assembleSignature(b: CityBuildingView, time: number, rocket: RocketStat
         ]);
       }
       add(() => [part(box(x0 + 2.5, y0 + 1.45, 0.05, x0 + 2.9, y0 + 1.55, 0.14), BARK), part(box(x0 + 2.5, y0 + 1.53, 0.14, x0 + 2.9, y0 + 1.56, 0.24), BARK)]);
+      crowd(b, "park", s, s, 0.05, time, live);
       return k;
     }
     case "biosphere": {
@@ -1606,6 +1633,7 @@ function assembleSignature(b: CityBuildingView, time: number, rocket: RocketStat
       add(() => part(box(x0 + 0.1, y0 + d - 1.3, 0.05, x0 + s - 0.1, y0 + d - 0.1, 1.2), PAINT_WHITE));
       add(() => part(box(x0 + 0.08, y0 + d - 1.32, 0.8, x0 + s - 0.08, y0 + d - 0.08, 0.9).slice(1, 3), ACCENT));
       live(() => part(box(x0 + s / 2 - 0.3, y0 + d - 0.09, 0.4, x0 + s / 2 + 0.3, y0 + d - 0.08, 0.7), on ? WARM_LIGHT : UNLIT, { emissive: true }));
+      crowd(b, "station", s, d, 0.25, time, live);
       return k;
     }
     case "research_forum": {
