@@ -426,3 +426,53 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   src/web/city-overview.ts src/web/city.ts src/web/config.ts src/web/game.ts src/web/hud.ts
   src/web/offline-words.ts src/web/planner.ts src/web/statistics.ts src/web/style.css
   src/web/world-map.ts
+- review 1: accepted
+  Every deliverable is built and the exit gate is met by tests:
+  - each alert type fires in a scripted run that causes it and not in one beside it
+    (`src/web/alerts.test.ts`; the flood on Batch 24's fixture with flooding on, recorded);
+  - the alerts are derived at the readout and never saved;
+  - the planet's record survives the save exactly and is bounded: 125 samples, 25.2-26.3 kB after
+    1,000 sim-years, measured and tested;
+  - in the assembled game, an alert clicked opens Ares with the right building selected, from
+    orbit and from inside the city (`src/web/alert-centre.test.ts`).
+
+  Checked in this round:
+  - Typecheck, `build` and `build:web` (519.88 kB JS, 177.12 kB gzip, past Vite's 500 kB warning
+    as the note records) are green.
+  - Full suite (`--maxWorkers=2 --minWorkers=1`): 109 files, 1,277 tests, all passed (369 s; the
+    Known-red opening test passed).
+  - Two of the note's injections, one at a time. Each was caught as the note records, and the tree
+    was clean after each:
+    - buildings dark for a shortage also listed offline (`src/web/alerts.ts` line 193): the blackout
+      test, "expected [ …(2) ] to deeply equal []";
+    - the v16 to v17 migration making up made and drawn for a sample under way
+      (`src/sim/save.ts`, `migrateV16toV17`): "loads a save from before it (v16)", "expected
+      [0, 0, 0, 0, 0] to be null".
+  - Simulation rules:
+    - the planet's record is taken in `advance` on the substep grid, and is the same in any chunks
+      (tested);
+    - it changes nothing else in the world (tested with `PLANET_HISTORY_EVERY` 0);
+    - `PLANET_HISTORY_EVERY` and `PLANET_HISTORY_SAMPLES` are in `tuning.ts` and the §10 table;
+    - `src/sim/history.ts` imports only the simulation;
+    - the alerts, centre, toasts, statistics and overviews read the state and never write it;
+    - save v17 has a migration and a test that loads a v16 save.
+  - The browser's alert timings sit in `src/web/config.ts` beside `READOUT_HZ`, as earlier
+    batches' display constants do. They are not simulation tuning.
+  - Measured in this round: the planet's sample costs a little in `advance` on a bare planet
+    (4,000 substeps: 165-178 ms with it, 125-172 ms without, noisy). With a city, the city's step
+    is the larger cost. This is not a gate.
+  - Three manual statements match the code:
+    - "a reading about every half minute at 1x": 4 substeps of 8.33 s in both paces;
+    - "a city's charts cover its last 150 years, about 80 minutes of play at 1x":
+      `HISTORY_SAMPLES` 150, one sample every 4 substeps, 82.5 min;
+    - pop-ups "up to three at a time", urgent "about 12 seconds", notice "about 6 seconds":
+      `TOASTS_SHOWN`, `TOAST_URGENT_MS` and `TOAST_NOTICE_MS`.
+
+    The changed pages carry no file names, code names, constants or "sim-years". Update 31 has no
+    Fixed section because nothing was fixed (as in Updates 28 and 30).
+  - Small points, not grounds for rejection:
+    - "A new city shows Spaceport offline" is in Update 31's known issues but not in the current
+      known-issues list at the bottom of the page.
+    - The chart readout under the pointer is the reverse: in the bottom list, not in Update 31's.
+  - The eleven decisions are ones a bare "Go" would accept. None deletes or overwrites player data:
+    the migration keeps every city sample and makes nothing up.
