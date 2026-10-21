@@ -55,7 +55,8 @@ describe("the alert centre", () => {
 
   it("lists what holds now and what happened, newest first; the same thing again in one place is one line counting up", () => {
     const { host, centre } = mount();
-    centre.update([alert("now", "urgent", "Blackout in Ares")], [alert("built:1", "record", "Solar Array finished in Ares")], 10);
+    centre.update([alert("now", "urgent", "Blackout in Ares")], [alert("built:1", "record", "Solar Array finished in Ares")], 9);
+    centre.update([], [alert("built:1", "record", "Habitat Dome finished in Ares")], 10);
     centre.update([], [alert("built:1", "record", "Habitat Dome finished in Ares")], 11);
     centre.update([], [alert("built:2", "record", "Depot finished in Nix")], 12);
     centre.update([], [alert("built:2", "record", "Depot finished in Nix")], 13);
@@ -65,7 +66,8 @@ describe("the alert centre", () => {
     // Nothing holds now at the last look.
     expect(now).toEqual([]);
     expect(host.querySelector(".alerts-now")!.textContent).toBe("Nothing needs you right now.");
-    expect(log).toEqual(["Depot finished in Nix (2 times)", "Habitat Dome finished in Ares (2 times)"]);
+    // A different building in the same city is a line of its own: the count is of the same thing.
+    expect(log).toEqual(["Depot finished in Nix (2 times)", "Habitat Dome finished in Ares (2 times)", "Solar Array finished in Ares"]);
     expect(host.querySelector(".alerts-log .alert-text")!.textContent).toMatch(/^Year 13\. /);
   });
 

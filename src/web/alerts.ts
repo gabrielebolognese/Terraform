@@ -179,7 +179,7 @@ function deriveSettlementAlerts(s: Settlement, env: HabitatChannels, t: Tuning):
     } else {
       const name = RESOURCE_NAMES[r].toLowerCase();
       const people = LIFE.has(r) ? " Its people go without." : "";
-      out.push({ key: `short:${s.id}:${r}`, kind: "shortage", resource: r, priority: LIFE.has(r) ? "urgent" : "notice", title: `${label} is short of ${name}`, text: `${RESOURCE_NAMES[r]} is running short.${people}${offFor} Build ${MADE_BY[r]}, or lay a corridor to one.`, count: Math.max(1, dark.length), target });
+      out.push({ key: `short:${s.id}:${r}`, kind: "shortage", resource: r, priority: LIFE.has(r) ? "urgent" : "notice", title: `${label} is short of ${name}`, text: `${RESOURCE_NAMES[r]} ${r === "materials" ? "are" : "is"} running short.${people}${offFor} Build ${MADE_BY[r]}, or lay a corridor to one.`, count: Math.max(1, dark.length), target });
     }
   }
 
