@@ -77,7 +77,7 @@ import {
   skipGuide,
 } from "../sim/index.js";
 import type { BuildingType } from "../sim/index.js";
-import { READOUT_HZ, SPARK_CAPACITY, SPARK_HZ, speedsFor } from "./config.js";
+import { ALERT_HZ, READOUT_HZ, SPARK_CAPACITY, SPARK_HZ, speedsFor } from "./config.js";
 import type { Speed } from "./config.js";
 import { EventLog } from "./events.js";
 import { advise, withAffordability } from "./guidance.js";
@@ -89,6 +89,11 @@ import { Ring } from "./ring.js";
 import { GuidePanel, ObjectivesPanel, guideHint, rewardWords } from "./onboarding.js";
 import type { GuideContext } from "./onboarding.js";
 import { MilestoneCards, MilestoneWatch } from "./milestones.js";
+import { AlertWatch, buildingAt } from "./alerts.js";
+import type { AlertTarget } from "./alerts.js";
+import { AlertCentre, AlertToasts } from "./alert-centre.js";
+import { StatisticsScreen } from "./statistics.js";
+import { cityOverview, overviewWords } from "./city-overview.js";
 
 export interface GameOptions {
   readonly state: SimState;
@@ -566,6 +571,49 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   });
   const milestones = new MilestoneWatch();
   const cards = new MilestoneCards(root);
+  /**
+   * Knowing what is happening (Batch 31): the alerts, worked out from the
+   * state at the readout; the toasts that interrupt; the centre that keeps
+   * the record; and the statistics. Each clicks through to where it happened.
+   * None of them writes the world.
+   */
+  const alertWatch = new AlertWatch();
+  /** An alert clicked through to a city: the building to select once the city is down. */
+  let pendingShow: { readonly id: string; readonly at: { readonly x: number; readonly y: number } | null } | null = null;
+  function goToAlert(target: AlertTarget): void {
+    if (target.kind === "objectives") {
+      statistics.setOpen(false);
+      alertCentre.setOpen(false);
+      objectives.setOpen(true);
+      return;
+    }
+    if (worldMap.isOpen) worldMap.close();
+    if (target.kind === "planet") {
+      pendingShow = null;
+      if (journey.resident !== null) journey.goToOrbit(performance.now());
+      return;
+    }
+    const s = state.settlements.find((x) => x.id === target.id);
+    if (s === undefined || s.lostAtSeaLevelM !== null) return;
+    pendingShow = { id: target.id, at: target.at };
+    if (journey.resident !== target.id) journey.goTo(target.id, performance.now());
+  }
+  const alertCentre = new AlertCentre(root, goToAlert, () => {
+    objectives.setOpen(false);
+    statistics.setOpen(false);
+  });
+  const toasts = new AlertToasts(root, goToAlert);
+  const statistics = new StatisticsScreen(root, tuning, () => {
+    objectives.setOpen(false);
+    alertCentre.setOpen(false);
+  });
+  /** Beside the Menu button: the statistics and the alerts. */
+  const bar = document.createElement("div");
+  bar.className = "game-bar";
+  bar.append(statistics.toggle, alertCentre.toggle);
+  root.append(bar);
+  let lastAlerts = -Infinity;
+
   /** Where the player is looking, for the guide's words. */
   function guideContext(): GuideContext {
     const resident = journey.resident;
@@ -576,6 +624,11 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   function freshViews(): void {
     milestones.reset();
     cards.clear();
+    alertWatch.reset();
+    alertCentre.clear();
+    toasts.clear();
+    pendingShow = null;
+    lastAlerts = -Infinity;
     journey.abort();
     travelPrompt.close();
     seedMessage = null;
@@ -638,6 +691,10 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
         rings.progress.clear();
         events.clear();
         hud.clear();
+        alertWatch.reset();
+        alertCentre.clear();
+        toasts.clear();
+        pendingShow = null;
         clock.resync();
       },
     },
@@ -730,6 +787,17 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
 
     journey.frame(timestamp);
     const resident = journey.resident;
+    // An alert clicked through: once its city is down, its building selected and brought into view.
+    if (pendingShow !== null && resident === pendingShow.id) {
+      const here = state.settlements.find((x) => x.id === pendingShow!.id);
+      if (planner.openId === pendingShow.id) {
+        planner.close();
+        city.root.hidden = false;
+      }
+      const index = here === undefined || pendingShow.at === null ? -1 : buildingAt(here, pendingShow.at, tuning);
+      if (index >= 0) city.show(index);
+      pendingShow = null;
+    }
     if (resident !== null) {
       const here = state.settlements.find((s) => s.id === resident);
       if (here === undefined) journey.abort();
@@ -762,6 +830,8 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       // The flows the next substep of `advance` will integrate - weather included,
       // which `flows` above (built with no forcing) leaves out.
       liquidRate = liquidWaterRate(nextSubstepFlows(state, config()));
+      /** The planet as the cities see it at this readout: what the flood words, the overviews and the alerts read. */
+      const hab = habitat(state.reservoirs, d, tuning, liquidRate);
       // §9's dust channel carries the weather as well as the outgassing.
       const storm = stormIntensity(state.seed, year, tuning);
       visuals = deriveVisuals(state.reservoirs, d, flows, tuning, storm);
@@ -837,7 +907,16 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
         seeded: state.seeded,
         settlements: state.settlements,
         // Batch 25: the flood forecast, asked of the simulation - with flooding off, none.
-        floodWarnings: floodWarnings(state, habitat(state.reservoirs, d, tuning, liquidRate), liquidRate, tuning),
+        floodWarnings: floodWarnings(state, hab, liquidRate, tuning),
+        // Batch 31: each city at a glance, from the same substep the alerts read.
+        overviews: new Map(
+          state.settlements
+            .filter((s) => s.lostAtSeaLevelM === null)
+            .map((s) => {
+              const o = cityOverview(s, hab, tuning);
+              return [s.id, { words: overviewWords(o, s), short: o.short.length > 0 }] as const;
+            }),
+        ),
         founding,
         foundingSite: founding === null ? null : foundingSite,
         canFoundMetropolis: tuning.SANDBOX_ENABLED > 0 || hasUnlock(state, "metropolis", tuning),
@@ -850,6 +929,14 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       guide.update(mine ? guideHint({ state, tuning, context: guideContext(), founding: founding !== null, selected: city.hasSelection }) : null);
       objectives.update(mine ? objectiveStatus(state, tuning) : []);
       if (mine) cards.push(milestones.observe(state, tuning));
+      statistics.update(state);
+      // The alerts, a couple of times a second (`ALERT_HZ`); none while the example planet shows.
+      if (mine && timestamp - lastAlerts >= 1000 / ALERT_HZ) {
+        lastAlerts = timestamp;
+        const look = alertWatch.observe({ state, env: hab, liquidRatePerYear: liquidRate, tuning, now: timestamp, speed });
+        alertCentre.update(look.now, look.fresh, year);
+        toasts.push(look.fresh);
+      }
       inspector.update(
         {
           simYear: year,
@@ -877,6 +964,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     }
 
     cards.frame(timestamp);
+    toasts.frame(timestamp);
 
     if (example.mayPersist && !options.lookOnly && hooks.saveDue()) {
       hooks.save(state);

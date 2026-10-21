@@ -18,6 +18,7 @@
 import type { HabitatChannels, Route, Settlement, SimState, Tuning } from "../sim/index.js";
 import { MARS_RADIUS_M, hasCosmetic, keyChunk, routeCost, routeKm, siteElevation } from "../sim/index.js";
 import { settlementLabel, sizeLabel } from "./settlement-label.js";
+import { cityOverview, overviewWords } from "./city-overview.js";
 
 /** The world, in world tiles: 2,048 round, 1,024 pole to pole. */
 export const WORLD_TILES_X = 2048;
@@ -190,7 +191,7 @@ export class WorldMapScreen {
       }
     }
     this.draw(state, now);
-    this.renderPanel(state);
+    this.renderPanel(state, env);
   }
 
   /** Map pixels from the view's size, and the camera, fitted to the whole world the first time. */
@@ -426,10 +427,13 @@ export class WorldMapScreen {
     }
   }
 
-  private renderPanel(state: SimState): void {
+  private renderPanel(state: SimState, env: HabitatChannels): void {
     const s = state.settlements.find((x) => x.id === this.selected) ?? null;
     const routes = s === null ? [] : state.routes.filter((r) => r.a === s.id || r.b === s.id);
-    const key = JSON.stringify([s?.id, s === null ? 0 : Math.floor(s.population), routes.length, this.joining, state.routes.length, s === null ? 0 : Math.floor(s.stores.materials / 100)]);
+    // Batch 31: the city at a glance - people, what is short, what is being built.
+    const glance = s === null || s.lostAtSeaLevelM !== null ? null : cityOverview(s, env, this.tuning);
+    const words = glance === null || s === null ? "" : overviewWords(glance, s);
+    const key = JSON.stringify([s?.id, s === null ? 0 : Math.floor(s.population), routes.length, this.joining, state.routes.length, s === null ? 0 : Math.floor(s.stores.materials / 100), words]);
     if (key === this.panelKey) return;
     this.panelKey = key;
     if (this.notice === null) this.hint.textContent = this.joining ? "Click another settlement to lay a railway to it. Esc cancels." : s === null ? "Click a settlement to choose it." : "";
@@ -453,6 +457,7 @@ export class WorldMapScreen {
     this.panel.replaceChildren(
       el("h2", "worldmap-name", settlementLabel(s)),
       el("p", "worldmap-line", `${kind} - ${Math.floor(s.population).toLocaleString("en")} people - ${s.buildings.length.toLocaleString("en")} buildings`),
+      ...(words === "" ? [] : [overviewLine(words, glance !== null && glance.short.length > 0)]),
       el("p", "worldmap-line", routes.length === 0 ? "No railway to anywhere." : `Railways to ${routes.length} settlement${routes.length === 1 ? "" : "s"}:`),
       list,
       button("worldmap-open", "Open the city", () => this.hooks.onOpen(s.id)),
@@ -464,6 +469,15 @@ export class WorldMapScreen {
       el("p", "worldmap-note", `A railway costs ${this.tuning.INTERCITY_COST_PER_KM} materials a km, half from each end, and carries up to ${this.tuning.INTERCITY_CARRY} of water, oxygen, food and materials a year each way.`),
     );
   }
+}
+
+/** The city at a glance, marked when something is short. */
+function overviewLine(words: string, short: boolean): HTMLElement {
+  const p = document.createElement("p");
+  p.className = "worldmap-overview";
+  p.textContent = words;
+  p.toggleAttribute("data-short", short);
+  return p;
 }
 
 /** For a railway not yet laid: how long, and what it would cost. */

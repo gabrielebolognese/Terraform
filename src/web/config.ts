@@ -26,6 +26,25 @@ export const MAX_SUBSTEPS_PER_FRAME = 256;
 /** DOM text updates per second. The sim runs at frame rate; the readout does not need to. */
 export const READOUT_HZ = 10;
 
+/**
+ * The alerts (Batch 31). Worked out a couple of times a second, not at the
+ * readout's 10: each city's substep is kept between steps, but a new step for
+ * every settlement ten times a second at a high speed is a cost for nothing.
+ * A condition that comes back within ALERT_QUIET_MS of ending is not
+ * announced again - a store at its limit flickers short and back every few
+ * substeps. A dust storm is announced STORM_WARN_SECONDS of real time before
+ * it rises.
+ */
+export const ALERT_HZ = 2;
+export const ALERT_QUIET_MS = 60_000;
+export const STORM_WARN_SECONDS = 120;
+/** How long a toast stays, by priority, ms; and how many show at once. */
+export const TOAST_URGENT_MS = 12_000;
+export const TOAST_NOTICE_MS = 6_000;
+export const TOASTS_SHOWN = 3;
+/** Lines the alert centre keeps of what happened, newest first. */
+export const ALERT_LOG = 60;
+
 /** Live sparkline sampling rate and window. 600 samples at 10 Hz is a 60-second window. */
 export const SPARK_HZ = 10;
 export const SPARK_CAPACITY = 600;

@@ -29,6 +29,7 @@ import type { CardKind } from "./city-cards.js";
 import { makePreviews } from "./city-cards.js";
 import { ChunkedCity } from "./city-chunks.js";
 import { formatMetres } from "./settlement-label.js";
+import { RESOURCE_NAMES, offlineWords } from "./offline-words.js";
 import { formatLatLon, settlementLabel, sizeLabel } from "./settlement-label.js";
 
 export interface ActionOutcome {
@@ -79,23 +80,6 @@ function linkAt(view: CityView, layer: LinkLayer, i: number): boolean {
   return (layer === "rails" ? view.rails?.[i] : view[layer][i]) === true;
 }
 
-/** What makes each resource, for the words: where a corridor or cable should lead. */
-const MADE_BY: Readonly<Record<MicroResource, string>> = {
-  power: "a power plant",
-  water: "a Water Extractor",
-  oxygen: "an Atmosphere Processor",
-  food: "a Greenhouse",
-  materials: "a Regolith Mine",
-};
-
-const RESOURCE_NAMES: Readonly<Record<MicroResource, string>> = {
-  power: "Power",
-  water: "Water",
-  oxygen: "Oxygen",
-  food: "Food",
-  materials: "Materials",
-};
-
 /** How often the panel's numbers are rewritten. The picture animates every frame; text need not. */
 const PANEL_HZ = 4;
 const DRAG_THRESHOLD_PX = 4;
@@ -144,23 +128,7 @@ function rateList(rates: Partial<Record<MicroResource, number>>): string {
  */
 export function offlineReason(view: CityView, index: number, env: HabitatChannels, t: Tuning): string | null {
   const b = view.buildings[index];
-  if (b === undefined || b.operable) return null;
-  if (b.construction !== undefined && b.construction !== null) return `Under construction: ${Math.round(b.construction * 100)}% built. A rover is at work on it.`;
-  if (b.submerged) return "Offline: under water.";
-  if (b.network !== null) {
-    const lacks = b.network.resources;
-    // Power comes by cable; everything else by corridor - say which to lay, to what.
-    const how = (layer: Layer): string[] =>
-      lacks.filter((r) => layerOf(r) === layer).map((r) => `${layer === "cables" ? "a power cable" : "a corridor"} to ${MADE_BY[r]}`);
-    const lay = [...how("cables"), ...how("corridors")];
-    return `Not connected: nothing on its network makes ${lacks.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(" or ")}. Lay ${lay.join(", and ")}.`;
-  }
-  const def = BUILDING_DEFS[b.type];
-  if (!def.canOperate(env, t)) return "Offline: the planet does not allow it here yet - the air needs more CO2.";
-  const draws = def.consumes(t, env);
-  const short = view.shortages.filter((r) => (draws[r] ?? 0) > 0);
-  if (short.length === 0) return "Offline: browned out.";
-  return `Offline: this ${view.kind} is short of ${short.map((r) => RESOURCE_NAMES[r].toLowerCase()).join(" and ")}.`;
+  return b === undefined ? null : offlineWords(b, view.kind, view.shortages, env, t);
 }
 
 /**
@@ -269,6 +237,8 @@ export class CityScreen {
   /** While a drag lays ("lay") or takes up ("clear"), and the last tile it touched. */
   private painting: { mode: "lay" | "clear"; last: number } | null = null;
   private selected: number | null = null;
+  /** A building to bring into view once the camera is set (an alert clicked through, Batch 31). */
+  private focusOn: number | null = null;
   private hover: { tx: number; ty: number } | null = null;
   private notice: string | null = null;
   private view: CityView | null = null;
@@ -407,6 +377,7 @@ export class CityScreen {
     this.selectedTile = null;
     this.painting = null;
     this.selected = null;
+    this.focusOn = null;
     this.notice = null;
     this.paletteKind = null;
     this.lastPanel = -Infinity;
@@ -540,6 +511,17 @@ export class CityScreen {
     this.lastPanel = -Infinity;
   }
 
+  /** Select a building and bring it to the middle of the view: where an alert clicked through to (Batch 31). */
+  show(index: number): void {
+    this.select(index);
+    this.focusOn = index;
+  }
+
+  /** The selected building's index, or null. */
+  get selection(): number | null {
+    return this.selected;
+  }
+
   /** One frame: derive the view, draw it, and (at PANEL_HZ) rewrite the panel. */
   frame(settlement: Settlement, env: HabitatChannels, now: number, sinceYears = 0): void {
     if (this.settlementId !== settlement.id) return;
@@ -576,6 +558,14 @@ export class CityScreen {
     if (this.selected !== null && this.selected >= view.buildings.length) this.selected = null;
     const size = this.viewSize();
     if (this.camera === null) this.camera = centreCamera(view.tiles, size.w);
+    if (this.focusOn !== null) {
+      const b = view.buildings[this.focusOn];
+      if (b !== undefined) {
+        const c = isoProject(b.tx + b.size / 2, b.ty + (b.depth ?? b.size) / 2, b.baseZ);
+        this.camera = { ...this.camera, cx: c.sx, cy: c.sy };
+      }
+      this.focusOn = null;
+    }
     // A claim west or north moved the frame's corner, and every tile index with
     // it: move the camera by as much, so the ground stays where it was on screen.
     const o = this.origin;
