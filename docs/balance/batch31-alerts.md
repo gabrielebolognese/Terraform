@@ -247,7 +247,15 @@ by the simulation's tests, then caught by the statistics test written for it.
 
 ## Verification
 
-To be filled in at the end of the session (typecheck, the full suite, both builds).
+- `npm run typecheck`: green.
+- `npx vitest run --maxWorkers=2 --minWorkers=1`, on the final code: 109 files, 1,277 tests, all passed (460 s). An earlier run,
+  before the last two small edits (the record's merge, "materials are"): 109 files, 1,277 tests, all
+  passed (454 s). The Known-red metropolis opening test passed both runs.
+- `npm run build:web`: green. 519.9 kB of script (177.1 kB gzip), up from 496.4 kB; Vite now warns
+  that the bundle passes 500 kB. 42.3 kB of styles.
+- `npm run build`: green.
+- The built page served over HTTP from a scratch server: the page (200, 732 B), its script (200,
+  519,884 B) and its styles (200, 42,323 B).
 
 ## Open
 
@@ -267,3 +275,8 @@ To be filled in at the end of the session (typecheck, the full suite, both build
 - **In a city, the toasts can sit over the Objectives panel** when both are open.
 - **A new city shows "Spaceport offline in ..."** from its founding until power reaches it. It is
   true, and it is the guide's next steps.
+- **The page's script passed 500 kB** (519.9 kB, 177.1 kB gzip), and Vite warns. Splitting it is
+  for Batch 40's performance pass.
+- **The layout of the new buttons, panels and toasts was not looked at in a browser** (no browser
+  is opened in an unattended session). Their places were checked against the CSS and the existing
+  buttons' places only.
