@@ -520,7 +520,7 @@ it. The flood warning fires on Batch 24's drowning-city fixture with flooding on
 leaves off until Batch 38. The planet's record measured 125 samples and 25.2-26.3 kB of JSON after
 1,000 sim-years, and can never pass 239 samples. In the assembled game, an alert clicked from orbit
 opens Ares with the offline Greenhouse selected, and one clicked from inside the city selects the
-Water Extractor. 46 injected faults: 42 caught at once, 4 only after a new or stronger test.
+Water Extractor. 47 injected faults: 43 caught at once, 4 only after a new or stronger test.
 
 **Decisions taken** (none were set for Phase 1; each recorded with its reason in the note):
 1. **The planet's record lives in the simulation,** sampled in `advance` every 4 substeps, halved
