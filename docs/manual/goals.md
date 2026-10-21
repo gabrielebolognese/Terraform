@@ -50,6 +50,13 @@ list then opens. The goals after the current one are shown as **Next**.
 
 ### The planet
 
+**The caps let go** and **First water** are measured from where your planet started, not from
+nothing. Their bars start nearly empty and fill as the planet warms. The line under each says how
+far the planet has come and where it stands, for example "0.1 of 3.0 K up from the start (213.2
+now, 216 needed)". The bars follow the planet's temperature as it is, weather and all. A dust
+storm cools the planet and can take a bar back for a while. The caps let go is only 3 K from the
+start, so its bar moves a lot with the weather.
+
 | Goal | What counts | Reward |
 |---|---|---|
 | The caps let go | The planet reaches Phase 2, Runaway thickening | 1,000 credits |

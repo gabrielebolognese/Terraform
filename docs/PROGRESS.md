@@ -291,3 +291,48 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     - the Objectives button sits just above Menu in orbit and just under it in a city (the CSS).
   - No decision deletes or overwrites player data. Older worlds keep their recorded tuning, with
     both features off.
+- fix 1: done
+  1. The first upgrade is recorded as still missed, in GAME_PLAN and the note (what went wrong, a
+     measurement table, Open). Measured again with review 1's command: the taught player's first
+     upgrade is done at 108.3 s (asked at 42 s, latched at 50 s), too early; the untaught script's
+     at 1,291.7 s (21.5 min), too late. An upgrade's worth is unchanged.
+  2. The planet bars: an objective's progress now says where its bar starts (`from`). The two
+     temperature goals start at the planet's temperature as the world began, 213.04 K (Mars's
+     start, no weather). The panel fills from there, the meter's minimum is that start, and the
+     words say how far the planet has come: "0.1 of 3.0 K up from the start (213.2 now, 216
+     needed)". A new Standard world with a city founded: The caps let go 4.7% (was 98.7%), Thicker
+     air 6.2% (unchanged), First water 0.2% (was 78.0%). Two new tests in
+     `src/web/onboarding.test.ts`:
+     - near empty on a new world, each planet goal opened in turn, with the meter's minimum and the
+       words;
+     - fills as the planet warms (90.2% after the planet played alone for 90 minutes), full once
+       the phase is reached.
+
+     The sim test checks `from` too. Six injections, one at a time, the file checked against its
+     backup after each, all caught:
+     - the bars from 0 K again;
+     - the panel's fill ignoring the start;
+     - the start at the target;
+     - the words ignoring the start;
+     - the meter's minimum at 0;
+     - the bar standing at the start until done.
+
+     The last was first caught only by the words check ahead of the fill guard, so the guard got a
+     test of its own, and it fails too (0% against more than 50).
+  3. `src/sim/objectives.test.ts`'s header names `src/web/first-hour.test.ts`.
+  - decisions:
+    - The bar keeps the weather: the HUD shows and the phases judge the temperature with it
+      (Batch 13). On the first goal's 3 K span it swings: 48% at 45 min, 0% at 60, 90% at 90 in
+      the planet played alone. Recorded in the note's Open and the manual's known issues.
+    - Both temperature goals are measured from the world's start, not First water from 216 K: one
+      rule, and both read near empty on a new world. First water opens about 68% full, the
+      warming already done.
+    - Thicker air stays measured from 0 mbar: 6.2% on a new world, and review 1 did not flag it.
+  - verification: typecheck green; build green; build:web green (496.4 kB JS, 169.7 kB gzip); npx
+    vitest run --maxWorkers=2 --minWorkers=1: 105 files, 1,237 tests, all passed (403 s; the
+    Known-red opening test passed this run)
+  - manual: docs/manual/goals.md (the planet's bars, measured from the start, and the weather),
+    docs/manual/update-notes.md (Update 30's objectives and known issues; the current known issues)
+  - changed: src/sim/objectives.ts src/sim/objectives.test.ts src/web/onboarding.ts
+    src/web/onboarding.test.ts docs/balance/batch30-first-hour.md GAME_PLAN.md
+    docs/manual/goals.md docs/manual/update-notes.md docs/PROGRESS.md

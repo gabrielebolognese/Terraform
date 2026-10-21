@@ -197,7 +197,7 @@ export function rewardWords(r: Reward): string {
 /**
  * Progress in words: "312 of 500 people", "6.4 of 100 mbar"; a goal measured
  * from where the world began says how far it has come since, and where it
- * stands: "0.6 of 2.8 K up from the start (213.8 now, 216 needed)".
+ * stands: "0.1 of 3.0 K up from the start (213.2 now, 216 needed)".
  */
 export function progressWords(o: ObjectiveStatus): string {
   const n = (v: number): string => (Number.isInteger(v) ? v.toLocaleString("en") : v.toFixed(1));

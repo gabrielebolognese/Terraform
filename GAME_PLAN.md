@@ -434,7 +434,10 @@ building.
 
 **Done** - see [the note](docs/balance/batch30-first-hour.md). Built unattended (`/next-batch auto`)
 in one session. All 45 injected faults caught, one only after a new test (the guide latched once a call
-rather than every substep: seen only when a city is lost to the sea within one call).
+rather than every substep: seen only when a city is lost to the sea within one call). Review 1 found
+two faults in the record and the panel. The planet's two temperature goals counted their bars from
+absolute zero, so a new world showed them 98.7% and 78.0% full. The first upgrade was recorded as
+meeting Batch 28's 4-8 minutes at 1.8 minutes. Both are fixed, with six more injections, all caught.
 
 **Decisions taken:**
 1. **The list,** measured and tuned, each opening when the one before it in its chain is claimed:
@@ -466,8 +469,17 @@ rather than every substep: seen only when a city is lost to the sea within one c
 - **Milestones include an objective done,** so a reward waiting is never missed.
 - **The metropolis gate broke Batch 29's vehicle tests** (their scene founded a metropolis in a new
   Standard world, unchecked); the scene's world now holds the unlock.
-- **Batch 28's open item, the first upgrade at 4-8 minutes, is met for a taught player** (the
-  guide's fifth step; 1.8 minutes). The untaught script is unchanged (21.5 minutes).
+- **Batch 28's open item, the first upgrade at 4-8 minutes, is still missed.** It was first
+  recorded here as met at 1.8 minutes, which is outside the window; review 1 corrected it. The
+  guide brings the first upgrade too early: it asks for one at 42 s, the step latches at 50 s, and
+  the level is done at 108 s (1.8 minutes). The untaught script brings it too late, at 21.5 minutes.
+  An upgrade's worth is unchanged.
+- **The planet's temperature goals are measured from the planet as the world began** (review 1).
+  Counted from absolute zero, "The caps let go" showed 213.2 of 216 K, 98.7% full on a new world,
+  for a goal 1.65 hours away. Its bar now runs from 213.0 K (Mars's start, no weather) to 216 K,
+  and "First water"'s to 273.15 K. A new world shows them 4.7% and 0.2% full. The bar follows the
+  temperature the HUD shows and the phases judge, weather included. On the first goal's 3 K that
+  moves it a lot: 48% at 45 minutes, 0% at 60, 90% at 90 in the planet played alone.
 
 ---
 

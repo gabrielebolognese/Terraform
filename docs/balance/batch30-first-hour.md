@@ -45,6 +45,18 @@ by doing, and every player always has a next goal worth reaching and a reward fo
 - **The guide's way back from the planner was wrong in two steps** ("found a city" and "a second
   settlement" pointed at the city's Back to orbit button, which the planner does not show). The
   test that every hint names a control that exists found it.
+- **Review 1: the planet's goals showed nearly done on a new world.** "The caps let go" and "First
+  water" reported the planet's absolute temperature, and the panel filled the bar from 0 K: 213.2
+  of 216 K, 98.7% full at the start, for a goal 1.65 hours away; "First water" 78.0% full, 28 hours
+  away. The exit gate's "how far along it is" was met in words and broken by the bar. No test
+  looked at a planet bar. Fixed: each temperature goal now carries where its bar starts, the
+  planet's temperature as the world began (213.0 K). The panel fills from there, and the words say
+  how far the planet has come: "0.1 of 3.0 K up from the start (213.2 now, 216 needed)".
+- **Review 1: the record said Batch 28's first upgrade at 4-8 minutes was met, at 1.8 minutes.**
+  1.8 is outside 4-8. The taught player's first upgrade comes too early, the untaught one's too
+  late. Corrected here (Open) and in GAME_PLAN.
+- **Review 1: a test's header pointed at a file that does not exist** (`src/harness/first-hour.test.ts`;
+  the playthroughs are in `src/web/first-hour.test.ts`). Corrected.
 
 ## Decisions (taken unattended; a bare "Go" would accept them)
 
@@ -157,6 +169,26 @@ or left alone with a city founded. The earliest is "A hundred people" at 34.9 mi
 The pacing script's own moments (`pace.test.ts`) do not move: it claims nothing and follows no
 guide, and the latch changes nothing it reads.
 
+The first upgrade (review 1), a new Standard world, seed 0, against Batch 28's 4-8 minutes:
+
+| Player | First upgrade done | 4-8 min |
+|---|---|---|
+| Taught (the guide asks at 42 s; the step latches at 50 s) | 108 s (1.8 min) | missed: too early |
+| Untaught (Batch 28's pacing script) | 1,291.7 s (21.5 min) | missed: too late |
+
+The planet's bars (review 1), a new Standard world with a city founded. The bar starts at Mars's
+start temperature with no weather, 213.04 K:
+
+| Goal | Counted from 0 (before) | From the start (now) | Words |
+|---|---|---|---|
+| The caps let go | 98.7% | 4.7% | 0.1 of 3.0 K up from the start (213.2 now, 216 needed) |
+| Thicker air | 6.2% | 6.2% | 6.2 of 100 mbar |
+| First water | 78.0% | 0.2% | 0.1 of 60.1 K up from the start (213.2 now, 273.1 needed) |
+
+Through the planet played alone, claiming: "The caps let go" reads 3.6% at 5 minutes, 9.8% at 15,
+0% at 30 (210.6 K, a cold spell), 48.4% at 45, 0% at 60, 36.2% at 75, 90.2% at 90, done at 1.65 h.
+"First water" opens at 16.7 h, 68.1% full (254.0 K), and reads 89.5% at 24 h and 99.0% at 28 h.
+
 ## Tests
 
 - `src/sim/objectives.test.ts`, 18:
@@ -168,19 +200,26 @@ guide, and the latch changes nothing it reads.
     metropolis gate; cities joined; steady years; off without objectives;
   - the save: exact, a v15 save loads with nothing done, a corrupt record named.
 - `src/web/first-hour.test.ts`, 7: the exit gate's scripted runs (above).
-- `src/web/onboarding.test.ts`, 12: the guide's hint step by step and view by view; every
+- `src/web/onboarding.test.ts`, 14: the guide's hint step by step and view by view; every
   control it names exists in the real HUD, city view, world map and planner; the card's glow;
-  the objectives panel; milestones (nothing on the first look; each kind once); the cards in turn
-  with the chime; and the assembled game: the guide pointing, Skip, Claim into the world and the
-  card it brings, the metropolis button and the gold markers.
+  the objectives panel; the planet's bars (review 1: near empty on a new world, each of the three
+  opened in turn, the meter's minimum the planet's start and the words; and filling as the planet
+  warms, full once the phase is reached); milestones (nothing on the first look; each kind once);
+  the cards in turn with the chime; and the assembled game: the guide pointing, Skip, Claim into
+  the world and the card it brings, the metropolis button and the gold markers.
 
 ## Injections
 
-45 faults, one at a time, each against the tests meant to catch it; the tree was checked clean after
-each (`git diff --stat`). **44 caught at once; the 45th - the guide latched once a call rather than
-every substep - was missed** by every test: within one call a step's condition only ever comes to
-hold and stays. It does not when a city is lost to the sea, which can happen inside a call; a test
-now drowns Batch 24's low city within one call, and the fault is caught (2 steps counted against 0).
+51 faults, one at a time, each against the tests meant to catch it; the tree was checked clean after
+each (`git diff --stat`). 45 in the batch, 6 in review 1's fixes. **50 caught at once.** The 51st,
+the guide latched once a call rather than every substep, was missed by every test: within one call a
+step's condition only ever comes to hold and stays. It does not when a city is lost to the sea,
+which can happen inside a call. A test now drowns Batch 24's low city within one call, and the
+fault is caught (2 steps counted against 0).
+
+In review 1's round, the bar standing still at the start was first caught only by the words check
+that runs before the fill guard. The guard ("fills as the planet warms") was split into a test of
+its own, and the same fault then failed it too: 0% against more than 50.
 
 | Fault | Caught by |
 |---|---|
@@ -229,6 +268,12 @@ now drowns Batch 24's low city within one call, and the fault is caught (2 steps
 | A metropolis offered to all | the assembled game: not before it is unlocked |
 | Gold markers never shown | the assembled game: gold once three cities joined is claimed |
 | Milestones never watched in the game | the assembled game: the card a claim brings |
+| (Review 1) The temperature goals' bars from 0 K again | derive their progress (`from` 0 against 213.04); the planet's bars start near empty (98.7% against less than 10) |
+| (Review 1) The panel's fill ignoring where the bar starts | the planet's bars start near empty (98.7% against less than 10) |
+| (Review 1) The bar's start at its target (never fills) | derive their progress (216 against 213.04); the planet's bars start near empty |
+| (Review 1) The words ignoring where the bar starts | the planet's bars start near empty ("213.2 of 216 K") |
+| (Review 1) The meter's minimum left at 0 | the planet's bars start near empty (0 against 213.04) |
+| (Review 1) The bar standing at the start until the phase is reached | the planet's bars start near empty (the words: "0 of 3.0 K"); fill as the planet warms (0% against more than 50) |
 
 ## Verification
 
@@ -242,6 +287,13 @@ now drowns Batch 24's low city within one call, and the fault is caught (2 steps
 - The built page served (`vite preview`), and its bundle (496,117 bytes) and stylesheet fetched over
   HTTP, with the guide's, the objectives' and the milestones' code and styles in them.
 
+Review 1's fixes:
+
+- `npm run typecheck`, `npm run build`: green. `npm run build:web`: green, 496.4 kB JS (169.7 kB
+  gzip); the bundle carries the new words ("up from the start").
+- `npx vitest run --maxWorkers=2 --minWorkers=1`: 105 files, 1,237 tests, all passed (403 s). The
+  Known-red metropolis opening timing test passed in this run.
+
 ## Open
 
 - **The guide takes 42 minutes**, not the plan's 10-20, because claiming land waits for 200
@@ -252,9 +304,16 @@ now drowns Batch 24's low city within one call, and the fault is caught (2 steps
 - **The chime has no volume control** until Batch 35 (sound) and Batch 36 (settings).
 - **A reward can be partly lost** to a full city (no empty homes, no room in its stores). It lands
   in the largest city; choosing the city is not offered.
-- **Batch 28's open item, the first upgrade at 4-8 minutes, is met for a taught player:** the
-  guide's fifth step asks for one, and the taught player's first upgrade is at 1.8 minutes. The
-  untaught script still upgrades first at 21.5 minutes; an upgrade's worth is unchanged.
+- **Batch 28's open item, the first upgrade at 4-8 minutes, is still missed** (first recorded here
+  as met; corrected by review 1). The guide brings it too early: it asks for an upgrade at 42 s,
+  the step latches at 50 s and the level is done at 108 s, 1.8 minutes. The untaught script brings
+  it too late, at 21.5 minutes. An upgrade's worth is unchanged. Moving the guide's upgrade step
+  later, or making an upgrade worth doing early, are the levers.
+- **"The caps let go" bar moves with the weather.** Its span is 3 K (213.0 to 216 K), and the
+  weather moves the temperature about as much. In the planet played alone the bar reads 48% at
+  45 minutes, 0% at 60 and 90% at 90. It follows the temperature the HUD shows and the phases
+  judge, weather included (Batch 13: the HUD must describe the planet `advance` integrates). A
+  steadier bar would read the weather-free temperature, and then disagree with the HUD.
 - **Batch 29's open item, the city packed without streets, is not taught by the guide.** Its
   power step says a rover drives out to build, and the manual says to leave streets; no step asks
   for a corridor.
