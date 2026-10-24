@@ -33,7 +33,9 @@ Cities run on their own, faster clock: a year in a city passes in about half a m
 - **The top line** shows the city's size (Small, Medium or Large city, Metropolis, or Outpost),
   where it is, and how high it stands.
 - **The status line** says how many people are housed and whether every need is met, or what is
-  short ("Short of power, water - buildings that use it are browned out").
+  short ("Short of power, water - buildings that use it are browned out"). In a world made from
+  Update 32 on it says "Life support is met", and the **People** section below it shows the
+  people's happiness and their other needs (see [People and their needs](people.md)).
 - **Stores** shows Power, Water, Oxygen, Food and Materials: how much you have, how much room
   there is, and whether each is rising or falling.
 - **Builds** lists everything being built or upgraded, with a countdown, and what is waiting for a
@@ -151,6 +153,11 @@ built.
 If any of the four runs short, buildings that use it brown out and stop, and people start to
 leave or die. Keep a margin, and build storage so a short gap does not hurt.
 
+In a world made from Update 32 on, a growing city also wants green space and varied food from 500
+people, and medical care, research, transport and shops from 2,000 on. Services in reach of the
+homes make people happier, and a happy city grows faster and works better. See
+[People and their needs](people.md).
+
 ## Land
 
 A city starts on a patch of ground around its Headquarters. At **200 people** it can claim a new
@@ -176,6 +183,10 @@ time. A Spaceport also brings in a trickle of materials, water, oxygen and food 
   it uses, and, for each of power, water, oxygen, food and materials, what it made and what it
   used, year by year. The same charts are in **Statistics** (see
   [Alerts and statistics](alerts-and-statistics.md)).
+- **Coverage** (in a world made from Update 32 on) shows where a service reaches: choose **Green
+  space**, **Medical care**, **Research**, **Transport** or **Shops** to see the homes it reaches in
+  green and the homes nothing reaches in red. **Overview** lists the city's happiness and each
+  need. See [People and their needs](people.md#seeing-it).
 
 ## The world map and railways
 
@@ -201,5 +212,7 @@ stacked with containers.
 ## Example cities
 
 The Example planet and a Terraformed start come with cities already built, including
-metropolises - huge cities spread over many districts. You can found a metropolis yourself once
+metropolises - huge cities spread over many districts. Their homes have parks, medical centers,
+laboratories, stations and malls among them, so in a Terraformed start their people are happy;
+only their Stations, which stand by the railways, reach fewer homes than the rest. You can found a metropolis yourself once
 you claim the objective "A city of 1,000", or in a Sandbox world.

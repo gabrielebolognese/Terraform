@@ -479,6 +479,7 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
 
 ### Batch 32 - People, not a number: needs, services and happiness
 - status: in progress
+- note: docs/balance/batch32-people.md
 - sessions: 1 (started 2026-10-15)
 - decisions:
   - Six needs above life support, in two tiers: comfort (green space, food variety) asked from 500
@@ -488,4 +489,18 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     every home, so spare room would be unmet in every settled city whatever the player built.
   - Jobs (people working buildings) not now: a labour model reprices every building and every
     measured gate; happiness's output factor stands in for how well people work.
+  - The mood: each asked need adds its weight met, takes it away unmet (-1 to 1, 0 asking
+    nothing); growth x(1 + 0.5 mood), output x(1 + 0.1 mood) - what buildings make and research
+    earns, not the planet's CO2 draw (as the command centre's boost). Unhappy people do not leave.
+  - Reach: the square 33 tiles a side about a running provider, 6 more a level, over the
+    corridors (rails join); homes weighted by the people they house.
+  - Derived inside the substep's brownout passes, never stored: no save change.
+  - On in every new world (Standard, Sandbox, Terraformed start); worlds before keep their tuning.
+  - The example rebuilt (src/harness/services.ts) with its services among the homes, keeping the
+    user's layout rules; a station only beside a rail, so transport is met in part (0.9-65%).
+  - The scripted pacing player still builds no services (the instrument); a `needs` option
+    measures one who does. Measured tests that moved with needs on hold the new measurements,
+    with the reasons beside them.
+  - The crowd is display (2% of the people a station or park reaches, a figure per 5, at most 16);
+    towers lit by occupancy with needs on only, so the golden frames keep theirs.
 

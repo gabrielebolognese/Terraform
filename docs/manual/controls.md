@@ -43,6 +43,7 @@ Left alone for a few seconds, the planet turns slowly by itself.
 | Use the chosen tool | Drag with the left mouse button |
 | Move around | Drag with the middle mouse button (or choose **Move**) |
 | Zoom | Mouse wheel |
+| Show where a service reaches | Click **Green space**, **Medical care**, **Research**, **Transport** or **Shops** in the **Coverage** row; **Off** hides it (a world made from Update 32 on) |
 
 ## On the world map
 

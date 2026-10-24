@@ -21,6 +21,7 @@ This manual describes the game as it is today. What changed in each update is in
 | [Goals](goals.md) | The guide through your first steps, the objectives and their rewards, and milestones |
 | [Alerts and statistics](alerts-and-statistics.md) | What needs you and where, pop-up messages, the Alerts button, the charts of your planet and cities, and each city at a glance |
 | [Cities](cities.md) | Founding a settlement, building, how rovers drive, the build queue, upgrades, people, land, railways and trains |
+| [People and their needs](people.md) | What a growing city's people want beyond life support, how far each service reaches, happiness and what it does |
 | [Buildings](buildings.md) | Every structure: what it costs, what it does, how long it takes |
 | [Controls](controls.md) | Mouse, keyboard and game speed in every view |
 | [Worlds and saving](worlds-and-saving.md) | Keeping several worlds, saving, backups, and what happens while you are away |
@@ -34,7 +35,9 @@ This manual describes the game as it is today. What changed in each update is in
    the left tells you what the planet needs next. Order an **Orbital mirror array** to start
    warming it.
 3. **Found a city**: press **Found a city**, then click the planet where it should stand. Open it
-   to build habitats, power, water, oxygen and food, and people will come.
+   to build habitats, power, water, oxygen and food, and people will come. As it grows they want
+   more - green space, varied food, medical care, research, transport, shops - and a happy city
+   grows faster.
 4. **Keep both going.** The planet's machines cost credits; your cities' research earns more. As
    the planet passes each phase, new machines unlock, until Mars is a living world.
 5. **Watch for alerts.** A blackout, a shortage or a building that cannot run pops up at the top
