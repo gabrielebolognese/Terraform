@@ -58,8 +58,17 @@ import type {
   OpenDecision,
   PlacedBuilding,
   SettlementEffect,
+  ContractKind,
+  EarthContract,
+  EarthFlight,
+  EarthGood,
+  EarthGoods,
+  EarthOrder,
+  EarthRecord,
+  EarthState,
 } from "./types.js";
-import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORDER, RESERVOIR_KEYS } from "./types.js";
+import { BUILDING_TYPES, EARTH_GOODS, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORDER, RESERVOIR_KEYS } from "./types.js";
+import { NO_GOODS, emptyEarth } from "./earth.js";
 
 /**
  * Current save shape.
@@ -70,7 +79,7 @@ import { BUILDING_TYPES, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORD
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 18;
+export const SAVE_SCHEMA_VERSION = 19;
 
 export interface SavedFacility {
   readonly type: string;
@@ -129,6 +138,14 @@ export interface SaveFile {
    * When a card is dealt is never kept: it is a function of the seed.
    */
   readonly decisions?: { readonly open: readonly Record<string, unknown>[]; readonly log: readonly Record<string, unknown>[] };
+  /**
+   * Added in v19 (Batch 34, Earth): the player's reputation, the market's
+   * memory of their trade, the orders waiting for a window, the rockets away,
+   * Earth's offer and the contracts taken, and the record. When a window
+   * opens and what its market asks are never kept: they are the orbit's and
+   * the seed's.
+   */
+  readonly earth?: Record<string, unknown>;
 }
 
 export interface SavedSettlement {
@@ -309,6 +326,22 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       open: state.decisions.open.map((e) => ({ ...e, at: e.at === null ? null : { ...e.at } })),
       log: state.decisions.log.map((r) => ({ ...r, outcome: { ...r.outcome } })),
     },
+    earth: {
+      reputation: state.earth.reputation,
+      fulfilled: state.earth.fulfilled,
+      failed: state.earth.failed,
+      bought: { ...state.earth.bought },
+      sold: { ...state.earth.sold },
+      orders: state.earth.orders.map((o) => ({ ...o })),
+      flights: state.earth.flights.map((f) => ({ ...f, cargo: { ...f.cargo }, paid: { ...f.paid } })),
+      offer: state.earth.offer === null ? null : { ...state.earth.offer },
+      contracts: state.earth.contracts.map((c) => ({ ...c })),
+      log: state.earth.log.map((r) => ({ ...r, goods: { ...r.goods } })),
+      spent: state.earth.spent,
+      earned: state.earth.earned,
+      rewards: state.earth.rewards,
+      next_id: state.earth.nextId,
+    },
   };
 }
 
@@ -363,6 +396,7 @@ export function fromSave(raw: unknown, t: Tuning): SimState {
     goals: readGoals(save),
     history: readPlanetHistory(save, steps),
     decisions: readDecisions(save, settlements, steps),
+    earth: readEarth(save, settlements, steps),
   };
 
   assertFiniteState(state, "fromSave");
@@ -409,7 +443,154 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   // v17 -> v18: events that ask for decisions (Batch 33). None was open and none had happened: a world made before them
   // has them off in its recorded tuning, so this is what it keeps; no city has anything left on it by one.
   if (version < 18) current = migrateV17toV18(current);
+  // v18 -> v19: Earth (Batch 34). Nothing traded, nothing offered: a world made before it has Earth off in its
+  // recorded tuning, so this is what it keeps.
+  if (version < 19) current = migrateV18toV19(current, t);
   return current;
+}
+
+/** v18 -> v19: Earth as a world starts it - the starting reputation, nothing ordered, away, offered or recorded. */
+function migrateV18toV19(save: Record<string, unknown>, t: Tuning): Record<string, unknown> {
+  const e = emptyEarth(t);
+  return {
+    ...save,
+    schema_version: 19,
+    earth: { reputation: e.reputation, fulfilled: 0, failed: 0, bought: { ...NO_GOODS }, sold: { ...NO_GOODS }, orders: [], flights: [], offer: null, contracts: [], log: [], spent: 0, earned: 0, rewards: 0, next_id: e.nextId },
+  };
+}
+
+const EARTH_GOOD_SET: ReadonlySet<string> = new Set<string>(EARTH_GOODS);
+const CONTRACT_KIND_SET: ReadonlySet<string> = new Set<string>(["materials", "water", "research"]);
+const EARTH_RECORD_SET: ReadonlySet<string> = new Set<string>(["launched", "landed", "missed", "fulfilled", "failed"]);
+
+/** v19: an amount of each of Earth's goods, none negative. */
+function readGoods(raw: unknown, at: string): EarthGoods {
+  const x = asRecord(raw, at);
+  const out = { ...NO_GOODS };
+  for (const g of EARTH_GOODS) {
+    const v = numberAt(x, g, `${at}.${g}`);
+    if (!(v >= 0)) throw new SaveError(`${at}.${g} must be >= 0, got ${v}`);
+    out[g] = v;
+  }
+  return out;
+}
+
+/** v19: a contract - a known kind, an amount, what is sent toward it, its pay and its window. */
+function readContract(raw: unknown, at: string): EarthContract {
+  const x = asRecord(raw, at);
+  const kind = x["kind"];
+  if (typeof kind !== "string" || !CONTRACT_KIND_SET.has(kind)) throw new SaveError(`${at}.kind must be "materials", "water" or "research", got ${describe(kind)}`);
+  const amount = numberAt(x, "amount", `${at}.amount`);
+  if (!(amount > 0)) throw new SaveError(`${at}.amount must be > 0, got ${amount}`);
+  const delivered = numberAt(x, "delivered", `${at}.delivered`);
+  if (!(delivered >= 0)) throw new SaveError(`${at}.delivered must be >= 0, got ${delivered}`);
+  const reward = numberAt(x, "reward", `${at}.reward`);
+  if (!(reward >= 0)) throw new SaveError(`${at}.reward must be >= 0, got ${reward}`);
+  const id = wholeAt(x, "id", `${at}.id`, 1);
+  const due = wholeAt(x, "due", `${at}.due`);
+  if (due <= id) throw new SaveError(`${at}.due must come after the launch it was offered at`);
+  const accepted = x["accepted"];
+  if (typeof accepted !== "boolean") throw new SaveError(`${at}.accepted must be true or false`);
+  return { id, kind: kind as ContractKind, amount, delivered, reward, due, accepted };
+}
+
+/**
+ * v19: Earth - a reputation in [0, 100], the market's memory, orders and
+ * flights for this world's settlements, the offer and the contracts, and the
+ * record; nothing placed or launched after the world's own time, and every
+ * order, flight and record a number of its own below the next one.
+ */
+function readEarth(save: Record<string, unknown>, settlements: readonly Settlement[], steps: number): EarthState {
+  const raw = asRecord(save["earth"], "earth");
+  const ids = new Set(settlements.map((s) => s.id));
+  const reputation = numberAt(raw, "reputation", "earth.reputation");
+  if (!(reputation >= 0 && reputation <= 100)) throw new SaveError(`earth.reputation must be in [0, 100], got ${reputation}`);
+  const nextId = wholeAt(raw, "next_id", "earth.next_id", 1);
+  const used = new Set<number>();
+  const idOf = (x: Record<string, unknown>, at: string): number => {
+    const id = wholeAt(x, "id", `${at}.id`, 1);
+    if (id >= nextId) throw new SaveError(`${at}.id ${id} is not below earth.next_id ${nextId}`);
+    if (used.has(id)) throw new SaveError(`${at}.id ${id} is used twice`);
+    used.add(id);
+    return id;
+  };
+  const place = (x: Record<string, unknown>, at: string): string => {
+    const settlement = x["settlement"];
+    if (typeof settlement !== "string" || !ids.has(settlement)) throw new SaveError(`${at}.settlement must be a settlement of this world, got ${describe(settlement)}`);
+    return settlement;
+  };
+  const orders = asArray(raw["orders"], "earth.orders").map((item, i): EarthOrder => {
+    const at = `earth.orders[${i}]`;
+    const x = asRecord(item, at);
+    const good = x["good"];
+    if (typeof good !== "string" || !EARTH_GOOD_SET.has(good)) throw new SaveError(`${at}.good must be one of Earth's goods, got ${describe(good)}`);
+    const side = x["side"];
+    if (side !== "buy" && side !== "sell") throw new SaveError(`${at}.side must be "buy" or "sell", got ${describe(side)}`);
+    const paid = numberAt(x, "paid", `${at}.paid`);
+    if (!(paid >= 0) || (side === "sell" && paid !== 0)) throw new SaveError(`${at}.paid must be >= 0, and 0 for a sale, got ${paid}`);
+    const placed = wholeAt(x, "placed", `${at}.placed`);
+    if (placed > steps) throw new SaveError(`${at} was placed after the world's own time`);
+    return { id: idOf(x, at), settlement: place(x, at), good: good as EarthGood, side, amount: wholeAt(x, "amount", `${at}.amount`, 1), paid, placed };
+  });
+  const flights = asArray(raw["flights"], "earth.flights").map((item, i): EarthFlight => {
+    const at = `earth.flights[${i}]`;
+    const x = asRecord(item, at);
+    const launched = wholeAt(x, "launched", `${at}.launched`);
+    if (launched > steps) throw new SaveError(`${at} lifted off after the world's own time`);
+    const arrives = wholeAt(x, "arrives", `${at}.arrives`);
+    if (arrives <= launched) throw new SaveError(`${at}.arrives must come after it lifted off`);
+    return { id: idOf(x, at), settlement: place(x, at), tile: wholeAt(x, "tile", `${at}.tile`), launched, arrives, cargo: readGoods(x["cargo"], `${at}.cargo`), paid: readGoods(x["paid"], `${at}.paid`) };
+  });
+  const offerRaw = raw["offer"];
+  const offer = offerRaw === null ? null : readContract(offerRaw, "earth.offer");
+  if (offer !== null && offer.accepted) throw new SaveError("earth.offer is accepted already: it belongs with the contracts");
+  const contracts = asArray(raw["contracts"], "earth.contracts").map((item, i) => {
+    const c = readContract(item, `earth.contracts[${i}]`);
+    if (!c.accepted) throw new SaveError(`earth.contracts[${i}] was never accepted`);
+    return c;
+  });
+  const log = asArray(raw["log"], "earth.log").map((item, i): EarthRecord => {
+    const at = `earth.log[${i}]`;
+    const x = asRecord(item, at);
+    const kind = x["kind"];
+    if (typeof kind !== "string" || !EARTH_RECORD_SET.has(kind)) throw new SaveError(`${at}.kind must be a record's kind, got ${describe(kind)}`);
+    const step = wholeAt(x, "step", `${at}.step`);
+    if (step > steps) throw new SaveError(`${at} happened after the world's own time`);
+    const settlement = x["settlement"] === null ? null : place(x, at);
+    const contract = x["contract"];
+    if (contract !== null && (typeof contract !== "string" || !CONTRACT_KIND_SET.has(contract))) throw new SaveError(`${at}.contract must be a contract's kind or null, got ${describe(contract)}`);
+    return {
+      id: idOf(x, at),
+      kind: kind as EarthRecord["kind"],
+      step,
+      settlement,
+      contract: contract as ContractKind | null,
+      goods: readGoods(x["goods"], `${at}.goods`),
+      credits: numberAt(x, "credits", `${at}.credits`),
+      reputation: numberAt(x, "reputation", `${at}.reputation`),
+    };
+  });
+  const total = (key: string): number => {
+    const v = numberAt(raw, key, `earth.${key}`);
+    if (!(v >= 0)) throw new SaveError(`earth.${key} must be >= 0, got ${v}`);
+    return v;
+  };
+  return {
+    reputation,
+    fulfilled: wholeAt(raw, "fulfilled", "earth.fulfilled"),
+    failed: wholeAt(raw, "failed", "earth.failed"),
+    bought: readGoods(raw["bought"], "earth.bought"),
+    sold: readGoods(raw["sold"], "earth.sold"),
+    orders,
+    flights,
+    offer,
+    contracts,
+    log,
+    spent: total("spent"),
+    earned: total("earned"),
+    rewards: total("rewards"),
+    nextId,
+  };
 }
 
 /** v17 -> v18: no event open, none resolved, nothing left on any city by one. */
@@ -1166,7 +1347,11 @@ function readJobs(s: Record<string, unknown>, where: string): readonly Settlemen
     const remaining = numberAt(job, "remaining", `${at}.remaining`);
     if (!Number.isInteger(tile) || tile < 0) throw new SaveError(`${at}.tile must be a tile key, got ${tile}`);
     if (!(total > 0) || !(remaining > 0) || remaining > total) throw new SaveError(`${at} has ${remaining} of ${total} years left, which no job can`);
-    if (kind === "rocket") return { kind, tile, total, remaining };
+    if (kind === "rocket") {
+      // v19: Earth's shipment it carries, by its flight's number.
+      if (job["earth"] === undefined) return { kind, tile, total, remaining };
+      return { kind, tile, total, remaining, earth: wholeAt(job, "earth", `${at}.earth`, 1) };
+    }
     // v15: the way it drives, where it turns.
     const route = readRoute(job["route"], `${at}.route`);
     const routed = route === undefined ? {} : { route };

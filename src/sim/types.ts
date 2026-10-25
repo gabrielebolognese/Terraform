@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 18;
+  readonly schemaVersion: 19;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -362,6 +362,117 @@ export interface SimState {
   readonly history: PlanetHistory;
   /** Events that ask for decisions (v18, Batch 33): those open now, and the record of those resolved. */
   readonly decisions: Decisions;
+  /** Earth (v19, Batch 34): its market, the orders and rockets, the contracts, the player's standing. */
+  readonly earth: EarthState;
+}
+
+/** Batch 34: what Earth sells (all six) and buys (the four stores a rocket can carry off). */
+export const EARTH_GOODS = ["materials", "water", "food", "oxygen", "settlers", "rovers"] as const;
+export type EarthGood = (typeof EARTH_GOODS)[number];
+/** What a contract asks for: materials or water sent up on a rocket, or research sent home. */
+export type ContractKind = "materials" | "water" | "research";
+
+/** An amount of each good: a cargo, what was paid for it, what landed. */
+export type EarthGoods = Readonly<Record<EarthGood, number>>;
+
+/**
+ * An order waiting for the next launch window: to buy (paid when placed) or
+ * to sell (paid as it goes up). It rides the city's rocket at the first
+ * window its rocket is home for.
+ */
+export interface EarthOrder {
+  readonly id: number;
+  readonly settlement: string;
+  readonly good: EarthGood;
+  readonly side: "buy" | "sell";
+  /** Whole units: bought, or sold at most. */
+  readonly amount: number;
+  /** Credits paid when placed (a purchase); 0 for a sale. */
+  readonly paid: number;
+  /** The substep it was placed at. */
+  readonly placed: number;
+}
+
+/** A rocket away for Earth: it lifted off at a launch window and comes back with what was ordered. */
+export interface EarthFlight {
+  readonly id: number;
+  readonly settlement: string;
+  /** Its spaceport's corner tile: the rocket in the view is the job there. */
+  readonly tile: number;
+  /** Substeps: when it lifted off (a window), and when it lands. */
+  readonly launched: number;
+  readonly arrives: number;
+  /** What it brings back, and the credits paid for each good (a settler who cannot land is refunded at that). */
+  readonly cargo: EarthGoods;
+  readonly paid: EarthGoods;
+}
+
+/**
+ * Earth's contract: an amount of materials, water or research by a launch
+ * window. While it is Earth's offer it is not `accepted`; accepted, what is
+ * sent counts toward it until it is met (paid, and the player's reputation
+ * rises) or its window passes (failed, and it falls).
+ */
+export interface EarthContract {
+  /** The window it was offered at: unique in a world. */
+  readonly id: number;
+  readonly kind: ContractKind;
+  readonly amount: number;
+  readonly delivered: number;
+  /** Credits it pays when met. */
+  readonly reward: number;
+  /** The launch window it is due by. */
+  readonly due: number;
+  readonly accepted: boolean;
+}
+
+/**
+ * Something that happened between the planet and Earth, for the record:
+ *   launched:  a rocket lifted off - `goods` sent up (sold or delivered), `credits` paid for what was sold;
+ *   landed:    it came back - `goods` landed, `credits` for what did not fit, sold back or refunded;
+ *   missed:    a window came and the city's rocket was not there: its orders wait for the next;
+ *   fulfilled: a contract met - `credits` its reward, `reputation` gained;
+ *   failed:    a contract's window passed short - `reputation` lost.
+ */
+export interface EarthRecord {
+  readonly id: number;
+  readonly kind: "launched" | "landed" | "missed" | "fulfilled" | "failed";
+  readonly step: number;
+  readonly settlement: string | null;
+  /** A contract's kind (fulfilled, failed), or null. */
+  readonly contract: ContractKind | null;
+  readonly goods: EarthGoods;
+  readonly credits: number;
+  readonly reputation: number;
+}
+
+export interface EarthState {
+  /** 0 to 100; it moves Earth's prices. */
+  readonly reputation: number;
+  /** Contracts met and failed, ever: met ones unlock goods. */
+  readonly fulfilled: number;
+  readonly failed: number;
+  /**
+   * The market's memory of the player's trade, credits' worth at Earth's base
+   * price, by good: bought raises what Earth asks, sold lowers what it pays.
+   * Each launch window keeps EARTH_MARKET_RECOVERY of it.
+   */
+  readonly bought: EarthGoods;
+  readonly sold: EarthGoods;
+  readonly orders: readonly EarthOrder[];
+  readonly flights: readonly EarthFlight[];
+  /** Earth's standing offer, until it is accepted or the next window replaces it. */
+  readonly offer: EarthContract | null;
+  /** Accepted, not yet met or failed, in the order accepted. */
+  readonly contracts: readonly EarthContract[];
+  /** The latest EARTH_LOG records, oldest first. */
+  readonly log: readonly EarthRecord[];
+  /** Trade so far, credits: paid for goods, paid by Earth for goods sold, and contracts' rewards. */
+  readonly spent: number;
+  readonly earned: number;
+  readonly rewards: number;
+  /** The next id for an order, a flight or a record. */
+  readonly nextId: number;
 }
 
 /** Batch 33: the events that ask the player to decide. */
@@ -686,8 +797,12 @@ export type SettlementJob =
    * the old way (or before routes existed) and its drive is the straight line.
    */
   | { readonly kind: "rover"; readonly tile: number; readonly materials: number; readonly work: number; readonly total: number; readonly remaining: number; readonly levelM?: number; readonly route?: readonly number[] }
-  /** A rocket off the spaceport whose corner is `tile`, to come back with materials. */
-  | { readonly kind: "rocket"; readonly tile: number; readonly total: number; readonly remaining: number }
+  /**
+   * A rocket off the spaceport whose corner is `tile`, to come back with
+   * materials - or, with `earth` (Batch 34), Earth's shipment of that number,
+   * which `stepEarth` lands as the rocket comes down: no materials of its own.
+   */
+  | { readonly kind: "rocket"; readonly tile: number; readonly total: number; readonly remaining: number; readonly earth?: number }
   /**
    * A rover building (or, with `upgrade`, raising a level of) the building
    * whose corner is `tile` (at the user's request: "building takes 1 rover").

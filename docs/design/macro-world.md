@@ -696,6 +696,16 @@ SHIP_ROUGH = 0.75            SHIP_PAD_MATERIALS = 30       SHIP_UNATTENDED_EARLY
 SHIP_RUSH_CREDITS = 100      SHIP_WAIT = 0.5               SHIP_UNATTENDED_LATE = 0.25   # late: rushed (all); waited for; left alone
 SHIP_SEARCH_CREDITS = 100    SHIP_FOUND = 0.5              SHIP_INSURANCE_CREDITS = 60   # lost: searched for; written off; left alone, nothing
 DISCOVERY_STUDY_CREDITS = 100  DISCOVERY_RESEARCH_CREDITS = 400  DISCOVERY_SELL_CREDITS = 150  # study now, research at the deadline; or sell
+EARTH_ENABLED = 0            # Batch 34: Earth's launch windows, market and contracts; new Standard and Terraformed worlds use 1, a sandbox 0
+EARTH_SYNODIC_YEARS = 2.135  EARTH_TRIP_SHARE = 0.33       EARTH_KEEP_SHARE = 0.25   # a window every synodic period (the planet's years); the rocket's trip, of a window; a store never sent below this share
+EARTH_PRICE_MATERIALS = 4    EARTH_PRICE_WATER = 6         EARTH_PRICE_FOOD = 6      EARTH_PRICE_OXYGEN = 6   # credits a unit, Earth's base asking price
+EARTH_PRICE_SETTLERS = 30    EARTH_PRICE_ROVERS = 1500     EARTH_SELL_SHARE = 0.4    # settlers and rovers (unlocked by contracts); Earth pays this share of its price
+EARTH_SUPPLY_SWING = 0.2     EARTH_MARKET_DEPTH = 2000     EARTH_MARKET_RECOVERY = 0.5   # supply, either way, per window from the seed; +100% per credits' worth traded; kept per window
+EARTH_REP_START = 50         EARTH_REP_PRICE = 0.25        EARTH_REP_FULFIL = 10     EARTH_REP_FAIL = 20   # reputation 0-100: start; prices at 100 or 0; a contract met; failed
+EARTH_CONTRACT_WINDOWS = 3   EARTH_CONTRACT_MATERIALS = 150  EARTH_CONTRACT_WATER = 40  EARTH_CONTRACT_RESEARCH_YEARS = 3   # due windows on; amounts x1-x2 (research: years of the planet's)
+EARTH_CONTRACT_PAY_MATERIALS = 4  EARTH_CONTRACT_PAY_WATER = 6  EARTH_CONTRACT_PAY_RESEARCH = 2   # credits a unit, paid when met
+EARTH_WEIGHT_MATERIALS = 1   EARTH_WEIGHT_WATER = 1        EARTH_WEIGHT_RESEARCH = 1
+EARTH_UNLOCK_SETTLERS = 1    EARTH_UNLOCK_ROVERS = 3       EARTH_LOG = 40            # contracts met before Earth sends settlers, rovers; records kept
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75
 SOLAR_POWER = 6            GEOTHERMAL_POWER = 8       REACTOR_POWER = 24
