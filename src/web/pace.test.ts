@@ -187,12 +187,13 @@ describe("a world's pace is its tuning", () => {
   it("leaves a Classic world exactly the browser's tuning it always was, but for its seed, what every new world has since, and its mode's first hour", () => {
     expect({ ...worldTuning("standard", 0, "classic") }).toEqual({ ...makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES, ...MODE_OVERRIDES.standard }) });
     // Batch 30: the guide and the objectives are a Standard world's, never in the tuning of the worlds before.
-    expect(MODE_OVERRIDES.standard).toEqual({ GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1, DECISIONS_ENABLED: 1 });
+    expect(MODE_OVERRIDES.standard).toEqual({ GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1, DECISIONS_ENABLED: 1, EARTH_ENABLED: 1 });
     expect(BROWSER_TUNING.GUIDE_ENABLED + BROWSER_TUNING.OBJECTIVES_ENABLED).toBe(0);
-    // Batch 33: events in Standard and Terraformed worlds, never a sandbox's, nor the worlds before.
-    expect(MODE_OVERRIDES.terraformed).toEqual({ DECISIONS_ENABLED: 1 });
+    // Batch 33: events in Standard and Terraformed worlds, never a sandbox's, nor the worlds before. Batch 34: Earth the same.
+    expect(MODE_OVERRIDES.terraformed).toEqual({ DECISIONS_ENABLED: 1, EARTH_ENABLED: 1 });
     expect(MODE_OVERRIDES.sandbox).toEqual({});
     expect(BROWSER_TUNING.DECISIONS_ENABLED).toBe(0);
+    expect(BROWSER_TUNING.EARTH_ENABLED).toBe(0);
     // What every new world has since: the rovers' routes (Batch 29) and the people's needs (Batch 32). The worlds before worlds never had them.
     expect(NEW_WORLD_OVERRIDES).toEqual({ ROVER_ROUTES_ENABLED: 1, NEEDS_ENABLED: 1 });
     expect(BROWSER_TUNING.ROVER_ROUTES_ENABLED).toBe(0);

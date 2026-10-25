@@ -1281,7 +1281,10 @@ export const BASE_TUNING = Object.freeze({
    * EARTH_MARKET_RECOVERY of the trade it remembers.
    *
    * CONTRACTS: each window Earth offers one (weights EARTH_WEIGHT_*):
-   * EARTH_CONTRACT_MATERIALS or EARTH_CONTRACT_WATER (x1 to x2), or the
+   * EARTH_CONTRACT_MATERIALS_YEAR or EARTH_CONTRACT_WATER_YEAR for each of a
+   * city's years in a window's span (x1 to x2: 150 to 300 materials at the
+   * Standard pace, an eighth of it at Classic, whose windows are eight times
+   * as close for the cities), or the
    * planet's research over EARTH_CONTRACT_RESEARCH_YEARS (x1 to x2), due by
    * the EARTH_CONTRACT_WINDOWS-th window on. Accepted, a contract's
    * materials and water go up on the rockets, and research earned goes to
@@ -1313,8 +1316,8 @@ export const BASE_TUNING = Object.freeze({
   EARTH_REP_FULFIL: 10,
   EARTH_REP_FAIL: 20,
   EARTH_CONTRACT_WINDOWS: 3,
-  EARTH_CONTRACT_MATERIALS: 150,
-  EARTH_CONTRACT_WATER: 40,
+  EARTH_CONTRACT_MATERIALS_YEAR: 9,
+  EARTH_CONTRACT_WATER_YEAR: 2.4,
   EARTH_CONTRACT_RESEARCH_YEARS: 3,
   EARTH_CONTRACT_PAY_MATERIALS: 4,
   EARTH_CONTRACT_PAY_WATER: 6,
@@ -1530,6 +1533,10 @@ export function validateTuning(t: Tuning): void {
   if (!(t.EARTH_MARKET_DEPTH > 0)) fail("EARTH_MARKET_DEPTH must be > 0");
   for (const k of ["EARTH_CONTRACT_WINDOWS", "EARTH_LOG"] as const) if (!(Number.isInteger(t[k]) && t[k] >= 1)) fail(`${k} must be a whole number >= 1`);
   for (const k of ["EARTH_UNLOCK_SETTLERS", "EARTH_UNLOCK_ROVERS"] as const) if (!(Number.isInteger(t[k]) && t[k] >= 0)) fail(`${k} must be a whole number >= 0`);
+  // Earth never pays more than it asks: its best price for a good bought back stays at or under its cheapest asking.
+  if ((1 + t.EARTH_SUPPLY_SWING) * t.EARTH_SELL_SHARE * (1 + t.EARTH_REP_PRICE) > (1 - t.EARTH_SUPPLY_SWING) * (1 - t.EARTH_REP_PRICE) + 1e-12) {
+    fail("EARTH_SELL_SHARE, EARTH_SUPPLY_SWING and EARTH_REP_PRICE let Earth pay more than it asks: buying and selling back would make credits");
+  }
   for (const k of TUNING_SCALAR_KEYS) {
     if ((k.startsWith("EARTH_PRICE_") || k.startsWith("EARTH_CONTRACT_")) && !(t[k] > 0)) fail(`${k} must be > 0`);
     if ((k.startsWith("EARTH_WEIGHT_") || k.startsWith("EARTH_REP_F")) && !(t[k] >= 0)) fail(`${k} must be >= 0`);

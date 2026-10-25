@@ -321,6 +321,7 @@ export {
   windowAt,
   windowIndex,
   windowStep,
+  windowCityYears,
   windowYear,
 } from "./earth.js";
 export type { EarthOutcome } from "./earth.js";

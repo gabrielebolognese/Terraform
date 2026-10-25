@@ -21,8 +21,11 @@ import {
   NEED_BY_ID,
   capacities,
   NEUTRAL_ENV,
+  acceptContract,
+  exportable,
   advance,
   chooseDecision,
+  orderFromEarth,
   connectAll,
   decisionChoices,
   derive,
@@ -90,6 +93,13 @@ export interface PacingScript {
    * script answers none: each comes to its default, the worst.
    */
   readonly answer?: boolean;
+  /**
+   * Batch 34: trades with Earth - takes a materials contract Earth offers when
+   * none is under way and the city could send all of it now, and once the
+   * city's materials are nine-tenths full and nothing is waiting to be sold,
+   * puts down to half of them up for sale at the next window.
+   */
+  readonly trade?: boolean;
 }
 
 /** When the first hour's moments came (Batch 30), real seconds at 1x; null if not within the run. */
@@ -267,6 +277,22 @@ export function playPacing(t: Tuning, seconds: number, stopWhenDone = true, onSt
         state = outcome.state;
         claimed[o.def.id] = step * realPerStep;
         log.push(`${(step * realPerStep).toFixed(0)} s: claimed "${o.def.title}" (${outcome.people.toFixed(0)} people, ${outcome.materials.toFixed(0)} materials, ${outcome.credits} credits)`);
+      }
+    }
+    if (script.trade && t.EARTH_ENABLED) {
+      const offer = state.earth.offer;
+      if (offer?.kind === "materials" && state.earth.contracts.length === 0 && exportable(city(), "materials", t) >= offer.amount) {
+        const o = acceptContract(state, t);
+        if (o.ok) {
+          state = o.state;
+          log.push(`${(step * realPerStep).toFixed(0)} s: accepted Earth's contract for ${state.earth.contracts.at(-1)!.amount} materials`);
+        }
+      }
+      const here = city();
+      const cap = capacities(here, t).materials;
+      if (here.stores.materials >= 0.9 * cap && !state.earth.orders.some((o) => o.side === "sell")) {
+        const o = orderFromEarth(state, id, "materials", "sell", Math.floor(here.stores.materials - 0.5 * cap), t);
+        if (o.ok) state = o.state;
       }
     }
     if (script.guided && followGuide()) return;
