@@ -822,3 +822,19 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - Every decision is one a bare "Go" would accept, and none deletes or overwrites player data.
   - Seen, not a ground for rejection: in `src/web/city.ts:112` the doc comment of `seconds` was
     left above `effectWords`'s own.
+- fix 1: done (session 2, 2026-10-16)
+  1. The note's line re-measured with `playPacing(worldTuning("standard", 0, "standard"), 4 h)`,
+     both ways, the same as the review: stopping when done, 2.035 h, 4 events (opening at 33.3,
+     55.7, 96.3 and 110.7 min: a failure, an early ship, an outbreak, a meteor); the full four
+     hours, 6 (the same four, then outbreaks at 139.0 and 159.9 min) and none after - the seed's
+     deck slots 7 to 10 (170-250 min) hold no card, a 1-in-256 draw at chance 0.75, not a fault.
+     `docs/balance/batch33-events.md` now says both, with their times, and that from the first
+     to the sixth it is one every 25 minutes; "What went wrong" has the review's finding as its
+     tenth item. No other file repeats the claim (searched the docs and the manual); nothing the
+     player sees changed, so the manual is unchanged.
+  - Also, from "Seen": `seconds`'s doc comment moved back above it in `src/web/city.ts`.
+  - checks: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 115 files, 1,347
+    tests, all passed (356 s; the Known-red opening test passed); build:web green (567.97 kB JS,
+    193.34 kB gzip, past Vite's 500 kB warning as recorded since Batch 31; 45.34 kB CSS); build
+    green.
+  - commits: the commit recording this

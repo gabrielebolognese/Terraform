@@ -109,7 +109,6 @@ function button(className: string, text: string, onClick: () => void): HTMLButto
 /** How many builds the panel lists, and labels over their worksites (the example planet has hundreds under way). */
 const BUILDS_SHOWN = 24;
 
-/** A settlement's sim-years as the real time they take at 1x, in words. */
 /**
  * Batch 33: what answered events have left on the city, in words - people
  * under cover from a meteor shower, a quarantine - each with its time left.
@@ -125,6 +124,7 @@ export function effectWords(s: Settlement, t: Tuning): string {
   return words.join("");
 }
 
+/** A settlement's sim-years as the real time they take at 1x, in words. */
 function seconds(years: number, t: Tuning): string {
   // "About": to the nearest second (a countdown rounds up instead, so it never shows 0 early).
   return `about ${formatDuration(Math.max(1, Math.round(realSeconds(years, t, 1))))} at 1x`;

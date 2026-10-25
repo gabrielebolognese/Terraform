@@ -78,6 +78,11 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
 9. **A number was written before it was measured.** The note's draft gave 151 cards dealt in 200
    slots of seed 7; measured, 141. The rule is to measure first; the draft broke it, the check
    before finishing caught it.
+10. **A measurement was given the wrong length of run.** The note said the scripted world met 4
+    events "in four hours"; the run behind it stops when every moment is reached, at 2.03 h, so
+    it read as one event an hour against a design of one every 25 minutes. The check before
+    finishing did not catch this one; review 1 did, and rejected the batch on it. Re-measured
+    both ways (4 in 2.03 h, 6 in four hours) and corrected.
 
 ## What was built
 
@@ -171,8 +176,12 @@ down lost. During the shelter's minute the town made no materials. During the qu
 | Classic, events never answered | 8 s | 19.9 min | 1.82 h | 12.4 min |
 | Classic, events answered | 8 s | 19.9 min | 1.81 h | 12.4 min |
 
-In four hours at Standard the scripted world met 4 events (a failure, a ship, an outbreak, a
-meteor), the first at 33 minutes. The guided first steps end at 42.4 min without events, 43.8 min
+The scripted run stops once every moment is reached: at Standard, at 2.03 h. In that time it met
+4 events, opening at 33 minutes (a failure), 56 (a ship), 96 (an outbreak) and 111 (a meteor).
+Played the full four hours, it met 6: the same four, then outbreaks at 139 and 160 minutes, and
+none after - this seed's deck holds no card in the four slots from 170 to 250 minutes (each slot
+is empty with chance 0.25, four in a row 1 in 256). Over the 127 minutes from the first to the
+sixth, one every 25 minutes. The guided first steps end at 42.4 min without events, 43.8 min
 with them unanswered, 42.4 min answered.
 
 ### The deck
