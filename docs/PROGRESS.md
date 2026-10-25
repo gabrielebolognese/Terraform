@@ -954,3 +954,80 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   src/web/city.ts src/web/decisions-gate.test.ts src/web/earth-gate.test.ts src/web/earth-words.ts
   src/web/earth.test.ts src/web/earth.ts src/web/first-hour.test.ts src/web/game-tuning.ts
   src/web/game.ts src/web/pace.test.ts src/web/style.css
+- review 1: rejected
+  1. Seven new tests have no injection in the note's table (`docs/balance/batch34-earth.md:239-292`).
+     Nothing shows they were ever broken by a fault. This is the rule Batch 29's review 1 rejected
+     on. The "Caught by" column names one or two tests a fault, and none of these is named in any
+     row:
+     - `src/sim/earth.test.ts:232`: "misses it too with no finished spaceport: the city's orders
+       wait";
+     - `src/web/earth-gate.test.ts:65`: "is the orbit's period in the browser's tuning";
+     - `src/web/earth-gate.test.ts:155`: "at Standard, a player who trades has the city of 1,000
+       sooner ...". This is the Standard half of the fun measurement; only the Classic test has
+       rows (27, 50);
+     - `src/web/earth.test.ts:77`: "is not there in a world without Earth";
+     - `src/web/earth.test.ts:83`: "shows the standing, the next launch window and Earth's prices,
+       settlers and rovers locked";
+     - `src/web/earth.test.ts:129`: "shows the rocket away and when it is home, then what it
+       landed";
+     - `src/web/earth.test.ts:143`: "offers Earth's contract with what it pays, and shows it under
+       way once accepted".
+
+     Spot-checked in this review: forcing `this.toggle.hidden = false` in `EarthPanel.update`
+     (`src/web/earth.ts:180`) does fail `:77` ("expected false to be true"). That test works and
+     only its record is missing. Break each of the others once, one fault at a time. Add every one
+     to the table and correct the totals: the note's `:60` and `:228-235`, and this entry's
+     `found:` and `injections:` lines.
+  2. Minor: the comment on the contract sizes in `src/sim/tuning.ts:1285` says "150 to 300
+     materials at the Standard pace". As tuned, the measurement is 150 to 310, and that is what the
+     note, the manual and `src/web/earth-gate.test.ts:94` say.
+
+  Checked in this round, and sound:
+  - Typecheck green.
+  - `npx vitest run --maxWorkers=2 --minWorkers=1`: 118 files, 1,393 tests, all passed (402 s).
+    The Known-red opening test passed this time.
+  - `build:web` green: 602.24 kB JS, 203.45 kB gzip (past Vite's 500 kB warning, as recorded since
+    Batch 31), 48.67 kB CSS. `build` green.
+  - Every deliverable is built:
+    - shipments by launch windows on the spaceport's own rocket, which the view draws, with a
+      missed window waiting for the next;
+    - contracts for materials, water and research, paying credits and unlocks, and costing
+      reputation when failed;
+    - a market moved by supply and reputation;
+    - trade in the Earth panel, tied to the bank.
+  - The exit gate is met by tests:
+    - 50 windows at both paces, each at most a substep late;
+    - a contract met against the same run failed differs by its reward and by 10 + 20 reputation;
+    - `EARTH_ENABLED` is 0 by default and in `BROWSER_TUNING`, with the golden run, the golden
+      frames and the Batch 3 score in the suite on the default tuning.
+  - Two injections from the note's table were re-run, one at a time. Each file was restored byte
+    for byte, and `git status` was clean after each:
+    - #17, a purchase priced at its first unit: "costs the same bought in one order or in two"
+      fails, 393 credits apart against at most 1;
+    - #41, a lost city's orders not refunded: "refunds the orders of a city lost to the sea" fails.
+  - Simulation rules:
+    - `stepEarth` and `divertResearch` run inside `advance`, every substep;
+    - a ragged-chunk test covers windows, landings and contracts;
+    - all 31 `EARTH_*` constants are in `tuning.ts` and the section 10 table;
+    - `src/sim/` imports nothing from `src/web/` or `src/render/`;
+    - the panel's actions go through `orderFromEarth`, `cancelEarthOrder` and `acceptContract`, as
+      Batch 33's choices do;
+    - save v19 has a v18 -> v19 migration and a test loading a v18 save.
+  - GAME_PLAN's row is COMPLETE, with the note linked, the deliverables ticked and the changes
+    from the plan recorded. README has the batch.
+  - The manual has Update 34 at the top (New, Changed and Known issues; nothing fixed) and a new
+    Earth page, and the pages it touches are updated. Statements checked against the code:
+    - the trip is 3 min 12 s at Standard (23 substeps of 0.03125 planet-years);
+    - a contract is due by the third window after its offer (`due = k + EARTH_CONTRACT_WINDOWS`);
+    - contracts pay 4, 6 and 2 credits a unit;
+    - water contracts are 40 to 80 at Standard and 10 at Classic;
+    - a new world starts at reputation 50, "Neutral".
+  - Every decision is one a bare "Go" would accept, and none deletes or overwrites player data.
+  - Not grounds for rejection, recorded for later:
+    - **Buying a contract's materials from Earth can pay at high reputation.** Measured on seed 7:
+      at reputation 100, buying a materials contract's whole amount from Earth costs up to 230
+      credits less than the contract pays at Standard (53 at Classic). At 50 it loses 217 on
+      average at Standard; 2 of 50 windows gain.
+    - **A rocket landing at a lost city loses its cargo unrefunded** (`landFlights`,
+      `src/sim/earth.ts:476-503`). The orders still waiting are refunded. No city can be lost in
+      the browser until flooding is turned on (Batch 38).
