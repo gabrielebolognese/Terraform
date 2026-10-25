@@ -683,6 +683,19 @@ NEED_WEIGHT_GREEN = 0.15     NEED_WEIGHT_VARIETY = 0.1     NEED_WEIGHT_MEDICAL =
 NEED_WEIGHT_RESEARCH = 0.15  NEED_WEIGHT_TRANSPORT = 0.2   NEED_WEIGHT_SHOPS = 0.2   # met adds the weight to the mood (-1 to 1), unmet takes it away
 FOOD_VARIETY_KINDS = 2       # kinds of food grown (Greenhouse, Biosphere, Mega Mall) for food variety to be met
 HAPPINESS_GROWTH = 0.5       HAPPINESS_OUTPUT = 0.1        # growth x(1 + this x mood); every building makes x(1 + this x mood)
+DECISIONS_ENABLED = 0        # Batch 33: events that ask for decisions; new Standard and Terraformed worlds use 1, a sandbox 0
+DECISION_FIRST_SECONDS = 1800  DECISION_EVERY_SECONDS = 1200  DECISION_CHANCE = 0.75   # real s at 1x: no card before; a slot per; a slot's card dealt
+DECISION_DEADLINE_SECONDS = 180  DECISION_LOG = 40           # real s at 1x from opening to the outcome; resolved events kept for the record
+DECISION_WEIGHT_METEOR = 1   DECISION_WEIGHT_FAILURE = 1   DECISION_WEIGHT_OUTBREAK = 1   DECISION_WEIGHT_SHIP = 1   DECISION_WEIGHT_DISCOVERY = 1
+METEOR_HITS = 3              METEOR_SHELTER_SECONDS = 60   METEOR_SHIELD_CREDITS = 150   # keep working: hits (a level each); the default twice as many
+FAILURE_REPAIR_SHARE = 0.5   FAILURE_DEGRADED = 0.5        FAILURE_SECONDS = 600         # repair: share of cost x level, materials; degraded output; how long
+OUTBREAK_MIN_PEOPLE = 200    OUTBREAK_SHARE = 0.1          OUTBREAK_TREAT_CREDITS = 5    # at risk: share of people the Medical Centers cannot shelter; credits a person
+OUTBREAK_TREATED = 0.2       OUTBREAK_QUARANTINED = 0.5    OUTBREAK_QUARANTINE_SECONDS = 300  # share of those at risk lost; quarantine's stop to growth
+SHIP_MATERIALS = 150         SHIP_SETTLERS = 20            SHIP_EARLY_SHARE = 0.4        SHIP_LATE_SHARE = 0.4   # the cargo; early, late, the rest lost
+SHIP_ROUGH = 0.75            SHIP_PAD_MATERIALS = 30       SHIP_UNATTENDED_EARLY = 0.5   # early: landed rough; clearing the pad; left alone
+SHIP_RUSH_CREDITS = 100      SHIP_WAIT = 0.5               SHIP_UNATTENDED_LATE = 0.25   # late: rushed (all); waited for; left alone
+SHIP_SEARCH_CREDITS = 100    SHIP_FOUND = 0.5              SHIP_INSURANCE_CREDITS = 60   # lost: searched for; written off; left alone, nothing
+DISCOVERY_STUDY_CREDITS = 100  DISCOVERY_RESEARCH_CREDITS = 400  DISCOVERY_SELL_CREDITS = 150  # study now, research at the deadline; or sell
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75
 SOLAR_POWER = 6            GEOTHERMAL_POWER = 8       REACTOR_POWER = 24

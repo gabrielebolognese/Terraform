@@ -264,3 +264,29 @@ export { NO_GOALS } from "./planets/mars.js";
 export type { Goals } from "./types.js";
 export type { PlanetHistory, PlanetSample } from "./types.js";
 export { emptyPlanetHistory, planetSample, recordPlanet, samplesAt } from "./history.js";
+
+// ---- events that ask for decisions, Batch 33 --------------------------------
+export {
+  CHOICE_TITLES,
+  DECISION_KINDS,
+  cardAt,
+  cardDealtAt,
+  cardFor,
+  chooseDecision,
+  cityYearsFor,
+  dealCard,
+  decisionChoices,
+  decisionText,
+  decisionTitle,
+  deckSlots,
+  defaultWords,
+  outbreakAtRisk,
+  repairCost,
+  resolveDecision,
+  secondsFor,
+  stepDecisions,
+  substepsFor,
+} from "./decisions.js";
+export type { ChooseOutcome, DecisionChoice } from "./decisions.js";
+export { NO_DECISIONS } from "./planets/mars.js";
+export type { DecisionKind, DecisionOutcome, DecisionRecord, DecisionVariant, Decisions, OpenDecision, SettlementEffect } from "./types.js";

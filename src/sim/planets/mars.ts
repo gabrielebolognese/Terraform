@@ -24,7 +24,7 @@ import { unlockedFor } from "../tech.js";
 import { DEFAULT_TUNING } from "../tuning.js";
 import type { Tuning } from "../tuning.js";
 import { Phase } from "../types.js";
-import type { Reservoirs, SimState } from "../types.js";
+import type { DecisionRecord, Decisions, OpenDecision, Reservoirs, SimState } from "../types.js";
 
 /** Mars surface gravity, m/s^2. Sets H2O_MBAR_PER_M = rho * g / 100 = 37.11. */
 export const G_MARS = 3.711;
@@ -77,7 +77,7 @@ export const MARS_RADIUS_M = 3_389_500;
 /** A fresh, unplayed Mars. */
 export function marsStart(seed = 123456, t: Tuning = DEFAULT_TUNING): SimState {
   return {
-    schemaVersion: 17,
+    schemaVersion: 18,
     planetId: "mars",
     seed,
     steps: 0,
@@ -100,8 +100,12 @@ export function marsStart(seed = 123456, t: Tuning = DEFAULT_TUNING): SimState {
     routes: [],
     goals: NO_GOALS,
     history: emptyPlanetHistory(t),
+    decisions: NO_DECISIONS,
   };
 }
 
 /** Nothing of the first hour done yet: no guided step, nothing claimed (Batch 30). */
 export const NO_GOALS = Object.freeze({ guide: 0, guideSkipped: false, claimed: Object.freeze([]) as readonly string[] });
+
+/** No event open, none resolved yet (Batch 33). */
+export const NO_DECISIONS: Decisions = Object.freeze({ open: Object.freeze([]) as readonly OpenDecision[], log: Object.freeze([]) as readonly DecisionRecord[] });

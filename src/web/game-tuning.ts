@@ -66,12 +66,13 @@ export const NEW_WORLD_OVERRIDES: TuningOverrides = {
  * What a mode adds besides a sandbox's rules. The first hour (Batch 30) - the
  * guided first steps and the objectives - is Standard's: a sandbox has
  * neither (no losses, nothing to earn), and a Terraformed start begins with
- * every objective already met.
+ * every objective already met. Events that ask for decisions (Batch 33) come
+ * to Standard and Terraformed worlds alike, never to a sandbox (no losses).
  */
 export const MODE_OVERRIDES: Readonly<Record<WorldMode, TuningOverrides>> = {
-  standard: { GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1 },
+  standard: { GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1, DECISIONS_ENABLED: 1 },
   sandbox: {},
-  terraformed: {},
+  terraformed: { DECISIONS_ENABLED: 1 },
 };
 
 /** "Standard", today's game; "Sandbox"; "Terraformed start", the example planet as a start that saves. */

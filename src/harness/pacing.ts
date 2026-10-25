@@ -22,7 +22,9 @@ import {
   capacities,
   NEUTRAL_ENV,
   advance,
+  chooseDecision,
   connectAll,
+  decisionChoices,
   derive,
   foundSettlement,
   habitat,
@@ -82,6 +84,12 @@ export interface PacingScript {
    * (the first of its buildings the city may place).
    */
   readonly needs?: boolean;
+  /**
+   * Batch 33: answers every event as it opens, with the first of its choices
+   * the world can pay for, in the order the card shows them. Without it the
+   * script answers none: each comes to its default, the worst.
+   */
+  readonly answer?: boolean;
 }
 
 /** When the first hour's moments came (Batch 30), real seconds at 1x; null if not within the run. */
@@ -329,6 +337,18 @@ export function playPacing(t: Tuning, seconds: number, stopWhenDone = true, onSt
   for (; step < totalSteps; step += 1) {
     if (step % stepsPerLook === 0) look();
     state = advance(state, 1, cfg);
+    if (script.answer) {
+      for (const e of state.decisions.open) {
+        if (e.chosen !== null) continue;
+        for (const c of decisionChoices(e, t)) {
+          const o = chooseDecision(state, e.id, c.id, t);
+          if (!o.ok) continue;
+          state = o.state;
+          log.push(`${((step + 1) * realPerStep).toFixed(0)} s: ${e.kind} answered ${c.id}`);
+          break;
+        }
+      }
+    }
     // An observer (Batch 29's scripted day): it sees each substep's state and changes nothing.
     onStep?.(state, step);
     const after = city();

@@ -63,6 +63,7 @@ export function newSettlement(id: string, kind: SettlementKind, lat: number, lon
     planned: [],
     history: EMPTY_HISTORY,
     extraRovers: 0,
+    effects: [],
   };
 }
 
@@ -578,6 +579,8 @@ export function removeBuilding(state: SimState, settlementId: string, tx: number
     buildings: s.buildings.filter((_, i) => i !== index),
     jobs: s.jobs.filter((j) => !(j.kind === "build" && j.tile === corner)),
     buildQueue: s.buildQueue.filter((q) => q.tile !== corner),
+    // A fault goes with its building, not to whatever is built there next.
+    effects: s.effects.some((e) => e.tile === corner) ? s.effects.filter((e) => e.tile !== corner) : s.effects,
   };
   return { state: withSettlement(state, settlementId, next), ok: true, reason: null };
 }
@@ -647,7 +650,7 @@ export function claimLand(state: SimState, settlementId: string, i: number, j: n
   return { state: withSettlement(state, settlementId, moved), ok: true, reason: null };
 }
 
-/** Everything stored in local tiles, moved by (dx, dy): buildings, corridors, cables, broken rocks, jobs. */
+/** Everything stored in local tiles, moved by (dx, dy): buildings, corridors, cables, broken rocks, jobs, faults. */
 export function shiftContent(s: Settlement, dx: number, dy: number): Settlement {
   if (dx === 0 && dy === 0) return s;
   const move = (key: number): number => {
@@ -667,6 +670,7 @@ export function shiftContent(s: Settlement, dx: number, dy: number): Settlement 
     planned: s.planned.map((p) => ({ ...p, tile: move(p.tile) })),
     grades: s.grades.map((g) => ({ ...g, tile: move(g.tile) })),
     jobs: s.jobs.map((job) => (job.kind !== "rocket" && job.route !== undefined ? { ...job, tile: move(job.tile), route: job.route.map(move) } : { ...job, tile: move(job.tile) })),
+    effects: s.effects.map((e) => (e.tile === null ? e : { ...e, tile: move(e.tile) })),
   };
 }
 
@@ -1095,6 +1099,20 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
   }
   const { defs, levels, kindOf, types } = shapeOf(s.buildings, t);
   const building = constructing(s);
+  // Batch 33: what answered events leave on the city - people sheltering (materials and research), a quarantine
+  // (growth), a building with a fault (its output; broken down at 0, offline). None, and nothing below changes.
+  let work = 1;
+  let growthBy = 1;
+  let faults: Map<number, number> | null = null;
+  for (const e of s.effects) {
+    if (e.kind === "shelter") work = Math.min(work, e.factor);
+    else if (e.kind === "quarantine") growthBy = Math.min(growthBy, e.factor);
+    else if (e.tile !== null) {
+      faults ??= new Map();
+      faults.set(e.tile, Math.min(faults.get(e.tile) ?? 1, e.factor));
+    }
+  }
+  const faultOf = faults === null ? null : s.buildings.map((b) => faults!.get(tileKey(b.tx, b.ty)) ?? 1);
   // What a building of each type draws, makes, how well it runs and whether it may: asked once a type this
   // substep, not once a building (a metropolis has 40,000 buildings of 28 types).
   const kindDraw: Partial<Record<MicroResource, number>>[] = [];
@@ -1115,7 +1133,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     kindCan.push(def.canOperate(env, t));
   }
   // A building with water over any tile of its footprint is offline (detail §4.3); one still going up is not running yet.
-  const operable = defs.map((_, i) => kindCan[kindOf[i]!]! && !(flood !== null && submerged(s.buildings[i]!, flood)) && !building.has(tileKey(s.buildings[i]!.tx, s.buildings[i]!.ty)));
+  const operable = defs.map((_, i) => kindCan[kindOf[i]!]! && !(flood !== null && submerged(s.buildings[i]!, flood)) && !building.has(tileKey(s.buildings[i]!.tx, s.buildings[i]!.ty)) && !(faultOf !== null && faultOf[i] === 0));
   // Section 6's networks: with them off, every building on the grid is on them.
   const n = frameOf(s, t).n;
   // Railways join the districts round the stations they link.
@@ -1160,7 +1178,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     for (let i = 0; i < defs.length; i += 1) {
       if (!operable[i]) continue;
       const k = kindOf[i]!;
-      const eff = kindEff[k]! * levels[i]! * commandBoost(i) * out;
+      let eff = kindEff[k]! * levels[i]! * commandBoost(i) * out;
+      if (faultOf !== null) eff *= faultOf[i]!;
       const p = kindMakeRow[k]!;
       const c = kindDrawRow[k]!;
       p0 += p[0]! * eff;
@@ -1174,6 +1193,7 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
       c3 += c[3]!;
       c4 += c[4]!;
     }
+    if (work !== 1) p4 *= work;
     return { prod: { power: p0, water: p1, oxygen: p2, food: p3, materials: p4 }, cons: { power: c0, water: c1, oxygen: c2, food: c3, materials: c4 } };
   };
 
@@ -1265,7 +1285,8 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     const forum = defs.some((def, i) => operable[i] && def.type === "research_forum") ? 1 + t.FORUM_GROWTH_BONUS : 1;
     // Batch 32: happy people are drawn to the city, unhappy ones put off.
     const happy = (needs as NeedsReading | null)?.growth ?? 1;
-    const growth = home > 0 ? t.MICRO_GROWTH_RATE * forum * happy * population * (1 - population / home) * (supported ? 1 : 0) : 0;
+    let growth = home > 0 ? t.MICRO_GROWTH_RATE * forum * happy * population * (1 - population / home) * (supported ? 1 : 0) : 0;
+    if (growthBy !== 1) growth *= growthBy;
     // Medical Centers (at the user's request: "avoids that people die when
     // there is a scarcity of oxygen or food, as people find shelter here"):
     // while oxygen or food alone runs short, the people they shelter do not
@@ -1290,11 +1311,14 @@ export function settlementStep(standing: Settlement, env: HabitatChannels, t: Tu
     if (!operable[i]) continue;
     const k = kindOf[i]!;
     planetaryCo2 += kindCo2[k]! * kindEff[k]! * levels[i]!;
-    research += kindResearch[k]! * levels[i]! * commandBoost(i) * out;
+    research += kindResearch[k]! * levels[i]! * commandBoost(i) * out * (faultOf === null ? 1 : faultOf[i]!);
   }
+  if (work !== 1) research *= work;
 
   // The planner's work: drawn links built, zones levelled - and the record kept.
-  let next: Settlement = { ...s, stores, population, jobs, cleared, grades, buildings: built };
+  // An effect counts down like a job, gone once its time is spent.
+  const effects = s.effects.length === 0 ? s.effects : s.effects.flatMap((e) => (e.remaining - h > 1e-9 ? [{ ...e, remaining: e.remaining - h }] : []));
+  let next: Settlement = { ...s, stores, population, jobs, cleared, grades, buildings: built, effects };
   next = buildPlanned(next, t, h);
   next = sendBuilders(next, t);
   next = sendLevellers(next, t);

@@ -31,6 +31,7 @@ import type { ForcingFn } from "./rates/index.js";
 import { computeStep } from "./rates/index.js";
 import { flowRoutes } from "./micro/routes.js";
 import { latchGuide } from "./objectives.js";
+import { stepDecisions } from "./decisions.js";
 import { planetSample, recordPlanet, samplesAt } from "./history.js";
 import { liquidWaterRate } from "./sea-level.js";
 import type { Tuning } from "./tuning.js";
@@ -370,6 +371,8 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
       settlements: t.INTERCITY_ENABLED ? flowRoutes(contribution.settlementsNext, working.routes, t, h) : contribution.settlementsNext,
       steps: working.steps + 1,
     };
+    // Events that ask for decisions (Batch 33): those due resolve and the card dealt now opens, every substep.
+    if (t.DECISIONS_ENABLED) working = stepDecisions(working, t);
     // The guided first steps (Batch 30), latched like the phase: every substep, from the state it leaves.
     if (t.GUIDE_ENABLED) working = latchGuide(working, t);
     // The planet's record (Batch 31): the planet as the HUD shows it, weather included, on the substep grid.
