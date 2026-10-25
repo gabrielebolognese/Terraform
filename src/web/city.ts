@@ -902,7 +902,7 @@ export class CityScreen {
       const made = Object.fromEntries(Object.entries(def.produces(this.tuning)).map(([r, v]) => [r, (v ?? 0) * k]));
       if (level > 1) extra.push(`Level ${level}: x${k.toFixed(2)} output.`);
       // Batch 33: a fault from an equipment failure, and how long it has to run.
-      if (b.fault !== undefined) extra.push(b.fault.factor === 0 ? `Broken down: back in ${seconds(b.fault.remaining, this.tuning)}.` : `A fault: it makes ${Math.round(b.fault.factor * 100)}% of its output for ${seconds(b.fault.remaining, this.tuning)} more.`);
+      if (b.fault !== undefined) extra.push(b.fault.factor === 0 ? `Broken down: back in ${seconds(b.fault.remaining, this.tuning)}.` : `A fault: it makes ${Math.round(b.fault.factor * 100)}% of its output, for ${seconds(b.fault.remaining, this.tuning)}.`);
       // Batch 32: a service's reach, and the crowd at a station or a park.
       if (b.reaches !== undefined) {
         extra.push(b.operable ? `Reaches the homes of ${Math.round(b.reaches).toLocaleString("en")} people.` : "Reaches no one while it is not running.");

@@ -12,7 +12,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { OpenDecision, SimState } from "../sim/index.js";
-import { BUILDING_DEFS, NEUTRAL_ENV, advance, cardFor, chooseDecision, cityYearsFor, foundSettlement, habitat, derive, marsStart, placeBuilding, worldEnv } from "../sim/index.js";
+import { BUILDING_DEFS, NEUTRAL_ENV, advance, cardFor, chooseDecision, cityYearsFor, foundSettlement, habitat, derive, marsStart, placeBuilding, tileKey, worldEnv } from "../sim/index.js";
 import { AlertWatch } from "./alerts.js";
 import { AlertCentre } from "./alert-centre.js";
 import { DecisionPanel } from "./decisions.js";
@@ -21,6 +21,7 @@ import { startGame } from "./game.js";
 import type { GameHandle } from "./game.js";
 import { worldTuning } from "./game-tuning.js";
 import { effectWords } from "./city.js";
+import { offlineWords } from "./offline-words.js";
 
 const T = worldTuning("standard", 0, "standard");
 const cfg = { tuning: T, env: NEUTRAL_ENV, forcing: null };
@@ -235,6 +236,39 @@ describe("events in the assembled game", () => {
     } finally {
       handle.stop();
     }
+  }, 15_000);
+});
+
+describe("a fault, in the city", () => {
+  function play(state: SimState): { root: HTMLElement; handle: GameHandle } {
+    const root = document.createElement("div");
+    document.body.append(root);
+    const handle = startGame(root, { state, tuning: T, fresh: () => marsStart(undefined, T) }, { save: () => {}, saveDue: () => false, saveFailures: () => 0, onMenu: () => {}, onBackToTitle: () => {} });
+    return { root, handle };
+  }
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it("goes from the card to the failing building, whose inspector says what its fault leaves, and why a broken one is down", async () => {
+    let s = ares();
+    const e = cardFor(s, 4, "failure", null, s.settlements[0]!, s.steps, T)!;
+    // No claims yet: the ground's corner is the tile's.
+    const tile = tileKey(e.at!.x, e.at!.y);
+    s = { ...s, decisions: { open: [e], log: [] }, settlements: s.settlements.map((c) => ({ ...c, effects: [{ kind: "fault" as const, tile, factor: 0.5, remaining: cityYearsFor(600, T), event: 0 }] })) };
+    const { root, handle } = play(s);
+    const inspector = () => root.querySelector<HTMLElement>(".city-inspector")!;
+    try {
+      await wait(700);
+      root.querySelector<HTMLButtonElement>(".decision-go")!.click();
+      await wait(3000);
+      expect(root.querySelector(".city-title")!.textContent).toBe("Ares");
+      expect(inspector().querySelector(".city-inspector-name")!.textContent).toBe(BUILDING_DEFS[e.building!].name);
+      expect(inspector().textContent).toContain("A fault: it makes 50% of its output, for about 10 min at 1x.");
+    } finally {
+      handle.stop();
+    }
+    // Broken down, the words say why it is offline - not "browned out".
+    const view = { type: e.building!, operable: false, submerged: false, network: null, fault: { factor: 0, remaining: 1 } };
+    expect(offlineWords(view, "city", [], habitat(s.reservoirs, derive(s.reservoirs, NEUTRAL_ENV, T), T, 0), T)).toBe("Broken down: an equipment failure nobody saw to. It runs again once the fault is past.");
   }, 15_000);
 });
 
