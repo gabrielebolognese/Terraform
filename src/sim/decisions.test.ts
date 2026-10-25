@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { cardFor, cityYearsFor, resolveDecision, stepDecisions, substepsFor } from "./decisions.js";
+import { cardAt, cardFor, cityYearsFor, resolveDecision, stepDecisions, substepsFor } from "./decisions.js";
 import { habitat } from "./habitat.js";
 import { advance } from "./integrate.js";
 import { derive } from "./derive.js";
@@ -125,12 +125,21 @@ describe("the deck's record (Batch 33)", () => {
     expect(s.decisions.log.map((r) => r.id)).toEqual([2, 3, 4]);
   });
 
-  it("changes nothing with events off, not even the object", () => {
-    const s = town();
-    const off = makeTuning({ ...T, DECISIONS_ENABLED: 0 });
-    expect(stepDecisions(s, off)).toBe(s);
+  it("changes nothing with events off, not even the object - at a substep where a card is dealt and one is due", () => {
+    // Every slot dealt, and the world at the substep the first card falls on, with an event open and due.
+    const dealing = makeTuning({ ...T, DECISION_CHANCE: 1 });
+    const base = town();
+    const at = cardAt(base.seed, 0, dealing)!;
+    const due = cardFor(base, 99, "discovery", "ice", city(base), at - 22, dealing)!;
+    const s: SimState = { ...base, steps: at, decisions: { open: [{ ...due, deadline: at }], log: [] } };
+    // Vacuity: with events on, this substep resolves one and deals another.
+    const on = stepDecisions(s, dealing);
+    expect(on.decisions.log.map((r) => r.id)).toEqual([99]);
+    expect(on.decisions.open.map((e) => e.id)).toEqual([0]);
+    expect(stepDecisions(s, makeTuning({ ...dealing, DECISIONS_ENABLED: 0 }))).toBe(s);
     // And with them on, between cards and with nothing open: the same object too.
-    expect(stepDecisions(s, T)).toBe(s);
+    const quiet = town();
+    expect(stepDecisions(quiet, T)).toBe(quiet);
   });
 
   it("says, coming back, how many events came to a head and how many nobody answered", () => {
