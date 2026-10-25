@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 32
-in_progress_batch: none
+in_progress_batch: 33
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -700,3 +700,8 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   (`docs/balance/batch32-people.md`, "The scripted pacing player unchanged") says the `needs`
   script option "measures one who does not". It measures a player who does meet the needs
   (`src/harness/pacing.ts:79-84`), as this entry's own decisions say.
+
+### Batch 33 - Events that ask for decisions
+- status: in progress
+- sessions: 1 (started 2026-10-16)
+- commits: (started)
