@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 33
-in_progress_batch: 34
+last_completed_batch: 34
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -23,6 +23,8 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   conflict").
 - The city-open timing test passed in Batch 29's full run (under load from another project); it is
   still recorded as red.
+- Batch 34's full run: the city-open timing test failed at 513 ms against 400 (the only failure);
+  no code it runs changed in Batch 34.
 
 ## Batches
 
@@ -882,5 +884,73 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
       values are beside it).
 
 ### Batch 34 - Earth: shipments, contracts and the market
-- status: in progress
+- status: complete
+- note: docs/balance/batch34-earth.md
+- manual: docs/manual/earth.md (new: the Earth button, launch windows, buying and selling, prices,
+  contracts, alerts, while away, the Spaceport), docs/manual/update-notes.md (Update 34, known
+  issues), docs/manual/README.md (contents, the game in one minute), docs/manual/alerts-and-statistics.md
+  (Earth's alerts), docs/manual/buildings.md (the Spaceport), docs/manual/cities.md (the Spaceport and
+  rockets), docs/manual/controls.md (the Earth button), docs/manual/getting-started.md (the first
+  window), docs/manual/the-planet.md (credits from Earth), docs/manual/worlds-and-saving.md (Earth
+  while away)
+- commits: 1d307ad (started), 24c495f, 72f4370, aae07be, 73ea9ab, 8a9359f, a278138, 7a961db, 0bd4232,
+  and the completing commit
 - sessions: 1 (2026-10-16)
+- found:
+  - contracts sized in units were eight times harder at Classic, whose windows (the planet's
+    calendar) are eight times as close for the cities: the scripted trader failed 23 in its first
+    Classic hour. Now sized per city-year of a window's span (150 to 310 materials at Standard, 20 to
+    40 at Classic).
+  - an offer announced in the alerts every window broke Batch 31's "a quiet, healthy city says
+    nothing at all"; the test was right, and offers are the Earth button's to say.
+  - the bank is the wrong measure of trade (the scripted player spends it on the planet): measured
+    on Earth's own totals and the moments instead.
+  - the invariant #2 gate bans the word `window` in simulation code; three refusal strings were
+    reworded, the gate unchanged.
+  - 54 faults injected: 46 caught at once, 3 only after a test was added or strengthened (a sale
+    that found nothing closed, orders not saved, contracts sized by Standard's clock), 2 masked by a
+    second guard and caught as coherent faults, 1 (a save's sale of settlers, found by reading the
+    code) caught at once.
+  - two earlier tests needed Earth adding: the v17-load test strips v19's field too, and the pinned
+    mode overrides list EARTH_ENABLED.
+- decisions:
+  - Windows by the planet's calendar, k x 2.135 of its years from year 0, from k alone: "by sim time"
+    is the planet's, and the orbit is.
+  - The spaceport's own rocket carries the shipment both ways, a rocket job with the flight's number:
+    the view draws it and a supply run holds it, so a window can be missed. The trip is a third of a
+    window, always home before the next.
+  - A purchase is paid when placed and refundable until it goes; a sale is paid as it goes up, at the
+    window's prices. What does not fit is sold back; a settler with no home refunded.
+  - A rocket never takes a store below a quarter of its room (sales and contracts alike).
+  - One offer each window, dealt from the seed and the world, due three windows on; research goes to
+    Earth instead of the bank while its contract is open.
+  - The unlocks are Earth's goods: settlers after 1 contract met, rovers after 3. Reputation moves
+    prices (+-25%); failing costs 20, meeting gains 10.
+  - Earth never pays more than it asks: validateTuning refuses a tuning that would let it.
+  - On in new Standard and Terraformed worlds (MODE_OVERRIDES), never a sandbox or a world made
+    before; the free supply run unchanged.
+  - Earth's request (Batch 33's sixth event) is a contract, not an event card.
+  - "The economy panel" is a panel of its own from the bar, with the bank and the trade so far: the
+    HUD's economy is one line of the orbit view, and trade is wanted from a city too.
+  - An offer is said by the Earth button, not the alerts: one comes every window.
+- verification: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 118 files, 1,393
+  tests, 1,392 passed (454 s); the one failure is the Known-red metropolis opening test
+  (src/web/city-open.test.ts, 513 ms against 400; no code it runs changed in this batch); build:web
+  green (602.24 kB JS, 203.45 kB gzip - past Vite's 500 kB warning, as recorded since Batch 31; 48.67
+  kB CSS); build green; the built page, its script and its styles served and fetched over HTTP (the
+  script holds "Next launch window in", "Earth (an offer)", "Launch window missed in"; the styles the
+  panel). With Earth off the golden run, the golden frames, the Batch 3 score and determinism are in
+  the suite, unchanged.
+- injections: 54 faults, one at a time, each file restored byte for byte and checked: 46 caught at
+  once, 3 after a new or stronger test, 2 changing no behaviour as written (a second guard) and
+  caught as coherent faults, 1 added after the run and caught (the table is in the note).
+- review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch34-earth.md
+  docs/design/macro-world.md docs/manual/README.md docs/manual/alerts-and-statistics.md
+  docs/manual/buildings.md docs/manual/cities.md docs/manual/controls.md docs/manual/earth.md
+  docs/manual/getting-started.md docs/manual/the-planet.md docs/manual/update-notes.md
+  docs/manual/worlds-and-saving.md src/harness/pacing.ts src/sim/earth.test.ts src/sim/earth.ts
+  src/sim/index.ts src/sim/integrate.ts src/sim/micro/settlement.ts src/sim/offline.ts
+  src/sim/planets/mars.ts src/sim/save.ts src/sim/tuning.ts src/sim/types.ts src/web/alerts.ts
+  src/web/city.ts src/web/decisions-gate.test.ts src/web/earth-gate.test.ts src/web/earth-words.ts
+  src/web/earth.test.ts src/web/earth.ts src/web/first-hour.test.ts src/web/game-tuning.ts
+  src/web/game.ts src/web/pace.test.ts src/web/style.css
