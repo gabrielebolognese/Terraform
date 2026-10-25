@@ -3518,3 +3518,256 @@ button:hover {
 .decision-chosen {
   color: var(--text);
 }
+
+/* ---- Batch 34: Earth - trade, shipments and contracts ---- */
+
+/* In the bar beside Statistics and Alerts; the panel opens where the alerts do. */
+.earth-toggle {
+  padding: 7px 14px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* An offer waiting: said in the label as well as the colour. */
+.earth-toggle[data-offer] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.earth-toggle[hidden],
+.earth-panel[hidden] {
+  display: none;
+}
+
+.earth-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 84px;
+  z-index: 9;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 12px 16px 16px;
+  background: var(--surface-solid);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+
+.game:has(.city:not([hidden])) .earth-panel {
+  top: 108px;
+  bottom: auto;
+  max-height: calc(100vh - 140px);
+}
+
+.earth-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.earth-title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.earth-close,
+.earth-cancel,
+.earth-go {
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.earth-status,
+.earth-bank,
+.earth-room,
+.earth-none {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.earth-heading {
+  margin: 14px 0 6px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.earth-market {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.earth-market th,
+.earth-market td {
+  padding: 3px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+.earth-market th:first-child,
+.earth-market td:first-child {
+  text-align: left;
+}
+
+.earth-order-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.earth-city,
+.earth-good,
+.earth-amount {
+  min-width: 0;
+  flex: 1;
+  padding: 5px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+}
+
+.earth-amount {
+  flex: 0 0 80px;
+}
+
+.earth-buy,
+.earth-sell,
+.earth-accept {
+  flex: 1;
+  padding: 6px 12px;
+  font: inherit;
+  color: var(--bg);
+  background: var(--accent);
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.earth-sell {
+  background: var(--good);
+}
+
+.earth-buy:disabled,
+.earth-sell:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.earth-notice {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--good);
+}
+
+.earth-notice[data-state="refused"] {
+  color: var(--bad);
+}
+
+.earth-notice[hidden] {
+  display: none;
+}
+
+.earth-orders,
+.earth-flights,
+.earth-record {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.earth-order-line,
+.earth-flight,
+.earth-record-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  border-bottom: 1px solid var(--line);
+}
+
+.earth-line {
+  flex: 1;
+}
+
+.earth-record-title {
+  flex: 1 0 100%;
+  font-weight: 600;
+}
+
+.earth-record-text {
+  flex: 1;
+  color: var(--text-2);
+}
+
+.earth-record-line[data-kind="missed"] .earth-record-title,
+.earth-record-line[data-kind="failed"] .earth-record-title {
+  color: var(--warn);
+}
+
+.earth-contract {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.earth-contract[data-offer] {
+  border-color: var(--accent);
+}
+
+.earth-contract p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.earth-contract .earth-contract-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.earth-contract .earth-contract-pay {
+  color: var(--warn);
+}
+
+.earth-accept {
+  margin-top: 8px;
+}
+
+.earth-bar {
+  height: 6px;
+  margin-top: 8px;
+  background: var(--surface-3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.earth-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--good));
+}
