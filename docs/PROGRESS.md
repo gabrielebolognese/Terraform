@@ -838,3 +838,45 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     193.34 kB gzip, past Vite's 500 kB warning as recorded since Batch 31; 45.34 kB CSS); build
     green.
   - commits: the commit recording this
+- review 2: accepted
+  - Review 1's problem is fixed. `docs/balance/batch33-events.md` now gives both lengths of run,
+    and both re-measure exactly in this review (`playPacing(worldTuning("standard", 0,
+    "standard"), 4 h)`):
+    - stopping when done: 2.035 h, 4 events (failure 33.3 min, ship 55.7, outbreak 96.3, meteor
+      110.7);
+    - the full four hours: 6 (the same four, then outbreaks at 139.0 and 159.9).
+    - The seed's slots 7 to 10 (170-250 min) hold no card; slot 2 is empty too, and slot 11 holds
+      one at 260.7 min.
+    - From the first event to the sixth is 126.6 min over 5 gaps: 25.3 min, "one every 25".
+    - The finding is the note's tenth "What went wrong". `seconds`'s doc comment is back above
+      it in `src/web/city.ts`.
+  - Checks in this round:
+    - typecheck green;
+    - `npx vitest run --maxWorkers=2 --minWorkers=1`: 115 files, 1,347 tests, all passed (423 s;
+      the Known-red opening test passed);
+    - `build:web` green (567.97 kB JS, 193.34 kB gzip; Vite's 500 kB warning, as recorded since
+      Batch 31);
+    - `build` green.
+  - Two injections re-run that review 1 did not try, one at a time. Each file was restored byte
+    for byte, and `git status` was clean after each:
+    - #13, the outbreak's toll taken from the city at the deadline rather than its stake, is
+      caught by the gate's outbreak test (15 lost where 14 are due);
+    - #36, past resolutions announced on the first look, is caught by "takes its bearings on
+      opening a world".
+  - The exit gate, the simulation rules, the save's migration, the decisions and the manual
+    were checked again; review 1's findings on them still hold.
+    - Every new constant is in `tuning.ts` and the section 10 table.
+    - `stepDecisions` runs in `advance`, per substep, after the cities.
+    - Effects count down in `settlementStep`.
+    - No action removes a settlement, so a record's city check in `readDecisions` cannot strand
+      a save.
+  - Manual statements checked against the code in this round:
+    - the countdown, 3 min 4 s at 1x (22 substeps);
+    - a meteor never hits the Headquarters or a building going up, and can hit one twice;
+    - the status line's "about 1 min at 1x" under cover;
+    - a refused choice's "Cannot: it needs 150 credits; the bank holds ...";
+    - the away summary's "3 events came to a head, 2 unanswered".
+  - Seen, not a ground for rejection:
+    - "about one every 25 minutes" rounds 26.7 (20 min / 0.75), but the measured gap is 25.3;
+    - `pace.test.ts`'s title says "a twentieth or so" where it bounds an eighth (its measured
+      values are beside it).
