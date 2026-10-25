@@ -99,7 +99,7 @@ export function parseSeed(text: string): number | null {
 /**
  * A new world's first state. Standard and Sandbox start on the bare planet;
  * "Terraformed start" on the example planet, laid out from the seed (about
- * twenty seconds to build, measured).
+ * forty seconds to build with its services, measured).
  */
 export function startState(spec: NewWorld, t: Tuning): SimState {
   if (spec.mode === "terraformed") return examplePlanet(DEFAULT_TUNING, t, spec.seed).state;

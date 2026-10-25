@@ -47,7 +47,7 @@ function page(store = new MemorySaveStore(true)): { app: App; root: HTMLElement;
     now: () => (at += 1000),
     randomSeed: () => 4242,
     launch: startGame,
-    // The look-only example's build is twenty seconds; its plumbing is what is tested here.
+    // The look-only example's build is about forty seconds; its plumbing is what is tested here.
     buildExample: () => ({ state: marsStart(7, BROWSER_TUNING), tuning: BROWSER_TUNING }),
     download: (_name, text) => downloads.push(text),
     titleGlobe: false,

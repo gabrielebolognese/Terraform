@@ -33,7 +33,7 @@ export interface AppDeps {
   readonly randomSeed: () => number;
   /** Start a world on the page: `startGame`, or a stand-in in a test. */
   readonly launch: (app: HTMLElement, options: GameOptions, hooks: GameHooks) => GameHandle;
-  /** The look-only example planet (about twenty seconds to build). */
+  /** The look-only example planet (about forty seconds to build, measured). */
   readonly buildExample: () => { readonly state: SimState; readonly tuning: Tuning };
   /** Hand the player a file. */
   readonly download: (filename: string, text: string) => void;
@@ -48,7 +48,7 @@ type View = "title" | "worlds" | "new" | "settings" | "credits" | "game";
 const MODE_ABOUT: Readonly<Record<WorldMode, string>> = {
   standard: "Today's game: earn what you build, unlock it as the planet changes.",
   sandbox: "Unlimited materials and credits, everything unlocked, nothing lost.",
-  terraformed: "Start on a living planet with cities already built (about twenty seconds to make).",
+  terraformed: "Start on a living planet with cities already built (about forty seconds to make).",
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = ""): HTMLElementTagNameMap[K] {
@@ -356,7 +356,7 @@ export class App {
       const mode = chosen ?? "standard";
       const s = parseSeed(seed.value) ?? this.deps.randomSeed();
       create.disabled = true;
-      this.say(mode === "terraformed" ? "Making a living planet - about twenty seconds..." : "Making the world...");
+      this.say(mode === "terraformed" ? "Making a living planet - about forty seconds..." : "Making the world...");
       // Let the message paint before a long build.
       setTimeout(() => {
         void this.queue(async () => {
@@ -428,7 +428,7 @@ export class App {
   /** The example planet: look only, nothing saved. */
   playExample(): Promise<void> {
     return this.queue(async () => {
-      this.say("Building the example planet - about twenty seconds...");
+      this.say("Building the example planet - about forty seconds...");
       await new Promise((r) => setTimeout(r, 30));
       const example = this.deps.buildExample();
       this.say("");

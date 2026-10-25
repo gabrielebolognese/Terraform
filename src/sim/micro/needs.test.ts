@@ -146,11 +146,21 @@ describe("off, and too small to ask, nothing changes", () => {
   });
 
   it("is the same in any chunks: 64 substeps at once, or 16 calls of 4", () => {
-    const start = cityWith([at("biosphere", NEAR), at("laboratory", FAR), at("greenhouse", { tx: 70, ty: 40 })]);
+    // 1,990 people, growing about 40 a substep (measured): asked for medical care and research from the first
+    // substep, for transport from about the 55th. The mood moves during the run (0.25, -0.1, -0.3), so a mood
+    // found once a call, not once a substep, shows here; with 11,000 people it was the same all run and did not.
+    const start = cityWith([at("biosphere", NEAR), at("laboratory", FAR), at("greenhouse", { tx: 70, ty: 40 })], 1990);
     const cfg = { tuning: ON, env: NEUTRAL_ENV, forcing: null };
     let chained = start;
     for (let k = 0; k < 16; k += 1) chained = advance(chained, 4, cfg);
-    expect(advance(start, 64, cfg)).toEqual(chained);
+    const whole = advance(start, 64, cfg);
+    // The city first, so a difference names what moved; then everything.
+    expect({ people: whole.settlements[0]!.population, stores: whole.settlements[0]!.stores }).toEqual({ people: chained.settlements[0]!.population, stores: chained.settlements[0]!.stores });
+    expect(whole).toEqual(chained);
+    // Not vacuous: the mood the run ends with is not the one it starts with.
+    const mood = (s: SimState) => readNeeds(s.settlements[0]!, s.settlements[0]!.buildings.map(() => true), new Set(), null, ON)!.mood;
+    expect(mood(start)).toBeCloseTo(0.25, 9);
+    expect(mood(chained)).toBeCloseTo(-0.3, 9);
   });
 });
 

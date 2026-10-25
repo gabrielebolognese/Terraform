@@ -540,7 +540,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
 
   /**
    * "See example planet": the banner says what is showing and that nothing is
-   * saved, and the way back. Building the example takes about twenty seconds; the
+   * saved, and the way back. Building the example takes about forty seconds; the
    * banner says so first, so the click never seems to do nothing.
    */
   const exampleBanner = document.createElement("div");
@@ -650,7 +650,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     exampleText.textContent = "Building the example planet...";
     exampleBack.hidden = true;
     exampleBanner.hidden = false;
-    // Let the banner paint before the build (about twenty seconds).
+    // Let the banner paint before the build (about forty seconds).
     setTimeout(() => {
       state = example.enter(state, () => examplePlanet(DEFAULT_TUNING, tuning).state);
       freshViews();
