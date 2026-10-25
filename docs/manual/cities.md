@@ -35,7 +35,9 @@ Cities run on their own, faster clock: a year in a city passes in about half a m
 - **The status line** says how many people are housed and whether every need is met, or what is
   short ("Short of power, water - buildings that use it are browned out"). In a world made from
   Update 32 on it says "Life support is met", and the **People** section below it shows the
-  people's happiness and their other needs (see [People and their needs](people.md)).
+  people's happiness and their other needs (see [People and their needs](people.md)). After an
+  event it also says when the city's people are under cover from a meteor shower or the city is
+  in quarantine, and for how long (see [Events and decisions](events.md)).
 - **Stores** shows Power, Water, Oxygen, Food and Materials: how much you have, how much room
   there is, and whether each is rising or falling.
 - **Builds** lists everything being built or upgraded, with a countdown, and what is waiting for a

@@ -626,16 +626,16 @@ perfect with needs on and off, every asked need but transport met for 89.9% of h
 only weather that happens.
 
 **Deliverables:**
-- [ ] **A deterministic event deck,** seeded by the world as storms already are:
+- [x] **A deterministic event deck,** seeded by the world as storms already are:
   - a meteor shower (shelter, or risk damage);
   - equipment failure (pay to repair now, or run degraded);
   - an outbreak (medical capacity matters);
   - a supply ship early, late or lost;
   - a discovery (spend to study, for research);
-  - an Earth request (Batch 34).
-- [ ] **Each event** gives two or three choices with stated outcomes, a deadline, and a default if
+  - an Earth request (Batch 34) - left to Batch 34, with Earth's contracts.
+- [x] **Each event** gives two or three choices with stated outcomes, a deadline, and a default if
   ignored. Resolved inside `advance`, chunk-independent, and caught up offline like everything else.
-- [ ] **Event log and history in the alert centre.**
+- [x] **Event log and history in the alert centre.**
 
 **Exit gate:**
 - The same world seed gives the same events at the same sim-years, live or offline, chunked any way
@@ -644,6 +644,41 @@ only weather that happens.
 - An ignored event resolves to its default, and the default is never the best choice (checked per
   event).
 - Behind a tuning constant at 0. The browser opts in.
+
+**Done** - see [the note](docs/balance/batch33-events.md). Built unattended (`/next-batch auto`) in
+one session. A deck dealt from the world's seed brings an event to one of the player's cities from
+30 minutes in, about every 25 minutes at 1x: a meteor shower, an equipment failure, an outbreak,
+Earth's supply ship early, late or lost, a discovery. Each gives two or three choices paid for when
+chosen, and its outcome lands at its deadline three minutes on, inside `advance`. The same seed gives
+the identical world (`toEqual`) in one call, in ragged chunks, caught up offline from a save, and
+with the player's answers given at the same moments. Each choice is measured against the town alone
+and the others. The default is the worst choice made worse, and some choice dominates it in every
+event, measured. Behind `DECISIONS_ENABLED` (0); new Standard and Terraformed worlds turn it on.
+
+**Decisions taken** (none were set for Phase 1; each recorded with its reason in the note):
+1. **The deck's timing is a function of the seed; the events are state.** The open events, the
+   player's choices and the latest 40 resolved are kept in the world (save v18).
+2. **Costs when chosen, outcomes at the deadline.**
+3. **The default is the worst choice made worse:** twice the meteor's hits, broken down rather
+   than degraded, the outbreak's whole toll and the quarantine's stop, less of the ship's cargo.
+4. **What lasts goes on the settlement** (sheltering, quarantine, a faulty building), counted down
+   in its own substep, so the city view and the alerts see it.
+5. **Earth's request waits for Batch 34** (contracts and reputation).
+6. **On in new Standard and Terraformed worlds**, never a sandbox's, nor a world made before.
+
+**What changed from the plan, and why:**
+- **Earth's request is not in the deck:** it belongs with Batch 34's contracts.
+- **"The default is never the best" is judged at the deadline on what the event is about** - the
+  bank, the people, the levels and buildings standing, the materials stored, a fault's output - not
+  on every store: a wrecked consumer stops drawing, and some stores ended higher for it.
+- **The supply ship's materials mostly land in a full store** (Batch 30's finding: a growing
+  city's are full from 15 minutes in). The settlers matter; the materials are a known issue for
+  Batch 34.
+- **Unanswered events bring the scripted city of 1,000 sooner at Standard** (2.16 h to 2.04 h;
+  answered 1.98 h) and later at Classic (1.74 h to 1.82 h; answered 1.81 h). The script answers a
+  shock by building what is short. The first half hour is unchanged to the second.
+- **Five measured tests that priced one feature on new-world tuning** now run with events off in
+  both runs; the events' own effect is measured by tests of its own.
 
 ---
 

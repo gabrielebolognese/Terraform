@@ -48,6 +48,11 @@ The **While you were away** summary says how much time passed, what changed on t
 what your cities built ("In the cities, the reactor reached level 5, the spaceport is half
 built"). It appears in the **Instruments** drawer.
 
+Events keep coming while you are away, and with nobody there to answer them, each comes to its
+worst; one you decided before you left still happens as you chose. The summary says how many came
+and how many went unanswered ("3 events came to a head, 2 unanswered"), and **Event history** in
+**Alerts** lists them. See [Events and decisions](events.md).
+
 A world left open in a background tab pauses until you come back to it.
 
 ## The Example planet

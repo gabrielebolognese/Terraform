@@ -4,6 +4,50 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 33 - Events that ask for decisions
+
+Mars now throws problems at your cities, and the odd piece of luck: a meteor shower, a machine
+about to fail, a sickness, Earth's supply ship, a find in the rocks. Each gives you a few choices
+with their costs, and about three minutes to choose. Do nothing, and the worst happens.
+
+**New**
+- **Events**, from about half an hour into a new world, about one every 25 minutes at 1x, each on
+  one of your cities. See [Events and decisions](events.md) for every event and its choices.
+  - **Meteor shower**: take shelter (no materials or research for a minute), raise the shields
+    (150 credits), or keep working and take 3 hits. Each hit takes a building down a level and
+    wrecks one at level 1.
+  - **A machine failing**: repair it (materials), or run it at half its output for 10 minutes.
+    Left alone, it breaks down for 10 minutes.
+  - **Outbreak** in a city of 200 or more: Medical Centers shelter people from it. Treat everyone
+    (credits) or quarantine the city.
+  - **Earth's supply ship**, early, late or lost, with materials and settlers aboard.
+  - **A discovery**: study it for research, or sell the samples to Earth.
+- **The event card** at the top left: what happened and where, the time left, each choice with
+  its cost and what it does, and what happens if you do nothing. A choice you cannot pay for says
+  why.
+- **Alerts**: an event waiting for you pops up as urgent and stays under **Now** until you choose.
+  When it happens, **What happened** says what you chose and what it did.
+- **Event history** in **Alerts**: every event your world has had, decided or missed. It is kept
+  with the world.
+- A city's status line says when its people are under cover or in quarantine, and a building with
+  a fault says so when you select it.
+
+**Changed**
+- Events come to new **Standard** and **Terraformed start** worlds. A **Sandbox** has none, and
+  worlds made before this update play as they always have.
+- The **While you were away** summary says how many events came while you were gone and how many
+  nobody answered.
+
+**Known issues**
+- Events keep coming while the game is closed, and nobody answers them: each comes to its worst.
+  Ten hours away can bring about twenty.
+- A supply ship's materials are lost when the city's stores are full, which a growing city's
+  usually are. Its settlers land if there are empty homes.
+- Earth does not yet ask anything of you: requests from Earth come with trade.
+- Events make no sound yet.
+
+---
+
 ## Update 32 - People, not a number
 
 The people of your cities now want more than air and food as their city grows. Look after them
@@ -263,3 +307,7 @@ and railways between settlements; and the Example planet.
   40 seconds each, where they took about 20.
 - Happiness is not yet shown on the world map's city cards, in the Settlements list, in Alerts or
   in Statistics.
+- Events keep coming while the game is closed, and nobody answers them: each comes to its worst.
+- A supply ship's materials are lost when the city's stores are full; only its settlers land.
+- Earth does not yet ask anything of you.
+- Events make no sound yet.

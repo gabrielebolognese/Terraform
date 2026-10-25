@@ -67,7 +67,7 @@ describe("the deck (Batch 33)", () => {
       expect(cardDealtAt(7, at, ON)).toBe(k);
       expect(cardAt(7, k, ON)).toBe(at);
     }
-    // DECISION_CHANCE 0.75 of 200 slots; and a second seed is dealt differently.
+    // DECISION_CHANCE 0.75 of 200 slots: measured 141 dealt for seed 7. And a second seed is dealt differently.
     expect(dealt).toBeGreaterThan(130);
     expect(dealt).toBeLessThan(170);
     const other = Array.from({ length: 50 }, (_, k) => cardAt(8, k, ON));
@@ -105,7 +105,8 @@ describe("the same seed, the same events, however it is run (Batch 33's gate)", 
     const back = resume(toSave(start(), ON, AT), saved + away, cfg(ON));
     expect(back.state.steps - start().steps).toBe(N);
     expect(back.state).toEqual(one);
-    // Not the agreement of nothing: cards of several kinds were dealt, resolved and left their marks.
+    // Not the agreement of nothing: cards of several kinds were dealt, resolved and left their marks. Measured: 5 events
+    // of 3 kinds (a meteor, two outbreaks, a meteor, a discovery).
     const log = one.decisions.log;
     expect(log.length).toBeGreaterThanOrEqual(5);
     expect(new Set(log.map((r) => r.kind)).size).toBeGreaterThanOrEqual(3);
