@@ -165,8 +165,8 @@ better. See [People and their needs](people.md).
 A city starts on a patch of ground around its Headquarters. At **200 people** it can claim a new
 square of land next to what it holds, and one more for every 100 people after that. Press
 **Claim land**, then click where to grow. Claiming is free; outposts cannot claim land. The squares
-the city can claim now are drawn green with a whole edge; those it must grow into first are grey,
-with a dashed edge.
+the city can claim now are drawn green (blue or cyan with a colour-blind palette) with a whole edge;
+those it must grow into first are grey, with a dashed edge.
 
 ## The Spaceport and rockets
 
