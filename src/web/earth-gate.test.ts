@@ -19,7 +19,7 @@ import { describe, expect, it } from "vitest";
 
 import { playPacing } from "../harness/pacing.js";
 import { BROWSER_TUNING, tuningRecord, worldTuning } from "./game-tuning.js";
-import { contractFor, orderFromEarth, windowStep } from "../sim/earth.js";
+import { contractFor, orderFromEarth, saleEstimate, windowStep } from "../sim/earth.js";
 import { advance } from "../sim/integrate.js";
 import { capacities, removeBuilding } from "../sim/micro/settlement.js";
 import { DEFAULT_TUNING, makeTuning } from "../sim/tuning.js";
@@ -106,6 +106,34 @@ describe("a contract's size (Batch 34)", () => {
       // Not vacuous: the sizes vary across the range.
       if (pace === "standard") expect(Math.max(...materials) - Math.min(...materials)).toBeGreaterThan(100);
     }
+  });
+});
+
+describe("what a contract pays (Batch 34)", () => {
+  it("pays more for its goods than Earth's market would at full reputation, and more for research than the bank would have had", () => {
+    // A contract has a date and reputation at stake: taking one must pay better than selling the same goods.
+    // Review 1's injection run: a materials contract at a tenth of its pay (0.4 credits a unit, less than Earth
+    // pays for a sale) got through every other Earth test.
+    const world = playPacing(worldTuning("standard", 7, "standard"), 1, false).state;
+    let least = Infinity;
+    for (const pace of ["standard", "classic"] as const) {
+      const t = worldTuning("standard", 7, pace);
+      for (let k = 1; k <= 40; k++) {
+        // Earth at its most generous: reputation 100, nothing sold to it lately, window k's supply.
+        const best: SimState = { ...world, steps: windowStep(k, t), earth: { ...world.earth, reputation: 100 } };
+        for (const kind of ["materials", "water"] as const) {
+          const c = contractFor(world, k, kind, t);
+          const sale = saleEstimate(best, kind, c.amount, t);
+          expect(sale, `${pace} ${kind} ${k}`).toBeGreaterThan(0);
+          least = Math.min(least, c.reward / sale);
+        }
+        // Research goes to Earth instead of the bank, credit for credit.
+        const r = contractFor(world, k, "research", t);
+        expect(r.reward).toBeGreaterThan(r.amount);
+      }
+    }
+    // Measured: at least 1.71 times what Earth would pay (Classic's water: 60 credits against 35).
+    expect(least).toBeGreaterThan(1);
   });
 });
 

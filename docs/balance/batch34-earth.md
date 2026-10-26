@@ -57,7 +57,9 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
      as a new world starts it, which the test now asserts.
    - The pinned mode overrides (`pace.test.ts`, `first-hour.test.ts`) list exactly what each mode
      adds. They now include `EARTH_ENABLED`, as Batch 33 added `DECISIONS_ENABLED`.
-10. **Injections the tests did not see.** 54 faults were injected, one at a time; five got through on the first run.
+10. **Injections the tests did not see.** 71 faults were injected, one at a time: 54 in the
+    batch's run and 17 in review 1's fix round (item 11). Six got through on the first run, five
+    in the batch's and one in the fix round's.
     - **A sale that found nothing to send was closed** (9). The test only covered a window when
       the rocket did not fly. The sale is settled inside the rocket's loading, so the fault showed
       only when something else (a purchase) sent the rocket up. The test now has both.
@@ -76,6 +78,24 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
     Reading the code during the run turned up a gap no fault had probed. A save with a sale of
     settlers passed validation, and would have priced the sale at NaN credits at the window. It
     is refused on load now (fault 52).
+11. **Seven tests went out with no injection on record, and review 1 rejected the batch for
+    it.** The table named the tests that caught each fault, and seven of the batch's tests were
+    in no row. They were the city with no spaceport at all missing its window, the orbit's period
+    in the browser's tuning, the Standard half of the trading measurement, and four of the
+    panel's: no button without Earth, the standing and prices, the rocket away, and the offer.
+    Nothing showed they could fail. The fix round broke each of them, 17 faults in all, one at a
+    time (53 to 69), and all seven failed. Two things came of it:
+    - **A contract paying a tenth got through every Earth test** (57). At 0.4 credits a unit,
+      materials contracts paid less than Earth pays for the same goods sold, and the Standard
+      trader still came out ahead. Nothing said a contract must pay better than the market. A test
+      now does, over 40 windows at both paces with Earth at full reputation. Measured, a contract
+      pays at least 1.71 times Earth's best price for its goods (Classic's water: 60 credits
+      against 35), and research pays twice what the bank would have had.
+    - **The rocket-away test failed on a null, not with a message** (65), when the panel's list
+      was redrawn only as the orders changed. It now checks first that the rocket is listed, and
+      says so.
+
+    It cost a review round, one test added and one check added.
 
 ## What was built
 
@@ -225,16 +245,18 @@ dearest offer for materials never exceeded the cheapest asking.
 
 ## Injection run
 
-54 faults, one at a time. Each file was restored byte for byte, and `git status` was checked after
-each one; the tree was clean at the end.
+71 faults, one at a time: 54 in the batch's run, and 17 in review 1's fix round (53 to 69), which
+broke the seven tests the first run had not. Each file was restored byte for byte, and `git status`
+was checked after each one; the tree was clean at the end.
 
-- 46 were caught at once.
-- 3 were missed until a test was added or strengthened (9, 37, 43).
+- 62 were caught at once (46 in the batch's run, 16 in the fix round).
+- 4 were missed until a test was added or strengthened (9, 37, 43, 57).
 - 2 changed no behaviour as written (30, 35): a second guard held. Each was injected again as the
   coherent fault and caught.
 - 1 was the save check added after the run (52), caught at once.
 
-Test names are shortened.
+The fix round ran the Earth tests each time: the simulation's, the panel's and the exit gate's (47
+tests). Test names are shortened.
 
 | # | Fault | Caught by |
 |---|---|---|
@@ -290,6 +312,23 @@ Test names are shortened.
 | 50 | the trading script takes contracts it cannot send | at Classic, trading does not hold the city back |
 | 51 | the city chosen in the panel left to the browser | puts Earth in the bar, opens it in place of the alerts, and takes an o; disables what the world would refuse, with the reason |
 | 52 | a sale of settlers accepted from a save (the check added after the run) | refuses a corrupt record, by name |
+| 53 | a missed window recorded only for a spaceport still going up, not for a city with none | misses it too with no finished spaceport: the city's orders wait |
+| 54 | the orders of a city with no spaceport dropped at the window, unrefunded | misses it too with no finished spaceport: the city's orders wait |
+| 55 | the orbit's period a round 2 years | is the orbit's period in the browser's tuning; lands 50 windows on their dates, both paces; shows the standing, the next launch window and Earth's prices; shows the rocket away and when it is home; brings the rocket home before the next window |
+| 56 | Earth's credits never reach the bank, from sales or contracts | at Standard, a player who trades has the city of 1,000 sooner (7,767 s both ways); sends a sale up at the window; fills materials from what is above the keep, pays when met; sends the planet's research to Earth instead of the bank; pays its reward and raises the reputation when met |
+| 57 | materials contracts paying a tenth (0.4 credits a unit) | **missed**; caught after the test was added: pays more for its goods than Earth's market would at full reputation |
+| 58 | research contracts paying half a credit for each credit | pays more for its goods than Earth's market would at full reputation, and more for research than the bank would have had |
+| 59 | the Earth button shown in every world | is not there in a world without Earth |
+| 60 | the next launch window counted one window late | shows the standing, the next launch window and Earth's prices, settlers and rovers locked |
+| 61 | settlers and rovers priced before they are for sale | shows the standing, the next launch window and Earth's prices, settlers and rovers locked |
+| 62 | "Earth pays" showing what Earth asks | shows the standing, the next launch window and Earth's prices, settlers and rovers locked |
+| 63 | "home in" counted to the launch, not the landing | shows the rocket away and when it is home, then what it landed |
+| 64 | the record oldest first | shows the rocket away and when it is home, then what it landed |
+| 65 | the list of orders and rockets redrawn only when the orders change | shows the rocket away and when it is home, then what it landed (first on a null; the test now checks the rocket is listed, and says so) |
+| 66 | the Earth button never says an offer waits | offers Earth's contract with what it pays, and shows it under way once accepted |
+| 67 | the offer's reputation gain and loss swapped | offers Earth's contract with what it pays, and shows it under way once accepted |
+| 68 | a contract's bar full from the start | offers Earth's contract with what it pays, and shows it under way once accepted |
+| 69 | Accept never reaching the simulation | offers Earth's contract with what it pays, and shows it under way once accepted |
 
 ## Open
 
