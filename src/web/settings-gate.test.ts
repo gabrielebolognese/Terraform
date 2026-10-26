@@ -19,7 +19,8 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SimState } from "../sim/index.js";
-import { NEUTRAL_ENV, advance, foundSettlement, marsStart, placeBuilding } from "../sim/index.js";
+import { NEUTRAL_ENV, advance, cityView, derive, foundSettlement, habitat, launchRocket, marsStart, placeBuilding, worldEnv } from "../sim/index.js";
+import { CHUNK_TILES_BY_QUALITY, cityChunkSignature, cityLiveChunks, cityScene } from "../render/city.js";
 import { App } from "./app.js";
 import { startGame } from "./game.js";
 import type { GameHandle, GameOptions } from "./game.js";
@@ -535,6 +536,34 @@ describe("graphics, in a city", () => {
     } finally {
       handle.stop();
     }
+  });
+
+  it("with moving details off, the buildings' moving parts stand still in their pictures; a rocket in flight still rises, drawn live in its chunk", () => {
+    let s = ares();
+    const port = s.settlements[0]!.buildings.find((b) => b.type === "spaceport")!;
+    const envOf = (x: SimState) => habitat(x.reservoirs, derive(x.reservoirs, worldEnv(x, NEUTRAL_ENV, T), T), T, 0);
+    const opts = { time: 1, selected: null, ghost: null, quality: "high" as const, sinceYears: 0 };
+    const size = CHUNK_TILES_BY_QUALITY.high;
+    const still = cityView(s.settlements[0]!, envOf(s), T);
+    const on = cityLiveChunks(still, { ...opts, effects: true }, size);
+    expect(on.size, "moving details: every chunk with a building").toBeGreaterThan(0);
+    expect(cityLiveChunks(still, { ...opts, effects: false }, size).size, "off, and nothing in flight: nothing drawn live").toBe(0);
+    // A moving part drawn into the still picture: the picture's signature says so, and it is redrawn on the change.
+    expect(cityChunkSignature(still, { ...opts, effects: false }, size, 0, 0)).toBeDefined();
+    const launched = launchRocket(s, "settlement-1", port.tx, port.ty, T);
+    expect(launched.ok, launched.reason ?? "").toBe(true);
+    // Just away: climbing for the first tenth of its trip.
+    s = launched.state;
+    const flying = cityView(s.settlements[0]!, envOf(s), T);
+    const live = cityLiveChunks(flying, { ...opts, effects: false }, size);
+    expect(live.size, "the rocket's chunk, live").toBe(1);
+    // And it is drawn there, in the live layer - not held still in the picture with the rest.
+    const [cx, cy] = [...live][0]!.split(",").map(Number) as [number, number];
+    const liveShapes = (v: typeof flying) => cityScene(v, { ...opts, effects: false, chunk: { x0: cx * size, y0: cy * size, size }, layer: "live" }).length;
+    expect(liveShapes(flying), "the rocket, live").toBeGreaterThan(0);
+    expect(liveShapes(still), "nothing live without it").toBe(0);
+    const all = cityLiveChunks(flying, { ...opts, effects: true }, size);
+    expect([...live].every((id) => all.has(id)), "the rocket's chunk is one of those with moving details").toBe(true);
   });
 
   it("not yet measured, the settings say so", async () => {
