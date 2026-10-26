@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 34
-in_progress_batch: none
+in_progress_batch: 35
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -1118,3 +1118,7 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     - "What a contract pays" checks research on a world one second old, which earns no research.
       Every research contract there is the floor of 10, so its half checks only the ratio of pay
       to amount. That is what it is for, and #58 shows it catches half pay.
+
+### Batch 35 - Sound: music, ambience and effects
+- status: in progress
+- sessions: 1 (2026-10-16)
