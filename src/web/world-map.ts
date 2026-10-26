@@ -7,8 +7,8 @@
  * The planet flat, as a map: WORLD_TILES_X by WORLD_TILES_Y world tiles, a
  * world tile about 10 km at the equator (Mars is 21,300 km round). Its ground
  * by height and green, its sea where the water stands; every settlement at
- * its place - a mark and its name far out, the very chunks it holds up close
- * - and the railways between them with their trains. Choose a settlement to
+ * its place - its mark, shaped by its kind, and its name; up close the very
+ * chunks it holds as well - and the railways between them with their trains. Choose a settlement to
  * open it, or to join it to another by rail.
  *
  * Like the other screens it owns no state: it is handed the world each
@@ -118,6 +118,43 @@ function button(className: string, text: string, onClick: () => void): HTMLButto
 const KIND_COLOUR: Readonly<Record<Settlement["kind"], string>> = { metropolis: "#ffd36b", city: "#8fd3ff", outpost: "#c9c9cf" };
 /** Batch 30's cosmetic: cities and metropolises in gold, once "Three cities joined" is claimed. */
 export const GOLD = "#f5b82e";
+/** A settlement's mark, half its width in screen pixels, by kind. */
+const MARK_R: Readonly<Record<Settlement["kind"], number>> = { metropolis: 6.5, city: 3.5, outpost: 2.5 };
+
+/**
+ * A settlement's mark (Batch 36, review 1): its kind told by its shape as
+ * well as its colour - an outpost a square, as its pin on the planet; a city
+ * a disc; a metropolis a larger diamond - and one lost to the sea crossed
+ * out. Gold, a city and a metropolis are one colour; the shape still tells
+ * them apart. Outlined dark, so it reads on the ground and over the land the
+ * settlement holds.
+ */
+function drawMark(ctx: CanvasRenderingContext2D, x: number, y: number, s: Settlement): void {
+  const r = MARK_R[s.kind];
+  ctx.beginPath();
+  if (s.kind === "outpost") ctx.rect(x - r, y - r, 2 * r, 2 * r);
+  else if (s.kind === "metropolis") {
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
+  } else ctx.arc(x, y, r, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.strokeStyle = "#0e0f11";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  if (s.lostAtSeaLevelM !== null) {
+    const k = r + 2;
+    ctx.strokeStyle = "#e6e6ea";
+    ctx.beginPath();
+    ctx.moveTo(x - k, y - k);
+    ctx.lineTo(x + k, y + k);
+    ctx.moveTo(x + k, y - k);
+    ctx.lineTo(x - k, y + k);
+    ctx.stroke();
+  }
+}
 
 export class WorldMapScreen {
   readonly root: HTMLElement;
@@ -442,7 +479,7 @@ export class WorldMapScreen {
       ctx.arc(sx(pa.x + (bx - pa.x) * along), sy(pa.y + (pb.y - pa.y) * along), Math.max(2, Math.min(5, cam.scale)), 0, 2 * Math.PI);
       ctx.fill();
     }
-    // The settlements: up close the chunks each holds, further out a mark; and names.
+    // The settlements: up close the chunks each holds; its mark, by its kind, at every zoom; and names.
     const gold = hasCosmetic(state, "gold_markers", this.tuning);
     const C = this.tuning.CLAIM_CHUNK_TILES;
     const chunkTiles = (C * this.tuning.TILE_METRES) / 1000 / WORLD_TILE_KM;
@@ -461,12 +498,8 @@ export class WorldMapScreen {
         for (const [i, j] of chunks) {
           ctx.fillRect(sx(p.x + (i - half) * chunkTiles), sy(p.y + (j - half) * chunkTiles), Math.ceil(chunkTiles * cam.scale), Math.ceil(chunkTiles * cam.scale));
         }
-      } else {
-        const r = s.kind === "metropolis" ? 5 : s.kind === "city" ? 3.5 : 2.5;
-        ctx.beginPath();
-        ctx.arc(sx(p.x), sy(p.y), r, 0, 2 * Math.PI);
-        ctx.fill();
       }
+      drawMark(ctx, sx(p.x), sy(p.y), s);
       if (s.id === this.selected) {
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2;
