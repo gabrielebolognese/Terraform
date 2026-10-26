@@ -1560,3 +1560,31 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch36-settings.md
     docs/manual/alerts-and-statistics.md docs/manual/cities.md docs/manual/settings.md
     docs/manual/update-notes.md src/web/charts.ts src/web/settings-cues.test.ts src/web/style.css
+- review 3: accepted
+  - Review 2's problem is fixed. Every chart with more than one line now gives each line a
+    pattern by its place: solid, dashed, dotted, dash-dot, long dashes (`src/web/charts.ts:116-124`,
+    drawn at `:220`). Its key draws the same pattern in the line's colour and names it, e.g.
+    "Homes (dashed): 320" (`:167-176`). Made is solid and Used dashed on all five made-and-used
+    charts. The four shortages each get a strip with their name on it (`drawStrips`, `:229`), where
+    before they were bars under a pixel wide. All 19 charts are registered in `settings-cues.test.ts`
+    ("the charts"), checked both ways, and tested from what each canvas draws in Statistics (a city
+    and the planet) and in the planner's Charts tab. The test checks a pattern's name against the
+    dash's own shape, not against the code's table.
+  - Injections 69 (dashed and dotted named the wrong way round) and 72 (every strip drawn in the
+    same place) were re-run one at a time in a separate worktree. Both were caught as the table says
+    ("the key says "Homes (dotted): 322", the line is drawn [6,4]"; "bars outside its strip"). The
+    file was restored and the tree was clean after each; the worktree was then removed.
+  - Other canvases read in the code: sparklines are one line each beside their metric's name;
+    world-map railways are one colour; the land held up close sits under the settlement's mark and
+    name; building-card pictures and inspector swatches carry no code (the swatches print their hex
+    value). The palettes' reach is stated as the page, the city and the planner's map, and the
+    manual says the charts and the world map keep their colours.
+  - Manual checked against the code, all true: the pattern order and "Homes (dashed)"
+    (`charts.ts:116-124`, Homes second of two); made solid and used dashed; the shortage strips run
+    blackouts first, then water, oxygen and food, top to bottom (`top = 2 + k * band`, in series
+    order, `:58-63`).
+  - Verification: typecheck green; `npx vitest run --maxWorkers=2 --minWorkers=1`: 123 files,
+    1,476 tests, all passed (405.2 s; the Known-red opening test passed). `build:web` green
+    (656.72 kB JS, 222.17 kB gzip; 52.19 kB CSS) and `build` green, both exit 0. Nothing in
+    `src/sim/` changed across the batch, and the walls hold. The note's items skip from 8 to 10
+    (no 9), a numbering slip only.
