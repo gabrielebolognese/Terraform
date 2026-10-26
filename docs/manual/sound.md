@@ -76,8 +76,14 @@ Alerts that are kept only for the record in **Alerts** - a building finished, an
 contract met - make no alert sound; a building finished and an upgrade done have their own sounds
 above.
 
-On the **Example planet** you hear its music, its wind and its cities, but not its buildings
-finishing or its rockets lifting off: it is not your world.
+The **Example planet** from the title screen sounds like any of your worlds, alerts and
+milestones included: nothing you do there is saved, but it is all heard.
+
+The **See example planet** button in the **Instruments** drawer is different: it sets your planet
+aside and shows the example in its place. While that example shows, you hear its music, its wind
+and its cities, and your own clicks, but not its buildings finishing, its upgrades or its rockets
+lifting off. It shows no alerts, objectives or milestone cards either, so none of their sounds
+play.
 
 ## Sound settings
 

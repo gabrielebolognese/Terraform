@@ -808,7 +808,9 @@ and survive a reload through the real title screen. Licences in `docs/credits.md
    storm blows the wind harder.
 5. **Alerts, objectives, milestones and buttons on the interface channel**; the world's effects
    on the effects channel.
-6. **The example planet's happenings are not heard**; its music and beds are.
+6. **While the Instruments drawer's example planet shows, its happenings are not heard** (its
+   alerts and cards are not shown either); its music and beds are. The title's Example planet, a
+   look-only world showing all of those, is heard in full (corrected in review 1).
 7. **Sound constants are browser constants in `src/web/`**: they change nothing the simulation
    computes.
 8. **The settings record in the store's index**, the player's own until Batch 36 decides its home.

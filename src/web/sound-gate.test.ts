@@ -7,12 +7,15 @@
  *   - the title: its music waits for the player's first gesture;
  *   - the assembled game: silent until a gesture, then the phase's music and
  *     the planet's wind; down in a city, the machinery near the camera; a
- *     building placed through the canvas answered with its sound, once.
+ *     building placed through the canvas answered with its sound, once;
+ *   - the example planets: the title's, a look-only world whose alerts and
+ *     objectives show, heard in full; the Instruments drawer's, whose alerts
+ *     and objectives do not, heard for its music and wind but nothing it does.
  * The engine, the cues, the beds and the music on their own are in
  * `sound.test.ts`.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { SimState } from "../sim/index.js";
 import { BUILDING_DEFS, NEUTRAL_ENV, advance, cityView, derive, foundSettlement, habitat, marsStart, placeBuilding, worldEnv } from "../sim/index.js";
@@ -29,6 +32,20 @@ import { PIECES, pieceFor } from "./sound-music.js";
 import { DEFAULT_SOUND, PlayerSettings, SETTINGS_KEY, readSound } from "./sound-settings.js";
 import { MemorySaveStore } from "./storage.js";
 
+/**
+ * The Instruments drawer's example: a stand-in world when one is set, so the test
+ * need not build the real example (about forty seconds).
+ */
+const example = vi.hoisted(() => ({ world: null as SimState | null }));
+vi.mock("../harness/example.js", async (actual) => {
+  const real = await actual<typeof import("../harness/example.js")>();
+  return {
+    ...real,
+    examplePlanet: (...args: Parameters<typeof real.examplePlanet>) =>
+      example.world === null ? real.examplePlanet(...args) : ({ state: example.world } as ReturnType<typeof real.examplePlanet>),
+  };
+});
+
 const T = worldTuning("standard", 0, "standard");
 const cfg = { tuning: T, env: NEUTRAL_ENV, forcing: null };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -39,6 +56,7 @@ beforeEach(() => {
   listening = new AbortController();
 });
 afterEach(() => {
+  example.world = null;
   listening.abort();
   document.body.replaceChildren();
 });
@@ -244,11 +262,24 @@ describe("the assembled game", () => {
     return s;
   }
 
-  function play(state: SimState, sound: SoundEngine): { root: HTMLElement; handle: GameHandle } {
+  /** Ares as above, with a greenhouse just placed and going up. */
+  function worksite(): SimState {
+    const s = city();
+    for (let r = 3; r < 30; r += 1) {
+      for (let k = 0; k < 8 * r; k += 1) {
+        const a = (k / (8 * r)) * 2 * Math.PI;
+        const o = placeBuilding(s, "settlement-1", "greenhouse", Math.round(46 + r * Math.cos(a)), Math.round(46 + r * Math.sin(a)), T);
+        if (o.ok) return o.state;
+      }
+    }
+    throw new Error("nowhere to build a greenhouse");
+  }
+
+  function play(state: SimState, sound: SoundEngine, lookOnly: { readonly banner: string } | null = null): { root: HTMLElement; handle: GameHandle } {
     const root = document.createElement("div");
     document.body.append(root);
     // Every speed (the debug setting), so a build can finish within the test.
-    const handle = startGame(root, { state, tuning: T, fresh: () => marsStart(undefined, T), sound, debugSpeeds: true }, { save: () => {}, saveDue: () => false, saveFailures: () => 0, onMenu: () => {}, onBackToTitle: () => {} });
+    const handle = startGame(root, { state, tuning: T, fresh: () => marsStart(undefined, T), sound, debugSpeeds: true, lookOnly }, { save: () => {}, saveDue: () => false, saveFailures: () => 0, onMenu: () => {}, onBackToTitle: () => {} });
     return { root, handle };
   }
 
@@ -356,4 +387,54 @@ describe("the assembled game", () => {
       handle.stop();
     }
   });
+
+  const fast = (root: HTMLElement) => [...root.querySelectorAll<HTMLButtonElement>(".hud-speed")].find((b) => b.textContent === "1000x")!.click();
+  /** Ares's line in the settlements list: what is being built there. */
+  const building = (root: HTMLElement) => root.querySelector(".hud-settlement-overview")!.textContent ?? "";
+  const goingUp = /going up|waiting for a rover/;
+
+  it("on the title's Example planet - a world that never saves, its alerts and objectives shown - hears a building finished", async () => {
+    const sound = engine();
+    const { root, handle } = play(worksite(), sound, { banner: "Example planet: nothing here is saved." });
+    try {
+      gesture();
+      await wait(400);
+      expect(handle.mayPersist).toBe(false);
+      expect(root.querySelector<HTMLElement>(".example-banner")!.hidden).toBe(false);
+      expect(building(root)).toMatch(goingUp);
+      expect(sound.played.get("built") ?? 0).toBe(0);
+      fast(root);
+      for (let i = 0; i < 60 && sound.played.get("built") === undefined; i += 1) await wait(100);
+      await wait(1200);
+      expect(building(root)).not.toMatch(goingUp);
+      expect(sound.played.get("built"), "the title's Example planet heard finishing its building").toBe(1);
+    } finally {
+      handle.stop();
+    }
+  }, 30_000);
+
+  it("while the Instruments drawer's See example planet shows, hears its music and its wind but nothing it does", async () => {
+    example.world = worksite();
+    const sound = engine();
+    const { root, handle } = play(city(), sound);
+    const banner = () => root.querySelector(".example-banner span")!.textContent ?? "";
+    try {
+      gesture();
+      [...root.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "See example planet")!.click();
+      for (let i = 0; i < 40 && !banner().startsWith("Example planet:"); i += 1) await wait(50);
+      expect(banner()).toMatch(/^Example planet: fully terraformed, with 1 cities/);
+      await wait(400);
+      expect(building(root)).toMatch(goingUp);
+      fast(root);
+      for (let i = 0; i < 60 && goingUp.test(building(root)); i += 1) await wait(100);
+      await wait(1200);
+      // Vacuity: the example's greenhouse is finished - there was something to hear.
+      expect(building(root)).not.toMatch(goingUp);
+      expect(sound.played.get("built") ?? 0, "the drawer's example heard finishing a building").toBe(0);
+      expect(sound.player!.current).not.toBeNull();
+      expect(sound.ambienceLevels.wind).toBeGreaterThan(0);
+    } finally {
+      handle.stop();
+    }
+  }, 30_000);
 });

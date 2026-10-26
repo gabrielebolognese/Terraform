@@ -43,7 +43,6 @@ rocket, and every alert.
 - Graphics and control settings are not available yet.
 - Your sound settings are kept by this browser: another browser, or a world's exported file, does
   not carry them.
-- On the Example planet, buildings finishing and rockets lifting off make no sound.
 - A rocket coming home makes no sound; only its lift-off does.
 - A train that stops at a station near the middle of your view is heard as it comes, not again as
   it leaves.
@@ -407,7 +406,6 @@ and railways between settlements; and the Example planet.
 - The statistics do not chart your trade with Earth or your reputation.
 - Your sound settings are kept by this browser: another browser, or a world's exported file, does
   not carry them.
-- On the Example planet, buildings finishing and rockets lifting off make no sound.
 - A rocket coming home makes no sound; only its lift-off does.
 - A train that stops at a station near the middle of your view is heard as it comes, not again as
   it leaves.

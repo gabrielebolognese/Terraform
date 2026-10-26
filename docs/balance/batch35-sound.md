@@ -57,9 +57,10 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
    lingers out to 8.9. Injection 37 is caught by it.
 7. **Two wirings had no test at all, found by the injection plan.** Nothing checked that the
    example planet's happenings are not heard, nor that the assembled game passes its alerts to the
-   sound. Both now have tests (the director with `cues` off over a run with a build, and in the
-   assembled game a greenhouse placed through the canvas, finished at 1000x, and offline on no
-   network: its built sound once, and the alert's).
+   sound. The alerts' wiring got its test (in the assembled game a greenhouse placed through the
+   canvas, finished at 1000x, and offline on no network: its built sound once, and the alert's).
+   The example's did not: its test reached only the director, called with `cues` off, never the
+   game's wiring of it. The review found that (item 12); the wiring has its tests since.
 8. **A claim west renumbers every tile, worksites' included.** Keyed on the grid's numbers, a
    worksite whose building stands a claim's width east of another would be heard as that one
    finishing the moment the land is claimed. The cue watch keys on the ground's corners (as Batch
@@ -78,6 +79,22 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
     (35, 65, 69, and 75 the first time) and are caught since; one (72) was missed because it showed
     a defect (item 1); one (44) changes nothing as written, a second guard covering it, and is
     caught as a coherent fault (75); one (55) was no fault at all, and redone (76) is caught.
+12. **Review 1 rejected the batch: the Example planet the player reaches was heard.** The decision
+    (6, below), the manual and the known issues all said the Example planet's buildings finishing
+    and rockets lifting off are not heard. The game silenced them only while the Instruments
+    drawer's **See example planet** shows (`cues: !example.active`). The title's **Example
+    planet**, the only one the manual names, is a look-only world that never enters that mode, so
+    everything it did was heard. Nothing tested the game's wiring: `cues: true` in its place failed
+    none of the 48 tests in the three sound files, and injection 49 reached only the director. The
+    fix keeps the browser's behaviour and corrects the record, because the decision's own reason
+    ("as its milestones and alerts are not shown") holds only for the drawer's example. The
+    title's Example planet shows its alerts, objectives and milestone cards, and lets the player
+    build, so it is heard in full, sounds and cards together. Two tests through the assembled game
+    now pin both: the title's look-only world hears its greenhouse finish once; the drawer's
+    example (a stand-in world, so the test need not build the real one for forty seconds) does
+    not, though the greenhouse is seen finished in its city's line, and its music and wind play
+    on. Injections 81 and 82 below. Cost: one review round, the decision restated, three manual
+    statements corrected.
 
 ## What was built
 
@@ -144,8 +161,11 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
    the wind harder.
 5. **Alerts, objectives, milestones and buttons on the interface channel**; the world's effects on
    the effects channel, placed in the city view.
-6. **The example planet's happenings are not heard** (as its milestones and alerts are not shown);
-   its music, beds and the player's own clicks are.
+6. **While the Instruments drawer's example planet shows, its happenings are not heard**, as its
+   milestones, objectives and alerts are not shown; its music, beds, trains and the player's own
+   clicks are. The title's **Example planet** is a look-only world that shows all of those, and
+   is heard in full. (As first recorded, this decision said "the example planet", meaning both;
+   review 1 found the title's heard, and the record was corrected to the browser: item 12.)
 7. **Sound constants are browser constants in `src/web/`**, not `tuning.ts` and §10: they change
    nothing the simulation computes, as `config.ts`'s do not.
 8. **The settings record lives in the store's index** under `settings`, the player's own store
@@ -263,6 +283,8 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
 | 78 | game | a refused placement sounds (again) | "is silent until a gesture, then plays the phase's music, the wind, the city's machinery, a" |
 | 79 | engine | the engine's clock never started | "the title's music waits for the first gesture, then starts, plays on, and every button tic" |
 | 80 | engine | the clock started before a gesture | "is silent until a gesture, then plays the phase's music, the wind, the city's machinery, a" |
+| 81 | game | the drawer's example heard (`cues: true`; review 1) | "while the Instruments drawer's See example planet shows, hears its music and its wind but nothing it does" ("the drawer's example heard finishing a building: expected 1 to be +0") |
+| 82 | game | the title's look-only world silenced (`cues: !example.active && !options.lookOnly`; review 1) | "on the title's Example planet - a world that never saves, its alerts and objectives shown - hears a building finished" ("expected undefined to be 1") |
 
 
 ## What changed from the plan

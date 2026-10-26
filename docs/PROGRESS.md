@@ -1154,7 +1154,9 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     storm blows the wind harder.
   - Alerts, objectives, milestones and buttons on the interface channel; the world's effects on the
     effects channel, placed in the city view by the camera's ear.
-  - The example planet's happenings (built, upgraded, rockets) are not heard; its music and beds are.
+  - While the Instruments drawer's example planet shows, its happenings (built, upgraded, rockets) are
+    not heard; its music and beds are. The title's Example planet (a look-only world, its alerts and
+    cards shown) is heard in full. Corrected to the browser in review 1 (see fix 1).
   - Sound constants are browser constants in src/web, not tuning.ts and section 10: they change
     nothing the simulation computes, like config.ts's.
   - Settings kept per player as a "settings" record in the store's index beside the worlds list;
@@ -1265,3 +1267,36 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     - the machinery near the camera is 0.19, bounded at more than 0.05 (`:460`);
     - First water writes 75 notes, bounded at more than 10 (`:555`), over 20 distinct pitches,
       bounded at more than 3 (`:562`).
+- fix 1: done
+  1. The Example planet heard: the record now follows the browser, not the other way. The title's
+     Example planet shows its alerts, objectives and milestone cards and lets the player build, so
+     it is heard in full. While the Instruments drawer's **See example planet** shows, none of those
+     show, and its built, upgraded and rocket sounds do not play either. That is where the decision's
+     own reason ("as its milestones and alerts are not shown") holds. No game code changed.
+     - decision: the browser's behaviour kept (the reviewer's second option). Silencing the title's
+       look-only world would have left its alert and objective sounds playing beside unheard
+       buildings, and its player's own builds unheard.
+     - tests: two through the assembled game in `src/web/sound-gate.test.ts`. The title's look-only
+       world (`lookOnly`, `mayPersist` false, its banner shown) hears its greenhouse finish once at
+       1000x. The drawer's example is entered by its button, the example's build replaced by a
+       stand-in world (`vi.mock` of `examplePlanet`) so it takes no forty seconds. It does not hear
+       its greenhouse finish, which its city's line in the list shows went from "going up" to done.
+       Its music and wind still play.
+     - injections, one at a time, `game.ts` restored from a backup and `git diff` clean after each:
+       81, `cues: true` at `game.ts:929`: the drawer test fails ("the drawer's example heard
+       finishing a building: expected 1 to be +0"); 82, `cues: !example.active &&
+       !options.lookOnly`: the title test fails ("the title's Example planet heard finishing its
+       building: expected undefined to be 1"). Each passes the other test.
+     - record corrected: `docs/manual/sound.md` (both examples, the drawer's named as on screen);
+       `docs/manual/update-notes.md` (the false known issue gone from Update 35 and from the current
+       list); `docs/balance/batch35-sound.md` (item 7 corrected, item 12 the review's finding,
+       decision 6, injections 81 and 82 in the table); `GAME_PLAN.md` decision 6; this entry's
+       `decisions:`.
+  - not changed: the lower bounds the review saw without their measurements beside them (not a
+    rejection item).
+  - verification: typecheck green; the three sound files (`sound.test.ts`, `sound-gate.test.ts`,
+    `onboarding.test.ts`) 50 tests passed; `npx vitest run --maxWorkers=2 --minWorkers=1`: 120
+    files, 1,430 tests, all passed (426 s; the Known-red opening test passed); build:web green
+    (623.88 kB JS, 210.56 kB gzip, unchanged; 49.29 kB CSS); build green.
+  - files: GAME_PLAN.md docs/PROGRESS.md docs/balance/batch35-sound.md docs/manual/sound.md
+    docs/manual/update-notes.md src/web/sound-gate.test.ts
