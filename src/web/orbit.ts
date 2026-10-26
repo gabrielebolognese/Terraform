@@ -67,11 +67,14 @@ export function drag(o: Orbit, dx: number, dy: number, radius: number, dt: numbe
   };
 }
 
-/** Advance by `dt` seconds with nobody holding it: inertia decays, then the idle spin eases in. */
-export function coast(o: Orbit, dt: number): Orbit {
+/**
+ * Advance by `dt` seconds with nobody holding it: inertia decays, then the
+ * idle spin eases in - unless `spin` is false (Batch 36: reduced motion).
+ */
+export function coast(o: Orbit, dt: number, spin = true): Orbit {
   const keep = Math.pow(ORBIT.friction, dt);
   const idle = o.idle + dt;
-  const ease = clamp((idle - ORBIT.idleDelay) / ORBIT.idleEase, 0, 1);
+  const ease = spin ? clamp((idle - ORBIT.idleDelay) / ORBIT.idleEase, 0, 1) : 0;
   const pitch = clamp(o.pitch + o.pitchVelocity * dt, -ORBIT.maxPitch, ORBIT.maxPitch);
   return {
     ...o,
@@ -86,6 +89,11 @@ export function coast(o: Orbit, dt: number): Orbit {
 /** Held still under the cursor: no inertia, no idle spin. */
 export function hold(o: Orbit): Orbit {
   return { ...o, yawVelocity: 0, pitchVelocity: 0, idle: 0 };
+}
+
+/** Turned by the keys (Batch 36): `dYaw` and `dPitch` radians, held where it is after. */
+export function turn(o: Orbit, dYaw: number, dPitch: number): Orbit {
+  return { ...hold(o), yaw: o.yaw + dYaw, pitch: clamp(o.pitch + dPitch, -ORBIT.maxPitch, ORBIT.maxPitch) };
 }
 
 /** A wheel step; positive `delta` zooms out, as a scroll wheel reads. */

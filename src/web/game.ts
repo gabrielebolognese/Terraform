@@ -105,6 +105,9 @@ import { cityOverview, overviewWords } from "./city-overview.js";
 import { SoundDirector } from "./sound-director.js";
 import { SoundEngine } from "./sound-engine.js";
 import { trainCars } from "../render/city.js";
+import type { Settings } from "./settings.js";
+import { DEFAULT_SETTINGS } from "./settings.js";
+import type { FrameCosts } from "./frame-costs.js";
 
 export interface GameOptions {
   readonly state: SimState;
@@ -121,6 +124,10 @@ export interface GameOptions {
   readonly debugSpeeds?: boolean;
   /** The session's sound (Batch 35). Absent, the world is silent. */
   readonly sound?: SoundEngine;
+  /** The player's settings (Batch 36), read as the world plays: a change counts at once. Absent, the defaults. */
+  readonly settings?: { readonly current: Settings };
+  /** Where each city frame's cost is kept, for the graphics settings to show. */
+  readonly frameCosts?: FrameCosts;
 }
 
 export interface GameHooks {
@@ -134,6 +141,8 @@ export interface GameHooks {
   onMenu(): void;
   /** A look-only world's way back. */
   onBackToTitle(): void;
+  /** Save now (Batch 36: the Save key), and the words for how it went. Absent, nothing is saved. */
+  saveNow?(): Promise<string>;
 }
 
 export interface GameHandle {

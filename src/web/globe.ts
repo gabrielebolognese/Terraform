@@ -19,7 +19,11 @@ import { sphereCdf } from "../shared/sphere-cdf.js";
 import { TERRAIN_IDENTITY, elevationCdf, terrainRotation } from "../shared/planet-terrain.js";
 import type { TerrainRotation } from "../shared/planet-terrain.js";
 import type { Orbit } from "./orbit.js";
-import { coast, drag, hold, initialOrbit, zoomBy } from "./orbit.js";
+import { coast, drag, hold, initialOrbit, turn, zoomBy } from "./orbit.js";
+import type { Settings } from "./settings.js";
+import { DEFAULT_SETTINGS } from "./settings.js";
+import { Pinch, wheelIntent } from "./gestures.js";
+import { reducedMotion } from "./interface.js";
 import { MAX_DPR } from "./config.js";
 import type { Settlement } from "../sim/index.js";
 import { latLonToVec, vecToLatLon } from "../sim/index.js";
@@ -64,6 +68,13 @@ export class Globe implements PlanetSink {
   private slowFrames = 0;
   private fastFrames = 0;
   private dragging: { id: number; x: number; y: number; t: number } | null = null;
+  /** Two fingers on the planet (Batch 36): a pinch zooms. */
+  private readonly pinch = new Pinch();
+  /**
+   * The player's settings (Batch 36): the wheel's way, and reduced motion,
+   * which leaves the planet still when nobody turns it. Read as it plays.
+   */
+  prefs: () => Settings = () => DEFAULT_SETTINGS;
   private readonly started = performance.now();
   /** Batch 17: one marker per settlement, laid over the canvas and moved every frame. */
   private readonly markerLayer: HTMLElement;
@@ -123,6 +134,15 @@ export class Globe implements PlanetSink {
     this.posed = true;
     this.dragging = null;
     this.orbit = { ...hold(this.orbit), yaw: pose.yaw, pitch: pose.pitch, zoom: pose.zoom };
+  }
+
+  /** The keys (Batch 36): turn by `dYaw` and `dPitch` radians, or zoom by `factor`; not while a journey drives the camera. */
+  turnBy(dYaw: number, dPitch: number): void {
+    if (!this.posed) this.orbit = turn(this.orbit, dYaw, dPitch);
+  }
+
+  zoomStep(factor: number): void {
+    if (!this.posed) this.orbit = zoomBy(this.orbit, -Math.log(factor) / 0.0012);
   }
 
   /** The camera as it stands: where a journey's pull-back should return to. */
@@ -246,6 +266,12 @@ export class Globe implements PlanetSink {
   private bindInput(): void {
     const c = this.canvas;
     c.addEventListener("pointerdown", (e) => {
+      if (this.pinch.down(e)) {
+        // A second finger: the pinch has it, the drag lets go.
+        this.dragging = null;
+        c.classList.remove("dragging");
+        return;
+      }
       if (e.button !== 0 || this.posed) return;
       c.setPointerCapture(e.pointerId);
       c.classList.add("dragging");
@@ -259,6 +285,11 @@ export class Globe implements PlanetSink {
         const hit = pickPlanet(e.clientX - rect.left, e.clientY - rect.top, this.camera());
         this.onPickHover?.(hit === null ? null : vecToLatLon(hit));
       }
+      const two = this.pinch.move(e);
+      if (two !== null) {
+        if (!this.posed) this.orbit = zoomBy(hold(this.orbit), -Math.log(two.factor) / 0.0012);
+        return;
+      }
       const d = this.dragging;
       if (d === null || d.id !== e.pointerId) return;
       const dt = Math.max((e.timeStamp - d.t) / 1000, 1 / 240);
@@ -266,6 +297,7 @@ export class Globe implements PlanetSink {
       this.dragging = { id: d.id, x: e.clientX, y: e.clientY, t: e.timeStamp };
     });
     const release = (e: PointerEvent): void => {
+      this.pinch.up(e);
       if (this.dragging?.id !== e.pointerId) return;
       // A click - pressed and released in place - picks a founding site when
       // one is being chosen. A drag still turns the planet as usual.
@@ -292,7 +324,10 @@ export class Globe implements PlanetSink {
       (e) => {
         e.preventDefault();
         if (this.posed) return;
-        this.orbit = zoomBy(this.orbit, e.deltaY);
+        const intent = wheelIntent(e, this.prefs().controls);
+        // Two fingers sliding on a trackpad turn the planet, as a drag does.
+        if ("pan" in intent) this.orbit = turn(this.orbit, -intent.pan.dx / Math.max(1, this.discRadiusCss()), -intent.pan.dy / Math.max(1, this.discRadiusCss()));
+        else this.orbit = zoomBy(this.orbit, intent.zoom);
       },
       { passive: false },
     );
@@ -330,7 +365,7 @@ export class Globe implements PlanetSink {
     const dt = this.lastFrame === 0 ? 1 / 60 : Math.min((now - this.lastFrame) / 1000, 0.1);
     const frameMs = now - this.lastFrame;
     this.lastFrame = now;
-    if (this.dragging === null && !this.posed) this.orbit = coast(this.orbit, dt);
+    if (this.dragging === null && !this.posed) this.orbit = coast(this.orbit, dt, !reducedMotion(this.prefs().ui));
     this.adaptScale(frameMs);
 
     if (this.gl !== null) this.drawGl(now);
