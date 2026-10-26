@@ -5,7 +5,11 @@
  * "A loader menu, a new game like minecraft worlds." The game opens here,
  * over a slowly turning planet, and nothing is loaded until the player
  * chooses: Continue (the last world played), Worlds, New world, the Example
- * planet (look only), Settings (a stub until Batch 36) and Credits.
+ * planet (look only), Settings (sound since Batch 35; the rest in Batch 36)
+ * and Credits.
+ *
+ * Batch 35: the session's sound lives here, from the title on - the title's
+ * music, the player's volumes, and a tick for every button.
  *
  * Menus read the state and never write it. Everything that changes a world
  * goes through `WorldLibrary` (moving saves) or the running game (playing).
@@ -24,6 +28,11 @@ import { BROWSER_TUNING, MODE_NAMES, PACE_NAMES, WORLD_MODES, WORLD_PACES } from
 import type { Clock, WorldMeta } from "./worlds.js";
 import { WorldLibrary, parseSeed, startState } from "./worlds.js";
 import { drawThumbnail, planetLook } from "./thumbnail.js";
+import { SoundEngine } from "./sound-engine.js";
+import { PlayerSettings } from "./sound-settings.js";
+import { SoundPanel } from "./sound-panel.js";
+import { pieceFor } from "./sound-music.js";
+import { ORBIT_HEARING, SILENCE, WIND_THIN_MBAR, windFor } from "./sound-ambience.js";
 
 export interface AppDeps {
   readonly root: HTMLElement;
@@ -41,6 +50,15 @@ export interface AppDeps {
   readonly titleGlobe?: boolean;
   /** The debug setting (`?debug` on the page): every speed in every world (Batch 28). */
   readonly debugSpeeds?: boolean;
+  /** The session's sound (Batch 35), already listening for the player's first gesture. Absent, the game is silent. */
+  readonly sound?: SoundEngine;
+}
+
+/** What the title sounds like: the first piece, and bare Mars's thin wind heard from afar. */
+function titleSound(sound: SoundEngine): void {
+  sound.setMusic(pieceFor(0));
+  const wind = windFor(WIND_THIN_MBAR, 0);
+  sound.setAmbience({ ...SILENCE, wind: wind.level * ORBIT_HEARING.wind, windHz: wind.hz });
 }
 
 type View = "title" | "worlds" | "new" | "settings" | "credits" | "game";
@@ -79,6 +97,9 @@ function phaseName(phase: number): string {
 
 export class App {
   readonly library: WorldLibrary;
+  readonly sound: SoundEngine;
+  /** The player's own settings, kept for every world (Batch 35: sound). */
+  readonly settings: PlayerSettings;
   private readonly front: HTMLElement;
   private readonly screen: HTMLElement;
   private readonly notice: HTMLElement;
@@ -91,6 +112,13 @@ export class App {
 
   constructor(private readonly deps: AppDeps) {
     this.library = new WorldLibrary(deps.store, deps.now);
+    this.sound = deps.sound ?? new SoundEngine(() => null);
+    this.settings = new PlayerSettings(deps.store);
+    // Every button answers with a tick (the interface channel), the game's own and the menus'.
+    deps.root.addEventListener("click", (e) => {
+      const target = e.target as Element | null;
+      if (target !== null && typeof target.closest === "function" && target.closest("button") !== null) this.sound.play("click");
+    });
     this.front = el("div", "front");
     this.front.setAttribute("role", "main");
     this.screen = el("div", "front-screen");
@@ -102,6 +130,7 @@ export class App {
 
   /** Read the worlds, show the title, then check every world's save in the background. */
   async start(): Promise<void> {
+    this.sound.setVolumes(await this.settings.load());
     await this.library.open();
     if (this.library.problem !== null) this.say(this.library.problem);
     if (!this.deps.store.durable) this.say("This browser has no durable storage: worlds will not survive a reload.");
@@ -153,6 +182,7 @@ export class App {
 
   showTitle(): void {
     this.showPlanet();
+    titleSound(this.sound);
     const last = this.library.last;
     const panel = el("section", "front-panel front-title");
     panel.append(el("h1", "front-logo", "Terraform"), el("p", "front-tagline", "Make Mars a living world."));
@@ -372,11 +402,23 @@ export class App {
   }
 
   showSettings(): void {
-    const panel = el("section", "front-panel");
+    const panel = el("section", "front-panel front-settings");
     const head = el("header", "front-head");
     head.append(this.back(), el("h2", "", "Settings"));
-    panel.append(head, el("p", "", "Settings - sound, graphics, controls - arrive in a later update."));
+    panel.append(head, this.soundPanel().root, el("p", "front-about", "Graphics and controls arrive in a later update."));
     this.render("settings", panel);
+  }
+
+  /** The sound settings: each change heard at once, and kept for every world. */
+  private soundPanel(): SoundPanel {
+    return new SoundPanel(
+      this.settings.sound,
+      (next) => {
+        this.sound.setVolumes(next);
+        void this.settings.setSound(next);
+      },
+      this.sound.unlocked ? null : "Sound starts with your first click or key press: browsers keep a page silent until then.",
+    );
   }
 
   showCredits(): void {
@@ -387,7 +429,8 @@ export class App {
       head,
       el("p", "", "Terraform - a planet-scale simulation of making Mars habitable."),
       el("p", "", "Made by Gabriele B., built with Claude."),
-      el("p", "", "Typeface: Lexend. Everything else is drawn by the game itself."),
+      el("p", "", "Typeface: Lexend (SIL Open Font License). Everything else is drawn by the game itself."),
+      el("p", "", "Music and sound: made by the game itself as it plays, from tones and noise - no recordings."),
     );
     this.render("credits", panel);
   }
@@ -453,7 +496,7 @@ export class App {
     this.hidePlanet();
     this.front.hidden = true;
     this.view = "game";
-    const handle = this.deps.launch(this.deps.root, options, {
+    const handle = this.deps.launch(this.deps.root, { ...options, sound: this.sound }, {
       save: (state) => void this.saveWorld(state, false),
       saveDue: () => autosaver?.due(AUTOSAVE_INTERVAL_MS) ?? false,
       saveFailures: () => autosaver?.failureCount ?? 0,
@@ -498,9 +541,20 @@ export class App {
       });
     });
     save.disabled = !mayPersist;
+    // Settings (Batch 35): the sound, opened in the menu; graphics and controls come later.
+    let sounds: SoundPanel | null = null;
     const settings = button("Settings", () => {
-      status.textContent = "Settings arrive in a later update.";
+      if (sounds !== null) {
+        sounds.root.remove();
+        sounds = null;
+        settings.setAttribute("aria-expanded", "false");
+        return;
+      }
+      sounds = this.soundPanel();
+      settings.after(sounds.root);
+      settings.setAttribute("aria-expanded", "true");
     });
+    settings.setAttribute("aria-expanded", "false");
     panel.append(
       el("h2", "", this.game.world?.name ?? "Example planet"),
       button("Resume", () => this.closeMenu(), "front-button primary"),

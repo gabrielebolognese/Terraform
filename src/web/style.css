@@ -3771,3 +3771,61 @@ button:hover {
   height: 100%;
   background: linear-gradient(90deg, var(--accent), var(--good));
 }
+
+/* ---- sound (Batch 35): a slider for each channel, on the Settings screen and in the menu ---- */
+
+.sound-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sound-head {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+
+.sound-row {
+  display: grid;
+  grid-template-columns: 8.5em 1fr 3em;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+}
+
+.sound-slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.sound-value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+
+.sound-mute {
+  display: flex;
+  gap: 8px;
+}
+
+.sound-mute-box {
+  accent-color: var(--accent);
+}
+
+.sound-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.game-menu-panel .sound-panel {
+  padding: 10px 0 4px;
+  border-top: 1px solid var(--line);
+}
+
+.front-settings {
+  width: min(460px, 100%);
+}

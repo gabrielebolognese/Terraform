@@ -403,7 +403,7 @@ describe("milestones", () => {
     const host = document.createElement("div");
     document.body.append(host);
     const sounds: boolean[] = [];
-    const cards = new MilestoneCards(host, (grand) => sounds.push(grand));
+    const cards = new MilestoneCards(host, (m) => sounds.push(m.grand));
     cards.push([
       { kind: "phase", title: "Phase 2: Runaway thickening", text: "", grand: true },
       { kind: "founded", title: "Ares is founded", text: "", grand: false },
