@@ -181,11 +181,12 @@ in flight still move), each level's frame time measured on the player's machine.
 shortcuts by physical key, each with two rebindable slots that swap on conflict; camera speed;
 edge scrolling; invert zoom; trackpad pinch and two-finger panning, and pinch on touch, in every
 view. Interface: the panels' size (never the canvases'), red-green and blue-yellow colour-blind
-palettes for the page and the canvases (measured under simulated colour blindness), reduced
+palettes for the page, the city and the planner's map (measured under simulated colour blindness), reduced
 motion (a cut for the flight down, a still planet), high contrast, and which alerts pop up.
 Saving: the autosave interval, Ctrl+S, and where the worlds are kept. Every colour code has a
 second cue - a word, a sign, a shape, on the planner's map a pattern, on the world map a shape for
-each kind of settlement - and a test holds the stylesheet's colour rules to a register of them. No setting changes the simulation: the same
+each kind of settlement, on a chart a pattern for each line and a named strip for each shortage -
+and a test holds the stylesheet's colour rules, and every chart, to a register of them. No setting changes the simulation: the same
 frames with every setting moved come out the same.
 
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,

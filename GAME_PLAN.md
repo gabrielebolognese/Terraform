@@ -861,12 +861,14 @@ pressing the key (any key, Esc too), a key taken from another action swapped; ca
 the keys and the screen's edge; edge scrolling in a city; invert zoom on every wheel; a trackpad's
 pinch zooming everywhere and, by choice, two fingers moving the view; two fingers pinching on a
 touch screen. Interface: the panels' size (never the canvases'), red-green and blue-yellow
-colour-blind palettes for the page and every canvas colour code, reduced motion (the interface
+colour-blind palettes for the page, the city and the planner's map, reduced motion (the interface
 still, the flight down a cut, the planet not turning), high contrast, and which alerts pop up.
 Saving: an autosave interval, Ctrl+S, and the menu saying when the world was last saved and where
 the worlds are kept. Every colour code has a second cue, and a test holds the stylesheet's colour
 rules to a register of them, each state put on screen by the real components; the planner's map
-carries patterns and names what is under the pointer.
+carries patterns and names what is under the pointer; the world map's settlements have shapes by
+kind; every chart of more than one line gives each line a pattern, drawn and named in its key,
+and each shortage a strip with its name on it, all 19 charts registered.
 
 **Decisions taken** (none were set for Phase 1; each recorded with its reason in the note):
 1. **A store of their own**: a third IndexedDB object store, `player`; the v1 record moved on first
@@ -899,6 +901,12 @@ carries patterns and names what is under the pointer.
   outpost a square, a city a disc, a metropolis a diamond, a ruin crossed out) at every zoom: they
   were a colour code the batch had not registered, and with gold markers a city and a metropolis
   differed only in size.
+- **Review 2's fix**: the charts' lines given patterns (solid, dashed, dotted, dash-dot, long
+  dashes), drawn and named in their keys, and the shortages a strip each with its name: every line
+  had been a solid stroke told from its neighbour by colour alone, Food made and used 30.1 apart for
+  deuteranopes, and the four shortages' bars each under a pixel wide. All 19 charts registered and
+  tested from what their canvases draw. The palettes do not reach the charts or the world map; the
+  plan's "palettes for every canvas colour code" is corrected to what they reach.
 
 ---
 

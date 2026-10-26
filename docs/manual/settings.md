@@ -48,7 +48,7 @@ four keys whatever your keyboard's layout. See [Controls](controls.md#keyboard) 
 | Setting | Choices | What it does |
 |---|---|---|
 | **Interface size** | 75% to 150% | The size of the panels, buttons and text. The planet and your cities are drawn the same. |
-| **Colours** | **Standard**, **Red-green colour-blind safe**, **Blue-yellow colour-blind safe** | Changes the colours that mean something - good, warning and bad, alerts, the planner's map, its coverage, its zones' first colours and the land a city can claim - to ones that stay apart for that kind of colour blindness. |
+| **Colours** | **Standard**, **Red-green colour-blind safe**, **Blue-yellow colour-blind safe** | Changes the colours that mean something - good, warning and bad, alerts, the planner's map, its coverage, its zones' first colours and the land a city can claim - to ones that stay apart for that kind of colour blindness. The charts and the world map keep their colours: a chart's lines have patterns, and the map's settlements shapes, which tell them apart in any colours. |
 | **Motion** | **Follow my system's setting**, **Reduced**, **Full** | With motion reduced, nothing in the panels slides, fades or pulses; going down to a city and back up is a cut instead of a flight; and the planet does not turn by itself. |
 | **High contrast** | on or off | Solid black panels, white text and stronger edges. |
 | **Pop-up alerts** | **Urgent alerts and notices**, **Urgent alerts only**, **None** | Which alerts pop up (and sound). **Alerts** keeps every one whatever you choose. |

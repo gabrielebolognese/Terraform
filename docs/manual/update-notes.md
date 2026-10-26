@@ -42,6 +42,10 @@ how often your world is saved. Colour is never the only way the game tells you s
   is a small square, a city a round dot, a metropolis a larger diamond, and a settlement lost to the
   sea is crossed out. The mark stays on the city when you zoom in close, and with gold markers on,
   cities and metropolises are still told apart by their shapes.
+- The charts, in **Statistics** and the planner's **Charts** tab, give each line its own pattern
+  as well as its colour - solid, dashed, dotted, dash-dot, long dashes - shown and named in the
+  key, for example "Used (dashed)". The shortages chart gives blackouts, water, oxygen and food a
+  strip each, with its name on it, where their bars stood side by side, too thin to tell apart.
 - **Alerts** says how many are urgent, for example **Alerts (3, 1 urgent)**, in its own words as
   well as in red.
 - A milestone in the planet's news says "milestone", as a warning says "warning".

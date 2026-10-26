@@ -99,7 +99,43 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
     title named the railway; the manual stated the menu's rule); the third, "every colour code has a
     second cue" in this note and the README, was not true of the world map until the fix. The
     lesson is Batch 10's again: a test's title is a claim, and only a fault that fails it proves it.
-11. **A zone's colour is the player's, and lives in the save.** A colour-blind palette passing its
+11. **Review 2 rejected the batch: the charts told their lines apart by colour alone.** A second
+    review round and a second fix session - the same fault as the world map's, one canvas over.
+    Every line of every chart was a solid 1.5 px stroke and every key a colour square; Food made
+    and used (`#e38b4f`, `#ef6b6b`) are 30.1 apart for deuteranopes, Materials made and used 38.0,
+    Born and Lost 52.5, under the 45 the batch's own tests hold a palette's closest kinds to. The
+    shortages were four bars side by side to a year, each under a pixel wide. No palette touches
+    the charts' colours. The register had grown from the stylesheet to every canvas the batch had
+    added a pattern to, and then to the world map once review 1 found it - never to a list of
+    every canvas the game draws a colour code on.
+    - **Lines**: in a chart of more than one, each line has a pattern by its place - solid, dashed,
+      dotted, dash-dot, long dashes (the five resources are the most a chart has) - and the key
+      draws a sample of the line in its colour and pattern and names it ("Homes (dashed): 320").
+      Made is solid and Used dashed on all five made-and-used charts. A chart of one line keeps a
+      solid line and its key no pattern's name.
+    - **Shortages**: a strip each, top to bottom in the key's order, its baseline, its bars a year
+      each as wide as a year's slot, and its name over its bars, outlined in the chart's ground.
+    - **The test** (`settings-cues.test.ts`, "the charts") opens Statistics on a city and on the
+      planet and the planner's Charts tab, records what each chart's canvas draws, and registers
+      all 19 charts by how their series are told apart (patterns, strips, or one line), checked
+      both ways: a chart drawn and not registered fails, and so does one registered and not
+      drawn. For a chart of lines, every line one stroke a year long, no two alike without their
+      colours, the key's sample the same dash as its line, and the pattern's name in the key true
+      of the dash; for the strips, each series' name drawn and its bars between it and the next
+      name. Nine faults, one at a time, all caught (66 to 74).
+    - **Looked at**: the charts drawn by a scratch software context to a PNG at three times their
+      size. The five patterns are distinct at 1.5 px, Made and Used stay solid and dashed where the
+      two lines nearly meet, and the strips' bars stay in their strips.
+    - **Every other canvas, looked at** (read in the code, not tested): the HUD's sparklines are one
+      line each beside their metric's name; the city's offline and unlinked badges differ by what is
+      drawn in the diamond (Batch 7); a placement refused is crossed (tested); the world map's
+      railways are one colour; the globe, the worlds' thumbnails and the build bar's pictures are
+      pictures, not codes. The palettes reach the page, the city and the planner's map, not the
+      charts or the world map; GAME_PLAN's "every canvas colour code" was corrected to that.
+    What it cost: a second fix round, on the claim "every colour code has a second cue" again. Review
+    1's lesson was taken for the one canvas it named, not for the claim: the fix session checked
+    the world map and not what else the game draws in colour.
+12. **A zone's colour is the player's, and lives in the save.** A colour-blind palette passing its
    own colours into new zones would have made a setting write the world. The palettes instead
    swap the game's eight first zone colours for their own at drawing time; a colour the player
    picked is drawn as picked. The standard palette's first colours are tested to be the
@@ -197,12 +233,18 @@ files, 1,475 tests (two new), all passed (533.1 s; the Known-red opening test pa
 green (655.42 kB JS, 221.67 kB gzip; 52.14 kB CSS); `build` green. Still nothing in `src/sim/`
 changed.
 
+**After review 2's fix**: typecheck green; `npx vitest run --maxWorkers=2 --minWorkers=1`: 123
+files, 1,476 tests (one new), all passed (451.8 s; the Known-red opening test passed); `build:web`
+green (656.72 kB JS, 222.17 kB gzip; 52.19 kB CSS); `build` green. Nothing in `src/sim/` or
+`src/render/` changed.
+
 ## Injections
 
-65 faults (56 in the batch, 9 in review 1's fixes), one at a time, each file restored from a
-backup and the tree checked after each (`git diff --quiet` on the file; the one stop, after 55,
-was the uncommitted fix itself, compared with the last commit - the file was restored byte for
-byte; in the fix round, `git diff --stat` or `cmp` against the backup). 63 caught at once; 40
+74 faults (56 in the batch, 9 in review 1's fixes, 9 in review 2's), one at a time, each file
+restored from a backup and the tree checked after each (`git diff --quiet` on the file; the one
+stop, after 55, was the uncommitted fix itself, compared with the last commit - the file was
+restored byte for byte; in the fix rounds, `git diff --stat` or `cmp` against the backup). 72
+caught at once; 40
 caught once its test read what is on screen; 51 changes nothing the test can call wrong
 (measured).
 
@@ -273,6 +315,15 @@ caught once its test read what is on screen; 51 changes nothing the test can cal
 | 63 | a ruin not crossed out | cues: the world map's marks | caught |
 | 64 | a metropolis a square like an outpost | cues: the world map's marks | caught: two shapes, not three |
 | 65 | the mark drawn only far out | cues: the world map's marks | caught: up close, no mark |
+| 66 | every chart line drawn solid (review 2's fault) | cues: the charts | caught: "Population: lines told apart without colour: 1 looks for 2 lines" |
+| 67 | the key's sample drawn solid | cues: the charts | caught: "Homes: the key's sample [] is not its line" |
+| 68 | the key does not name the pattern | cues: the charts | caught |
+| 69 | dashed and dotted named the wrong way round | cues: the charts | caught: "the key says "Homes (dotted): 322", the line is drawn [6,4]" |
+| 70 | the shortages side by side again | cues: the charts | caught: "Blackout (power): not named on the chart" |
+| 71 | the strips not named | cues: the charts | caught |
+| 72 | every strip in the same place | cues: the charts | caught: "bars outside its strip" |
+| 73 | a chart renamed, so not registered | cues: the charts | caught: "charts with no cue registered: Births and deaths" |
+| 74 | the fifth line given the first's pattern | cues: the charts | caught: "Stores: 4 looks for 5 lines" |
 
 ## Decisions
 
