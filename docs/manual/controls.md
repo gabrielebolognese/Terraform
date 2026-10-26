@@ -70,5 +70,9 @@ Opening the game menu pauses the world; closing it goes back to the speed you ha
 
 ## The game menu
 
-**Resume**, **Save**, **Settings** (not available yet) and **Save and quit to title**. On the
+**Resume**, **Save**, **Settings** and **Save and quit to title**. On the
 Example planet nothing is saved, so the last button is just **Quit to title**.
+
+**Settings** opens the sound settings under it - a volume for everything, the music, the ambience,
+the effects and the interface, and mute - and closes them again. The same settings are on the title
+screen. See [Sound and music](sound.md).

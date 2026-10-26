@@ -28,6 +28,9 @@ Saves are kept in your web browser. Clearing your browser's site data deletes th
 window does not keep them; the title screen warns you if this browser cannot keep worlds. Use
 **Export** to keep a copy that is safe from that.
 
+Your sound settings are kept apart from your worlds, by this browser, for every world you play:
+they are not in a world's save or its exported file. See [Sound and music](sound.md).
+
 Each world has one save. To keep an earlier state, **Duplicate** the world first, or **Export** it.
 
 ## A world that will not load

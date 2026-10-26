@@ -4,6 +4,52 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 35 - Sound and music
+
+Mars has a voice now: music that warms as the planet does, wind that thickens with the air, the hum
+of your cities, and a sound for every building placed, finished and upgraded, every train and
+rocket, and every alert.
+
+**New**
+- **Music** for every phase of the planet, from the cold, sparse **Cold ground** on bare Mars to the
+  warm, full **Living world**. When the planet reaches a new phase, the music fades into the new
+  piece over about eight seconds. See [Sound and music](sound.md).
+- **Ambience**: the wind, louder and deeper as the air thickens and harder in a dust storm; rain,
+  once clouds form over open water on a planet above freezing; the sea, once there is one, louder
+  for a city near its shore; and in a city, the hum of the running buildings near the middle of your
+  view.
+- **Effects**: a thump as you place a building, bell notes when one is finished, rising notes for an
+  upgrade, the rush of a train going by and the roar of a rocket lifting off. In a city they come
+  from where they happen: louder near the middle of your view, and from the left or the right.
+- **Sounds for alerts**: two soft notes for an alert that pops up, three quick pairs for an urgent
+  one. A soft tick for every button.
+- **Sound settings**: **Settings** on the title screen, or **Menu** then **Settings** in a world. A
+  slider each for **Master volume**, **Music**, **Ambience**, **Effects** and **Interface**, and
+  **Mute all sound**. They are yours, kept for every world you play.
+
+**Changed**
+- The game is silent until your first click or key press, as browsers require; then the music
+  starts.
+- The milestone chime is part of the game's sound now, on the **Interface** slider.
+- **Credits** says where the music and sound come from: the game makes them itself.
+
+**Fixed**
+- Alerts, events and Earth were silent. An event that needs your choice now sounds as an urgent
+  alert; a missed launch window and a failed contract as an alert; a rocket to Earth roars as it
+  lifts off.
+- The milestone chime could not be turned down or off.
+
+**Known issues**
+- Graphics and control settings are not available yet.
+- Your sound settings are kept by this browser: another browser, or a world's exported file, does
+  not carry them.
+- On the Example planet, buildings finishing and rockets lifting off make no sound.
+- A rocket coming home makes no sound; only its lift-off does.
+- A train that stops at a station near the middle of your view is heard as it comes, not again as
+  it leaves.
+
+---
+
 ## Update 34 - Earth: trade, shipments and contracts
 
 Earth is part of the game now. Every time Mars and Earth line up, your Spaceports' rockets fly
@@ -327,7 +373,7 @@ and railways between settlements; and the Example planet.
 - In a city, a right click also places or selects, the same as a left click.
 - The **While you were away** summary only appears in the Instruments drawer.
 - The ocean cover bar's minimum mark says "0.3%" when it means 30%.
-- **Settings** are not available yet.
+- **Settings** has only the sound so far: graphics and control settings are not available yet.
 - There is no ending yet: the game carries on after the planet becomes a Living world.
 - In a city, trains on different lines pass through each other where the lines cross.
 - A rover driving past another one at work beside its site can pass through it.
@@ -336,13 +382,11 @@ and railways between settlements; and the Example planet.
   is none: use **Level ground** on that tile instead.
 - The guide's sixth step, claiming land, waits for 200 people: the guide takes about 40 minutes to
   an hour to finish.
-- The milestone chime cannot be turned down or off yet.
 - A reward of settlers or materials is partly lost when the city has no empty homes or no room in
   its stores.
 - The bar for "The caps let go" moves with the weather, and a dust storm can take it back for a
   while.
 - The **What happened** list in **Alerts** starts fresh each time you open a world.
-- Alerts make no sound yet.
 - On a very large world, with dozens of cities, an alert can come a few seconds late.
 - In a city, the pop-up messages can cover the Objectives panel while it is open.
 - The statistics' charts show each line's latest value in their key; there is no reading under the
@@ -361,5 +405,9 @@ and railways between settlements; and the Example planet.
   one's rocket is away.
 - At Classic pace a launch window, and an offer from Earth, come about every 71 seconds.
 - The statistics do not chart your trade with Earth or your reputation.
-- Earth makes no sound yet.
-- Events make no sound yet.
+- Your sound settings are kept by this browser: another browser, or a world's exported file, does
+  not carry them.
+- On the Example planet, buildings finishing and rockets lifting off make no sound.
+- A rocket coming home makes no sound; only its lift-off does.
+- A train that stops at a station near the middle of your view is heard as it comes, not again as
+  it leaves.

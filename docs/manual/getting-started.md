@@ -2,7 +2,8 @@
 
 ## The title screen
 
-When the game opens you see Mars turning slowly behind the menu:
+When the game opens you see Mars turning slowly behind the menu. The game is silent until your
+first click or key press, as browsers require; then the music starts.
 
 - **Continue - *name*** opens the world you played last. With no world yet it just says
   **Continue** and cannot be pressed.
@@ -11,8 +12,9 @@ When the game opens you see Mars turning slowly behind the menu:
 - **New world** makes a new planet to play.
 - **Example planet** shows a fully terraformed Mars with cities and metropolises already built,
   to look around. It takes about forty seconds to build, and nothing you do there is saved.
-- **Settings** is not available yet; sound, graphics and control settings arrive in a later
-  update.
+- **Settings** sets the sound: a volume for the music, the ambience, the effects and the
+  interface, and mute. Graphics and control settings arrive in a later update. See
+  [Sound and music](sound.md).
 - **Credits** says who made the game.
 
 ## Making a world

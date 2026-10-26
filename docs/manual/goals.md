@@ -97,7 +97,8 @@ and neither do worlds made before Update 30.
 ## Milestones
 
 When something big happens, a card appears in the middle of the screen with a moment of light round
-its edge and a short chime:
+its edge and a short chime - a grander one for a new phase (the **Interface** volume in
+[Sound and music](sound.md)):
 
 - the planet reaches a new **phase**;
 - a **city** is founded;

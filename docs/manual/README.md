@@ -26,6 +26,7 @@ This manual describes the game as it is today. What changed in each update is in
 | [Earth](earth.md) | Launch windows, buying from and selling to Earth, prices, contracts and your reputation |
 | [Buildings](buildings.md) | Every structure: what it costs, what it does, how long it takes |
 | [Controls](controls.md) | Mouse, keyboard and game speed in every view |
+| [Sound and music](sound.md) | The music for each phase, the wind, rain, sea and machinery, every sound effect, and the volume settings |
 | [Worlds and saving](worlds-and-saving.md) | Keeping several worlds, saving, backups, and what happens while you are away |
 | [Update notes](update-notes.md) | What is new, changed and fixed in each update, and known issues |
 
@@ -51,6 +52,9 @@ This manual describes the game as it is today. What changed in each update is in
 7. **Trade with Earth.** Every 9 and a half minutes or so a launch window opens: your Spaceports'
    rockets fly to Earth with what you sell and come back with what you ordered. Earth offers
    contracts that pay well if you deliver on time. Press **Earth** to trade.
+
+Sound starts with your first click: music that warms as the planet does, and a sound for what you
+do and what finishes. **Settings** sets the volumes.
 
 A full terraforming is a long game: several days of play at normal speed. Cities move faster,
 with buildings that go up in seconds or minutes at first and take hours at their highest levels.
