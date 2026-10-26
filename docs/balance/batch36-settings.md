@@ -69,7 +69,37 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
      test could not have told it from one, so every pair is now bounded at under its measurement
      (80; 150 for blue-yellow), and putting back two of the standard's colours (54) is caught at
      46.7.
-9. **A zone's colour is the player's, and lives in the save.** A colour-blind palette passing its
+10. **Review 1 rejected the batch: three things the note said were checked were not.** A review
+    round and a fix session.
+    - **A railway was never laid in the cue test.** The pattern test was titled for "a power line,
+      a railway, a plan, a gap and a zone's edge", but its city only *planned* a railway, so the
+      railway's stripes were never looked at, nor the word "railway" under the pointer; the review
+      drew railways solid and both test files passed. The test's city now lays one: striped in
+      every palette and named under the pointer, each broken once (57, 58).
+    - **Nothing held a shortcut back under the game menu.** One line in the key handler keeps every
+      key but Esc and Ctrl+S from acting while the menu holds the world still; without it, Space or
+      1-4 would run the world behind the open menu and M, B or P would move the view under it.
+      The review took the line out and the gate passed, 22 of 22. A test now opens the menu, in
+      orbit and in a city, presses the pause, every speed, every panel, the map, the planner, back
+      to orbit, upgrade and the zoom, holds a camera key from before the menu opened, and finds the
+      world held and nothing moved; then closes it and finds the same keys live. Both guards (the
+      handler's and the held camera keys') broken once (59, 60).
+    - **The world map's settlements were a colour code nobody had registered**: a metropolis
+      yellow, a city blue, an outpost grey, a ruin dark grey. Far out they differed in size too (5,
+      3.5 and 2.5 px), up close not at all - and with gold markers claimed, a city and a metropolis
+      are one colour, so size was all that told them apart. The batch's register held only the
+      stylesheet's rules; a canvas's colours were checked only where the batch had added patterns.
+      The marks now have shapes - an outpost a square (as its pin on the planet), a city a disc, a
+      metropolis a larger diamond, a ruin crossed out - drawn at every zoom (up close over the land
+      the settlement holds) with a dark outline. The test records what the map draws and compares
+      each mark's path scaled to one size, so two marks that differ only in size count as the same
+      shape; far out and up close, in the kinds' colours and in gold. The map as it was fails it
+      (61), and so does each part of the shapes broken alone (62 to 65).
+    What it cost: a fix round. Two of the three were true of the code but checked by nothing (a test
+    title named the railway; the manual stated the menu's rule); the third, "every colour code has a
+    second cue" in this note and the README, was not true of the world map until the fix. The
+    lesson is Batch 10's again: a test's title is a claim, and only a fault that fails it proves it.
+11. **A zone's colour is the player's, and lives in the save.** A colour-blind palette passing its
    own colours into new zones would have made a setting write the world. The palettes instead
    swap the game's eight first zone colours for their own at drawing time; a colour the player
    picked is drawn as picked. The standard palette's first colours are tested to be the
@@ -112,7 +142,8 @@ Built unattended (`/next-batch auto`), one session, 2026-10-16.
 - **Second cues** (`src/web/palette.ts`, the planner, the city's claims): the planner's map draws
   power lines dashed, railways striped, plans dotted, zones outlined and coverage gaps hatched,
   names what is under the pointer, and shows the patterns in its legend; land a city cannot claim
-  yet has a dashed edge; each palette has its own building, coverage, zone and claim colours.
+  yet has a dashed edge; each palette has its own building, coverage, zone and claim colours. On
+  the world map (review 1's fix), each kind of settlement has its own shape, at every zoom.
 
 ## Measurements
 
@@ -161,12 +192,19 @@ palettes, `--ui-scale`, reduced motion and high contrast). The simulation is unc
 `src/sim/` changed, and the golden run, golden frames, Batch 3 score and determinism are in the
 suite as they were.
 
+**After review 1's fixes**: typecheck green; `npx vitest run --maxWorkers=2 --minWorkers=1`: 123
+files, 1,475 tests (two new), all passed (533.1 s; the Known-red opening test passed); `build:web`
+green (655.42 kB JS, 221.67 kB gzip; 52.14 kB CSS); `build` green. Still nothing in `src/sim/`
+changed.
+
 ## Injections
 
-56 faults, one at a time, each file restored from a backup and the tree checked after each
-(`git diff --quiet` on the file; the one stop, after 55, was the uncommitted fix itself, compared
-with the last commit - the file was restored byte for byte). 54 caught at once; 40 caught once its
-test read what is on screen; 51 changes nothing the test can call wrong (measured).
+65 faults (56 in the batch, 9 in review 1's fixes), one at a time, each file restored from a
+backup and the tree checked after each (`git diff --quiet` on the file; the one stop, after 55,
+was the uncommitted fix itself, compared with the last commit - the file was restored byte for
+byte; in the fix round, `git diff --stat` or `cmp` against the backup). 63 caught at once; 40
+caught once its test read what is on screen; 51 changes nothing the test can call wrong
+(measured).
 
 | # | Fault | Test | Result |
 |---|---|---|---|
@@ -226,6 +264,15 @@ test read what is on screen; 51 changes nothing the test can call wrong (measure
 | 54 | the page's red-green good and warning both the standard's | cues: the page's colours (46.7 < 80) | caught |
 | 55 | Esc with the menu open in a city does nothing to it | gate: Esc closes the game menu in a city | caught |
 | 56 | the city under the menu hears its Esc too | gate: Esc closes the game menu in a city | caught |
+| 57 | a railway drawn solid (review 1's fault) | cues: the planner's patterns | caught: one lightness, not two (it passed before the test laid a railway) |
+| 58 | a railway laid not named under the pointer | cues: names what is under the pointer | caught: "Here: open ground." |
+| 59 | the key handler's guard under the menu taken out (review 1's fault) | gate: under the open game menu | caught: the world at 10x, not held |
+| 60 | held camera keys move the view under the menu | gate: under the open game menu | caught: 286.7 px moved |
+| 61 | the world map's marks as before the fix | cues: the world map's marks | caught: far out, three discs one shape |
+| 62 | every kind a disc, sized by its kind | cues: the world map's marks | caught |
+| 63 | a ruin not crossed out | cues: the world map's marks | caught |
+| 64 | a metropolis a square like an outpost | cues: the world map's marks | caught: two shapes, not three |
+| 65 | the mark drawn only far out | cues: the world map's marks | caught: up close, no mark |
 
 ## Decisions
 

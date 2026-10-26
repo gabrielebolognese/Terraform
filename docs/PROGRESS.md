@@ -1451,3 +1451,34 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     the walls hold; Batch 35's record is moved and never deleted; the manual's statements checked
     against the code (the pictures' 48/96/144 MB, the speed keys per pace, the line under the
     planner's map, a landing rocket still moving with moving details off) hold.
+- fix 1: done
+  1. A railway laid in the cue test's city (`settings-cues.test.ts`, `planned()`): the pattern
+     test asserts its two lightnesses in every palette, and the pointer test that the line under
+     the map names it "railway" (not "railway planned"). Review 1's fault (`planner.ts:165` drawn
+     solid) caught: "standard: railway striped: expected 1 to be 2"; the word taken out caught:
+     "Here: open ground.".
+  2. `settings-gate.test.ts`, "under the open game menu no shortcut acts but its own key and
+     Save": in orbit, `setPaused(true)`, then Space, 1-4, N, C, E, O and M - the world still held
+     (speed 0, no steps), no panel and no map open; Ctrl+S still saves; closed, the same keys act.
+     In a city, B, P, U, = and - and a camera key held from before the menu opened - still in the
+     city, no planner, the camera unmoved; closed, P opens the planner. The guard at
+     `game.ts:399` taken out: caught ("the world is still held: expected 10 to be 0"); the held
+     camera keys' guard (`game.ts:472`) taken out: caught (286.7 px moved).
+  3. The world map's settlements given shapes by kind (`world-map.ts`, `drawMark`): an outpost a
+     square, a city a disc, a metropolis a larger diamond, a ruin crossed out, outlined dark, at
+     every zoom (up close over the land held). `settings-cues.test.ts`, "the world map's marks":
+     a recording context, each mark's path taken about its point and scaled to one size (so size
+     alone is not a shape), far out and up close, in the kinds' colours and in gold (where a city
+     and a metropolis are one colour). Five faults, one at a time, all caught: the map as it was
+     (three discs one shape), every kind a disc, a ruin not crossed, a metropolis a square, the
+     mark only far out.
+  - Player documentation: docs/manual/cities.md (the world map's marks), docs/manual/update-notes.md
+    (Update 36, Changed). Note: item 10, the injection table (57-65, 65 faults in all), the
+    verification after the fixes. GAME_PLAN.md and README.md: the world map's shapes.
+  - verification: typecheck green; `npx vitest run --maxWorkers=2 --minWorkers=1`: 123 files,
+    1,475 tests, all passed (533.1 s; the Known-red opening test passed); `build:web` green
+    (655.42 kB JS, 221.67 kB gzip; 52.14 kB CSS); `build` green. Nothing in `src/sim/` changed.
+  - commits: 449c73b (fix 1), 51c70d9 (fix 2), adfdf68 (fix 3), and the review 1 fixes commit.
+  - review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch36-settings.md
+    docs/manual/cities.md docs/manual/update-notes.md src/web/settings-cues.test.ts
+    src/web/settings-gate.test.ts src/web/world-map.ts
