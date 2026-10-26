@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 34
-in_progress_batch: 35
+last_completed_batch: 35
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -1120,5 +1120,65 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
       to amount. That is what it is for, and #58 shows it catches half pay.
 
 ### Batch 35 - Sound: music, ambience and effects
-- status: in progress
+- status: complete
+- note: docs/balance/batch35-sound.md
+- manual: docs/manual/sound.md (new: when sound starts, the music by phase, ambience, effects,
+  alerts and buttons, the sound settings), docs/manual/update-notes.md (Update 35, the current known
+  issues), docs/manual/README.md (contents, the game in one minute), docs/manual/getting-started.md
+  (Settings, silent until the first click), docs/manual/controls.md (the menu's Settings),
+  docs/manual/alerts-and-statistics.md (the pop-ups' sounds), docs/manual/events.md (the card's
+  sound), docs/manual/goals.md (the chime), docs/manual/earth.md (the rocket's roar),
+  docs/manual/worlds-and-saving.md (settings kept apart from worlds); docs/credits.md (new)
+- commits: 8310ca6 (started), 5fd646e, 7497e34, b0eec95, 7a0fc24, 09c4f00, and the completing commit
 - sessions: 1 (2026-10-16)
+- found:
+  - the title's music stopped after half a second: only a world's frame loop asked the engine to
+    write notes, and the title has none. Every test drove `frame` itself. The injection run found
+    it (the game's call removed changed no test); the engine keeps its own 200 ms clock now.
+  - the injection run found five weak or missing tests (a claim's false finish heard at the wrong
+    time; the world from the title never checked to use the title's engine; a refused placement
+    never reaching the place hook because the card was chosen twice; leaving for orbit from
+    silence) and one of its own faults that did not compile; all fixed and caught.
+  - the music's first test was vacuous: Cold Ground's notes all lie in First Water's mode; it now
+    follows each note to the piece it feeds.
+  - a rocket test passed with no rocket (refused: the stores were full); launches now assert.
+  - docs/AUTO_BATCH_SETUP.md (untracked, not this batch's) left as it is.
+- decisions:
+  - Every sound made by the game (oscillators and generated noise), no files: "self-made", nothing to
+    license or download; recorded in docs/credits.md with Lexend's licence.
+  - No AudioContext at all before the first pointerdown, keydown or touchend; effects asked for
+    before are dropped, the music and beds asked for start at the gesture.
+  - The music follows the phase reached (only goes forward), not the current phase: never flips at
+    a boundary. The title plays Phase 0's piece.
+  - Rain derived from clouds over open water above freezing (the simulation has no rain); a dust
+    storm blows the wind harder.
+  - Alerts, objectives, milestones and buttons on the interface channel; the world's effects on the
+    effects channel, placed in the city view by the camera's ear.
+  - The example planet's happenings (built, upgraded, rockets) are not heard; its music and beds are.
+  - Sound constants are browser constants in src/web, not tuning.ts and section 10: they change
+    nothing the simulation computes, like config.ts's.
+  - Settings kept per player as a "settings" record in the store's index beside the worlds list;
+    the rest of the record kept for Batch 36. A master volume and mute beside the four channels.
+  - At most three of one effect a look (a high speed finishes dozens of buildings a second).
+  - Batch 30's chime.ts removed: it made its own AudioContext outside any gesture.
+- verification: typecheck green; npx vitest run --maxWorkers=2 --minWorkers=1: 120 files, 1,428
+  tests, all passed (454 s; the Known-red opening test passed); build:web green (623.88 kB JS,
+  210.56 kB gzip - past Vite's 500 kB warning, as recorded since Batch 31; 49.29 kB CSS); build
+  green; the built page, its script and its styles served and fetched over HTTP (the script holds
+  "Master volume" and "Cold ground", the styles the sound panel). The simulation is unchanged: the
+  golden run, golden frames, Batch 3 score and determinism are in the suite as they were.
+- injections: 80 faults, one at a time, each file restored byte for byte and checked: 73 caught at
+  once; 4 caught once a test was added or strengthened (35, 65, 69, 75); 1 showed a defect (72, the
+  title's music; fixed, its replacement faults 79 and 80 caught); 1 changes nothing as written (44,
+  a second guard; caught coherent as 75); 1 was no fault (55, did not compile; redone as 76, caught).
+  The table is in the note.
+- review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch35-sound.md
+  docs/credits.md docs/manual/README.md docs/manual/alerts-and-statistics.md
+  docs/manual/controls.md docs/manual/earth.md docs/manual/events.md
+  docs/manual/getting-started.md docs/manual/goals.md docs/manual/sound.md
+  docs/manual/update-notes.md docs/manual/worlds-and-saving.md src/web/app.ts src/web/chime.ts
+  (deleted) src/web/city.ts src/web/fake-audio.ts src/web/game.ts src/web/main.ts
+  src/web/milestones.ts src/web/onboarding.test.ts src/web/sound-ambience.ts src/web/sound-cues.ts
+  src/web/sound-director.ts src/web/sound-engine.ts src/web/sound-gate.test.ts
+  src/web/sound-music.ts src/web/sound-panel.ts src/web/sound-recipes.ts src/web/sound-settings.ts
+  src/web/sound.test.ts src/web/style.css
