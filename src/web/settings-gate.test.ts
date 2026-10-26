@@ -32,66 +32,20 @@ import { SettingsPanel } from "./settings-panel.js";
 import { FrameCosts } from "./frame-costs.js";
 import type { Settings } from "./settings.js";
 import { MemorySaveStore } from "./storage.js";
+import { Frames, drawCities, restoreCanvases } from "./test-frames.js";
 
 const T = worldTuning("standard", 0, "standard");
 const cfg = { tuning: T, env: NEUTRAL_ENV, forcing: null };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Animation frames and `performance.now` by hand: each step is `ms` of the page's time. */
-class Frames {
-  t = 10_000;
-  private readonly queue = new Map<number, FrameRequestCallback>();
-  private next = 0;
-
-  install(): void {
-    vi.spyOn(performance, "now").mockImplementation(() => this.t);
-    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
-      this.next += 1;
-      this.queue.set(this.next, cb);
-      return this.next;
-    });
-    vi.stubGlobal("cancelAnimationFrame", (id: number) => {
-      this.queue.delete(id);
-    });
-  }
-
-  step(n = 1, ms = 16): void {
-    for (let k = 0; k < n; k += 1) {
-      this.t += ms;
-      const due = [...this.queue.values()];
-      this.queue.clear();
-      for (const cb of due) cb(this.t);
-    }
-  }
-}
-
-/** A 2D context that draws nothing, so the city's whole frame - its level of detail, its pictures - runs in happy-dom. */
-function nullContext(counted: { fills: number }): CanvasRenderingContext2D {
-  const handler: ProxyHandler<Record<string | symbol, unknown>> = {
-    get(target, key) {
-      if (key in target) return target[key];
-      if (key === "fill") return () => (counted.fills += 1);
-      if (key === "measureText") return () => ({ width: 10 });
-      if (key === "getImageData" || key === "createImageData") return (w = 1, h = 1) => ({ data: new Uint8ClampedArray(4 * Math.max(1, w) * Math.max(1, h)), width: w, height: h });
-      return () => new Proxy({}, handler);
-    },
-    set(target, key, value) {
-      target[key] = value;
-      return true;
-    },
-  };
-  return new Proxy({}, handler) as unknown as CanvasRenderingContext2D;
-}
-
 let frames: Frames;
-const realGetContext = HTMLCanvasElement.prototype.getContext;
 beforeEach(() => {
   frames = new Frames();
 });
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  HTMLCanvasElement.prototype.getContext = realGetContext;
+  restoreCanvases();
   setWaitingForKey(false);
   document.body.replaceChildren();
   document.head.querySelectorAll("style[data-test]").forEach((s) => s.remove());
@@ -101,16 +55,6 @@ afterEach(() => {
   html.removeAttribute("data-motion");
   html.style.removeProperty("--ui-scale");
 });
-
-/** The city's canvases get a context that draws nothing but counts its fills; the planet's none (it would draw in software). */
-function drawCities(): { fills: number } {
-  const counted = { fills: 0 };
-  HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, kind: string) {
-    if (kind !== "2d" || this.classList.contains("globe-canvas")) return null;
-    return nullContext(counted);
-  } as typeof HTMLCanvasElement.prototype.getContext;
-  return counted;
-}
 
 /** The game's stylesheet on the page, as the browser has it. */
 function styles(): void {

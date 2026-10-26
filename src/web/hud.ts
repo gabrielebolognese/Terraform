@@ -692,9 +692,9 @@ export class Hud {
        */
       item.append(el("span", "hud-feed-year", `year ${event.year.toFixed(0)}`));
       item.append(document.createTextNode(" "));
-      // The tone word, so "warning" is not carried by colour alone.
-      if (event.tone === "warning") {
-        item.append(el("span", "hud-feed-tone", "warning"));
+      // The tone word, so "warning" - and since Batch 36 "milestone" - is not carried by colour alone.
+      if (event.tone !== "note") {
+        item.append(el("span", "hud-feed-tone", event.tone));
         item.append(document.createTextNode(" "));
       }
       item.append(el("span", "hud-feed-text", event.text));

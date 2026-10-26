@@ -38,6 +38,7 @@ import type { Settings } from "./settings.js";
 import { CHUNK_PIXELS, DEFAULT_SETTINGS } from "./settings.js";
 import type { FrameCosts } from "./frame-costs.js";
 import { Pinch, wheelIntent } from "./gestures.js";
+import { MAP_PALETTES } from "./palette.js";
 
 export interface ActionOutcome {
   readonly ok: boolean;
@@ -688,7 +689,18 @@ export class CityScreen {
 
   sceneOptions(now: number): CitySceneOptions {
     const claimable = this.claimable();
-    return { time: now / 1000, selected: this.selected, ghost: this.ghost(), selectedTile: this.selectedTile, sinceYears: this.sinceYears, seeThrough: this.building, ...(claimable === undefined ? {} : { claimable }) };
+    const palette = this.prefs().ui.palette;
+    return {
+      time: now / 1000,
+      selected: this.selected,
+      ghost: this.ghost(),
+      selectedTile: this.selectedTile,
+      sinceYears: this.sinceYears,
+      seeThrough: this.building,
+      ...(claimable === undefined ? {} : { claimable }),
+      // Batch 36: the land on offer in the player's palette (the standard green left as the renderer has it).
+      ...(palette === "standard" ? {} : { claimReady: MAP_PALETTES[palette].claimReady }),
+    };
   }
 
   /** In claim mode, the land on offer: ready if the city has the people for another claim. */
