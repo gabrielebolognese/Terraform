@@ -117,6 +117,19 @@ export function browserAudio(): AudioContextLike | null {
 /** The events that count as the player's gesture: what browsers let start sound. */
 export const GESTURES = ["pointerdown", "keydown", "touchend"] as const;
 
+/**
+ * How often the engine writes the music's next notes, ms: its own clock, so the music plays on the
+ * title screen as in a world (whose frame loop is not the title's). Well inside the music's
+ * lookahead, so a late tick leaves no gap.
+ */
+export const SCHEDULE_MS = 200;
+
+/** Repeat `fn` every `ms`: a timer that never keeps a test's process alive. */
+function every(fn: () => void, ms: number): void {
+  const handle = setInterval(fn, ms) as unknown as { unref?: () => void };
+  handle.unref?.();
+}
+
 /** Seconds the channel volumes take to follow a slider: quick, but never a click. */
 const VOLUME_GLIDE_S = 0.03;
 
@@ -143,7 +156,14 @@ export class SoundEngine {
   /** The context's construction failed (no Web Audio): never tried again. */
   private unavailable = false;
 
-  constructor(private readonly make: () => AudioContextLike | null = browserAudio) {}
+  /**
+   * `make` makes the context (the browser's, or a test's fake); `repeat` is the clock that writes
+   * the music ahead, started once sound has (a test may hold it still and call `frame` itself).
+   */
+  constructor(
+    private readonly make: () => AudioContextLike | null = browserAudio,
+    private readonly repeat: (fn: () => void, ms: number) => void = every,
+  ) {}
 
   /** Sound has been let start: a gesture came and the browser has audio. */
   get unlocked(): boolean {
@@ -186,6 +206,7 @@ export class SoundEngine {
       this.ambience = new AmbienceBed(ctx, this.buses.get("ambience")!);
       if (this.piece !== null) this.music.set(this.piece);
       this.ambience.set(this.levels);
+      this.repeat(() => this.frame(), SCHEDULE_MS);
       return true;
     } catch {
       this.unavailable = true;
@@ -290,7 +311,7 @@ export class SoundEngine {
     return this.music;
   }
 
-  /** Every frame: the music writes its next notes a little ahead. */
+  /** The music writes its next notes a little ahead: every `SCHEDULE_MS` on the engine's own clock. */
   frame(): void {
     try {
       this.music?.frame();

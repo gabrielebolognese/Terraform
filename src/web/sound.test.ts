@@ -40,9 +40,9 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** An engine over the fake, let start as a gesture would. */
+/** An engine over the fake, let start as a gesture would; its clock held still, the test calls `frame`. */
 function started(): { engine: SoundEngine; ctx: FakeAudioContext } {
-  const engine = new SoundEngine(() => new FakeAudioContext());
+  const engine = new SoundEngine(() => new FakeAudioContext(), () => undefined);
   expect(engine.unlock()).toBe(true);
   return { engine, ctx: FakeAudioContext.made[0]! };
 }
@@ -244,7 +244,8 @@ describe("the effects", () => {
     s = claimed.state;
     expect(s.settlements[0]!.buildings.some((b) => b.tx === pair!.tx + shift && b.ty === pair!.ty), "the standing one renumbered onto the worksite's old tile").toBe(true);
     const said = (c: { kind: string; tx: number; ty: number }) => `${c.kind}@${c.tx},${c.ty}`;
-    const heard: string[] = watch.observe(s, T).map(said);
+    expect(watch.observe(s, T).map(said), "the claim itself finishes nothing").toEqual([]);
+    const heard: string[] = [];
     for (let i = 0; i < 60 && constructionOf(s.settlements[0]!).size > 0; i += 1) {
       s = advance(s, 1, cfg);
       heard.push(...watch.observe(s, T).map(said));
@@ -463,7 +464,9 @@ describe("ambience follows its driver", () => {
     const close = engine.ambienceLevels.machinery;
     director.city({ settlement: "settlement-1", view, x: 46 + 60, y: 46 - 60, radius: 18, zoom: 1 }, 1000, () => []);
     expect(engine.ambienceLevels.machinery).toBeLessThan(close / 4);
-    // Back to orbit: no machinery.
+    // Back near the machinery, then up to orbit from there: none.
+    director.city({ settlement: "settlement-1", view, x: 46, y: 46, radius: 18, zoom: 1 }, 2000, () => []);
+    expect(engine.ambienceLevels.machinery).toBeCloseTo(close, 12);
     director.orbit();
     expect(engine.ambienceLevels.machinery).toBe(0);
     expect(target("machinery")).toBe(0);
