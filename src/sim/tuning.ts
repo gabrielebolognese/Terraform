@@ -830,6 +830,13 @@ export const BASE_TUNING = Object.freeze({
    */
   TERRACE_STEP_M: 2,
   TERRACE_MATERIALS_PER_M: 4,
+  /**
+   * §4.5's "throttle the planet" (Batch 38): the projection that says what
+   * switching the planet's facilities off would buy a threatened city runs the
+   * planet this many sim-years ahead, on a grid of THROTTLE_STEP_YEARS.
+   */
+  THROTTLE_HORIZON_YEARS: 100,
+  THROTTLE_STEP_YEARS: 0.25,
 
   // -------------------------------------------------------------------------
   // Worlds (Batch 27): what a world is made with, recorded in the world
@@ -1539,6 +1546,8 @@ export function validateTuning(t: Tuning): void {
   if (!(t.FLOOD_GRACE_YEARS >= 0)) fail("FLOOD_GRACE_YEARS must be >= 0");
   if (!(t.TERRACE_STEP_M > 0)) fail("TERRACE_STEP_M must be > 0");
   if (!(t.TERRACE_MATERIALS_PER_M >= 0)) fail("TERRACE_MATERIALS_PER_M must be >= 0");
+  if (!(t.THROTTLE_HORIZON_YEARS > 0)) fail("THROTTLE_HORIZON_YEARS must be > 0");
+  if (!(t.THROTTLE_STEP_YEARS > 0)) fail("THROTTLE_STEP_YEARS must be > 0");
   if (!(t.COST_CORRIDOR >= 0)) fail("COST_CORRIDOR must be >= 0");
   if (!(t.COST_CABLE >= 0)) fail("COST_CABLE must be >= 0");
   if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");

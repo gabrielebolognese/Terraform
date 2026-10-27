@@ -181,6 +181,8 @@ export type { Axis, RouteOutcome } from "./micro/routes.js";
 export { sizeClass } from "./micro/registry.js";
 export { dikeHeightM, floodAlert, floodForecast, floodReading, submerged } from "./micro/flood.js";
 export { evacuateSettlement, terraceBuilding, terracePlan, threatened } from "./micro/defences.js";
+export { throttleForecast } from "./throttle.js";
+export type { ThrottleReading } from "./throttle.js";
 export type { EvacuationOutcome, TerracePlan } from "./micro/defences.js";
 export type { FloodForecast, FloodReading, FloodState } from "./micro/flood.js";
 export type { SizeClass } from "./micro/registry.js";

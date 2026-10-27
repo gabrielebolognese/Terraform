@@ -609,6 +609,7 @@ DIKE_M_PER_LEVEL = 4         # Batch 38: each level of a city's Seawall raises i
 COST_SEAWALL = 200           BUILD_YEARS_SEAWALL = 0.4   BUILD_SECONDS_SEAWALL = 240   # one a city; upgrades raise it
 FLOOD_GRACE_YEARS = 36       # city-years the sea takes nothing of a city carried from a save before flooding (20 min at 1x)
 TERRACE_STEP_M = 2           TERRACE_MATERIALS_PER_M = 4  # terracing raises a footprint this far over its highest tile; materials per tile-metre
+THROTTLE_HORIZON_YEARS = 100 THROTTLE_STEP_YEARS = 0.25   # the throttle forecast projects the planet this far ahead, on this grid, facilities on and off
 
 # Worlds (Batch 27). Both 0 by default; a new world in the browser records its own.
 TERRAIN_SEED = 0             # turns the elevation field to a seeded orientation; 0 is the original planet
