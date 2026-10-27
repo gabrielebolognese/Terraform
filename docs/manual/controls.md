@@ -62,6 +62,8 @@ Left alone for a few seconds, the planet turns slowly by itself - unless motion 
 | Select a building, a rock or a deposit | Click it |
 | Show the ground's deposits | **Deposits** (top right, with the tools); choosing a mine, water extractor, geothermal plant or solar array shows its own |
 | Upgrade the selected building | **Upgrade** in its panel, or **U** |
+| Raise the selected building's ground, against the sea | **Raise its ground** in its panel (where the sea floods) |
+| Move a threatened city's people to safety | **Evacuate its people**, in **The sea** in the city's panel |
 | Lay corridors, cables or railway | Choose the tool, then drag; start on an existing link to remove links |
 | Put down the chosen tool, or deselect | **Esc** |
 | Scroll the build bar | Mouse wheel over it, or drag its scrollbar |

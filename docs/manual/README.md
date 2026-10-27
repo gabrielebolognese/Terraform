@@ -20,7 +20,7 @@ This manual describes the game as it is today. What changed in each update is in
 | [The planet](the-planet.md) | The view from orbit: phases, the machines you order, credits, the goal |
 | [Goals](goals.md) | The guide through your first steps, the objectives and their rewards, and milestones |
 | [Alerts and statistics](alerts-and-statistics.md) | What needs you and where, pop-up messages, the Alerts button, the charts of your planet and cities, and each city at a glance |
-| [Cities](cities.md) | Founding a settlement, building, the ground's deposits, how rovers drive, the build queue, upgrades, people, land, railways and trains |
+| [Cities](cities.md) | Founding a settlement, building, the ground's deposits, how rovers drive, the build queue, upgrades, people, land, the rising sea and its defences, railways and trains |
 | [People and their needs](people.md) | What a growing city's people want beyond life support, how far each service reaches, happiness and what it does |
 | [Events and decisions](events.md) | Meteor showers, failing machines, outbreaks, supply ships and discoveries: the choices each gives you, and what happens if you do nothing |
 | [Earth](earth.md) | Launch windows, buying from and selling to Earth, prices, contracts and your reputation |
@@ -51,7 +51,10 @@ This manual describes the game as it is today. What changed in each update is in
 6. **Answer events.** From about half an hour in, a meteor shower, a failing machine, a sickness
    or a ship from Earth asks you to choose, with about three minutes to do it. Do nothing, and the
    worst happens.
-7. **Trade with Earth.** Every 9 and a half minutes or so a launch window opens: your Spaceports'
+7. **Mind the sea.** Late in the game the melting ice raises a sea that floods low cities (in a
+   world made from Update 38 on). You are warned decades ahead: wall a city with a **Seawall**,
+   raise its buildings, move its people, or slow the planet.
+8. **Trade with Earth.** Every 9 and a half minutes or so a launch window opens: your Spaceports'
    rockets fly to Earth with what you sell and come back with what you ordered. Earth offers
    contracts that pay well if you deliver on time. Press **Earth** to trade.
 

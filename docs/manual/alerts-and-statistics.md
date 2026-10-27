@@ -14,6 +14,7 @@ names its place, and clicking it takes you there.
 | *City* **is short of water / oxygen / food** | People are going without | Urgent: a pop-up message |
 | *City* **is short of materials** | Buildings that use materials go without | A pop-up message |
 | *Buildings* **offline in** *city* | Buildings that cannot run, and why: not connected to what they need (and what to lay), or the planet does not allow them yet | A pop-up message |
+| **Flood warning:** *city* | The sea is coming: when it will start to cover the city and when the city would be lost at the current rate (in a world made from Update 38 on). See [Cities](cities.md#the-rising-sea) | Urgent: a pop-up message |
 | **A dust storm is coming** | A storm will rise in about two minutes, and how long it will last. A storm cools the planet while it lasts | A pop-up message |
 | *Building* **finished in** *city* | A new building is up | Kept in **Alerts** only |
 | *Building* **raised to level** *N* **in** *city* | An upgrade is done | Kept in **Alerts** only |

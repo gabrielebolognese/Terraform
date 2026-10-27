@@ -37,9 +37,9 @@ export function floodWarning(forecast: FloodForecast | null, reading: FloodReadi
  */
 export function throttleWords(r: ThrottleReading | null): string {
   if (r === null || r.asIsYears === null) return "";
-  if (r.throttledYears === null) return " Switching off the planet's facilities would keep the sea from it for the century ahead.";
+  if (r.throttledYears === null) return " Switching off the planet's machines would keep the sea from it for the century ahead.";
   const bought = r.throttledYears - r.asIsYears;
-  return bought <= 0 ? "" : ` Switching off the planet's facilities would buy ${yearsWords(bought)}.`;
+  return bought <= 0 ? "" : ` Switching off the planet's machines would buy ${yearsWords(bought)}.`;
 }
 
 /**

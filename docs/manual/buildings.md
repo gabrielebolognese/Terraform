@@ -74,6 +74,15 @@ vent (each twice as much) and a Solar Array on a sunny high flat (1.5 times). Se
 these buildings meet those needs for the homes in the square 33 tiles across centred on them (6
 tiles wider a level), on the same corridors. See [People and their needs](people.md).
 
+## Against the sea
+
+In a Standard or Terraformed world made from Update 38 on, where the rising sea floods cities (see
+[Cities](cities.md#the-rising-sea)):
+
+| Building | Cost | Size | What it does | Build time | Notes |
+|---|---|---|---|---|---|
+| Seawall | 200 | 3×1 | Holds the sea back 4 m a level, up to 32 m at level 8: the water must climb that much higher to flood the city or take its buildings. Uses nothing | 4 min, up to 33 min at level 8 | One for each settlement. It stands until the city falls |
+
 ## Already there
 
 - **Headquarters.** Every settlement's heart: it keeps your rovers, makes a little oxygen and

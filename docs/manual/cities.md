@@ -17,7 +17,8 @@ In orbit, open the **Settlements** section. Type a name if you like, then press:
 
 Then click the planet where it should stand; the line under the cursor shows the place and its
 height. **Esc** or **Cancel** stops founding. Founding is free, and you can have as many
-settlements as you like.
+settlements as you like. In a world where the sea floods, you cannot found one where the sea
+already stands (see [The rising sea](#the-rising-sea)).
 
 To go down to a settlement, press **Open** beside it, click its marker on the planet and choose
 **Go down**, or use **Open the city** on the world map. **Back to orbit** brings you back up. The
@@ -38,6 +39,8 @@ Cities run on their own, faster clock: a year in a city passes in about half a m
   people's happiness and their other needs (see [People and their needs](people.md)). After an
   event it also says when the city's people are under cover from a meteor shower or the city is
   in quarantine, and for how long (see [Events and decisions](events.md)).
+- **The sea**, in a city the sea threatens (in a world made from Update 38 on), gives its flood
+  warning and the button to evacuate it (see [The rising sea](#the-rising-sea)).
 - **Stores** shows Power, Water, Oxygen, Food and Materials: how much you have, how much room
   there is, and whether each is rising or falling.
 - **Builds** lists everything being built or upgraded, with a countdown, and what is waiting for a
@@ -48,7 +51,8 @@ Cities run on their own, faster clock: a year in a city passes in about half a m
   ground, and (in a world made from Update 37 on) show the ground's **Deposits**.
 
 Click any building to select it. The panel that opens says what it is doing, and has buttons to
-**Upgrade**, **Remove** or **Close** (and **Launch rocket** for a Spaceport).
+**Upgrade**, **Remove** or **Close** (and **Launch rocket** for a Spaceport). Where the sea floods,
+it also has **Raise its ground**.
 
 ## Building
 
@@ -199,6 +203,59 @@ square of land next to what it holds, and one more for every 100 people after th
 **Claim land**, then click where to grow. Claiming is free; outposts cannot claim land. The squares
 the city can claim now are drawn green (blue or cyan with a colour-blind palette) with a whole edge;
 those it must grow into first are grey, with a dashed edge.
+
+## The rising sea
+
+In a Standard or Terraformed world made from Update 38 on, the sea floods cities. As the planet
+warms, its ice melts and water pools in the lowest basins; then the sea rises, fast for a few
+decades of the planet's time, and about a third of Mars can end up under it. A city built low,
+near the ice, is the first it reaches. The height on a city's top line is what decides it.
+
+**The warning.** About 50 of the planet's years before the sea reaches a city - or once it is
+within 20 m of it - the city's line in the **Settlements** list says so, a **Flood warning** alert
+pops up, and the city's panel shows **The sea**:
+
+> Flood warning: submersion begins in ~14 yr, total loss in ~31 yr at current rate. Switching off
+> the planet's machines would buy ~8 yr.
+
+The years are the planet's: about 4 and a half minutes each at 1x in a Standard world, half a
+minute at Classic pace. "At current rate" means if the water keeps coming as fast as it does now;
+while the sea is speeding up, it comes sooner.
+
+**What the water does.** In the city view the sea fills the low ground, and its shore creeps
+inland as it rises.
+
+- A building with water over any of its tiles stops ("Offline: under water.").
+- It is lost once the water stands 2 m over the highest ground under it.
+- When the sea stands 10 m over the city's own ground, the city is lost: every building and
+  everyone in it. A lost city is grey and crossed out on the map.
+
+**What you can do:**
+
+- **Build high.** The surest defence is a city founded well above where the sea will come. You
+  cannot found a settlement where the sea already stands ("The sea covers that place.").
+- **A Seawall** (see [Buildings](buildings.md#against-the-sea)) holds the sea back 4 m for each
+  level, up to 32 m at level 8: the water must climb that much higher to flood the city, take its
+  buildings or take the city itself. One for each settlement; upgrade it to raise it. It counts
+  once it is built, and an upgrade once its rover is home. It stands until the city falls. Beyond
+  a walled city's land, the open sea is drawn standing higher than the water inside.
+- **Raise its ground.** Select a building and press **Raise its ground** in its panel: a rover
+  drives out and raises the ground under it to 2 m above its highest point, for 4 materials a
+  metre for each of its tiles (the button gives the price). The work takes about 7 seconds a tile
+  at 1x, plus the drive; the building keeps running. Press it again to raise it further. The
+  ground beside it rises at the edge too.
+- **Evacuate its people.** In a city the warning names, **Evacuate its people** in **The sea**
+  moves them to the nearest cities the sea does not threaten, as many as each has empty homes
+  for; anyone with nowhere to go stays. The city then takes no new settlers and does not grow,
+  and what is built there runs until the sea takes it. This cannot be undone.
+- **Slow the planet.** Switching off the planet's machines (see [The planet](the-planet.md))
+  slows the warming, and with it the sea - for every city at once, at the cost of the planet's
+  progress. The warning says how many years switching them all off now would buy each city.
+
+A Seawall and raised ground buy most near where the sea will settle. While the sea rises fastest,
+even a full Seawall buys a city only a few months of the planet's time.
+
+Worlds made before Update 38, and Sandbox worlds, have no rising sea.
 
 ## The Spaceport and rockets
 
