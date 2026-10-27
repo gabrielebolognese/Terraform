@@ -37,7 +37,18 @@ Batch 28's pacing targets are re-measured with deposits on.
      off), unchanged. A second test holds the game as it now ships: a trader still has Phase 2
      20.7 minutes sooner (4,708 s against 5,950 s), and the city of 1,000 within 2% (measured
      1.1%).
-4. **A Terraformed start's first step took ten times as long.** With deposits on, four substeps
+4. **Batch 30's measured reward moved, and I missed it at first.** "Two rovers: the city of 1,000
+   8.3 minutes sooner" (more than 7) failed with deposits on: 5.1 minutes. It failed in the first
+   run of the world tests too, but I read that log for the two failures I expected and missed it,
+   and the full suite found it.
+   - **The other four rewards are worth what they were**, to the tenth of a minute (56.7, 3.2,
+     13.1 and 20.7 minutes).
+   - **The cause is the same chaos as finding 3.** The deposits made the rewarded run 2.5 minutes
+     slower (102.5 against 100.0) and the run without it 0.7 minutes faster.
+   - **What changed in the test.** Batch 30's check now runs on the world it measured (deposits
+     off), still more than 7 minutes. A check beside it holds the shipped world: more than 4
+     minutes, measured 5.1.
+5. **A Terraformed start's first step took ten times as long.** With deposits on, four substeps
    of the example planet took 6.2 s against 0.7 s.
    - **The cause:** working out what each of its 83,589 mines, extractors, geothermal plants and
      solar arrays stands on, one tile at a time, at 16 terrain samples a tile (5.3 million
@@ -46,19 +57,19 @@ Batch 28's pacing targets are re-measured with deposits on.
      one array, and kept a byte a tile per frame. That brings it to 1.9 s against 0.6 s.
    - **What is left:** 1.3 s, once, when a Terraformed world is opened. It is under Open, for
      Batch 40's performance budget (a world opening in under 3 s).
-5. **The whole-frame map cost more than the ground it is read from.** A metropolis's (288 tiles)
+6. **The whole-frame map cost more than the ground it is read from.** A metropolis's (288 tiles)
    took 120 ms, against the ground's 90 ms. The corners were read through a closure, and those
    past the frame's edge through a Map. Read from one padded array instead, it takes 52 ms. It is
    also made a band of rows at a time while a city opens (`prepareDeposits`, inside
    `prepareCity`), so it never freezes a frame.
-6. **The first look at the marks found two faults** (rendered to PNG and read):
+7. **The first look at the marks found two faults** (rendered to PNG and read):
    - **The ore's "diamond" drew as a flat bar.** A square turned 45 degrees on the ground is
      square to the screen in the isometric view. It is now square to the tiles, so it reads as a
      diamond, as a tile does.
    - **Marks were drawn over the buildings standing on them.** A vent's rings covered its
      geothermal plant. A building's own tiles now carry no mark; its panel says what is under it.
      Both are tested, and both injections are caught (31, 32).
-7. **The injection run found six tests weaker than they looked**, each strengthened:
+8. **The injection run found six tests weaker than they looked**, each strengthened:
    - The siting was kept per building list whatever the tuning (15). A balance sweep runs
      variants on the same state, so a variant with no ore would have been paid for the first
      tuning's ore. A test now runs the same city under a tuning where no ore is found.
@@ -75,7 +86,7 @@ Batch 28's pacing targets are re-measured with deposits on.
      levelling keeps a deposit, but the test's map was already made and kept for its place. It now
      levels 40 ore tiles at a place nothing has asked about, then makes the view: all 40 were lost
      with the fault.
-8. **Two faults change nothing a test can see**, recorded as such:
+9. **Two faults change nothing a test can see**, recorded as such:
    - The map's ring summed in reverse order (29): the sums differ in the last bit, and no tile of
      the tested sites lies that close to a threshold.
    - A one-to-one shift of the batch's corner memo (33): every corner still has its own slot.
@@ -137,8 +148,8 @@ Batch 28's pacing targets are re-measured with deposits on.
    one click.
 10. **The scripted player sites within a reach**, after the unbounded version starved its city
     (finding 1).
-11. **Batch 34's trade test is pinned to the world it measured**, with a deposits-on check beside
-    it (finding 3).
+11. **Batch 34's trade test and Batch 30's rover reward are measured on the worlds they were
+    measured on**, each with a deposits-on check beside it (findings 3 and 4).
 
 ## Measurements
 
@@ -234,8 +245,8 @@ Read across:
 
 ## Verified by injection
 
-38 faults, one at a time, each file restored from a copy and checked byte for byte after each:
-- 31 caught at once;
+39 faults, one at a time, each file restored from a copy and checked byte for byte after each:
+- 32 caught at once;
 - 5 missed at first and caught once their test was strengthened (15, 28, 34, 35, 38);
 - 2 change nothing a test can see (29, and 33's first form; its second form is caught).
 
@@ -282,6 +293,7 @@ was restored from the commit and the runner fixed before any other work.
 | 35 | the siting's codes kept across a claim | missed; asked before and after the claim: 548 differ |
 | 36 | new worlds without deposits | the pace test's switches, the deposits pace test (vacuity: 7,325 s both ways), the siting test |
 | 37 | the scripted player never sites | the siting pace test: the far player no longer an hour later |
+| 39 | the town's reward gives no rovers | the reward test: 0 against more than 7 minutes |
 | 38 | the map read from the levelled ground, not the natural | missed: the place's map was already made and kept; the test now makes a fresh place's map with 40 ore tiles levelled first: all 40 lost |
 
 ## Verification

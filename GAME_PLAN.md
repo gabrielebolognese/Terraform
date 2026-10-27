@@ -965,6 +965,9 @@ ring, a cross) registered in the cue test, the hint and the panels saying the sh
 - **Batch 34's trade test is pinned to the world it measured** (deposits off). With deposits on,
   the greedy script's chaos put the trader's city of 1,000 83 s later. A deposits-on check beside
   it holds that trading still brings Phase 2 20.7 minutes sooner.
+- **Batch 30's rover reward is measured on the world it measured** (8.3 minutes, more than 7); with
+  deposits on it is worth 5.1 minutes, held beside it (more than 4). The other four rewards are
+  unchanged.
 - **The pace test's batch-by-batch comparisons** gained a Batch 36 world (deposits off), so each
   feature is still measured alone.
 - **A Terraformed start's first step is 1.3 s slower once**, after the siting was made 3x faster
