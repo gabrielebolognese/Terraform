@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 37
-in_progress_batch: none
+in_progress_batch: 38
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -1755,3 +1755,7 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - Since review 1, only `src/web/deposit-words.ts` and `src/web/deposits.test.ts` changed in the
     source; review 1's other findings (exit gate, switch, tuning table, walls, no save change,
     decisions) still stand.
+
+### Batch 38 - Flood defences and the rising water; flooding on
+- status: in progress
+- sessions: 1 (2026-10-16)
