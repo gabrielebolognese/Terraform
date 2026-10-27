@@ -53,7 +53,7 @@ import {
   tileKey,
   worldEnv,
 } from "../sim/index.js";
-import { cityScene } from "../render/city.js";
+import { DEPOSIT_MARKS, cityScene, depositMark } from "../render/city.js";
 import { AlertCentre, AlertToasts } from "./alert-centre.js";
 import type { Alert } from "./alerts.js";
 import { buildRows, orderDelta } from "./build.js";
@@ -508,6 +508,37 @@ describe("the city's own marks", () => {
     const blue = MAP_PALETTES["red-green"].claimReady;
     const shapes = cityScene(view, { time: 0, selected: null, ghost: null, layer: "overlay", claimable: [{ tx: 0, ty: 0, size, ready: true, hover: false }], claimReady: blue });
     expect(shapes.some((sh) => sh.fill.r === blue.r && sh.fill.g === blue.g && sh.fill.b === blue.b)).toBe(true);
+  });
+});
+
+describe("the deposits' marks (Batch 37)", () => {
+  /**
+   * A mark's shape without its colour or its size: each ring of the shapes
+   * drawn in its colour, as its points about the mark's middle, scaled so the
+   * furthest is 1 - two marks the same shape at different sizes read alike.
+   */
+  const shapeOf = (kind: keyof typeof DEPOSIT_MARKS): string => {
+    const rings = depositMark(kind, 4, 4, 0)
+      .filter((s) => s.fill === DEPOSIT_MARKS[kind].fill)
+      .flatMap((s) => s.rings);
+    const xs = rings.flatMap((r) => r.filter((_, i) => i % 2 === 0));
+    const ys = rings.flatMap((r) => r.filter((_, i) => i % 2 === 1));
+    const cx = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const cy = ys.reduce((a, b) => a + b, 0) / ys.length;
+    const far = Math.max(...rings.flatMap((r) => r.flatMap((v, i) => (i % 2 === 0 ? [Math.hypot(v - cx, r[i + 1]! - cy)] : []))));
+    return JSON.stringify(rings.map((r) => r.map((v, i) => Math.round(((v - (i % 2 === 0 ? cx : cy)) / far) * 20) / 20)));
+  };
+
+  it("ore, ice, a vent and sun are told apart by shape alone - a diamond, a disc, a ring, a cross", () => {
+    const kinds = Object.keys(DEPOSIT_MARKS) as (keyof typeof DEPOSIT_MARKS)[];
+    expect(kinds).toEqual(["ore", "ice", "vent", "sun"]);
+    const shapes = kinds.map(shapeOf);
+    expect(new Set(shapes).size, kinds.map((k, i) => `${k}: ${shapes[i]}`).join("\n")).toBe(4);
+    // The shape the words name is the one drawn: a ring is two outlines (its middle the ground), a cross two strokes.
+    expect(depositMark("vent", 0, 0, 0).find((s) => s.fill === DEPOSIT_MARKS.vent.fill)!.rings.length).toBe(2);
+    expect(depositMark("sun", 0, 0, 0).filter((s) => s.fill === DEPOSIT_MARKS.sun.fill).length).toBe(2);
+    expect(depositMark("ore", 0, 0, 0).find((s) => s.fill === DEPOSIT_MARKS.ore.fill)!.rings[0]!.length / 2).toBe(4);
+    expect(depositMark("ice", 0, 0, 0).find((s) => s.fill === DEPOSIT_MARKS.ice.fill)!.rings[0]!.length / 2).toBeGreaterThan(8);
   });
 });
 

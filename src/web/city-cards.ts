@@ -21,7 +21,7 @@ export const PREVIEW_W = 112;
 export const PREVIEW_H = 80;
 
 /** What a card can show: a building, a corridor, a power cable, or "connect everything". */
-export type CardKind = BuildingType | "corridor" | "cable" | "rail" | "connect" | "redundant" | "claim" | "level";
+export type CardKind = BuildingType | "corridor" | "cable" | "rail" | "connect" | "redundant" | "claim" | "level" | "deposits";
 
 /** A tiny flat scene: `tiles` square, with these buildings and road tiles. */
 export function previewView(id: string, tiles: number, buildings: readonly CityBuildingView[], corridorTiles: readonly (readonly [number, number])[], cableTiles: readonly (readonly [number, number])[] = []): CityView {
@@ -115,6 +115,10 @@ export function previewScene(kind: CardKind): Shape[] {
     const v = previewView("level", 4, [], []);
     return cityScene({ ...v, garage: { x: 0, y: 0 }, jobs: [{ kind: "rover", tx: 2, ty: 2, total: 1, remaining: 0.5, work: 0.6 }] }, at);
   }
+  if (kind === "deposits") {
+    // Batch 37: the four marks on a patch of ground, as the overlay draws them.
+    return cityScene({ ...previewView("deposits", 2, [], []), deposits: [1, 2, 3, 4] }, { ...at, deposits: ["ore", "ice", "vent", "sun"] });
+  }
   if (kind === "claim") {
     // A chunk of ground on offer, outlined as claim mode shows it.
     return cityScene(previewView("claim", 6, [], []), { ...at, claimable: [{ tx: 1, ty: 1, size: 4, ready: true, hover: true }] });
@@ -170,7 +174,7 @@ export function drawPreview(canvas: HTMLCanvasElement, shapes: readonly Shape[])
 /** Every card's picture, drawn once. In a page with no 2D canvas (tests) they stay blank. */
 export function makePreviews(): Map<CardKind, HTMLCanvasElement> {
   const out = new Map<CardKind, HTMLCanvasElement>();
-  for (const kind of [...BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].buildable), "corridor", "cable", "rail", "connect", "redundant", "claim", "level"] as CardKind[]) {
+  for (const kind of [...BUILDING_TYPES.filter((t) => BUILDING_DEFS[t].buildable), "corridor", "cable", "rail", "connect", "redundant", "claim", "level", "deposits"] as CardKind[]) {
     const canvas = document.createElement("canvas");
     canvas.width = PREVIEW_W * 2;
     canvas.height = PREVIEW_H * 2;
