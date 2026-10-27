@@ -169,6 +169,37 @@ describe("the same site always has the same deposits, and none are stored", () =
     expect(differ).toBe(0);
   });
 
+  it("the simulation's own reckoning of what stands on what agrees with the view's map: a mine on every square of a city", () => {
+    // A place and a tuning no map has been made for, so the siting works every tile out itself (asked together).
+    // Its land claimed west and north, so its tiles are not its site's (the frame starts at -32, -32) - and asked
+    // first with none claimed, so a claim must not reuse the codes of the frame before.
+    const T = makeTuning({ ...ON });
+    const founded = foundSettlement(marsStart(undefined, T), "city", -0.42, 2.3, T).state.settlements[0]!;
+    const grid = (n: number): PlacedBuilding[] => {
+      const out: PlacedBuilding[] = [];
+      for (let ty = 0; ty + 1 < n; ty += 2) for (let tx = 0; tx + 1 < n; tx += 2) out.push({ type: "regolith_mine", tx, ty, level: 1 });
+      return out;
+    };
+    sitingOf({ ...founded, buildings: grid(frameOf(founded, T).n) }, T);
+    const there = { ...founded, claims: [chunkKey(-1, 0), chunkKey(0, -1), chunkKey(-1, -1)] };
+    const n = frameOf(there, T).n;
+    expect(frameOf(there, T).x0).toBe(-32);
+    const buildings = grid(n);
+    const siting = sitingOf({ ...there, buildings }, T);
+    // Only now the view's map, made its own way.
+    const map = depositsOf(there, T);
+    let differ = 0;
+    let onOre = 0;
+    buildings.forEach((b, i) => {
+      const ore = [0, 1, n, n + 1].filter((d) => map[b.ty * n + b.tx + d] === code("ore")).length;
+      if (ore > 0) onOre += 1;
+      if ((siting?.shares[i] ?? 0) !== ore / 4) differ += 1;
+    });
+    // Not vacuous: some of the mines stand on ore.
+    expect(onOre).toBeGreaterThan(50);
+    expect(differ).toBe(0);
+  });
+
   it("claiming land west and north moves no deposit: the founding square's are where they were", () => {
     const before = depositsOf(HERE, ON);
     const claimed = { ...HERE, claims: [chunkKey(-1, 0), chunkKey(0, -1), chunkKey(-1, -1)] };
