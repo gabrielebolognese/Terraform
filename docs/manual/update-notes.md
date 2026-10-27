@@ -4,6 +4,44 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 37 - Deposits in the ground
+
+The ground under your cities holds ore, ice, hot vents and sunny high flats. A mine, water
+extractor, geothermal plant or solar array built on its own deposit makes more, so where you build
+matters.
+
+**New**
+- **Deposits**, in worlds made from this update on: ore veins on ridges and crater rims, ice
+  lenses in hollows (more of them toward the poles), geothermal vents along the land's fault
+  lines, and sunny high flats. See [Cities](cities.md#deposits).
+- A **Regolith Mine** on ore makes twice the materials, a **Water Extractor** on ice twice the water
+  (less once liquid water is within reach), a **Geothermal Plant** on a vent twice the power, and a
+  **Solar Array** on a sunny high flat 1.5 times the power. Partly on its deposit, a building gets
+  part of the bonus.
+- Choosing one of these four buildings marks its deposit on the ground while you place it.
+  **Deposits**, among the tools at the top right, marks all four kinds: ore with copper diamonds,
+  ice with pale blue discs, vents with red rings, sunny flats with yellow crosses.
+- While you place a building, the line above the build bar says what it would make where it
+  stands, for example "On ore vein, all 4 of its tiles: it would make x2 materials."
+- Click a tile with a deposit to see what it is and what it gives. A building's panel says what it
+  stands on.
+
+**Changed**
+- The four buildings' cards say which deposit helps them, and by how much.
+- The line under the pointer names the deposit there.
+
+**Fixed**
+- Nothing in this update.
+
+**Known issues**
+- Opening a Terraformed start world can pause for a second or two, once, while it works out what
+  each of its buildings stands on.
+- Deposits are seen only in a city: the planet, the world map and founding a settlement do not
+  show them.
+- Worlds made before this update have no deposits.
+
+---
+
 ## Update 36 - Settings, keys and accessibility
 
 Set the game up for your computer and for yourself: how much detail a city is drawn with, every
@@ -104,6 +142,10 @@ rocket, and every alert.
 - Your sound settings are kept by this browser: another browser, or a world's exported file, does
   not carry them.
 - A rocket coming home makes no sound; only its lift-off does.
+- Opening a Terraformed start world can pause for a second or two, once, while it works out what
+  each of its buildings stands on.
+- A settlement's deposits are seen only once it is founded: the planet and the world map do not
+  show them.
 - A train that stops at a station near the middle of your view is heard as it comes, not again as
   it leaves.
 

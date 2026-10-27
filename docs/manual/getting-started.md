@@ -69,6 +69,11 @@ more. See [Goals](goals.md).
    - a **Habitat Dome** so people have somewhere to live,
    - a **Greenhouse** for food and a **Water Extractor** for water.
 
+   In a world made from Update 37 on, choosing a mine, a water extractor, a geothermal plant or a
+   solar array marks its deposit on the ground: a copper diamond for ore, a pale blue disc for
+   ice, a red ring for a vent, a yellow cross for a sunny flat. Built on one near the city, it
+   makes up to twice as much (see [Cities](cities.md#deposits)).
+
    Your Headquarters already makes a little oxygen and water. Use **Corridor** and **Power cable**
    (top right) to connect buildings that do not touch: a building only runs when it is connected
    to everything it needs.

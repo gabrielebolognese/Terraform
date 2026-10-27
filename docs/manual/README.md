@@ -20,7 +20,7 @@ This manual describes the game as it is today. What changed in each update is in
 | [The planet](the-planet.md) | The view from orbit: phases, the machines you order, credits, the goal |
 | [Goals](goals.md) | The guide through your first steps, the objectives and their rewards, and milestones |
 | [Alerts and statistics](alerts-and-statistics.md) | What needs you and where, pop-up messages, the Alerts button, the charts of your planet and cities, and each city at a glance |
-| [Cities](cities.md) | Founding a settlement, building, how rovers drive, the build queue, upgrades, people, land, railways and trains |
+| [Cities](cities.md) | Founding a settlement, building, the ground's deposits, how rovers drive, the build queue, upgrades, people, land, railways and trains |
 | [People and their needs](people.md) | What a growing city's people want beyond life support, how far each service reaches, happiness and what it does |
 | [Events and decisions](events.md) | Meteor showers, failing machines, outbreaks, supply ships and discoveries: the choices each gives you, and what happens if you do nothing |
 | [Earth](earth.md) | Launch windows, buying from and selling to Earth, prices, contracts and your reputation |
@@ -39,7 +39,8 @@ This manual describes the game as it is today. What changed in each update is in
    the left tells you what the planet needs next. Order an **Orbital mirror array** to start
    warming it.
 3. **Found a city**: press **Found a city**, then click the planet where it should stand. Open it
-   to build habitats, power, water, oxygen and food, and people will come. As it grows they want
+   to build habitats, power, water, oxygen and food, and people will come. A mine, water extractor,
+   geothermal plant or solar array built on its own deposit makes more. As it grows they want
    more - green space, varied food, medical care, research, transport, shops - and a happy city
    grows faster.
 4. **Keep both going.** The planet's machines cost credits; your cities' research earns more. As

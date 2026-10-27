@@ -8,6 +8,11 @@ building makes, houses or stores.
 
 *Cities only* buildings cannot go in an outpost.
 
+In a world made from Update 37 on, four buildings make more standing on their own deposit: a
+Regolith Mine on an ore vein, a Water Extractor on an ice lens, a Geothermal Plant on a geothermal
+vent (each twice as much) and a Solar Array on a sunny high flat (1.5 times). See
+[Cities](cities.md#deposits).
+
 ## Homes
 
 | Building | Cost | Size | What it does | Build time | Notes |
@@ -19,16 +24,16 @@ building makes, houses or stores.
 
 | Building | Cost | Size | What it does | Build time | Notes |
 |---|---|---|---|---|---|
-| Solar Array | 20 | 2×2 | 6 power, more with orbital mirrors, less under solar shades | 30 s, up to 31 min | |
+| Solar Array | 20 | 2×2 | 6 power, more with orbital mirrors, less under solar shades | 30 s, up to 31 min | 1.5 times as much on a sunny high flat |
 | Wind Turbine | 35 | 2×2 | 10 power at Earth-like pressure, up to 15 in thicker air | 1 min, up to 61 min | At 300 mbar of air |
-| Geothermal Plant | 50 | 2×2 | 8 power | 2 min, up to 1.5 h | |
+| Geothermal Plant | 50 | 2×2 | 8 power | 2 min, up to 1.5 h | Twice as much on a geothermal vent |
 | Reactor | 150 | 2×2 | 24 power | 4 min, up to 3 h | |
 
 ## Water, oxygen and food
 
 | Building | Cost | Size | What it does | Build time | Notes |
 |---|---|---|---|---|---|
-| Water Extractor | 30 | 2×2 | 5 water, twice as much once there is liquid water nearby. Uses power | 1 min, up to 45 min | |
+| Water Extractor | 30 | 2×2 | 5 water, twice as much once there is liquid water nearby. Uses power | 1 min, up to 45 min | Twice as much on an ice lens while the planet is dry |
 | Atmosphere Processor | 60 | 2×2 | 4 oxygen, made from the planet's carbon dioxide (it helps the planet too). Uses power | 1.5 min, up to 67 min | Needs some carbon dioxide in the air |
 | Algae Reactor | 40 | 2×2 | 5 oxygen. Uses power and water | 1 min, up to 45 min | |
 | Greenhouse | 30 | 2×2 | 4 food. Uses power and water | 1 min, up to 45 min | Cities only |
@@ -40,7 +45,7 @@ building makes, houses or stores.
 
 | Building | Cost | Size | What it does | Build time | Notes |
 |---|---|---|---|---|---|
-| Regolith Mine | 25 | 2×2 | 5 materials. Uses power | 30 s, up to 1.7 h at level 10 | |
+| Regolith Mine | 25 | 2×2 | 5 materials. Uses power | 30 s, up to 1.7 h at level 10 | Twice as much on an ore vein |
 | Storage Depot | 10 | 1×1 | Room for 10 power, 60 each of water, oxygen and food, 200 materials | 20 s, up to 20 min | |
 | Water Tank | 25 | 2×2 | Room for 400 water | 30 s, up to 31 min | |
 | Battery Bank | 40 | 2×2 | Room for 150 power | 30 s, up to 31 min | |
