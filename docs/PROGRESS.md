@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 36
-in_progress_batch: none
+in_progress_batch: 37
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -1588,3 +1588,25 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     (656.72 kB JS, 222.17 kB gzip; 52.19 kB CSS) and `build` green, both exit 0. Nothing in
     `src/sim/` changed across the batch, and the walls hold. The note's items skip from 8 to 10
     (no 9), a numbering slip only.
+
+### Batch 37 - Terrain resource deposits
+- status: in progress
+- sessions: 1 (2026-10-16)
+- decisions:
+  - Behind its own DEPOSITS_ENABLED (0), on only in new worlds (NEW_WORLD_OVERRIDES), not behind
+    SETTLEMENTS_ENABLED alone (conflict 9): that is on in every browser world, so old worlds' mines
+    would change under them.
+  - A bonus only: bare ground keeps today's output, a deposit adds to it - today's balance stays
+    the floor and the bootstrap cannot get slower.
+  - The bonus by the share of the footprint on the matching deposit.
+  - Deposits a pure function of the terrain at site coordinates (a claim never moves one): ore
+    above a ring's mean (ridges, hilltops, rims), ice below it (easing poleward), vents along the
+    fault the canyons' course follows, sun on flat high ground nothing near stands over.
+  - The ice bonus fades as liquid water comes in reach (section 3.2: extractors "no longer need a
+    deposit").
+  - No depletion: nothing stored, no save change.
+  - Shown by an overlay with a shape per kind (Batch 36's second cue), on while placing a building
+    a deposit boosts and by a Deposits toggle; in words under the pointer, in the ground
+    inspector and in the placement hint with the factor.
+  - The pacing script gains `siting`; three runs measured (off, on and placed by spiral, on and
+    sited); the bootstrap replayed on the browser's terrain.
