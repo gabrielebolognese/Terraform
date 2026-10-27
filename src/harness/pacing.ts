@@ -34,7 +34,9 @@ import {
   housing,
   marsStart,
   maxLevel,
+  depositFor,
   placeBuilding,
+  sitingPreview,
   settlementStep,
   upgradeBuilding,
   worldEnv,
@@ -100,6 +102,16 @@ export interface PacingScript {
    * puts down to half of them up for sale at the next window.
    */
   readonly trade?: boolean;
+  /**
+   * Batch 37: reads the ground - a mine, water extractor, geothermal plant or
+   * solar array goes on the nearest place wholly on its own deposit it can be
+   * built on, if that is at most this many tiles further from the
+   * headquarters than the nearest place of all. Absent or 0, the nearest
+   * place, deposit or not. (Chasing every deposit, however far, starved the
+   * city: each far building's corridor and cable cost the materials it
+   * needed - measured, Batch 37's note.)
+   */
+  readonly siting?: number;
 }
 
 /** When the first hour's moments came (Batch 30), real seconds at 1x; null if not within the run. */
@@ -181,6 +193,7 @@ export function playPacing(t: Tuning, seconds: number, stopWhenDone = true, onSt
   /** Short of materials at the last try: what a player answers with a mine. */
   let wanting = false;
   const place = (type: BuildingType): boolean => {
+    let pick: { tx: number; ty: number; state: SimState } | null = null;
     for (const [tx, ty] of order) {
       const o = placeBuilding(state, id, type, tx, ty, t);
       if (!o.ok) {
@@ -192,13 +205,32 @@ export function playPacing(t: Tuning, seconds: number, stopWhenDone = true, onSt
         if (o.reason !== null && /needs a city|terraformed|too thin/.test(o.reason)) return false;
         continue;
       }
-      state = o.state;
-      const linked = connectAll(state, id, t);
-      if (linked.ok) state = linked.state;
-      log.push(`${(stepOf() * realPerStep).toFixed(0)} s: ${type} at ${tx},${ty}`);
-      return true;
+      pick = { tx, ty, state: o.state };
+      break;
     }
-    return false;
+    if (pick === null) return false;
+    // Batch 37: a sited player goes a little further for a place wholly on the building's own deposit.
+    const reach = script.siting ?? 0;
+    if (reach > 0 && depositFor(type) !== null) {
+      const g = garage(city());
+      const from = (x: number, y: number): number => Math.hypot(x - Math.round(g?.x ?? tiles / 2), y - Math.round(g?.y ?? tiles / 2));
+      const limit = from(pick.tx, pick.ty) + reach;
+      const env = envOf(state, t);
+      const whole = BUILDING_DEFS[type].footprint * BUILDING_DEFS[type].depth;
+      for (const [tx, ty] of order) {
+        if (from(tx, ty) > limit) break;
+        if (sitingPreview(city(), type, tx, ty, env, t)?.on !== whole) continue;
+        const o = placeBuilding(state, id, type, tx, ty, t);
+        if (!o.ok) continue;
+        pick = { tx, ty, state: o.state };
+        break;
+      }
+    }
+    state = pick.state;
+    const linked = connectAll(state, id, t);
+    if (linked.ok) state = linked.state;
+    log.push(`${(stepOf() * realPerStep).toFixed(0)} s: ${type} at ${pick.tx},${pick.ty}`);
+    return true;
   };
   let step = 0;
   const stepOf = (): number => step;

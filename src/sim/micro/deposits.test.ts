@@ -20,6 +20,7 @@ import type { Tuning } from "../tuning.js";
 import type { BuildingType, PlacedBuilding, SimState } from "../types.js";
 import { NEUTRAL_ENV } from "../types.js";
 import { DEPOSIT_KINDS, depositAt, depositBonus, depositOfCode, depositsOf, sitingOf } from "./deposits.js";
+import { placeBuilding, settlementStep } from "./settlement.js";
 import type { DepositKind } from "./deposits.js";
 import { foundSettlement } from "./registry.js";
 import { chunkKey, frameOf } from "./space.js";
@@ -303,5 +304,72 @@ describe("where each deposit lies (the table's typical locations)", () => {
       }
     }
     expect(suns).toBeGreaterThan(50);
+  });
+});
+
+describe("the Batch 18 bootstrap, re-measured with deposits (the exit gate)", () => {
+  /**
+   * Batch 18's plan - section 2.3's order, each building placed once it is
+   * affordable - on the browser's ground. Each building a deposit boosts goes
+   * on the nearest square wholly on its deposit; everything else on the
+   * nearest bare square. The same squares with deposits on and off, so the
+   * deposits alone differ. Returns the year each was placed and the people at
+   * year 150.
+   */
+  function bootstrap(deposits: 0 | 1): { years: number[]; people: number; unsupported: number } {
+    const t = makeTuning({ ...ON, DEPOSITS_ENABLED: deposits });
+    let s = foundSettlement(marsStart(undefined, t), "city", HERE.lat, HERE.lon, t).state;
+    const id = s.settlements[0]!.id;
+    const n = frameOf(HERE, ON).n;
+    const map = depositsOf(HERE, ON);
+    const g = groundOf(HERE, ON);
+    const plan: BuildingType[] = ["spaceport", "geothermal_plant", "solar_array", "habitat_dome", "greenhouse", "water_extractor", "regolith_mine", "geothermal_plant", "atmosphere_processor", "storage_depot", "habitat_dome", "greenhouse", "geothermal_plant"];
+    const order: [number, number][] = [];
+    for (let y = 0; y < n; y += 1) for (let x = 0; x < n; x += 1) order.push([x, y]);
+    order.sort((a, b) => Math.hypot(a[0] - n / 2, a[1] - n / 2) - Math.hypot(b[0] - n / 2, b[1] - n / 2));
+    const taken = new Set<number>();
+    // Free, buildable, and (when asked) all of one deposit code; a tile's ring round each building left free.
+    const fits = (tx: number, ty: number, w: number, want: number): boolean => {
+      for (let y = ty; y < ty + w; y += 1) for (let x = tx; x < tx + w; x += 1) if (x >= n || y >= n || taken.has(y * n + x) || g.steep[y * n + x] === true || map[y * n + x] !== want) return false;
+      return true;
+    };
+    const spots = plan.map((type) => {
+      const w = type === "spaceport" || type === "habitat_dome" ? 3 : type === "storage_depot" ? 1 : 2;
+      const k = DEPOSIT_KINDS.find((d) => ({ ore: "regolith_mine", ice: "water_extractor", vent: "geothermal_plant", sun: "solar_array" })[d] === type);
+      const at = (k === undefined ? undefined : order.find(([x, y]) => fits(x, y, w, code(k)))) ?? order.find(([x, y]) => fits(x, y, w, 0))!;
+      for (let y = at[1]; y <= at[1] + w; y += 1) for (let x = at[0]; x <= at[0] + w; x += 1) taken.add(y * n + x);
+      return [type, at[0], at[1]] as const;
+    });
+    const years: number[] = [];
+    let unsupported = 0;
+    const cfg = { tuning: t, env: NEUTRAL_ENV, forcing: null };
+    for (let year = 0; year < 150; year += 1) {
+      while (years.length < spots.length) {
+        const [type, x, y] = spots[years.length]!;
+        const o = placeBuilding(s, id, type, x, y, t);
+        if (!o.ok) break;
+        s = o.state;
+        years.push(year);
+      }
+      const env = habitat(s.reservoirs, derive(s.reservoirs, worldEnv(s, NEUTRAL_ENV, t), t), t, 0);
+      if (year > 0 && !settlementStep(s.settlements[0]!, env, t, t.SUBSTEP_YEARS).supported) unsupported += 1;
+      s = advance(s, 4, cfg);
+    }
+    return { years, people: s.settlements[0]!.population, unsupported };
+  }
+
+  it("off, it is Batch 18's to the year; on, the build-out is done 13 years sooner, and the city still fills its homes", () => {
+    const off = bootstrap(0);
+    const on = bootstrap(1);
+    // Measured: Batch 18's years exactly with deposits off (the ground changes nothing else).
+    expect(off.years).toEqual([0, 0, 0, 0, 0, 7, 15, 22, 29, 30, 38, 42, 48]);
+    // Measured with deposits: the mine on ore and the second power plant on a vent pay for the rest sooner -
+    // 19, 24, 25, 29, 32, 35 against 22, 29, 30, 38, 42, 48. The first seven are bought with the founding stock.
+    expect(on.years).toEqual([0, 0, 0, 0, 0, 7, 15, 19, 24, 25, 29, 32, 35]);
+    for (const r of [off, on]) {
+      expect(r.unsupported).toBe(0);
+      expect(r.people).toBeGreaterThan(79.9);
+      expect(r.people).toBeLessThanOrEqual(80);
+    }
   });
 });
