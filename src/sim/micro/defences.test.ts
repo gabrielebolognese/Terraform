@@ -230,8 +230,41 @@ describe("terracing raises a building's ground (detail §1.3, §4.5)", () => {
     expect(Math.abs(after - before - plan.raisedM / RISE_PER_SUBSTEP)).toBeLessThanOrEqual(1);
   });
 
+  it("carries a rover out raising a footprint through a save: loaded, it raises every tile of it", () => {
+    // Review 1: the footprint is read back (v20's `area`), or a terrace in flight - an autosave catches one - loads
+    // as levelling its corner tile only, after the whole footprint was paid for.
+    const plant = low(S).buildings.find((x) => x.tx <= 14 && x.ty <= 14 && 14 < x.tx + BUILDING_DEFS[x.type].footprint && 14 < x.ty + BUILDING_DEFS[x.type].depth)!;
+    const def = BUILDING_DEFS[plant.type];
+    expect(def.footprint * def.depth).toBeGreaterThan(1);
+    const target = terracePlan(low(S), 14, 14, t)!.levelM;
+    const out = advance(terraceBuilding(S, LOW_ID, 14, 14, t).state, 2, still);
+    expect(low(out).jobs.length, "the rover still out when saved").toBe(1);
+    const loaded = fromSave(JSON.parse(serialize(out, t, "2026-10-16T09:00:00.000Z")) as unknown, t);
+    let s = loaded;
+    for (let i = 0; i < 20 && low(s).jobs.length > 0; i += 1) s = advance(s, 1, still);
+    expect(low(s).jobs, "the rover home").toEqual([]);
+    const g = siteGround(low(s), t);
+    for (let y = plant.ty; y < plant.ty + def.depth; y += 1) for (let x = plant.tx; x < plant.tx + def.footprint; x += 1) expect(g.heightM[y * g.tiles + x], `${x},${y}`).toBeCloseTo(target, 9);
+    // And the ground is what it would have been, never saved.
+    expect(g.heightM).toEqual(siteGround(low(advance(out, 20, still)), t).heightM);
+  });
+
   it("is refused without a rover, for a building still going up, twice at once, or short of materials", () => {
     expect(terraceBuilding(START, LOW_ID, 0, 15, t).reason).toMatch(/no headquarters/);
+    // Every rover out (review 1): one headquarters keeps ROVERS_PER_HQ, each terrace sends one, and the next waits.
+    const sites = low(S).buildings.filter((b) => b.type !== "headquarters");
+    expect(sites.length).toBeGreaterThan(t.ROVERS_PER_HQ);
+    let busy = S;
+    for (const b of sites.slice(0, t.ROVERS_PER_HQ)) {
+      const o = terraceBuilding(busy, LOW_ID, b.tx, b.ty, t);
+      expect(o.ok, o.reason ?? "").toBe(true);
+      busy = o.state;
+    }
+    const next = sites[t.ROVERS_PER_HQ]!;
+    expect(terraceBuilding(busy, LOW_ID, next.tx, next.ty, t).reason).toBe(`all ${t.ROVERS_PER_HQ} rovers are out`);
+    expect(low(busy).jobs.length).toBe(t.ROVERS_PER_HQ);
+    // Reachable: with a rover home, the same building is raised.
+    expect(terraceBuilding(S, LOW_ID, next.tx, next.ty, t).ok).toBe(true);
     expect(terraceBuilding(S, LOW_ID, 1, 2, t).reason).toMatch(/no building there/);
     const once = terraceBuilding(S, LOW_ID, 0, 15, t).state;
     expect(terraceBuilding(once, LOW_ID, 0, 15, t).reason).toMatch(/already raising/);
@@ -312,6 +345,15 @@ describe("evacuation moves the people to safety (detail §4.5, conflict 8)", () 
     const doomed = edit(s, HIGH_ID, (c) => ({ ...c, floodGraceYears: 5 }));
     expect(threatened(doomed, doomed.settlements[1]!, rate, t)).toBe(true);
     expect(evacuateSettlement(doomed, LOW_ID, rate, t).reason).toMatch(/no city out of the sea's way has homes/);
+    // Nor is a city with room that was itself evacuated (review 1): no one settles there again. The same city not
+    // evacuated takes them.
+    const abandoned = edit(s, HIGH_ID, (c) => ({ ...c, evacuated: true }));
+    expect(threatened(abandoned, abandoned.settlements[1]!, rate, t)).toBe(false);
+    expect(housing(abandoned.settlements[1]!, t) - abandoned.settlements[1]!.population).toBeGreaterThanOrEqual(low(s).population);
+    const refuge = evacuateSettlement(abandoned, LOW_ID, rate, t);
+    expect(refuge.ok, `${refuge.moved} people moved to ${refuge.to.map((x) => x.id).join(", ")}`).toBe(false);
+    expect(refuge.reason).toMatch(/no city out of the sea's way has homes/);
+    expect(evacuateSettlement(s, LOW_ID, rate, t).ok).toBe(true);
     const off = makeTuning({ ...t, FLOODING_ENABLED: 0 });
     expect(evacuateSettlement(s, LOW_ID, rate, off).reason).toMatch(/floods nothing/);
   });
