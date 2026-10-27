@@ -1423,6 +1423,32 @@ button:hover {
   background: var(--warn-bg);
 }
 
+/* Batch 38: the sea, for a city it threatens - its warning in words, and the way out. */
+.city-flood {
+  margin: 14px 0 0;
+  padding: 9px 12px;
+  font-size: 13px;
+  background: var(--warn-bg);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn);
+  border-radius: 8px;
+}
+
+.city-flood[hidden],
+.city-evacuate[hidden] {
+  display: none;
+}
+
+.city-flood .city-section-title {
+  margin-top: 0;
+}
+
+.city-flood-text {
+  margin: 0 0 8px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Batch 32: the people's happiness and their needs. */
 .city-people[hidden] {
   display: none;

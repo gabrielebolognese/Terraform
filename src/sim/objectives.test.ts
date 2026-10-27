@@ -337,7 +337,8 @@ describe("the first hour in the save", () => {
     const loaded = fromSave(v15, T);
     expect(loaded.goals).toEqual(NO_GOALS);
     expect(first(loaded).extraRovers).toBe(0);
-    expect(loaded.settlements).toEqual(s.settlements);
+    // Each city held from the sea for its grace on the way (v20, Batch 38): it was made before flooding.
+    expect(loaded.settlements).toEqual(s.settlements.map((c) => ({ ...c, floodGraceYears: T.FLOOD_GRACE_YEARS })));
   });
 
   it("refuses a save whose record of the first hour is corrupt, naming the field", () => {

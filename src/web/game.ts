@@ -26,7 +26,7 @@ import { examplePlanet } from "../harness/example.js";
 import type { TerrainRotation } from "../shared/planet-terrain.js";
 import { formatLatLon, formatMetres, settlementLabel } from "./settlement-label.js";
 import { floodWarnings } from "./flood-warning.js";
-import type { FacilityType, HabitatChannels, MicroResource, SettlementKind, SimConfig, SimState, Tuning, VisualChannels } from "../sim/index.js";
+import type { FacilityType, HabitatChannels, MicroResource, SettlementKind, SimConfig, SimState, ThrottleReading, Tuning, VisualChannels } from "../sim/index.js";
 import {
   BUILDING_DEFS,
   DEFAULT_TUNING,
@@ -62,6 +62,11 @@ import {
   sendRover,
   siteElevation,
   liquidWaterRate,
+  dikeHeightM,
+  evacuateSettlement,
+  terraceBuilding,
+  threatened,
+  throttleForecast,
   nextSubstepFlows,
   seaLevel,
   renameSettlement,
@@ -626,6 +631,29 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
         state = outcome.state;
         return outcome;
       },
+      // Batch 38 - detail §4.5's defences, the simulation deciding.
+      onTerrace: (id, tx, ty) => {
+        const outcome = terraceBuilding(state, id, tx, ty, tuning);
+        state = outcome.state;
+        return outcome;
+      },
+      onEvacuate: (id) => {
+        const outcome = evacuateSettlement(state, id, liquidRate, tuning);
+        state = outcome.state;
+        if (!outcome.ok) return { ok: false, reason: outcome.reason, words: null };
+        const names = outcome.to.map((x) => {
+          const s = state.settlements.find((c) => c.id === x.id);
+          return `${s === undefined ? x.id : settlementLabel(s)} (${Math.floor(x.people).toLocaleString("en")})`;
+        });
+        const left = state.settlements.find((c) => c.id === id)?.population ?? 0;
+        const stayed = left >= 1 ? ` ${Math.floor(left).toLocaleString("en")} had nowhere to go and stay.` : "";
+        return { ok: true, reason: null, words: `${Math.floor(outcome.moved).toLocaleString("en")} people moved to safety: ${names.join(", ")}.${stayed}` };
+      },
+      floodNote: (id) => {
+        const s = state.settlements.find((c) => c.id === id);
+        if (s === undefined) return { words: null, evacuate: false, evacuated: false };
+        return { words: floodWords.get(id) ?? null, evacuate: !s.evacuated && s.population >= 1 && threatened(state, s, liquidRate, tuning), evacuated: s.evacuated };
+      },
       onMoveQueued: (id, from, to) => {
         const outcome = moveQueuedBuild(state, id, from, to);
         state = outcome.state;
@@ -1026,6 +1054,23 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   let lastReadout = 0;
   /** Net flow into liquid water at the last readout, m/yr: the sea level's rate reads it (Batch 23). */
   let liquidRate = 0;
+  /** Batch 38: each warned city's flood words at the last readout - what the city view's flood panel shows. */
+  let floodWords: ReadonlyMap<string, string> = new Map();
+  /**
+   * Batch 38's throttle link: what switching the planet's facilities off would buy the warned cities, asked of
+   * the simulation's projection - about 30 ms - once a sim-year of the world, or when the facilities, the cities
+   * warned or their Seawalls change; never while no city is warned.
+   */
+  let throttleKept: { key: string; map: ReadonlyMap<string, ThrottleReading> } = { key: "", map: new Map() };
+  const throttleFor = (ids: readonly string[]): ReadonlyMap<string, ThrottleReading> => {
+    const walls = ids.map((id) => {
+      const s = state.settlements.find((x) => x.id === id);
+      return s === undefined ? 0 : dikeHeightM(s, tuning);
+    });
+    const key = `${Math.floor(simYear(state, tuning))}|${state.facilities.map((x) => `${x.type}:${x.count}:${x.enabled ? 1 : 0}`).join(",")}|${ids.join(",")}|${walls.join(",")}`;
+    if (key !== throttleKept.key) throttleKept = { key, map: throttleForecast(state, config(), ids) };
+    return throttleKept.map;
+  };
   /** The planet as the cities see it this frame: what wind turbines and parks wait for (the same the city view shows). */
   let cityEnv: HabitatChannels | null = null;
   let lastSample = 0;
@@ -1207,8 +1252,9 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
         build: buildRows(state, tuning),
         seeded: state.seeded,
         settlements: state.settlements,
-        // Batch 25: the flood forecast, asked of the simulation - with flooding off, none.
-        floodWarnings: floodWarnings(state, hab, liquidRate, tuning),
+        // Batch 25: the flood forecast, asked of the simulation - with flooding off, none. Batch 38: with what
+        // throttling the planet would buy each warned city.
+        floodWarnings: (floodWords = floodWarnings(state, hab, liquidRate, tuning, throttleFor)),
         // Batch 31: each city at a glance, from the same substep the alerts read.
         overviews: new Map(
           state.settlements
