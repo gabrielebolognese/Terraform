@@ -298,7 +298,21 @@ was restored from the commit and the runner fixed before any other work.
 
 ## Verification
 
-VERIFICATION
+- **typecheck**: green.
+- **build**: green.
+- **build:web**: green, 667.63 kB JS (226.18 kB gzip), 52.19 kB CSS. Past Vite's 500 kB warning, as
+  recorded since Batch 31.
+- **The built page over HTTP**: the page, its script and its styles were served and fetched (all
+  200), and the script holds the deposits' words.
+- **The full suite** (`npx vitest run --maxWorkers=2 --minWorkers=1`): 125 files, 1,510 tests, all
+  passed (435 s). The Known-red opening test passed this run.
+  - The first full run had one failure, Batch 30's rover reward (finding 4). It is fixed, and the
+    second run is the one reported.
+- **Gates with deposits off by default:** the golden run, the golden frames, the city's and the
+  structures' reference frames, and the Batch 3 score are in the suite as they were.
+  `src/sim/micro/deposits.test.ts` holds chunk-independence with deposits on.
+- **The marks, looked at**: rendered by the software rasteriser to PNG (a 48-tile city with every
+  kind, whole and up close), and read.
 
 ## Open
 

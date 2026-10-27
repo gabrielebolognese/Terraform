@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 36
-in_progress_batch: 37
+last_completed_batch: 37
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -1590,8 +1590,38 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     (no 9), a numbering slip only.
 
 ### Batch 37 - Terrain resource deposits
-- status: in progress
+- status: complete
+- note: docs/balance/batch37-deposits.md
+- manual: docs/manual/cities.md (new section: Deposits; the tools), docs/manual/buildings.md (the
+  four boosted buildings), docs/manual/getting-started.md (the first half hour: deposits marked
+  while placing), docs/manual/controls.md (select a deposit, the Deposits tool),
+  docs/manual/update-notes.md (Update 37, the current known issues), docs/manual/README.md
+  (contents, the game in one minute)
+- commits: 62b74c6 (started), 0bf5de4, 5ebf08f, 1d9fbc2, 92fce03, c51d875, 93748bc, 98c52be,
+  3586c09, 9014e3a, 4ab7ada, and the completing commit
 - sessions: 1 (2026-10-16)
+- found:
+  - chasing deposits starves a city: the scripted player that sited every extractor on its deposit,
+    however far, never reached 1,000 people in 4 h (its far buildings' corridors and cables took
+    the founding stock); it now sites within a reach, and the manual says to take the near ones.
+  - the first thresholds (1.5 m) marked 30% of the ground ore and 33% ice, and no sun; measured,
+    6 m and 7 m: 5.8%, 7.5%, vents 2.7%, sun 1.5%, every kind at every one of 100 sites.
+  - Batch 34's "a trader has the city of 1,000 sooner" and Batch 30's "two rovers bring it 8.3 min
+    sooner" moved with deposits on (83 s later; 5.1 min): the greedy script's chaos (one extractor
+    on ice at 4,800 s changes every placement after it). Both now measured on the world they were
+    measured on, with a deposits-on check beside each. The second was missed in my first read of
+    a log and found by the full suite.
+  - a Terraformed start's first step took 6.2 s against 0.7 s (each boosted building's tiles
+    sampled one at a time); batched, 1.9 s against 0.6 s - 1.3 s once, under Open for Batch 40.
+  - a metropolis's map took 120 ms (more than its ground); a padded array, 52 ms, made a band at
+    a time while the city opens.
+  - looked at as PNG: the ore's diamond drew as a flat bar, and marks covered the buildings on them;
+    both fixed and tested.
+  - six tests weaker than they looked, found by injection and strengthened (15, 28, 34, 35, 38 and
+    the chunk test's first fault); one injection run left a fault in the tree (the runner restored
+    two edits to one file in the wrong order) - seen in git diff, restored from the commit, the
+    runner fixed.
+  - docs/AUTO_BATCH_SETUP.md (untracked, not this batch's) left as it is.
 - decisions:
   - Behind its own DEPOSITS_ENABLED (0), on only in new worlds (NEW_WORLD_OVERRIDES), not behind
     SETTLEMENTS_ENABLED alone (conflict 9): that is on in every browser world, so old worlds' mines
@@ -1610,3 +1640,32 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     inspector and in the placement hint with the factor.
   - The pacing script gains `siting`; three runs measured (off, on and placed by spiral, on and
     sited); the bootstrap replayed on the browser's terrain.
+  - The scripted player's `siting` is a reach in tiles (unbounded, it starved its city).
+  - Batch 34's trade test and Batch 30's rover reward are kept on the worlds they measured, each
+    with a deposits-on check beside it: the change is the script's chaos, not trade or rovers.
+  - "Unshadowed" read as nothing near standing over the tile: the city view has no sun direction.
+  - No keyboard shortcut for the Deposits tool: Batch 36's 21 actions left as they are.
+  - A tile with a deposit and no rock can be selected (to say what it is); no rover is offered there.
+- verification: typecheck green; build green; build:web green (667.63 kB JS, 226.18 kB gzip,
+  52.19 kB CSS); the built page, script and styles served and fetched over HTTP (the script holds
+  the deposits' words); npx vitest run --maxWorkers=2 --minWorkers=1: 125 files, 1,510 tests, all
+  passed (435 s; the Known-red opening test passed). The first full run had one failure (Batch
+  30's rover reward, above), fixed before this run. Deposits are off by default: the golden run,
+  golden frames, reference cities and Batch 3 score are in the suite as they were.
+- measured: Batch 18's bootstrap with deposits off to the year (last building at 48), with the
+  four boosted buildings on their deposits done at 35, 80 people both ways; Batch 28's targets with
+  deposits on (spiral) - first building 33 s / 8 s, first upgrade 21.5 / 19.9 min (still missing
+  4-8), city of 1,000 2.11 h / 1.80 h (2.03 / 1.82 without), phases unchanged.
+- injections: 39 faults, one at a time, each file restored from a copy and checked: 32 caught at
+  once, 5 caught once their test was strengthened (15, 28, 34, 35, 38), 2 change nothing a test
+  can see (29, the ring summed in reverse; 33's first form, a one-to-one shift of a memo). The
+  table is in the note.
+- review request: BUILD_PLAN.md GAME_PLAN.md README.md docs/PROGRESS.md
+  docs/balance/batch37-deposits.md docs/design/macro-world.md docs/manual/README.md
+  docs/manual/buildings.md docs/manual/cities.md docs/manual/controls.md
+  docs/manual/getting-started.md docs/manual/update-notes.md src/harness/pacing.ts
+  src/render/city.ts src/sim/index.ts src/sim/micro/deposits.test.ts src/sim/micro/deposits.ts
+  src/sim/micro/settlement.ts src/sim/micro/terrain.ts src/sim/micro/view.ts src/sim/tuning.ts
+  src/web/city-cards.ts src/web/city.ts src/web/deposit-words.ts src/web/deposits.test.ts
+  src/web/earth-gate.test.ts src/web/first-hour.test.ts src/web/game-tuning.ts src/web/pace.test.ts
+  src/web/settings-cues.test.ts
