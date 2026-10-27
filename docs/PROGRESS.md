@@ -1616,7 +1616,9 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - a metropolis's map took 120 ms (more than its ground); a padded array, 52 ms, made a band at
     a time while the city opens.
   - looked at as PNG: the ore's diamond drew as a flat bar, and marks covered the buildings on them;
-    both fixed and tested.
+    both fixed. The marks over buildings were tested (injection 31); the flat bar was not, though
+    this line and commit 93748bc said so (injection 32 is a different fault) - found by review 1,
+    tested in its fixes (injection 40).
   - six tests weaker than they looked, found by injection and strengthened (15, 28, 34, 35, 38 and
     the chunk test's first fault); one injection run left a fault in the tree (the runner restored
     two edits to one file in the wrong order) - seen in git diff, restored from the commit, the
@@ -1707,3 +1709,27 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   upgrades compound on top (`levelFactor` multiplies the same efficiency); the ice gives nothing
   once water is in reach everywhere (`depositBonus`). The decisions are ones a bare "Go" would
   accept; none touches player data.
+- fix 1: done
+  1. The hint's plurals: `sitingWords` names many of each with written-out plurals ("Ice lenses
+     are marked with pale blue discs", "Sunny high flats are marked with yellow crosses";
+     `marksWords` in `src/web/deposit-words.ts`). A new test in `src/web/deposits.test.ts` holds
+     the whole sentence for all four kinds, off the deposit and on it (2 of 4 and 4 of 4), and the
+     mine's hint test now reads the whole off-deposit sentence through the real component. The old
+     form injected: both fail ("Ice lenss are marked with a pale blue discs" in the diff).
+  2. The ore's mark on the screen: a new test in `src/web/deposits.test.ts` takes every ore mark
+     the city draws while a mine is being placed (more than 10) and holds it to a tile's shape on
+     the screen (`isoProject` of a tile's corners): four points straight above, below and either
+     side of its middle, twice as wide as tall, and its middle the tile's. Injected one at a time,
+     the tree clean after each: the turn removed (the flat bar) - its four points all off those
+     lines; the mark a tenth of a tile off its middle - 124.8 against 128 pixels. The note's
+     finding 7 now says the flat bar was untested until review 1 (and that 93748bc's message was
+     wrong), finding 10 records the plurals, the injection table gains 40-42 (row 32 says it is
+     not the flat bar), and this entry's `found:` line is corrected.
+  - manual: `docs/manual/cities.md` now gives the hint's words off a deposit as well ("No ore vein
+    under it: it would make x1. Ore veins are marked with copper diamonds."). Update 37's notes
+    quote only the on-deposit sentence, which is unchanged.
+  - checks: typecheck green; build green; build:web green (667.79 kB JS, 226.22 kB gzip, 52.19 kB
+    CSS; the built script holds "Ice lenses" and "crosses"); npx vitest run --maxWorkers=2
+    --minWorkers=1: 125 files, 1,512 tests, all passed (426 s; the Known-red opening test passed).
+  - files: src/web/deposit-words.ts, src/web/deposits.test.ts, docs/balance/batch37-deposits.md,
+    docs/manual/cities.md, docs/PROGRESS.md

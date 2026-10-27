@@ -90,6 +90,8 @@ stand on their own:
   to hide them. Marks are not drawn under buildings.
 - **The line above the build bar** names the deposit under the pointer, and says what the building
   would make there, for example "On ore vein, all 4 of its tiles: it would make x2 materials."
+  Off its deposit, it says so and how that deposit is marked: "No ore vein under it: it would
+  make x1. Ore veins are marked with copper diamonds."
 - **Click a tile with a deposit** to see what it is and what it gives. A building's panel says what
   it stands on, for example "On ore vein (all of it): x2 output."
 - A deposit never runs out, and stays where it is when the city claims more land.
