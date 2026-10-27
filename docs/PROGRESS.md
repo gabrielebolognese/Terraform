@@ -1669,3 +1669,41 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   src/web/city-cards.ts src/web/city.ts src/web/deposit-words.ts src/web/deposits.test.ts
   src/web/earth-gate.test.ts src/web/first-hour.test.ts src/web/game-tuning.ts src/web/pace.test.ts
   src/web/settings-cues.test.ts
+- review 1: rejected
+  1. The placement hint's words are broken English whenever one of the four buildings is held off
+     its own deposit, which is most of the time a player places one. `src/web/deposit-words.ts:57`
+     adds an "s" to the name and to `markWords` (which already starts with "a"). Measured in this
+     review (`sitingWords({ kind, on: 0, of: 4, factor: 1 })` for each kind): " No ice lens under
+     it: it would make x1. Ice lenss are marked with a pale blue discs.", "... Ore veins are marked
+     with a copper diamonds.", "... Geothermal vents are marked with a red rings.", "... Sunny high
+     flats are marked with a yellow crosss." The test (`src/web/deposits.test.ts:198`) checks only
+     the first sentence, so it passes. Needed: correct plurals ("Ice lenses are marked with pale
+     blue discs", "yellow crosses"), and a test that asserts the whole sentence for every kind,
+     broken once by the old form.
+  2. The fix the batch found by looking - the ore's mark drew as a flat bar on screen - has no
+     test, and the note and commit say it has. `docs/balance/batch37-deposits.md:66-71` ("Both are
+     tested, and both injections are caught (31, 32)") and commit 93748bc ("both tested and
+     injected") rest on injection 32 (`:290`, "the ore's diamond drawn as a disc"), a different
+     fault. Injected in this review: the turn at `src/render/city.ts:4376` removed
+     (`groundPolygon(cx, cy, 0.36 * k, 4, z)`, the flat bar), then `src/web/settings-cues.test.ts`,
+     `src/web/deposits.test.ts` and `src/web/city-cards.test.ts` run: 24 of 24 pass. No other test
+     draws the marks. The cue register's `shapeOf` (`settings-cues.test.ts:520`) compares shapes
+     in ground coordinates, where the bar and the diamond are both four-pointed. Needed: a test
+     that projects the ore's mark to the screen (`isoProject`) and holds it to a diamond (its
+     points on the screen's vertical and horizontal through its middle, as a tile's are),
+     injected with the turn removed; and the note's finding 7, its injection table and this
+     entry's `found:` line corrected to say what is tested.
+  Checked and sound: typecheck, build and build:web green (667.63 kB JS, 226.18 kB gzip, 52.19 kB
+  CSS, as the note says); `npx vitest run --maxWorkers=2 --minWorkers=1` 125 files, 1,510 tests,
+  all passed (481 s; the Known-red opening test passed). The exit gate is met by tests: the same
+  site's deposits, none in the save; each of the four makes x(1 + bonus) through a real `advance`,
+  by share, chunk-independent, a variant tuning reading its own ground; Batch 18's bootstrap and
+  Batch 28's targets re-measured with the numbers beside the bounds. Behind DEPOSITS_ENABLED 0,
+  on in NEW_WORLD_OVERRIDES only; the twelve constants in `tuning.ts` and the section 10 table;
+  `src/sim/` imports nothing from `src/web/` or `src/render/`; no save change. Injections
+  re-run, one at a time, the tree clean after each: fault 4 (the ice never fades) caught, 2
+  against 1.513; fault 18 (the hint's factor without its share) caught, x2 against x1.5. Manual
+  checked against the code: no mark under a building (`depositOverlay`'s covered tiles);
+  upgrades compound on top (`levelFactor` multiplies the same efficiency); the ice gives nothing
+  once water is in reach everywhere (`depositBonus`). The decisions are ones a bare "Go" would
+  accept; none touches player data.
