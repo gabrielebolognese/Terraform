@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { REFERENCE_POLICY } from "../harness/policy.js";
-import { SEA_TUNING, buildTowns, playEvacuation, playToVictory, playWalled } from "../harness/ending.js";
+import { SEA_TUNING, buildTowns, placeFirst, playEvacuation, playToVictory, playWalled } from "../harness/ending.js";
 import type { SimState } from "./index.js";
 import { NEUTRAL_ENV, NO_ENDING, SaveError, advance, fromSave, holdSteps, makeTuning, marsStart, seaNow, siteElevation, stepEnding, toSave, worldScore } from "./index.js";
 
@@ -134,5 +134,29 @@ describe("the ending in a save", () => {
     expect(bad({ peak_people: -1 })).toThrow(/peak_people/);
     expect(bad({ achievements: [{ id: "caps", step: 1 }, { id: "caps", step: 2 }] })).toThrow(/twice/);
     expect(bad({ living_steps: 1.5 })).toThrow(/living_steps/);
+  });
+});
+
+describe("a city held by its wall", () => {
+  it("counts once the sea stands FLOOD_THRESHOLD_M over its ground - where it would be lost - and not before", () => {
+    // The walled run, the sea measured beside it: the first substep it stands 10 m over the walled city's ground.
+    let over: number | null = null;
+    let savedBefore = 0;
+    const run = playToVictory(REFERENCE_POLICY, SEA_TUNING, 2600, {
+      found: [{ lat: 0.31, lon: -1.2 }, { lat: 0.31, lon: -1.22 }, { lat: 0.33, lon: -1.2 }, { lat: 0.444, lon: 0.7773 }],
+      act: (s) => {
+        if (s.steps === 0) return placeFirst(s, "settlement-4", "seawall", SEA_TUNING);
+        const sea = seaNow(s, SEA_TUNING);
+        const ground = siteElevation(0.444, 0.7773, SEA_TUNING);
+        if (over === null && sea !== null && sea - ground >= SEA_TUNING.FLOOD_THRESHOLD_M) over = s.steps;
+        if (over === null) savedBefore = Math.max(savedBefore, worldScore(s, SEA_TUNING)!.citiesSaved);
+        return s;
+      },
+    });
+    expect(over).not.toBeNull();
+    expect(savedBefore).toBe(0);
+    // Latched from the state the substep left: the first state with the sea there.
+    expect(run.state.ending.achievements.find((a) => a.id === "held")!.step).toBe(over!);
+    expect(worldScore(run.state, SEA_TUNING)!.citiesSaved).toBe(1);
   });
 });

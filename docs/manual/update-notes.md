@@ -4,6 +4,47 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 39 - A world to win
+
+Mars can be won. Hold the living world for ten years and your world is won, with its story told in
+numbers and its score. Every world keeps a score and earns achievements as you play, and a win
+opens a bonus for your next world.
+
+**New**
+- **Victory**, in Standard worlds made from this update on: reach Living world and hold all six
+  minimums for 10 years in a row (about 44 minutes at 1x). The camera swings round the living
+  planet, then a card tells the world's story - the year, the cities, the people, what the sea took
+  and what you saved - and its score. **Keep playing** carries on; nothing ends. See
+  [Winning](the-ending.md).
+- **A score for every world**: speed, people, cities held behind their Seawall, cities lost, and the
+  pressure you put on the planet (its machines, for every year they ran). The **Worlds** list shows
+  it, with the year the world was won.
+- **30 achievements**, each with a card when you earn it, and an **Achievements** screen on the
+  title screen that keeps what you earned even if you delete the world. The rare ones reward how you
+  win: nobody lost to the sea, a light touch, a swift win, or no help bought from Earth.
+- **New game plus**: once you have won a world, a new Standard world can start with a bonus -
+  9,000 credits, five rovers at every headquarters, cities founded with full stores, or Earth's trust
+  from the start.
+
+**Changed**
+- The **While you were away** summary says when the world was won, and how many achievements came,
+  while you were away.
+
+**Fixed**
+- Nothing in this update.
+
+**Known issues**
+- Worlds made before this update, Sandbox worlds and Terraformed starts have no victory, score or
+  achievements.
+- Your victories and achievements are kept by this browser, like your settings: another browser does
+  not have them, and new game plus opens only once a world has been won in this browser.
+- An achievement earned while you were away gets no card; it is on the Achievements screen.
+- The score's pressure part, and "A light touch", were set from playthroughs that order the planet's
+  machines on a schedule without paying for them; a player paying as they go has not been measured
+  against them.
+
+---
+
 ## Update 38 - The rising sea
 
 As Mars warms, its ice melts and a sea rises, and in worlds made from this update on it floods
@@ -180,6 +221,14 @@ rocket, and every alert.
 - Your sound settings are kept by this browser: another browser, or a world's exported file, does
   not carry them.
 - A rocket coming home makes no sound; only its lift-off does.
+- Worlds made before Update 39, Sandbox worlds and Terraformed starts have no victory, score or
+  achievements.
+- Your victories and achievements are kept by this browser: another browser does not have them, and
+  new game plus opens only once a world has been won in this browser.
+- An achievement earned while you were away gets no card.
+- The score's pressure part, and "A light touch", were set from playthroughs that order the planet's
+  machines on a schedule without paying for them; a paying player has not been measured against
+  them.
 - Opening a Terraformed start world can pause for a second or two, once, while it works out what
   each of its buildings stands on.
 - A settlement's deposits are seen only once it is founded: the planet and the world map do not
@@ -512,7 +561,6 @@ and railways between settlements; and the Example planet.
 - In a city, a right click also places or selects, the same as a left click.
 - The **While you were away** summary only appears in the Instruments drawer.
 - The ocean cover bar's minimum mark says "0.3%" when it means 30%.
-- There is no ending yet: the game carries on after the planet becomes a Living world.
 - In a city, trains on different lines pass through each other where the lines cross.
 - A rover driving past another one at work beside its site can pass through it.
 - Levelling ground can leave the tiles beside it too steep to build on, with no rock on them.

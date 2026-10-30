@@ -40,8 +40,9 @@ at 1x (a third of that at 3x).
 it says how many of the six Living world minimums are met and what is still short. A Living world
 reads about 87%: the last stretch to a truly Earth-like planet goes beyond it.
 
-There is no ending yet. Reaching Living world is the goal today; victory, scores and achievements
-arrive in a later update.
+In a Standard world made from Update 39 on, Living world is the last step before **victory**: hold
+all six minimums for 10 years in a row (about 44 minutes at 1x) and the world is won. See
+[Winning](the-ending.md).
 
 ## What the planet needs next
 

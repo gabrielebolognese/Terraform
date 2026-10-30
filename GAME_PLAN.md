@@ -57,7 +57,7 @@ What is missing, in the user's words (2026-10-11):
 | 36 | Settings, controls and accessibility | **COMPLETE** - [note](docs/balance/batch36-settings.md) - every setting in one panel, kept per player in a store of their own (Batch 35's record moved, never deleted); detail held or Auto, pictures kept, moving details off, each level's frame time measured on the player's machine; 21 shortcuts by physical key, two rebindable slots each; camera speed, edge scrolling, invert zoom, trackpad and touch in every view; panel size, colour-blind palettes measured under simulated colour blindness, reduced motion, high contrast, pop-ups; autosave interval, Ctrl+S, where the worlds are kept; a second cue for every colour code, held to a register of the stylesheet's rules; the same world to the bit whatever the settings |
 | 37 | Terrain resource deposits (was `BUILD_PLAN` 27) | **COMPLETE** - [note](docs/balance/batch37-deposits.md) - ore on ridges and rims, ice in hollows (more poleward), vents along the canyons' fault, sunny high flats: derived at site coordinates, never stored; a mine, extractor, geothermal plant or solar array on its own deposit makes x2, x2 (fading with water), x2, x1.5 by the share of its footprint, through `advance`, in new worlds only; marked by shape when placing and by a Deposits tool, the hint giving the factor; Batch 18's bootstrap done 13 years sooner, the scripted pacing within 4%, far deposits a trap |
 | 38 | Flood defences and the rising water; flooding on (was `BUILD_PLAN` 28) | **COMPLETE** - [note](docs/balance/batch38-flood-defences.md) - the sea floods cities in new worlds; a Seawall raises a city's datum 4 m a level and stands until the city falls; terracing raises a building's ground; evacuation moves people to the nearest safe cities; the throttle link as a projection with every machine off (7.75-48 years bought at year 290, named exactly); a water plane clipped at the waterline in a reference frame; a grace for a city carried from an older save (v20); no founding under the sea |
-| 39 | The ending: victory, scores and achievements | NOT STARTED |
+| 39 | The ending: victory, scores and achievements | **COMPLETE** - [note](docs/balance/batch39-ending.md) - the six minimums held 10 years wins a new Standard world (the reference policy at the Standard pace: substep 55,032, 127.4 h at 1x); a score derived from the state (speed, people, cities held and lost, machine-years), the same live or offline, on the worlds list; 30 achievements latched from the state, each earned in a scripted run, none in the first minute (soonest 1,708 s); the victory over the globe with the world's story and the choice to keep playing; new game plus bonuses; save v21 |
 | 40 | Playtest pass: performance, polish and an adversarial review | NOT STARTED |
 
 The order is by what the player meets first, and by what later batches stand on:
@@ -1055,22 +1055,40 @@ before its grace period ends, tested.
 **Goal.** A game that can be won, and a reason to play again.
 
 **Deliverables:**
-- [ ] **Victory:** a breathable, temperate, watered planet - the arc's last phase, sustained for a
+- [x] **Victory:** a breathable, temperate, watered planet - the arc's last phase, sustained for a
   stated time. Then:
   - a victory sequence over the globe;
   - the world's story in numbers (years, cities, people, losses to the sea);
   - the choice to keep playing.
-- [ ] **A score per world:** speed, people, cities lost and saved, pressure on the planet; shown on
+- [x] **A score per world:** speed, people, cities lost and saved, pressure on the planet; shown on
   the worlds list.
-- [ ] **Achievements:** about thirty, each with an exact condition and checked from state. The rare
+- [x] **Achievements:** about thirty, each with an exact condition and checked from state. The rare
   ones reward a style of play, not a grind.
-- [ ] **New game plus:** a new world with a chosen bonus unlocked by a victory.
+- [x] **New game plus:** a new world with a chosen bonus unlocked by a victory.
 
 **Exit gate:**
 - The reference policy, scripted to the end, reaches victory at a measured real time under Batch
   28's pacing.
 - The score is derived, and identical for the same world live or offline.
 - Every achievement is earned in some scripted run, and none in the first minute.
+
+**Done** - see [the note](docs/balance/batch39-ending.md). Built unattended; the decisions are
+recorded in `docs/PROGRESS.md`.
+
+**What changed from the plan, and why:**
+- **Victory is held, not touched**: the six minimums held VICTORY_HOLD_YEARS (10) in a row. The
+  reference run enters the band once and never leaves it (to year 2,800, weather on or off), so the
+  hold costs it exactly 10 years: won at 1,719.75 (Standard pace), 127.4 h at 1x, 42.5 h at 3x.
+- **"Pressure on the planet" became machine-years**, every planet facility's units online for every
+  year: an exact count that only grows, which a style achievement ("A light touch") can be asked of
+  at the victory.
+- **The ending is a new Standard world's only** (`ENDING_ENABLED`): a sandbox has nothing to win, a
+  Terraformed start begins won, and old worlds keep the tuning they recorded.
+- **The first achievement list could be earned in a minute**: founding and railways are instant and
+  free, and a Classic build takes seconds. Every achievement now waits on people, a great structure
+  that asks for 1,000, the planet's years, Earth's windows, the first event, the sea or the victory.
+- **New game plus is four bonuses**, recorded in the new world's tuning like its mode and pace; it
+  opens once any world is won in the browser.
 
 ---
 

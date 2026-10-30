@@ -10,6 +10,8 @@ first click or key press, as browsers require; then the music starts.
 - **Worlds** lists every world you have made: play, rename, duplicate, back up or delete them.
   See [Worlds and saving](worlds-and-saving.md).
 - **New world** makes a new planet to play.
+- **Achievements** lists the 30 achievements, which you have earned, and in which world. See
+  [Winning](the-ending.md#achievements).
 - **Example planet** shows a fully terraformed Mars with cities and metropolises already built,
   to look around. It takes about forty seconds to build, and nothing you do there is saved.
 - **Settings** sets the game up for you: the sound, the graphics, the controls and every key,
@@ -39,6 +41,9 @@ Press **New world** and choose:
     carries on while the game is closed. The planet changes slowly, over days of play.
   - **Classic - the fast game before real build times.** Everything happens much faster, and you
     get speeds up to 1000x. Worlds made before real build times arrived play at this pace.
+
+- **New game plus** (once you have won a world): a bonus for a new Standard world - more credits,
+  more rovers, fuller stores, or Earth's trust. See [Winning](the-ending.md#new-game-plus).
 
 Press **Create world**, and you are dropped straight into orbit above your new planet.
 
@@ -103,6 +108,7 @@ one. See [Events and decisions](events.md).
 ## What to aim for
 
 - **On the planet:** pass the phases one by one: Warming, Runaway thickening, First water,
-  Ecopoiesis, Oxygenation and buffer, and finally Living world. See [The planet](the-planet.md).
+  Ecopoiesis, Oxygenation and buffer, and finally Living world - then hold it 10 years to win. See
+  [The planet](the-planet.md) and [Winning](the-ending.md).
 - **On the ground:** grow your cities. Bigger cities claim more land, unlock taller buildings,
   and earn the research credits that pay for the planet's machines. See [Cities](cities.md).
