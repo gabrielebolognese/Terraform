@@ -116,6 +116,8 @@ export interface AwaySummary {
   readonly events: { readonly resolved: number; readonly unanswered: number };
   /** Batch 34: Earth's contracts met and failed while away, from its counters (exact, however long the absence). */
   readonly contracts: { readonly fulfilled: number; readonly failed: number };
+  /** Batch 39: whether the planet was won while away, and the achievements earned (ids, in order). */
+  readonly ending: { readonly won: boolean; readonly achievements: readonly string[] };
   /** One line for the player, picking whatever actually changed most. */
   readonly headline: string;
 }
@@ -213,7 +215,12 @@ export function summariseAway(before: SimState, after: SimState, t: Tuning): Awa
   const contracts = { fulfilled: after.earth.fulfilled - before.earth.fulfilled, failed: after.earth.failed - before.earth.failed };
   const settled = [contracts.fulfilled > 0 ? `${contracts.fulfilled === 1 ? "a contract" : `${contracts.fulfilled} contracts`} met` : "", contracts.failed > 0 ? `${contracts.failed === 1 ? "a contract" : `${contracts.failed} contracts`} failed` : ""].filter((x) => x !== "");
   const earthLine = settled.length === 0 ? "" : ` Earth: ${settled.join(", ")} - see Earth.`;
-  return { simYears, phasesGained, deltas, builds, events, contracts, headline: planet + line + eventLine + earthLine };
+  // Batch 39: the victory, and the achievements earned while away.
+  const won = before.ending.victory === null && after.ending.victory !== null;
+  const earned = after.ending.achievements.slice(before.ending.achievements.length).map((a) => a.id);
+  const ending = { won, achievements: earned };
+  const endingLine = (won ? " The planet held its living world: you have won." : "") + (earned.length === 0 ? "" : ` ${earned.length === 1 ? "An achievement" : `${earned.length} achievements`} earned - see Achievements on the title screen.`);
+  return { simYears, phasesGained, deltas, builds, events, contracts, ending, headline: planet + line + eventLine + earthLine + endingLine };
 }
 
 function headlineFor(simYears: number, phasesGained: readonly Phase[], d: AwayDeltas): string {

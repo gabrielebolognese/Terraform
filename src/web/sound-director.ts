@@ -129,8 +129,9 @@ export class SoundDirector {
   }
 
   /** A milestone's card: the chime - grander for a phase, its own for an objective done. */
-  milestone(kind: "phase" | "founded" | "great" | "objective"): void {
-    this.play(kind === "phase" ? "phase" : kind === "objective" ? "objective" : "milestone");
+  milestone(kind: "phase" | "founded" | "great" | "objective" | "achievement" | "victory"): void {
+    // Batch 39: the victory is the grandest beat there is; an achievement chimes as an objective does.
+    this.play(kind === "phase" || kind === "victory" ? "phase" : kind === "objective" || kind === "achievement" ? "objective" : "milestone");
   }
 
   /** A fresh start (a world opened, the example left): take bearings again. */

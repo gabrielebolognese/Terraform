@@ -99,6 +99,7 @@ import { Ring } from "./ring.js";
 import { GuidePanel, ObjectivesPanel, guideHint, rewardWords } from "./onboarding.js";
 import type { GuideContext } from "./onboarding.js";
 import { MilestoneCards, MilestoneWatch } from "./milestones.js";
+import { VictorySequence } from "./victory.js";
 import { AlertWatch, buildingAt, shortagesOf } from "./alerts.js";
 import type { AlertTarget } from "./alerts.js";
 import { AlertCentre, AlertToasts } from "./alert-centre.js";
@@ -148,6 +149,10 @@ export interface GameOptions {
   readonly settings?: { readonly current: Settings };
   /** Where each city frame's cost is kept, for the graphics settings to show. */
   readonly frameCosts?: FrameCosts;
+  /** Batch 39: the victory's sequence has been shown in this world already: it plays once. */
+  readonly victorySeen?: boolean;
+  /** Batch 39: new game plus is open to the player (a world of theirs has been won), for the victory's card to say. */
+  readonly newGamePlus?: () => boolean;
 }
 
 export interface GameHooks {
@@ -163,6 +168,8 @@ export interface GameHooks {
   onBackToTitle(): void;
   /** Save now (Batch 36: the Save key), and the words for how it went. Absent, nothing is saved. */
   saveNow?(): Promise<string>;
+  /** Batch 39: the victory's sequence has begun - the worlds list keeps that it was shown. */
+  onVictory?(): void;
 }
 
 export interface GameHandle {
@@ -830,6 +837,22 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
   const milestones = new MilestoneWatch();
   const cards = new MilestoneCards(root, (m) => sound.milestone(m.kind));
   /**
+   * Batch 39: the victory, once, the first look after the world is won -
+   * however it was won: live, or while the player was away.
+   */
+  let victoryShown = options.victorySeen === true;
+  const victory = new VictorySequence(root, {
+    pose: (p) => globe.setPose(p),
+    currentPose: () => globe.currentPose(),
+    reducedMotion: () => reducedMotion(prefs().ui),
+    orbiting: () => journey.resident === null && !worldMap.isOpen,
+    keepPlaying: () => root.classList.remove("victory-on"),
+    leave: () => {
+      root.classList.remove("victory-on");
+      hooks.onBackToTitle();
+    },
+  });
+  /**
    * Events that ask for decisions (Batch 33): the card of those waiting, a
    * choice taken through the simulation like a claim. The history goes in
    * the alert centre, from the world's own record.
@@ -1276,6 +1299,13 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       guide.update(mine ? guideHint({ state, tuning, context: guideContext(), founding: founding !== null, selected: city.hasSelection }) : null);
       objectives.update(mine ? objectiveStatus(state, tuning) : []);
       if (mine) cards.push(milestones.observe(state, tuning));
+      if (mine && !victoryShown && tuning.ENDING_ENABLED && state.ending.victory !== null) {
+        victoryShown = true;
+        root.classList.add("victory-on");
+        victory.start(timestamp, state, tuning, options.newGamePlus?.() ?? true);
+        sound.milestone("victory");
+        hooks.onVictory?.();
+      }
       decisions.update(mine ? state : null, speed);
       earth.update(mine ? state : null, speed);
       statistics.update(state);
@@ -1323,6 +1353,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
     }
 
     cards.frame(timestamp);
+    victory.frame(timestamp);
     toasts.frame(timestamp);
     cameraKeys(timestamp);
 
@@ -1402,6 +1433,7 @@ export function startGame(app: HTMLElement, options: GameOptions, hooks: GameHoo
       worldMap.dispose();
       travelPrompt.dispose();
       guide.dispose();
+      victory.close();
       root.remove();
     },
   };
