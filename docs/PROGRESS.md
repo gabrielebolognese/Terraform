@@ -1957,3 +1957,24 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
 ### Batch 39 - The ending: victory, scores and achievements
 - status: in progress
 - sessions: 1 (2026-10-30)
+- commits: 86377de (started), 075e45a (the simulation)
+- decisions:
+  - Victory: every one of the six §2.3 minimums (Phase 6 as it stands) held VICTORY_HOLD_YEARS (10 sim-years:
+    44 min at 1x Standard, 5.5 min Classic) in a row, counted a substep at a time in `advance` from the reading
+    the phase is latched from; once won, won. The reference run enters the band once and never leaves it
+    (measured to year 2,800, weather on and off), so the hold costs it exactly 10 years.
+  - The ending (victory, score, achievements) is ENDING_ENABLED's, 0 by default; new Standard worlds only
+    (MODE_OVERRIDES). A sandbox has nothing to win; a Terraformed start begins won. Old worlds keep the tuning
+    they recorded (Batch 27), as every feature since Batch 29; their saves load with an empty ending (v21).
+  - "Pressure on the planet" as machine-years: every planet facility's deployed units, for every sim-year they
+    ran. The reference run's are 96,176 by its victory.
+  - The score: speed (1,000 x 1,720 / years to victory), people at the planet's most (0.1 a person), cities
+    held only by their Seawall (+250) and lost (-250), pressure (-0.004 a machine-year); derived, never stored.
+  - "Cities": cities and metropolises; outposts counted in neither losses nor saves.
+  - People lost to the sea: those in a settlement it takes, and those who leave or die in one the water stands
+    over (its homes going under). Counting only at the fall gave 0: the people go with their domes first.
+  - 30 achievements, each bounded away from the first minute by construction (people, a great structure that
+    asks for 1,000 people, the planet's years, Earth's windows, the first event, the sea, the victory). Founding
+    and railways are instant and free, and a Classic build takes seconds, so "three cities", "an outpost",
+    "a building at level 2" and "a Seawall" as first written could all come in a minute; each was reworded or
+    dropped. Five rare ones reward how the world was won.
