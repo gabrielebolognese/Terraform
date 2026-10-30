@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 38
-in_progress_batch: none
+in_progress_batch: 39
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -1953,3 +1953,7 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     founding refused with "The sea covers that place." (`registry.ts:78`); buildings lost under
     2 m of water (`FLOOD_BUILDING_LOSS_M`); a city lost under 10 m (`FLOOD_THRESHOLD_M`). A
     Sandbox keeps flooding off (`worldTuning`).
+
+### Batch 39 - The ending: victory, scores and achievements
+- status: in progress
+- sessions: 1 (2026-10-30)
