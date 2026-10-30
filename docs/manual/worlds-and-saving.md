@@ -57,8 +57,8 @@ the planet moves on:
 - **Classic pace:** up to 8 hours count, at a reduced rate.
 
 Catching up is quick in a world you built yourself: under a second after ten hours away, even five
-hours into a game. A Terraformed start, with its dozens of cities, takes much longer: about
-40 seconds after an hour away and around five minutes after ten. While the game catches up, the
+hours into a game. A Terraformed start, with its dozens of cities, takes much longer: about half
+a minute after an hour away and around five minutes after ten. While the game catches up, the
 title screen or the **Worlds** list says how far it has got ("Catching up on the time you were away:
 34%"), and the page keeps working while it does.
 

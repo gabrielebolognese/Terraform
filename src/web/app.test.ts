@@ -11,6 +11,7 @@
  * takes the whole game off the page.
  */
 
+import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { marsStart } from "../sim/index.js";
@@ -90,6 +91,26 @@ function notice(root: ParentNode): string {
 }
 
 describe("the front door, through the real components", () => {
+  it("says how far it has got while a world catches up on a long absence, then plays it (Batch 40)", async () => {
+    // A world an earlier update saved (the v20 test file), its save written ten hours before this page's clock.
+    const old = JSON.parse(readFileSync("src/web/old-saves/v20.json", "utf8")) as { slot: string; index: { worlds: { id: string; name: string }[] }; save: string };
+    const store = new MemorySaveStore(true);
+    await store.saveMeta("worlds", old.index);
+    store.putRaw(old.slot, { ...(JSON.parse(old.save) as object), last_saved_real: new Date(T0 - 10 * 3600 * 1000).toISOString() });
+    const { app, root } = page(store);
+    await app.start();
+    buttonNamed(root, "Worlds").click();
+    const said: string[] = [];
+    const watch = new MutationObserver(() => said.push(notice(root)));
+    watch.observe(root.querySelector(".front-notice")!, { childList: true, characterData: true, subtree: true });
+    buttonNamed(row(root, old.index.worlds[0]!.name), "Play").click();
+    await app.settled();
+    watch.disconnect();
+    expect(said.some((t) => /^Catching up on the time you were away: \d+%$/.test(t)), said.join(" | ")).toBe(true);
+    expect(notice(root), "cleared once it is done").toBe("");
+    expect(app.currentView).toBe("game");
+  });
+
   it("create, play, quit to title, continue: the world made is the world written and the world reopened", async () => {
     const { app, root, store } = page();
     await app.start();
