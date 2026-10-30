@@ -221,14 +221,6 @@ rocket, and every alert.
 - Your sound settings are kept by this browser: another browser, or a world's exported file, does
   not carry them.
 - A rocket coming home makes no sound; only its lift-off does.
-- Worlds made before Update 39, Sandbox worlds and Terraformed starts have no victory, score or
-  achievements.
-- Your victories and achievements are kept by this browser: another browser does not have them, and
-  new game plus opens only once a world has been won in this browser.
-- An achievement earned while you were away gets no card.
-- The score's pressure part, and "A light touch", were set from playthroughs that order the planet's
-  machines on a schedule without paying for them; a paying player has not been measured against
-  them.
 - Opening a Terraformed start world can pause for a second or two, once, while it works out what
   each of its buildings stands on.
 - A settlement's deposits are seen only once it is founded: the planet and the world map do not
@@ -606,3 +598,11 @@ and railways between settlements; and the Example planet.
 - While the sea rises fastest, even a full Seawall buys a city only a few months of the planet's time
   (a minute or so at 1x).
 - A building standing in the sea is drawn on top of the water, not partly under it.
+- Worlds made before Update 39, Sandbox worlds and Terraformed starts have no victory, score or
+  achievements.
+- Your victories and achievements are kept by this browser, like your settings: another browser does
+  not have them, and new game plus opens only once a world has been won in this browser.
+- An achievement earned while you were away gets no card; it is on the **Achievements** screen.
+- The score's pressure part, and "A light touch", were set from playthroughs that order the planet's
+  machines on a schedule without paying for them; a player paying as they go has not been measured
+  against them.

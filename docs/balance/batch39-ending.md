@@ -57,6 +57,15 @@ world on the worlds list, about thirty achievements checked from state, and new 
    set of earned ids built every substep, and the network check allocating with no cities at all).
    Keeping the ids per list and asking the network only with three cities standing brought it to
    2.25 us (2.08 us in the scripted five-hour city of 4,165 people).
+8. **Review 1: "Nobody lost to the sea" could be earned after the win.** The rare ones of how the
+   world was won were asked on every substep after the victory, on the claim that each reads a count
+   that only grows. The cities standing do not: founding is free and instant. A world won with two
+   cities (substep 6,882) earned it on the substep after a third was founded (6,883), against its
+   own words, "Win with at least 3 cities standing". No test founded a city after the win. The four
+   are now judged on the victory's own substep and never after; a test founds the third city the
+   moment after the victory and checks the achievement does not come, with every other part of its
+   condition holding five years on (injection 24). The same review found the batch's known issues
+   written into Update 35's notes instead of the list of the current game's; moved.
 
 ## What was built
 
@@ -94,8 +103,9 @@ world on the worlds list, about thirty achievements checked from state, and new 
 - **The ending is a new Standard world's only** (ENDING_ENABLED 0 by default; MODE_OVERRIDES): a
   sandbox has nothing to win and a Terraformed start begins won; old worlds keep the tuning they
   recorded (Batch 27), as every feature since Batch 29.
-- **Pressure on the planet as machine-years**: exact, only grows, so a style achievement can be asked
-  of it at the victory and can never come true later.
+- **Pressure on the planet as machine-years**: exact, only grows.
+- **The rare ones of how it was won are judged on the victory's substep only** (review 1): the world
+  as it stood when it was won, since not all they read only grows.
 - **Cities are cities and metropolises**; outposts count in neither losses nor saves.
 - **The victory's "seen" is the worlds list's**, not the world's: menus never write the state.
 - **The player's record is the player's** (beside the settings): victories and the first world each
@@ -208,6 +218,7 @@ checked after each: 23 faults, 22 caught at once, 1 caught once its test was str
 | 21 | No card for an achievement | the achievement card | expected [] to equal ["Achievement: Self-reliant"] |
 | 22 | The away summary quiet about the win | coming back to a world won | the headline lacks the line |
 | 23 | The score's speed not scaled by the years | the score | expected 1000 to be greater than 1000 |
+| 24 | "Nobody lost to the sea" asked after the victory (review 1) | a third city founded after the win | expected 57358.33 to be undefined |
 
 ## Verification
 
