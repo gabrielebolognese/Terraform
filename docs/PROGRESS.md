@@ -2238,7 +2238,7 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - 16 ms a frame for pictures never drawn, not 40: smoother panning against a slower first fill.
   - A long absence caught up a substep at a time between frames, with its progress on the front
     screen; resume keeps its chunks (advance is chunk-independent, and a test holds the two equal).
-  - A Terraformed start's opening recorded as missing the budget (6 s; 37.5 s an hour away; 302 s
+  - A Terraformed start's opening recorded as missing the budget (4.6 s; 31 s an hour away; 290 s
     after ten), not worked around: a cheaper catch-up would break live-equals-offline.
   - The script not split (708 kB): a change to how the page loads that cannot be checked in a
     browser here.

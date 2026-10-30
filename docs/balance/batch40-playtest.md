@@ -150,7 +150,27 @@ the runs; the numbers above are from the last run, after every fix.
 
 ### Opening a world
 
-OPEN_TABLE
+As the library opens a world: the tuning from its record, the save read and migrated, the absence
+caught up a substep at a time (the page handed back every 50 ms of work), then the first substep
+played. "The first slice" is the read, the migration and the first substep of the catch-up: the
+longest the page stops; "longest after" the slowest single substep after it.
+
+| World | Save | Away | Opened | The first slice | Longest after | First substep played |
+|---|---|---|---|---|---|---|
+| a new Standard world | 1 kB | none | 7 ms | 7 ms | - | 4 ms |
+| | | 1 h | 42 ms | 2 ms | 1 ms | 0 ms |
+| | | 10 h | 164 ms | 1 ms | 1 ms | 0 ms |
+| the scripted player's world, five hours in | 108 kB | none | 10 ms | 10 ms | - | 2 ms |
+| | | 1 h | 128 ms | 11 ms | 1 ms | 1 ms |
+| | | 10 h | 938 ms | 10 ms | 2 ms | 1 ms |
+| a Terraformed start | 43 MB | none | 2.25 s | 2.25 s | - | 2.3 s |
+| | | 1 h | 31.1 s | 4.6 s | 277 ms | 545 ms |
+| | | 10 h | 290.3 s | 4.1 s | 370 ms | 459 ms |
+
+Under 3 s for every Standard world at every absence up to the 10 h cap. A Terraformed start misses:
+4.6 s with no time away (its read, and the first substep's deposits for 83,589 buildings), 31 s an
+hour away, 290 s after ten. Caught up at once, before this batch, the page stopped for all of it
+(37.5 s and 302 s measured that way).
 
 ### The opening test's steps (one metropolis, `prepareCity`)
 
@@ -221,9 +241,13 @@ each file restored from a copy and checked identical after.
 | 18 | outbreak: each choice's words name what it loses | treating's words with quarantine's figure | caught |
 | 19 | structures: a city loaded draws as before | a building's level not read back | caught: 224,562 shapes against 224,603 |
 | 20 | terrain rotation: a rotation for every seed | a sign in the matrix | caught: det 1.00026 at seed 1 |
+| 21 | front door: says how far it has got while a world catches up | the progress never said | caught: no "Catching up" among what the notice said |
 
-20 faults, 20 caught; one premise of mine replaced (the row without a number). With the review's 14:
-34 faults, 31 caught at once, the 3 not caught fixed and caught as 18-20.
+21 faults, 21 caught; one premise of mine replaced (the row without a number). With the review's 14:
+35 faults, 32 caught at once, the 3 not caught fixed and caught as 18-20.
+
+One run of the front door's new test (21) did not finish in ten minutes and was stopped; three runs
+after, and the full run, finished it in about a second. Not explained.
 
 ## Verification
 
@@ -233,8 +257,9 @@ VERIFICATION
 
 The project's last batch: these are left with their evidence for whoever takes it on.
 
-- **A Terraformed start's opening** (item 4): 6 s at once, 37.5 s an hour away, 302 s ten hours
-  away, against 3 s. The page keeps working and says how far it is. A cheaper substep for a world of
+- **A Terraformed start's opening** (item 4): 4.6 s at once, 31 s an hour away, 290 s ten hours
+  away, against 3 s. The page keeps working and says how far it is, but its first slice - reading
+  the 43 MB save and the first substep - still stops it for about 4 s. A cheaper substep for a world of
   83,589 buildings, or deposits worked out a city at a time (Batch 37's open item), are the ways;
   a coarser catch-up is not (live must equal offline).
 - **Making a Terraformed start, and the example planet**, 30-42 s (Batch 27's open item, longer since

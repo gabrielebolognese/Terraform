@@ -13,13 +13,11 @@
  *   npx tsx src/web/budget.ts memory        memory bounded
  */
 
-import type { CityView, Settlement, SimState, Tuning } from "../sim/index.js";
-import { NEUTRAL_ENV, cityView, makeTuning, marsStart, prepareCity, resumeSteps, toSave, advance } from "../sim/index.js";
-import type { HabitatChannels } from "../sim/habitat.js";
-import { cityDay, metropolisScene } from "../harness/vehicles.js";
+import type { CityView, HabitatChannels, Settlement, SimState, Tuning } from "../sim/index.js";
+import { DEFAULT_TUNING, NEUTRAL_ENV, advance, cityView, makeTuning, marsStart, prepareCity, resumeSteps, toSave } from "../sim/index.js";
 import { examplePlanet } from "../harness/example.js";
 import { playPacing } from "../harness/pacing.js";
-import { DEFAULT_TUNING } from "../sim/index.js";
+import { cityDay, metropolisScene } from "../harness/vehicles.js";
 import { CHUNK_PIXELS } from "./settings.js";
 import type { CityCamera } from "./city-camera.js";
 import { centreCamera, pan, qualityFor } from "./city-camera.js";

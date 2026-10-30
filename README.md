@@ -233,7 +233,7 @@ world's tuning. All behind `ENDING_ENABLED` (new Standard worlds only); save v21
 measured in Node through the browser's code (`src/web/budget.ts`, on a Ryzen 7 5700U): the reference
 city's frames at a median of 2.5 ms (p95 4.8), a metropolis panned at 1x at 6.8 ms (p95 12.9, 99.4%
 of frames within 33 ms), memory steady at about 280 MB of heap while panning; a Standard world opens
-in under a second after ten hours away, a Terraformed start does not (37.5 s an hour away, five
+in under a second after ten hours away, a Terraformed start does not (31 s an hour away, nearly five
 minutes after ten - recorded, its page no longer frozen). What the budget found is fixed: tile keys
 read on a deprecated V8 map after a big world was built (`keyTile` a class), a metropolis's view
 re-derived five times a second whatever changed (now when its inputs change), 40 ms a frame of new

@@ -37,8 +37,8 @@ longer freezes the page while it catches up, and the game saves once when an aut
   game told you to send a rover to break a crag that was not there.
 
 **Known issues**
-- A Terraformed start you have been away from still takes a while to open: about 40 seconds after
-  an hour away, and around five minutes after ten hours. The game shows how far it has got.
+- A Terraformed start you have been away from still takes a while to open: about half a minute
+  after an hour away, and around five minutes after ten hours. The game shows how far it has got.
 - A Terraformed start takes a few seconds to open even when you have not been away.
 
 ---
@@ -399,8 +399,8 @@ and they are happier: a happy city fills its homes faster and every building in 
   railway, and the ready-made cities have only a few lines.
 - Making a Terraformed start, and building the Example planet, take longer than before: about
   40 seconds each, where they took about 20.
-- A Terraformed start you have been away from takes a while to open: about 40 seconds after an hour
-  away, and around five minutes after ten hours. The game shows how far it has got.
+- A Terraformed start you have been away from takes a while to open: about half a minute after an
+  hour away, and around five minutes after ten hours. The game shows how far it has got.
 - A Terraformed start takes a few seconds to open even when you have not been away.
 - Happiness is not yet shown on the world map's city cards, in the Settlements list, in Alerts or
   in Statistics.
