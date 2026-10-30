@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 38
-in_progress_batch: 39
+last_completed_batch: 39
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -27,6 +27,7 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   no code it runs changed in Batch 34.
 - Batch 38's review 1 fix run: the same test failed at 511 ms against 400 (the only failure); the
   round changed test files only.
+- Batch 39's full run: the same test failed at 400.5 ms against 400; no code it runs changed.
 
 ## Batches
 
@@ -1955,9 +1956,17 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     Sandbox keeps flooding off (`worldTuning`).
 
 ### Batch 39 - The ending: victory, scores and achievements
-- status: in progress
+- status: complete
+- note: docs/balance/batch39-ending.md
+- manual: docs/manual/the-ending.md (new page: Winning - victory, score, achievements, new game
+  plus), docs/manual/README.md (contents, the game in one minute), docs/manual/the-planet.md (Living
+  world is the step before victory), docs/manual/getting-started.md (the Achievements button, new
+  game plus, what to aim for), docs/manual/worlds-and-saving.md (the score on the list),
+  docs/manual/goals.md (achievement cards), docs/manual/update-notes.md (Update 39, the current
+  known issues)
 - sessions: 1 (2026-10-30)
-- commits: 86377de (started), 075e45a (the simulation)
+- commits: 86377de (started), 075e45a (the simulation), 3882dcc (the browser), c90f6d0 (injections,
+  manual), and the completing commit
 - decisions:
   - Victory: every one of the six §2.3 minimums (Phase 6 as it stands) held VICTORY_HOLD_YEARS (10 sim-years:
     44 min at 1x Standard, 5.5 min Classic) in a row, counted a substep at a time in `advance` from the reading
@@ -1978,3 +1987,41 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     and railways are instant and free, and a Classic build takes seconds, so "three cities", "an outpost",
     "a building at level 2" and "a Seawall" as first written could all come in a minute; each was reworded or
     dropped. Five rare ones reward how the world was won.
+  - The victory's "seen" is kept by the worlds list, never in the world (menus never write the state);
+    the player's record (victories, the first world each achievement was earned in) beside their
+    settings, so a deleted world takes nothing back. New game plus opens with any victory in it.
+  - Four new game plus bonuses, recorded in the new world's tuning: 9,000 starting credits, five
+    rovers a headquarters, cities founded with full stores (400 materials: a new city's store holds
+    400, so more would be clamped), Earth's regard from 80. A Standard world's only.
+  - The victory's sequence does not pause the world: it runs on behind the card, as behind a
+    milestone card; Keep playing hands the camera back.
+- found:
+  - the first list of achievements could be earned in a minute (founding and railways are instant and
+    free; a Classic build takes seconds; the headquarters, spaceport and Seawall are great structures
+    that ask for no one): earned at 8 s in the first scripted run; each reworded or dropped.
+  - the walled city's site searched on another world's terrain stood near -7,160 m and fell at year
+    296; the sea's level at the victory is the world's own (-3,091 m default, -3,020.5 m seed 7).
+  - people lost counted at the fall gave 0: the people go with their domes first.
+  - one test passed with its rule removed (injection 13, the total leaving out the cities held);
+    strengthened.
+  - four test premises of mine were wrong (the hold one substep short of the latch; the held latch a
+    substep late; a peak taken for the people at the sea's coming; a card test dropping from the
+    middle of the list).
+  - the latch cost 7.3 us a substep at first (a quarter of a planet substep); 2.25 us after.
+  - three earlier tests pinned what a Standard world is (Batches 28, 30, 33), each updated.
+  - docs/AUTO_BATCH_SETUP.md (untracked, not this batch's) left as it is.
+- verification: typecheck green; build green; build:web green (708.02 kB JS, 238.96 kB gzip, 54.94
+  kB CSS); the built page, script and styles served and fetched over HTTP; npx vitest run
+  --maxWorkers=2 --minWorkers=1: 132 files, 1,586 tests, 1,582 passed (742 s). The four failures: the
+  Known-red metropolis opening test (400.5 ms against 400), and three earlier tests pinning a
+  Standard world's rules and a v17 save made from a new one, each updated for the ending and re-run
+  green (3 files, 39 tests). The ending is off by default: the golden run, the Batch 3 score, the
+  golden frames and the exactness tests are as they were.
+- measured: the reference policy at the Standard pace wins on substep 55,032, year 1,719.75: 458,600
+  s, 127.39 h at 1x (127.42 h with weather; Classic 1,720, 15.93 h); the band entered once and never
+  left to year 2,800; machine-years 96,176 (reference), 82,793 (16 importers, won 1,543.5), 63,412
+  (lean, won 1,721); every achievement earned in a scripted run, the soonest at 1,708 s; the score
+  the same live and offline over two hours away; the latch 2.25 us a substep.
+- injections: 23 faults, one at a time, each file restored from a copy and checked: 22 caught at
+  once, 1 caught once its test was strengthened (13). The table is in the note.
+- review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch39-ending.md docs/design/macro-world.md docs/manual/README.md docs/manual/getting-started.md docs/manual/goals.md docs/manual/the-ending.md docs/manual/the-planet.md docs/manual/update-notes.md docs/manual/worlds-and-saving.md src/harness/ending.test.ts src/harness/ending.ts src/harness/pacing.ts src/sim/achievements.ts src/sim/decisions.ts src/sim/ending.test.ts src/sim/ending.ts src/sim/index.ts src/sim/integrate.ts src/sim/micro/defences.ts src/sim/offline.ts src/sim/planets/mars.ts src/sim/save.ts src/sim/tuning.ts src/sim/types.ts src/web/app.ts src/web/decisions-gate.test.ts src/web/ending-words.ts src/web/ending.test.ts src/web/first-hour.test.ts src/web/game-tuning.ts src/web/game.ts src/web/milestones.ts src/web/onboarding.test.ts src/web/pace.test.ts src/web/profile.ts src/web/sound-director.ts src/web/style.css src/web/victory.ts src/web/worlds.ts
