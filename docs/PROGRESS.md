@@ -2063,3 +2063,32 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
      not have them. The batch rightly removed "There is no ending yet" from that list, and the
      entry's `manual:` line says "the current known issues" were updated. The four lines belong
      at the bottom list, and Update 35's list should be as it was.
+- fix 1: done (2026-10-30, 1 session; commit 882fb1e and the progress record)
+  1. "Nobody lost to the sea" judged as the world stood at the victory. The four rare ones of how
+     the world was won (`src/sim/achievements.ts`) are now asked on the victory's own substep
+     (`ending.victory === steps`: `advance` latches the victory and asks the achievements on the
+     same substep) and never after; the file's header no longer claims every count they read only
+     grows. New test in `src/harness/ending.test.ts`: won with two high cities (substep 6,882), a
+     third founded the moment after the victory, run on five years - three cities standing, nobody
+     and nothing lost, and the achievement not earned. Injected (the old `won(s)` put back for
+     this one achievement alone): "expected 57358.33 to be undefined" - earned on the substep
+     after the win, as the review reproduced; restored from a copy, tree checked. The earlier test
+     premise of mine was a substep off (the founding is at the victory's step count, between its
+     substep and the next), found on the first run. The walled run still earns it on its victory
+     (it stops there).
+  2. The four known issues taken out of Update 35's notes (now exactly as before Batch 39: no
+     diff against 4193c25 in that section) and put at the bottom of "Known issues in the current
+     game", in the Update 39 wording.
+  - player documentation: `docs/manual/the-ending.md` says the four "How it was won" achievements
+    are judged at the moment the world is won, and a city founded after does not count.
+  - note: `docs/balance/batch39-ending.md` (what went wrong 8, the decision, injection 24).
+  - found, not fixed (not this round's, for Batch 40): Batch 37 made the same mistake - two of its
+    known issues ("Opening a Terraformed start world can pause..." and "A settlement's deposits are
+    seen only once it is founded...") are in Update 35's list (since 3586c09) and not in the
+    current game's list. Left as they were, since the review asked for Update 35's list as it was.
+  - verification: typecheck green; build green; build:web green (708.06 kB JS, 238.97 kB gzip,
+    54.94 kB CSS); `npx vitest run src/harness/ending.test.ts src/sim/ending.test.ts
+    src/web/ending.test.ts`: 3 files, 30 tests passed; `npx vitest run --maxWorkers=2
+    --minWorkers=1`: 132 files, 1,587 tests, all passed (603 s; the Known-red metropolis test
+    passed this run).
+  - review request: docs/PROGRESS.md docs/balance/batch39-ending.md docs/manual/the-ending.md docs/manual/update-notes.md src/harness/ending.test.ts src/sim/achievements.ts
