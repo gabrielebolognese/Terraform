@@ -67,8 +67,14 @@ export class ChunkedCity<P> {
     // 24 million pixels, some 96 MB of pictures (48 million, with a metropolis's 18,000 chunks to fill, was
     // more than a browser tab could hold beside the city itself).
     private maxPixels = 24_000_000,
-    /** Milliseconds a frame for chunks never drawn: a whole metropolis is seconds of work, so it fills in rather than freezing. */
-    private readonly firstBudgetMs = 40,
+    /**
+     * Milliseconds a frame for chunks never drawn: a whole metropolis is seconds of work, so it fills in rather
+     * than freezing. Batch 40: 16, not 40 - a chunk at high detail is 10-15 ms to make before the canvas fills
+     * it, so 40 let a frame panning a metropolis paint four and take 50 ms or more; at 16 the slowest 1% of
+     * frames went from 60 to 38 ms (measured in Node, `budget.ts`), and the first screen fills in over about
+     * twice as many frames.
+     */
+    private readonly firstBudgetMs = 16,
   ) {}
 
   /** Whether every chunk in view has a picture of what it holds now, at this zoom (a frame found nothing left to draw). */

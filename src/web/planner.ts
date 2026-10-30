@@ -23,6 +23,7 @@ import { settlementLabel } from "./settlement-label.js";
 import { chartFigure, cityCharts, fmt } from "./charts.js";
 import type { Settings } from "./settings.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
+import { ViewInputs } from "./view-inputs.js";
 import { Pinch, wheelIntent } from "./gestures.js";
 import type { Palette } from "./settings.js";
 import type { MapKind } from "./palette.js";
@@ -280,6 +281,8 @@ export class PlannerScreen {
   private view: CityView | null = null;
   private viewAt = -Infinity;
   private viewKey: unknown[] = [];
+  /** What the view was derived from (Batch 40): derived again only when they change. */
+  private readonly viewInputs = new ViewInputs();
   tool: PlannerTool = "pan";
   /** The zone the paint and erase tools work on. */
   selectedZone: number | null = null;
@@ -513,10 +516,12 @@ export class PlannerScreen {
     if (this.id !== s.id) return;
     this.settlement = s;
     const key = [s.buildings, s.corridors, s.cables, s.rails, s.zones, s.planned, s.levelQueue, s.grades, s.cleared, s.claims];
-    if (this.view === null || now - this.viewAt > 1000 || key.some((k, i) => k !== this.viewKey[i])) {
+    // Batch 40: once a second only if the city or the planet has changed since (a substep); what a click changes, at once.
+    if (this.view === null || (this.viewInputs.changed(s, env) && now - this.viewAt > 1000) || key.some((k, i) => k !== this.viewKey[i])) {
       this.view = cityView(s, env, this.tuning);
       this.viewAt = now;
       this.viewKey = key;
+      this.viewInputs.took(s, env);
       this.pixels = null;
     }
     // The coverage bar with needs on (Batch 32); the overlay with it, remade with the view.
