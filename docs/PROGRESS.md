@@ -2092,3 +2092,48 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     --minWorkers=1`: 132 files, 1,587 tests, all passed (603 s; the Known-red metropolis test
     passed this run).
   - review request: docs/PROGRESS.md docs/balance/batch39-ending.md docs/manual/the-ending.md docs/manual/update-notes.md src/harness/ending.test.ts src/sim/achievements.ts
+- review 2: rejected
+  Checked and sound: both of review 1's problems are fixed. "Nobody lost to the sea" and the
+  other three "How it was won" achievements are now asked only on the victory's own substep.
+  `advance` latches the victory as `after.steps` and asks the achievements on that same state
+  (`src/sim/integrate.ts:403`), so `atVictory` holds there and only there. The new test founds a
+  third city after the win. Update 35's notes are back as they were (no diff against 4193c25 in
+  that section), and the four known issues are at the bottom of "Known issues in the current
+  game". Typecheck, build and build:web (708 kB JS) are green. This review's full run,
+  `npx vitest run --maxWorkers=2 --minWorkers=1`: 132 files, 1,587 tests, 1,586 passed (548 s).
+  The one failure is the Known-red metropolis opening test (400.44 ms against 400). Injections 24
+  (the old `won(s)` back for "Nobody lost to the sea": "expected 57358.333333333336 to be
+  undefined") and 1 (the hold not started again: "expected 41 to be 80") were each broken once.
+  Both were caught with the note's messages, and the tree was clean after each. Credits 9,000 and
+  materials 400 were checked in a new world made with "Funded from home" and "Well supplied".
+  Two problems:
+  1. The "Trusted by Earth" bonus does not give better prices. It overrides `EARTH_REP_START`
+     (`src/web/game-tuning.ts:154`). That constant is both the starting reputation
+     (`src/sim/earth.ts:77`) and the neutral point of Earth's price curve: `standing()`
+     (`src/sim/earth.ts:164-165`) is 0 at `EARTH_REP_START`. A bonus world at 80 therefore pays
+     exactly what a world without the bonus pays at 50. Measured in this review (seed 7, Standard,
+     `earthPrices` on the new world): materials 4.353, water 6.691, settlers 24.352 and rovers
+     1,414.058 a unit, the same to the last digit in both. Below a regard of 100 it pays more than
+     a world without the bonus at the same regard: at 60, materials cost 4.625 against 4.135; at
+     90, 3.809 against 3.482. Earth's panel still says "Reputation 80 of 100: Trusted". The New
+     world dialog shows the bonus's text (`src/web/app.ts:424`), and the manual
+     (`docs/manual/the-ending.md:141`) says the same: "better prices from the first launch". The
+     browser does not do this. No test checks the effect of any bonus except "A bigger garage"
+     (`src/web/ending.test.ts:183-193`). Start the bonus world's reputation at 80 without moving
+     the price curve's neutral point (for example, a separate starting-regard constant in
+     `tuning.ts` and §10). Add a test that the bonus world's first prices are lower, and inject it.
+  2. "Self-reliant" can be earned by a world that bought from Earth, and no test protects its
+     condition. `src/sim/achievements.ts:183` reads `s.earth.bought`. That is Earth's market
+     memory for pricing, halved at every launch window (`openWindow`, `src/sim/earth.ts:516-521`,
+     `EARTH_MARKET_RECOVERY` 0.5), not a record of purchases. One material bought puts 4 into it,
+     and that is exactly 0 after 1,077 windows (2,299 years at 2.135 years a window). So a world
+     that buys a single material at its first window and wins after about year 2,300 earns "Win
+     without ever buying anything from Earth" (`docs/manual/the-ending.md:126`). A win that late
+     is plausible: the note says a player who pays as they go builds slower and is unmeasured. In
+     this review, with the purchase check removed (`earned: (s) => atVictory(s)`),
+     `src/harness/ending.test.ts`, `src/sim/ending.test.ts`, `src/web/ending.test.ts` and
+     `src/sim/earth.test.ts` all pass. Every run that earns the achievement never trades, no run
+     buys and checks that it is withheld, and the note's injection table has no row for it. Read
+     a running total that never decays (for example, `s.earth.spent`, which a cancelled or
+     refunded order puts back). Add a test in which a world buys from Earth and wins without the
+     achievement, and inject it.
