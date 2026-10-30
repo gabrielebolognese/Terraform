@@ -144,6 +144,9 @@ describe("the score", () => {
     const evacuated = worldScore(playEvacuation().state, SEA_TUNING)!;
     expect(evacuated.citiesLost).toBe(1);
     expect(evacuated.lost).toBe(-SEA_TUNING.SCORE_CITY_LOST_POINTS);
+    // The card shows the parts and the total: they add up, never below 0.
+    for (const x of [ref, swift, lean, walled, evacuated]) expect(x.total).toBe(Math.max(0, x.speed + x.people + x.saved + x.lost + x.pressure));
+    expect(walled.total).toBeGreaterThan(0);
   });
 
   it("is not kept in a world without the ending", () => {

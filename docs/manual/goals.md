@@ -104,7 +104,9 @@ its edge and a short chime - a grander one for a new phase (the **Interface** vo
 - a **city** is founded;
 - a **great structure** is finished: a Spaceport, Skyscraper, Medical Center, Observatory,
   Station, Research Forum, Industrial Command, Biosphere or Mega Mall;
-- an **objective** is done, with its reward waiting.
+- an **objective** is done, with its reward waiting;
+- an **achievement** is earned (Standard worlds made from Update 39 on; see
+  [Winning](the-ending.md#achievements)).
 
 Each card stays about six seconds, or press **OK**. Several at once take turns. Nothing is
 announced for what was already so when you open a world.

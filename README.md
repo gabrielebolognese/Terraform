@@ -215,6 +215,20 @@ frame and tile for tile the simulation's flood. A city carried from an older sav
 before the sea may take it (save v20); no city is founded under the sea. In the burst, metres of
 wall buy weeks; near the sea's final level, a wall saves a city for good.
 
+**The ending: victory, scores and achievements** (Batch 39). A new Standard world is won when every
+one of the six section 2.3 minimums (Phase 6 as it stands) has held 10 years in a row, counted a
+substep at a time in `advance` from the reading the phase is latched from; once won, won. The
+reference policy, scripted to the end at Batch 28's Standard pace, wins on substep 55,032 (year
+1,719.75): 127.4 hours at 1x. The score is derived from the state - speed, people at the planet's
+most, cities held only by their Seawall and cities lost, and the pressure on the planet as
+machine-years (every planet facility online, for every year it ran) - so it is the same live or
+offline. Thirty achievements are latched from the state, each bounded away from the first minute by
+construction and each earned in a scripted run (the soonest at 1,708 s); the rare ones are how the
+world was won. The victory plays once over the globe, with the world's story in numbers and the
+choice to keep playing; the worlds list shows each world's score; the title's **Achievements** keeps
+the player's record across worlds; a victory opens new game plus, a bonus recorded in the new
+world's tuning. All behind `ENDING_ENABLED` (new Standard worlds only); save v21.
+
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved

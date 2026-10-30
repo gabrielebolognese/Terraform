@@ -28,6 +28,7 @@ This manual describes the game as it is today. What changed in each update is in
 | [Controls](controls.md) | Every keyboard shortcut, the mouse, a trackpad and touch, and game speed in every view |
 | [Settings](settings.md) | Sound, graphics, controls and keys, the interface (size, colour-blind palettes, reduced motion, high contrast, pop-ups) and saving |
 | [Sound and music](sound.md) | The music for each phase, the wind, rain, sea and machinery, every sound effect, and the volume settings |
+| [Winning: victory, score and achievements](the-ending.md) | How a world is won and what the victory shows, each world's score, the 30 achievements, and new game plus |
 | [Worlds and saving](worlds-and-saving.md) | Keeping several worlds, saving, backups, and what happens while you are away |
 | [Update notes](update-notes.md) | What is new, changed and fixed in each update, and known issues |
 
@@ -44,7 +45,9 @@ This manual describes the game as it is today. What changed in each update is in
    more - green space, varied food, medical care, research, transport, shops - and a happy city
    grows faster.
 4. **Keep both going.** The planet's machines cost credits; your cities' research earns more. As
-   the planet passes each phase, new machines unlock, until Mars is a living world.
+   the planet passes each phase, new machines unlock, until Mars is a living world. Hold it there
+   for 10 years and the world is won: its story and score, and a bonus for your next world. Every
+   world keeps a score and earns achievements on the way (in Standard worlds).
 5. **Watch for alerts.** A blackout, a shortage or a building that cannot run pops up at the top
    right; click it to go straight there. **Statistics** charts how the planet and each city are
    doing.

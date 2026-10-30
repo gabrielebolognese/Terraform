@@ -5,7 +5,9 @@
 You can keep as many worlds as you like, each with its own planet, cities and save. **Worlds** on
 the title screen lists them, most recently played first. Each shows a picture of the planet, its
 mode and pace, its phase and year, how long you have played it, when you last played, and its
-seed.
+seed. A Standard world made from Update 39 on also shows its score, whether it is won and in what
+year, and how many achievements it has earned ("Score 865 - won in year 1,721 - 14 achievements");
+a world made with a new game plus bonus says which. See [Winning](the-ending.md).
 
 | Button | What it does |
 |---|---|
