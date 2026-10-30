@@ -326,7 +326,7 @@ export interface EconomyState {
 
 export interface SimState {
   /** Matches `SAVE_SCHEMA_VERSION`. The shape changed three times after §11 was written. */
-  readonly schemaVersion: 20;
+  readonly schemaVersion: 21;
   readonly planetId: string;
   readonly seed: number;
   /**
@@ -364,6 +364,39 @@ export interface SimState {
   readonly decisions: Decisions;
   /** Earth (v19, Batch 34): its market, the orders and rockets, the contracts, the player's standing. */
   readonly earth: EarthState;
+  /** The ending (v21, Batch 39): the victory hold, what the score counts, and the achievements earned. */
+  readonly ending: Ending;
+}
+
+/** An achievement, and the substep it was earned at (Batch 39). */
+export interface EarnedAchievement {
+  readonly id: string;
+  readonly step: number;
+}
+
+/**
+ * The ending (Batch 39): only what cannot be derived from the rest of the
+ * state. The score and the world's story are derived from it and the rest;
+ * nothing here is read back into the simulation. Kept by `advance` a substep
+ * at a time with ENDING_ENABLED on; off, it stays as the world began it.
+ */
+export interface Ending {
+  /** Substeps in a row, to now, with every §2.3 row in its band (Phase 6 as it stands). 0 outside it. */
+  readonly livingSteps: number;
+  /** The substep the planet was won - the band held VICTORY_HOLD_YEARS - or null. Once won, won. */
+  readonly victory: number | null;
+  /** The most people living on the planet at once, in the settlements standing. */
+  readonly peakPeople: number;
+  /** People living in settlements when the sea took them. */
+  readonly peopleLost: number;
+  /** People moved to safety from the sea (an evacuation). */
+  readonly peopleEvacuated: number;
+  /** Events answered: a choice made before the deadline (the record of resolved events keeps only the latest). */
+  readonly eventsAnswered: number;
+  /** Every machine of the planet's online, for every sim-year it ran: the pressure on the planet. */
+  readonly machineYears: number;
+  /** Achievements earned in this world, in the order earned. */
+  readonly achievements: readonly EarnedAchievement[];
 }
 
 /** Batch 34: what Earth sells (all six) and buys (the four stores a rocket can carry off). */

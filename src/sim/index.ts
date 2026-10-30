@@ -333,3 +333,11 @@ export {
 export type { EarthOutcome } from "./earth.js";
 export { EARTH_GOODS } from "./types.js";
 export type { ContractKind, EarthContract, EarthFlight, EarthGood, EarthGoods, EarthOrder, EarthRecord, EarthState } from "./types.js";
+
+// ---- the ending: victory, the score and achievements, Batch 39 --------------
+export { citiesLost, citiesSaved, heldBySeawall, holdSteps, peopleOn, seaNow, stepEnding, worldScore, worldStory } from "./ending.js";
+export type { WorldScore, WorldStory } from "./ending.js";
+export { ACHIEVEMENTS, ACHIEVEMENT_GROUPS, GROUP_NAMES, achievementById, earnedIds, latchAchievements } from "./achievements.js";
+export type { AchievementDef, AchievementGroup } from "./achievements.js";
+export { NO_ENDING } from "./planets/mars.js";
+export type { EarnedAchievement, Ending } from "./types.js";

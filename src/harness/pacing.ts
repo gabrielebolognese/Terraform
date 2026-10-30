@@ -44,7 +44,7 @@ import {
 import { garage, roverCount, roversOut } from "../sim/micro/rocks.js";
 import { claimLand, claimableChunks, claimsAllowed, constructionOf } from "../sim/micro/settlement.js";
 import { connectSettlements } from "../sim/micro/routes.js";
-import { GUIDE_STEPS, OBJECTIVES, claimObjective, guideReached, objectiveStatus } from "../sim/objectives.js";
+import { GUIDE_STEPS, OBJECTIVES, claimObjective, guideReached, metropolisAllowed, objectiveStatus } from "../sim/objectives.js";
 import { gridTiles, tileKey } from "../sim/micro/space.js";
 import { spendDown } from "./policy.js";
 
@@ -112,7 +112,12 @@ export interface PacingScript {
    * needed - measured, Batch 37's note.)
    */
   readonly siting?: number;
+  /** Batch 39: founds a metropolis (at PACING_METROPOLIS) the moment one may be founded. */
+  readonly metropolis?: boolean;
 }
+
+/** Where the scripted player founds its metropolis (Batch 39): open ground 68 km south of the first city. */
+export const PACING_METROPOLIS = { lat: 0.29, lon: -1.2 } as const;
 
 /** When the first hour's moments came (Batch 30), real seconds at 1x; null if not within the run. */
 export interface GoalMoments {
@@ -325,6 +330,13 @@ export function playPacing(t: Tuning, seconds: number, stopWhenDone = true, onSt
       if (here.stores.materials >= 0.9 * cap && !state.earth.orders.some((o) => o.side === "sell")) {
         const o = orderFromEarth(state, id, "materials", "sell", Math.floor(here.stores.materials - 0.5 * cap), t);
         if (o.ok) state = o.state;
+      }
+    }
+    if (script.metropolis && metropolisAllowed(state, t) && !state.settlements.some((x) => x.kind === "metropolis")) {
+      const f = foundSettlement(state, "metropolis", PACING_METROPOLIS.lat, PACING_METROPOLIS.lon, t);
+      if (f.ok) {
+        state = f.state;
+        log.push(`${(step * realPerStep).toFixed(0)} s: founded a metropolis`);
       }
     }
     if (script.guided && followGuide()) return;

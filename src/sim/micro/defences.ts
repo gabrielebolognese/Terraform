@@ -188,5 +188,7 @@ export function evacuateSettlement(state: SimState, settlementId: string, liquid
     const people = took.get(o.id);
     return people === undefined ? o : { ...o, population: o.population + people };
   });
-  return { state: { ...state, settlements }, ok: true, reason: null, moved, to };
+  // Batch 39: the people moved to safety, for the ending's story and its achievement.
+  const ending = t.ENDING_ENABLED ? { ...state.ending, peopleEvacuated: state.ending.peopleEvacuated + moved } : state.ending;
+  return { state: { ...state, settlements, ending }, ok: true, reason: null, moved, to };
 }

@@ -413,7 +413,9 @@ export function chooseDecision(s: SimState, id: number, choiceId: string, t: Tun
   if (choice.materials > 0) next = withCity(next, { ...city, stores: { ...city.stores, materials: city.stores.materials - choice.materials } });
   if (choice.credits > 0) next = { ...next, economy: { ...next.economy, credits: next.economy.credits - choice.credits, spent: next.economy.spent + choice.credits } };
   const open = next.decisions.open.map((x) => (x.id === id ? { ...x, chosen: choiceId } : x));
-  return { state: { ...next, decisions: { ...next.decisions, open } }, ok: true, reason: null };
+  // Batch 39: an answer counted for the ending (the record of resolved events keeps only the latest).
+  const ending = t.ENDING_ENABLED ? { ...next.ending, eventsAnswered: next.ending.eventsAnswered + 1 } : next.ending;
+  return { state: { ...next, decisions: { ...next.decisions, open }, ending }, ok: true, reason: null };
 }
 
 // ---------------------------------------------------------------------------

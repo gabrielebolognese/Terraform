@@ -25,7 +25,7 @@ import { unlockedFor } from "../tech.js";
 import { DEFAULT_TUNING } from "../tuning.js";
 import type { Tuning } from "../tuning.js";
 import { Phase } from "../types.js";
-import type { DecisionRecord, Decisions, OpenDecision, Reservoirs, SimState } from "../types.js";
+import type { DecisionRecord, Decisions, EarnedAchievement, Ending, OpenDecision, Reservoirs, SimState } from "../types.js";
 
 /** Mars surface gravity, m/s^2. Sets H2O_MBAR_PER_M = rho * g / 100 = 37.11. */
 export const G_MARS = 3.711;
@@ -78,7 +78,7 @@ export const MARS_RADIUS_M = 3_389_500;
 /** A fresh, unplayed Mars. */
 export function marsStart(seed = 123456, t: Tuning = DEFAULT_TUNING): SimState {
   return {
-    schemaVersion: 20,
+    schemaVersion: 21,
     planetId: "mars",
     seed,
     steps: 0,
@@ -103,8 +103,21 @@ export function marsStart(seed = 123456, t: Tuning = DEFAULT_TUNING): SimState {
     history: emptyPlanetHistory(t),
     decisions: NO_DECISIONS,
     earth: emptyEarth(t),
+    ending: NO_ENDING,
   };
 }
+
+/** Nothing of the ending yet (Batch 39): never in the band, not won, no one counted, nothing earned. */
+export const NO_ENDING: Ending = Object.freeze({
+  livingSteps: 0,
+  victory: null,
+  peakPeople: 0,
+  peopleLost: 0,
+  peopleEvacuated: 0,
+  eventsAnswered: 0,
+  machineYears: 0,
+  achievements: Object.freeze([]) as readonly EarnedAchievement[],
+});
 
 /** Nothing of the first hour done yet: no guided step, nothing claimed (Batch 30). */
 export const NO_GOALS = Object.freeze({ guide: 0, guideSkipped: false, claimed: Object.freeze([]) as readonly string[] });
