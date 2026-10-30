@@ -16,14 +16,16 @@
  */
 
 import type { SimState, Tuning } from "../sim/index.js";
-import { NAME_MAX, NEUTRAL_ENV, PHASE_INFO, marsStart } from "../sim/index.js";
+import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS, GROUP_NAMES, NAME_MAX, NEUTRAL_ENV, PHASE_INFO, marsStart } from "../sim/index.js";
 import type { Phase } from "../sim/index.js";
 import { Globe } from "./globe.js";
 import type { GameHandle, GameOptions, GameHooks } from "./game.js";
 import { Autosaver } from "./session.js";
 import type { GameStore } from "./storage.js";
 import type { WorldMode, WorldPace } from "./game-tuning.js";
-import { BROWSER_TUNING, MODE_NAMES, PACE_NAMES, WORLD_MODES, WORLD_PACES } from "./game-tuning.js";
+import { BONUSES, BROWSER_TUNING, MODE_NAMES, PACE_NAMES, WORLD_MODES, WORLD_PACES, bonusById, fromRecord, worldTuning } from "./game-tuning.js";
+import { PlayerProfile } from "./profile.js";
+import { listWords } from "./ending-words.js";
 import type { Clock, WorldMeta } from "./worlds.js";
 import { WorldLibrary, parseSeed, startState } from "./worlds.js";
 import { drawThumbnail, planetLook } from "./thumbnail.js";
@@ -65,7 +67,7 @@ function titleSound(sound: SoundEngine): void {
   sound.setAmbience({ ...SILENCE, wind: wind.level * ORBIT_HEARING.wind, windHz: wind.hz });
 }
 
-type View = "title" | "worlds" | "new" | "settings" | "credits" | "game";
+type View = "title" | "worlds" | "new" | "settings" | "credits" | "achievements" | "game";
 
 const MODE_ABOUT: Readonly<Record<WorldMode, string>> = {
   standard: "Today's game: earn what you build, unlock it as the planet changes.",
@@ -95,6 +97,9 @@ export function formatPlaytime(ms: number): string {
   return h === 0 ? `${m} min` : `${h} h ${m} min`;
 }
 
+/** The tuning the achievements' words are written in: a new Standard world's, where they are earned. */
+const BROWSER_ENDING: Tuning = worldTuning("standard", 0);
+
 function phaseName(phase: number): string {
   return PHASE_INFO[phase as Phase]?.name ?? `phase ${phase}`;
 }
@@ -106,6 +111,8 @@ export class App {
   readonly settings: PlayerSettings;
   /** What a city frame costs on this machine, this session: the graphics settings show it. */
   readonly frameCosts = new FrameCosts();
+  /** Batch 39: the player's victories and achievements across every world, kept beside their settings. */
+  readonly profile: PlayerProfile;
   /** The open Settings panel, on the title or in the menu: one at a time. */
   private settingsPanel: SettingsPanel | null = null;
   private readonly front: HTMLElement;
@@ -122,6 +129,7 @@ export class App {
     this.library = new WorldLibrary(deps.store, deps.now);
     this.sound = deps.sound ?? new SoundEngine(() => null);
     this.settings = new PlayerSettings(deps.store);
+    this.profile = new PlayerProfile(deps.store, deps.now);
     // Every change is heard and seen at once: the volumes, and the interface on the page.
     this.settings.onChange((s) => this.apply(s));
     // Every button answers with a tick (the interface channel), the game's own and the menus'.
@@ -141,6 +149,7 @@ export class App {
   /** Read the worlds, show the title, then check every world's save in the background. */
   async start(): Promise<void> {
     await this.settings.load();
+    await this.profile.load();
     await this.library.open();
     if (this.library.problem !== null) this.say(this.library.problem);
     if (!this.deps.store.durable) this.say("This browser has no durable storage: worlds will not survive a reload.");
@@ -215,6 +224,7 @@ export class App {
       cont,
       button("Worlds", () => this.showWorlds()),
       button("New world", () => this.showNewWorld()),
+      button("Achievements", () => this.showAchievements()),
       button("Example planet", () => void this.playExample()),
       button("Settings", () => this.showSettings()),
       button("Credits", () => this.showCredits()),
@@ -273,6 +283,11 @@ export class App {
     );
     const when = el("p", "world-when", w.lastPlayedAt > 0 ? `Last played ${new Date(w.lastPlayedAt).toLocaleString()} - seed ${w.seed}` : `Seed ${w.seed}`);
     info.append(name, facts, when);
+    // Batch 39: the world's score, and whether it is won; its new game plus bonus.
+    const ending = listWords(w.score, w.wonYear, w.achievements);
+    if (ending !== "") info.append(el("p", "world-score", ending));
+    const bonus = bonusById(w.bonus);
+    if (bonus !== undefined) info.append(el("p", "world-bonus", "New game plus: " + bonus.name));
     if (w.problem !== null) {
       const p = el("p", "world-problem", `Will not load: ${w.problem}. It is kept as it is.`);
       p.setAttribute("role", "alert");
@@ -396,9 +411,30 @@ export class App {
     pace.value = "standard";
     paceLabel.append(pace, el("span", "front-about", "Standard: builds take real minutes, then hours, and finish while you are away. Classic: the fast game from before."));
 
+    // Batch 39: new game plus - once a world has been won, a new Standard world may start with a bonus.
+    const bonuses = el("fieldset", "front-field new-world-bonus");
+    bonuses.append(el("legend", "", "New game plus - a bonus, unlocked by your victory"));
+    for (const b of [{ id: 0, name: "No bonus", about: "The game as it comes." }, ...BONUSES]) {
+      const opt = el("label", "front-option");
+      const radio = el("input");
+      radio.type = "radio";
+      radio.name = "bonus";
+      radio.value = String(b.id);
+      radio.checked = b.id === 0;
+      opt.append(radio, el("strong", "", b.name), el("span", "front-about", b.about));
+      bonuses.append(opt);
+    }
+    bonuses.hidden = !this.profile.newGamePlus;
+    // A bonus is a Standard world's: a sandbox has everything, a Terraformed start is won already.
+    const syncBonus = (): void => {
+      const mode = (form.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value;
+      bonuses.disabled = mode !== "standard";
+    };
+    modes.addEventListener("change", syncBonus);
+
     const create = el("button", "front-button primary", "Create world");
     create.type = "submit";
-    form.append(nameLabel, seedLabel, modes, paceLabel, create);
+    form.append(nameLabel, seedLabel, modes, paceLabel, bonuses, create);
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       const chosen = (form.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value as WorldMode | undefined;
@@ -409,7 +445,9 @@ export class App {
       // Let the message paint before a long build.
       setTimeout(() => {
         void this.queue(async () => {
-          const meta = await this.library.create({ name: name.value, seed: s, mode, pace: (WORLD_PACES as readonly string[]).includes(pace.value) ? (pace.value as WorldPace) : "standard" });
+          const picked = Number((form.querySelector('input[name="bonus"]:checked') as HTMLInputElement | null)?.value ?? 0);
+          const bonus = this.profile.newGamePlus && mode === "standard" && bonusById(picked) !== undefined ? picked : 0;
+          const meta = await this.library.create({ name: name.value, seed: s, mode, pace: (WORLD_PACES as readonly string[]).includes(pace.value) ? (pace.value as WorldPace) : "standard", bonus });
           this.say("");
           await this.playNow(meta.id);
         });
@@ -445,6 +483,36 @@ export class App {
   private closeSettings(): void {
     this.settingsPanel?.dispose();
     this.settingsPanel = null;
+  }
+
+  /** Batch 39: every achievement - those the player has earned in any world, and where first - group by group. */
+  showAchievements(): void {
+    const panel = el("section", "front-panel front-achievements");
+    const head = el("header", "front-head");
+    head.append(this.back(), el("h2", "", "Achievements"));
+    const record = this.profile.current;
+    const earned = ACHIEVEMENTS.filter((a) => record.achievements[a.id] !== undefined).length;
+    const victories = record.victories.length;
+    const won = victories === 0 ? "" : victories === 1 ? " - a world won" : " - " + victories + " worlds won";
+    panel.append(head, el("p", "achievements-total", earned + " of " + ACHIEVEMENTS.length + " earned" + won + ". Achievements are earned in Standard worlds."));
+    const t = BROWSER_ENDING;
+    for (const group of ACHIEVEMENT_GROUPS) {
+      const section = el("section", "achievement-group");
+      section.append(el("h3", "", GROUP_NAMES[group]));
+      const list = el("ul", "achievement-list");
+      for (const a of ACHIEVEMENTS.filter((x) => x.group === group)) {
+        const first = record.achievements[a.id];
+        const li = el("li", "achievement" + (first === undefined ? "" : " earned") + (a.rare ? " rare" : ""));
+        li.dataset["achievement"] = a.id;
+        li.append(el("span", "achievement-mark", first === undefined ? "Not yet" : "Earned"), el("strong", "achievement-title", a.title), el("span", "achievement-counts", a.counts(t)));
+        if (a.rare) li.append(el("span", "achievement-rare", "Rare"));
+        if (first !== undefined) li.append(el("span", "achievement-where", "First in " + first.name));
+        list.append(li);
+      }
+      section.append(list);
+      panel.append(section);
+    }
+    this.render("achievements", panel);
   }
 
   showCredits(): void {
@@ -488,6 +556,8 @@ export class App {
         storageWarning: this.deps.store.durable ? null : "this browser has no durable storage available, so progress will not survive a reload",
         debugSpeeds: this.deps.debugSpeeds === true,
         fresh: () => startState({ name: world.name, seed: world.seed, mode: world.mode === "terraformed" ? "standard" : world.mode, pace: world.pace }, tuning),
+        victorySeen: world.victorySeen,
+        newGamePlus: () => this.profile.newGamePlus,
       },
       world,
       autosaver,
@@ -530,6 +600,14 @@ export class App {
       saveNow: () => this.saveNow(),
       onMenu: () => (this.menu === null ? this.openMenu() : this.closeMenu()),
       onBackToTitle: () => void this.quitToTitle(),
+      // Batch 39: the victory's sequence plays once in a world; the world is saved as it begins, so the win is in the profile too.
+      onVictory: () => {
+        if (world === null) return;
+        void this.queue(async () => {
+          await this.library.markVictorySeen(world.id);
+          if (this.game !== null) await this.saveWorld(this.game.handle.state, false);
+        });
+      },
     });
     this.game = { handle, world, autosaver, playedBefore: world?.playtimeMs ?? 0 };
   }
@@ -570,6 +648,9 @@ export class App {
       thumbnail = look === null ? undefined : drawThumbnail(look, g.handle.terrain, g.handle.yaw) ?? undefined;
     }
     await this.library.record(g.world.id, state, { playtimeMs: g.playedBefore + g.handle.playedMs, thumbnail });
+    // Batch 39: what the world adds to the player's record - its victory, achievements earned nowhere before.
+    const kept = this.library.find(g.world.id);
+    if (kept !== undefined) await this.profile.note(kept, state, fromRecord(kept.tuning));
   }
 
   /** The in-game menu: the world stands still behind it. */

@@ -134,13 +134,42 @@ export function paceOf(t: Tuning): WorldPace {
 }
 
 /**
+ * New game plus (Batch 39): a bonus a new Standard world may be made with,
+ * once the player has won a world. Like the mode and the pace, a bonus is
+ * tuning, recorded in the world: what it changes, and its number
+ * (NEW_GAME_PLUS_BONUS) so the list can say which it was.
+ */
+export interface Bonus {
+  readonly id: number;
+  readonly name: string;
+  /** What it gives, in the player's words. */
+  readonly about: string;
+  readonly overrides: TuningOverrides;
+}
+
+export const BONUSES: readonly Bonus[] = [
+  { id: 1, name: "Funded from home", about: "Start with 9,000 credits instead of 3,000.", overrides: { ECON_STARTING_CREDITS: 9000 } },
+  { id: 2, name: "A bigger garage", about: "Five rovers at every headquarters instead of three: more builds at once.", overrides: { ROVERS_PER_HQ: 5 } },
+  { id: 3, name: "Well supplied", about: "Every city founded with its stores full: 400 materials instead of 250.", overrides: { FOUND_MATERIALS: 400 } },
+  { id: 4, name: "Trusted by Earth", about: "Earth's regard starts at 80 instead of 50: better prices from the first launch.", overrides: { EARTH_REP_START: 80 } },
+];
+
+/** A bonus by its number; undefined for 0 (none) or one not known. */
+export function bonusById(id: number): Bonus | undefined {
+  return BONUSES.find((b) => b.id === id);
+}
+
+/**
  * A new world's tuning: the browser's, its terrain turned by the seed, and
  * the mode's own rules. A mode is a tuning, recorded in the world - never a
- * flag the game reads, so a sandbox cannot leak into a standard world.
+ * flag the game reads, so a sandbox cannot leak into a standard world. A
+ * bonus (new game plus) is a Standard world's only.
  */
-export function worldTuning(mode: WorldMode, seed: number, pace: WorldPace = "standard"): Tuning {
+export function worldTuning(mode: WorldMode, seed: number, pace: WorldPace = "standard", bonus = 0): Tuning {
   const sandbox: TuningOverrides = mode === "sandbox" ? { SANDBOX_ENABLED: 1, TECH_GATE_ENABLED: 0, FLOODING_ENABLED: 0 } : {};
-  const t = makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES, ...PACE_OVERRIDES[pace], TERRAIN_SEED: seed, ...MODE_OVERRIDES[mode], ...sandbox });
+  const plus = mode === "standard" ? bonusById(bonus) : undefined;
+  const extra: TuningOverrides = plus === undefined ? {} : { ...plus.overrides, NEW_GAME_PLUS_BONUS: plus.id };
+  const t = makeTuning({ ...BROWSER_OVERRIDES, ...NEW_WORLD_OVERRIDES, ...PACE_OVERRIDES[pace], TERRAIN_SEED: seed, ...MODE_OVERRIDES[mode], ...sandbox, ...extra });
   validateTuning(t);
   return t;
 }

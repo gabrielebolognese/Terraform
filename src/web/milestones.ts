@@ -12,10 +12,10 @@
  */
 
 import type { BuildingType, Settlement, SimState, Tuning } from "../sim/index.js";
-import { BUILDING_DEFS, BUILD_TIER, PHASE_INFO, constructionOf, objectiveStatus, tileKey } from "../sim/index.js";
+import { BUILDING_DEFS, BUILD_TIER, PHASE_INFO, achievementById, constructionOf, objectiveStatus, tileKey } from "../sim/index.js";
 import { settlementLabel } from "./settlement-label.js";
 
-export type MilestoneKind = "phase" | "founded" | "great" | "objective";
+export type MilestoneKind = "phase" | "founded" | "great" | "objective" | "achievement";
 
 export interface Milestone {
   readonly kind: MilestoneKind;
@@ -45,6 +45,8 @@ export class MilestoneWatch {
   private settlements = new Set<string>();
   private great = new Map<string, Map<BuildingType, number>>();
   private done = new Set<string>();
+  /** Batch 39: achievements earned, as the last look saw them. */
+  private earned = -1;
 
   /** What crossed since the last look. The first look after `reset` only takes its bearings. */
   observe(state: SimState, t: Tuning): readonly Milestone[] {
@@ -76,6 +78,16 @@ export class MilestoneWatch {
       this.great.set(s.id, now);
     }
 
+    // Batch 39: an achievement earned since the last look. Latched in the state, in the order earned.
+    const have = state.ending.achievements;
+    if (!first && this.earned >= 0) {
+      for (const a of have.slice(this.earned)) {
+        const def = achievementById(a.id);
+        if (def !== undefined) out.push({ kind: "achievement", title: `Achievement: ${def.title}`, text: def.counts(t), grand: def.rare });
+      }
+    }
+    this.earned = have.length;
+
     for (const o of objectiveStatus(state, t)) {
       const ready = o.open && !o.claimed && o.progress.done;
       if (!ready) {
@@ -95,6 +107,7 @@ export class MilestoneWatch {
     this.settlements.clear();
     this.great.clear();
     this.done.clear();
+    this.earned = -1;
   }
 }
 
@@ -185,4 +198,5 @@ const EYEBROW: Readonly<Record<MilestoneKind, string>> = {
   founded: "A new city",
   great: "A great structure",
   objective: "Objective done",
+  achievement: "Achievement earned",
 };

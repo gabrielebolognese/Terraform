@@ -388,7 +388,9 @@ describe("milestones", () => {
     let built: string[] = [];
     for (let k = 0; k < 600 && built.length === 0; k += 1) {
       s = advance(s, 1, cfg);
-      built = watch.observe(s, T).map((m) => m.title);
+      // Batch 39: the substeps also latch the achievements this world now shows (Phase 2's "The caps let go"), each
+      // with its own card - those are `ending.test.ts`'s; here, the great structure's.
+      built = watch.observe(s, T).filter((m) => m.kind !== "achievement").map((m) => m.title);
     }
     expect(built).toEqual(["Spaceport finished"]);
     // An objective done: once, while it waits to be claimed.

@@ -26,7 +26,7 @@
  */
 
 import type { AwaySummary, OfflineGrant, SaveFile, SimConfig, SimState, Tuning } from "../sim/index.js";
-import { DEFAULT_TUNING, NAME_MAX, NEUTRAL_ENV, SaveError, fromSave, marsStart, resume, toSave } from "../sim/index.js";
+import { DEFAULT_TUNING, NAME_MAX, NEUTRAL_ENV, SaveError, fromSave, marsStart, resume, toSave, worldScore } from "../sim/index.js";
 import { examplePlanet } from "../harness/example.js";
 import type { GameStore } from "./storage.js";
 import type { WorldMode, WorldPace } from "./game-tuning.js";
@@ -64,6 +64,16 @@ export interface WorldMeta {
   readonly thumbnail: string | null;
   /** Why the save would not load when last tried; null when it loads (or has not been tried). */
   readonly problem: string | null;
+  /** Batch 39: the new game plus bonus it was made with (its tuning's NEW_GAME_PLUS_BONUS), 0 for none. */
+  readonly bonus: number;
+  /** Batch 39: its score when last saved, or null in a world without the ending. */
+  readonly score: number | null;
+  /** Batch 39: the sim-year it was won, or null. */
+  readonly wonYear: number | null;
+  /** Batch 39: achievements earned in it. */
+  readonly achievements: number;
+  /** Batch 39: the victory's sequence has been shown: it plays once. */
+  readonly victorySeen: boolean;
 }
 
 interface WorldIndex {
@@ -77,6 +87,8 @@ export interface NewWorld {
   readonly seed: number;
   readonly mode: WorldMode;
   readonly pace: WorldPace;
+  /** Batch 39: a new game plus bonus (a Standard world's), 0 or absent for none. */
+  readonly bonus?: number;
 }
 
 export type Loaded =
@@ -142,6 +154,21 @@ function readMeta(raw: unknown): WorldMeta | null {
     phase: num("phase", 0),
     thumbnail: typeof r["thumbnail"] === "string" ? r["thumbnail"] : null,
     problem: typeof r["problem"] === "string" ? r["problem"] : null,
+    // Batch 39: an entry written before the ending has none of it.
+    bonus: typeof tuning["NEW_GAME_PLUS_BONUS"] === "number" ? tuning["NEW_GAME_PLUS_BONUS"] : 0,
+    score: typeof r["score"] === "number" && Number.isFinite(r["score"]) ? r["score"] : null,
+    wonYear: typeof r["wonYear"] === "number" && Number.isFinite(r["wonYear"]) ? r["wonYear"] : null,
+    achievements: num("achievements", 0),
+    victorySeen: r["victorySeen"] === true,
+  };
+}
+
+/** What the list keeps of a world's ending (Batch 39), read from its state: derived, so never out of step with it. */
+function endingOf(state: SimState, t: Tuning): Pick<WorldMeta, "score" | "wonYear" | "achievements"> {
+  return {
+    score: worldScore(state, t)?.total ?? null,
+    wonYear: state.ending.victory === null ? null : state.ending.victory * t.SUBSTEP_YEARS,
+    achievements: state.ending.achievements.length,
   };
 }
 
@@ -236,6 +263,11 @@ export class WorldLibrary {
       phase: s.phase,
       thumbnail: null,
       problem: null,
+      bonus: 0,
+      score: null,
+      wonYear: null,
+      achievements: 0,
+      victorySeen: false,
     };
     await this.write({ version: INDEX_VERSION, worlds: [legacy], last: legacy.id });
   }
@@ -261,7 +293,7 @@ export class WorldLibrary {
 
   /** Make a world: its tuning from the mode and seed, its first save, then its entry. */
   async create(spec: NewWorld): Promise<WorldMeta> {
-    const t = worldTuning(spec.mode, spec.seed, spec.pace);
+    const t = worldTuning(spec.mode, spec.seed, spec.pace, spec.bonus ?? 0);
     const state = startState(spec, t);
     const at = this.now();
     const id = this.freshId(`w${at.toString(36)}`);
@@ -280,6 +312,9 @@ export class WorldLibrary {
       phase: state.phaseReached,
       thumbnail: null,
       problem: null,
+      bonus: t.NEW_GAME_PLUS_BONUS,
+      ...endingOf(state, t),
+      victorySeen: false,
     };
     // The save first: an entry whose slot is empty would list a world that is not there.
     await this.store.save(meta.slot, toSave(state, t, new Date(at).toISOString()));
@@ -353,9 +388,17 @@ export class WorldLibrary {
         phase: state.phaseReached,
         thumbnail: extra.thumbnail === undefined ? meta.thumbnail : extra.thumbnail,
         problem: null,
+        ...endingOf(state, t),
       },
       id,
     );
+  }
+
+  /** The victory's sequence was shown in this world (Batch 39): it is not shown again. */
+  async markVictorySeen(id: string): Promise<void> {
+    const meta = this.find(id);
+    if (meta === undefined || meta.victorySeen) return;
+    await this.put({ ...meta, victorySeen: true }, this.index.last);
   }
 
   async rename(id: string, name: string): Promise<void> {
