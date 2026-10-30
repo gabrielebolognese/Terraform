@@ -69,6 +69,25 @@ sea on loading is given a grace period, warned, not lost on the first substep".
      nothing back: the Seawall is left out of that test, with the reason.
 9. **The warning's words said "facilities"** where the planet's panel and the manual say machines,
    with a **Switch off** button. Changed to "Switching off the planet's machines would buy ~8 yr."
+10. **Four rules had no test, and the batch shipped them as tested** (found by review 1, which
+    broke each and saw the suite pass). The code was right each time; nothing would have noticed it
+    breaking:
+    - **a terrace's footprint read back from a save** (v20's `area`). Without it, a rover out
+      raising a building's ground when an autosave falls loads as levelling one corner tile, after
+      the whole footprint was paid for. 27 files that load a save (388 tests) passed with the read
+      gone;
+    - **the game's Raise its ground hook.** It is optional, so deleting it compiles, and the city
+      screen then hides the button: the shipped game would never offer terracing. Injection 38
+      broke the city screen mounted with the test's own hooks, never the game's wiring - the same
+      gap the batch closed for Evacuate (37) and left open here;
+    - **terracing with every rover out**, and **an evacuated city taken as a refuge**: neither
+      refusal was reached by any test.
+
+    Each now has a test, broken once (48-52): the footprint through a save to the rover's return,
+    every tile of the 2 x 2 geothermal plant at the plan's level; Raise its ground pressed in a
+    city through `startGame`, the rover found in the game's own state; both refusals, each with the
+    case that is allowed beside it. The cost: a fix round, and a commit message (1467ec5) and row 9
+    that called the plant's footprint 3 x 3.
 
 ## What was built
 
@@ -183,9 +202,12 @@ Taken unattended, each the recommendation a bare "Go" would accept:
 
 ## Verified by injection
 
-47 faults, one at a time, each file restored from a copy and checked after each:
-- 44 caught at once;
-- 3 missed at first and caught once their test was strengthened (5, 19, 25; finding 3).
+52 faults, one at a time, each file restored from a copy and checked after each (47 in the batch,
+5 in review 1's fix round):
+- 45 caught at once (50 among them);
+- 3 missed at first and caught once their test was strengthened (5, 19, 25; finding 3);
+- 4 the batch's suite let through, found by review 1, and caught by the tests its fix round added
+  (48, 49, 51, 52; finding 10).
 
 | # | Broken on purpose | Caught by |
 |---|---|---|
@@ -197,7 +219,7 @@ Taken unattended, each the recommendation a bare "Go" would accept:
 | 6 | no grace in the flood's consequences | the grace exit-gate tests |
 | 7 | the grace never counts down | "falls after its grace" |
 | 8 | the migration gives no grace | the grace tests |
-| 9 | a terrace raises its corner tile only | the 3 x 3 footprint test |
+| 9 | a terrace raises its corner tile only | the 2 x 2 footprint test (the geothermal plant; first written here as 3 x 3) |
 | 10 | a terrace without its step | the plan test |
 | 11 | an evacuated city takes settlers again | "leaves the city to the sea" |
 | 12 | evacuate a city out of the sea's way | the refusal test |
@@ -236,6 +258,11 @@ Taken unattended, each the recommendation a bare "Go" would accept:
 | 45 | the inspector silent on the Seawall | the inspector test |
 | 46 | the projection asked for every city | "asks for the warned cities only" |
 | 47 | the evacuation's words lose where the people went | the assembled-game evacuation |
+| 48 | (review 1) a terrace's footprint not read from a save | missed by every test (review 1: 388 passed); the save-mid-terrace test added: "14,13: expected 1 to be close to 2" |
+| 49 | (review 1) the game's Raise its ground hook deleted | missed by every test (review 1: 111 in the assembled game passed); the assembled-game terrace test added: "Raise its ground offered: expected true to be false" |
+| 50 | (review 1) the game's hook keeps no state | the assembled-game terrace test: "a rover out in the game's state: expected undefined" |
+| 51 | (review 1) terracing with every rover out not refused | missed by every test (review 1: 33 passed); the refusal test: "expected null to be 'all 3 rovers are out'" |
+| 52 | (review 1) an evacuated city taken as a refuge | missed by every test (review 1: 33 passed); the refusal test: "80 people moved to settlement-2" |
 
 ## Verification
 
@@ -257,6 +284,10 @@ Taken unattended, each the recommendation a bare "Go" would accept:
   `src/sim/micro/defences.test.ts` holds the grace chunk-independent and offline-exact.
 - **Looked at**: the Seawall at levels 1, 4 and 8, the structures sheet, the reference city with the
   sea in it (whole and up close) and walled, rendered by the software rasteriser to PNG and read.
+- **After review 1's fixes** (tests only; no shipped code changed): typecheck, build and build:web
+  green (682.79 kB JS, 231.21 kB gzip, 52.54 kB CSS, as before); the full suite 129 files, 1,557
+  tests, 1,556 passed (511 s). The one failure is the Known-red metropolis opening test, 511 ms
+  against its 400 ms limit.
 
 ## Open
 

@@ -25,6 +25,8 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   still recorded as red.
 - Batch 34's full run: the city-open timing test failed at 513 ms against 400 (the only failure);
   no code it runs changed in Batch 34.
+- Batch 38's review 1 fix run: the same test failed at 511 ms against 400 (the only failure); the
+  round changed test files only.
 
 ## Batches
 
@@ -1892,3 +1894,38 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     Old worlds keep the tuning they recorded.
   - GAME_PLAN's row and BUILD_PLAN's row are COMPLETE with the note linked, and README has the
     batch's row.
+- fix 1: done (sessions 2 and 3; session 2, 2026-10-16, committed 1 and 3 in 1467ec5 and was
+  stopped with 2 written and unrun; session 3, 2026-10-30, ran it, broke it, and finished the
+  round)
+  1. A terrace in flight through a save: a new test in `src/sim/micro/defences.test.ts` sends a
+     rover to raise the geothermal plant's 2 x 2 footprint, saves with it out, loads, runs it home
+     and finds every tile at the plan's level, and the ground the same as never saved. The
+     footprint's read dropped (`area` in `src/sim/save.ts`): "14,13: expected 1 to be close to 2".
+     (1467ec5's message calls the footprint 3 x 3; it is 2 x 2, and the older footprint test's
+     comment and the note's row 9 said 3 x 3 too - both corrected.)
+  2. Raise its ground in the assembled game: a new test in `src/web/flood-defences.test.ts` goes
+     down into a city through `startGame` (headquarters on, high above the sea), selects a dome,
+     finds **Raise its ground 2 m (N materials)** offered at the plan's price, presses it, and
+     finds the rover job in the game's own state (its tile, level and 3 x 3 area), the materials
+     paid, the hint "A rover is on its way to raise the Habitat Dome's ground.", and the trip
+     carried by the game's advance. Injected one at a time, the tree clean after each: the game's
+     `onTerrace` hook deleted - "Raise its ground offered: expected true to be false"; the hook
+     not keeping the outcome's state - "a rover out in the game's state: expected undefined".
+  3. Both refusals in `defences.test.ts`'s refusal tests, each with the allowed case beside it:
+     every rover out (`ROVERS_PER_HQ` terraces sent, the next refused "all 3 rovers are out", the
+     same building raised with a rover home); an evacuated city with room no refuge (refused "no
+     city out of the sea's way has homes", the same city not evacuated taking them). Removed one
+     at a time: "expected null to be 'all 3 rovers are out'"; "80 people moved to settlement-2".
+  - Session 3 broke all five again, one at a time, each file restored from a copy and `git status`
+    clean after each: each caught by the test above with the message quoted.
+  - note: finding 10 (the four rules without a test, and what each would have cost), the
+    injection table's totals and rows 48-52, row 9 corrected, the verification after the fixes.
+  - manual: unchanged. The fixes add tests only; nothing the player sees changed, and the manual's
+    Raise its ground and Evacuate paragraphs were checked against the tests' words.
+  - checks: typecheck green; build green; build:web green (682.79 kB JS, 231.21 kB gzip, 52.54 kB
+    CSS, as before: no shipped code changed); npx vitest run --maxWorkers=2 --minWorkers=1: 129
+    files, 1,557 tests (the batch's 1,555 and the two new), 1,556 passed (511 s). The one failure
+    is the Known-red metropolis opening test, 511 ms against its 400 ms limit (recorded 440-513
+    ms); this round changed only test files, none of the code it runs.
+  - files: src/sim/micro/defences.test.ts, src/web/flood-defences.test.ts,
+    docs/balance/batch38-flood-defences.md, docs/PROGRESS.md
