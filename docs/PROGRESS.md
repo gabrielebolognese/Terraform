@@ -2223,3 +2223,16 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
 - sessions: 1 (2026-10-30)
 - machine: AMD Ryzen 7 5700U (8 cores, 16 threads), 16 GB, Windows 11 Home, Node 22.16.0
 - decisions:
+  - No browser is opened (the user's standing rule), so the budget is measured in Node on the machine
+    above: the real code paths, timed; what only a browser can time (the canvas's fill) is recorded
+    as such.
+  - The opening test made load-proof by shares, not by CPU time: the process's CPU time counts the
+    collector's threads (a 51 ms step read 157 ms) and grew under load as much as the wall clock.
+    Each time is a share of the whole making, timed in the same run; the work was cut first.
+  - keyTile returns an object of its own class: as a literal its tiles were born on a deprecated map
+    once the example was built (14x a copy). Same values; a performance fix only.
+  - Real old saves made by each era's own code from git history (v13-v20) and kept as test files
+    (about 360 kB); the generator kept in scripts/ for the next schema.
+- pieces:
+  - a1a82cf: the opening test load-proof; the steps split, keyTile, the city view's buildings
+  - f090919: real old saves v13-v20, opened by today's library
