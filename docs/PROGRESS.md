@@ -2285,3 +2285,57 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   caught (one premise of mine replaced, recorded); the review's 14 into untabled tests of Batches
   26-39: 11 caught, the 3 not caught fixed and caught. The table is in the note.
 - review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch40-playtest.md docs/manual/cities.md docs/manual/update-notes.md docs/manual/worlds-and-saving.md scripts/old-save.ts src/harness/ending.test.ts src/render/structures.test.ts src/shared/planet-terrain.test.ts src/sim/index.ts src/sim/micro/build-curve.test.ts src/sim/micro/build-queue.test.ts src/sim/micro/drive.test.ts src/sim/micro/drive.ts src/sim/micro/rocks.ts src/sim/micro/settlement.ts src/sim/micro/space.ts src/sim/micro/view.ts src/sim/offline.test.ts src/sim/offline.ts src/sim/tick.ts src/web/app.test.ts src/web/app.ts src/web/budget.ts src/web/city-chunks.ts src/web/city-open.test.ts src/web/city.ts src/web/decisions-gate.test.ts src/web/earth-gate.test.ts src/web/old-saves.test.ts src/web/old-saves/v13.json src/web/old-saves/v14.json src/web/old-saves/v15.json src/web/old-saves/v16.json src/web/old-saves/v17.json src/web/old-saves/v18.json src/web/old-saves/v19.json src/web/old-saves/v20.json src/web/pace.test.ts src/web/planner.ts src/web/session.test.ts src/web/session.ts src/web/settings-gate.test.ts src/web/sound.test.ts src/web/view-inputs.test.ts src/web/view-inputs.ts src/web/worlds.ts
+- review 1: rejected
+  Checked and sound: every deliverable is built. The budget is measured on the stated machine, with
+  its one miss (a Terraformed start's opening) recorded with its measurement and cause in the note,
+  GAME_PLAN and Update 40. Typecheck, build and build:web are green (709.50 kB JS, as recorded).
+  This review's full run, `npx vitest run --maxWorkers=2 --minWorkers=1`: 135 files, 1,624 tests,
+  all passed (556 s), the metropolis opening test and the golden frames among them. Injections 13
+  (`due` counted from the last write to land: "expected 10 to be 1", "expected 3600 to be 2") and
+  10 (the channels ignored in `ViewInputs.changed`: "expected 1 to be 2") were each broken once.
+  Both were caught with the note's messages, and the tree was clean after. The view's new rule
+  holds in the live loop: the channels `game.ts` hands the city screen come from `readWorld` and
+  `liquidRate`, so they change only at a substep. No save change, no new tuning constant, and no
+  `src/sim/` import of the web or render code. The sliced catch-up equals the whole one, to the
+  bit (`offline.test.ts`, `old-saves.test.ts`). Every v13-v20 save comes from its era's commit
+  (v13 at 0e790e3, "Batch 27 complete"; v20 at 86377de, "Batch 39: started"). Three manual
+  statements match the code: the notice "Catching up on the time you were away: N%" sits under the
+  title screen and the Worlds list (`front-notice`); steep ground with no crag says "level the
+  ground first", and **Level ground** is the card's name; a failed save is tried again an interval
+  later, its failure still counted for the warning. Two problems:
+  1. The batch's known issues went into the wrong lists in `docs/manual/update-notes.md`, the same
+     mistake as Batch 39's review 1. "A Terraformed start you have been away from takes a while to
+     open..." and "A Terraformed start takes a few seconds to open even when you have not been
+     away" were added at lines 401-403. That is **Update 32**'s Known issues (its section runs from
+     line 366 to 409), so the Update 32 notes now describe Update 40. The fixed levelling issue was
+     deleted from **Update 29**'s Known issues (the old line 481, after line 520 now), which
+     rewrites what Update 29 shipped with. "Known issues in the current game" (line 592 on) is the
+     list next-batch.md says to keep current, and the batch left it unchanged. Lines 601-603 still
+     say "Laying a corridor, cable or railway there tells you to send a rover to break the crag,
+     but there is none". The game no longer says that (`src/sim/micro/settlement.ts:347-350`). The
+     list also lacks the Terraformed opening. The entry's `manual:` line says "the current known
+     issues: the levelling message fixed, a Terraformed start's opening" were updated. Put back
+     Update 29's and Update 32's lists as they were. In the bottom list, remove or rewrite the
+     levelling item (levelling can still leave a steep neighbour, but the message now says what to
+     do) and add the two Terraformed opening lines.
+  2. While a world catches up, a second **Play** launches the world twice. The batch hands the page
+     back every 50 ms during the catch-up (`src/web/worlds.ts:355-369`), and says "the page keeps
+     working meanwhile" (Update 40, `docs/manual/worlds-and-saving.md`). But the front door stays
+     as it was. The Worlds list's **Play** (`src/web/app.ts:297`) is present and enabled, and
+     `playNow` (`src/web/app.ts:539`) has no guard. Each click queues another `playNow`. When the
+     first has entered the game, the second loads the world again and calls `enter`
+     (`src/web/app.ts:597-618`). `enter` launches a second game on the page and overwrites
+     `this.game` without stopping the first. The first game keeps running unseen, and its autosave
+     hook (`src/web/app.ts:602`) writes its own state into the world's slot through `saveWorld`,
+     which uses the second game's autosaver. Two divergent states then overwrite one save, so the
+     player can lose progress. Reproduced in this review in happy-dom, with the real `App` and
+     `startGame` and the v20 test save ten hours away (the same set-up as the batch's
+     `app.test.ts` test): during the catch-up the notice read "Catching up on the time you were
+     away: 0%", Play was present and not disabled, and one more click gave "games launched: 2;
+     shells on the page: 2". (The scratch test was deleted and the tree is clean.) A Standard
+     world ten hours away takes about 1 s to catch up, long enough for a double click. A
+     Terraformed start takes 31 s to 5 minutes, and the progress notice invites the player to wait
+     and click again. Before this batch the page was frozen for the whole catch-up, so it could
+     not be clicked. The front door should hold its actions while a world loads (or `playNow`
+     should ignore a play while one is in progress, and `enter` should never leave a running game
+     behind), with a test that clicks Play twice during a catch-up and expects one game.
