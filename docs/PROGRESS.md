@@ -2137,3 +2137,57 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
      a running total that never decays (for example, `s.earth.spent`, which a cancelled or
      refunded order puts back). Add a test in which a world buys from Earth and wins without the
      achievement, and inject it.
+- fix 2: done (2026-10-30, 1 session; commits fcd3b91, 6c8c32f and the progress record)
+  1. "Trusted by Earth" gives better prices. The middle of Earth's price curve is now its own
+     constant, `EARTH_REP_NEUTRAL` (50, in `tuning.ts`, validated in [0, 100], and in §10);
+     `standing()` (`src/sim/earth.ts`) reads it, never `EARTH_REP_START`, which stays the starting
+     reputation and is what the bonus still overrides. Measured (seed 7, Standard, the new
+     world's first prices): materials 3.700 a unit against 4.353 without the bonus (15% less),
+     rovers 1,201.95 against 1,414.06; what Earth pays 15% more; and the two worlds pay the same
+     at every regard (0 to 100). A world made with the bonus before this fix keeps a tuning record
+     with no `EARTH_REP_NEUTRAL`, takes the default 50 on load (`fromRecord`), and so gets the better
+     prices from its next order, with no migration. New tests in `src/web/ending.test.ts`, on the
+     tuning and first state the worlds list makes: the bonus world's prices lower to buy and higher
+     to sell for every good, with the measured materials prices; the same prices at the same
+     regard; a pre-fix record without the constant getting them too; and the other bonuses'
+     effects ("Funded from home" 9,000 credits, "Well supplied" a city founded with 400 materials).
+  2. "Self-reliant" reads `s.earth.spent === 0` (`src/sim/achievements.ts`): what was paid Earth and
+     kept. A cancelled order, or one refunded for a city lost, takes its credits back out; selling
+     and contracts never touch it. New test in `src/harness/ending.test.ts`: the sea's world with
+     Earth on (and a bank deep enough for the reference schedule), a city with a spaceport, one
+     material bought 1,700 years in, in a market that forgets all its trade at every window
+     (`EARTH_MARKET_RECOVERY` 0, so the old reading is fooled the window after the purchase rather
+     than 1,077 windows after); the material lands, the world wins on substep 6,882, and the
+     achievement is not earned. The same world with the order cancelled wins on the same substep
+     with it (the guard against vacuity, and against counting orders placed).
+  - injections (one at a time, each file restored from a copy, `git status` checked after each):
+    25 the curve's middle at the start again: "Earth's asking for materials: expected
+    4.3528048384934666 to be less than 4.3528048384934666" (the review's number); 26 "Self-reliant"
+    read from `bought` again: "expected 57350 to be undefined"; 27 the review's own, its purchase
+    check removed: "expected 57350 to be undefined"; 28 a cancelled order keeping its credits in
+    `spent`: "expected undefined to be 57350"; 29 a pre-fix world's record given its start as the
+    curve's middle on load: "expected { materials: ... } to deeply equal ..."; 30 "Funded from
+    home" without its credits: "expected 3000 to be 9000"; 31 "Well supplied" without its
+    materials: "expected 250 to be 400". All seven caught at once.
+  - player documentation: `docs/manual/the-ending.md` (Trusted by Earth's prices, about 15% less
+    and 15% more; what does not count against Self-reliant), `docs/manual/earth.md` (prices as
+    usual at 50 whatever the start; the bonus starts at 80), `docs/manual/update-notes.md`
+    (Update 39's Fixed: the two fixes).
+  - note: `docs/balance/batch39-ending.md` (what went wrong 9 and 10, the decisions, injections
+    25-31, an open item: with the bonus, the "Trusted by Earth" achievement at 90 needs one
+    contract met rather than four).
+  - decisions:
+    - A new constant for the curve's middle, not a new constant for the start: the bonus keeps
+      overriding `EARTH_REP_START`, so worlds already made with it are fixed by the new
+      constant's default, with no migration and no save touched. The other way round would have
+      left them paying the old prices.
+    - The self-reliant test uses `EARTH_MARKET_RECOVERY` 0: a world winning after 1,077 windows
+      would need a run past year 2,300, and the market forgetting at once is the same fault seen
+      sooner.
+  - verification: typecheck green; build green; build:web green (708.04 kB JS, 238.98 kB gzip,
+    54.94 kB CSS); `npx vitest run src/web/ending.test.ts src/harness/ending.test.ts
+    src/sim/earth.test.ts src/web/earth-gate.test.ts src/sim/tuning.test.ts
+    src/sim/ending.test.ts`: 6 files, 88 tests passed; `npx vitest run --maxWorkers=2
+    --minWorkers=1`: 132 files, 1,592 tests, all passed (486 s; the Known-red metropolis test
+    passed this run).
+  - review request: docs/PROGRESS.md docs/balance/batch39-ending.md docs/design/macro-world.md docs/manual/earth.md docs/manual/the-ending.md docs/manual/update-notes.md src/harness/ending.test.ts src/sim/achievements.ts src/sim/earth.ts src/sim/tuning.ts src/web/ending.test.ts
