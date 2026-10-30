@@ -1338,10 +1338,15 @@ export const BASE_TUNING = Object.freeze({
    * THE MARKET: Earth's price for each good is EARTH_PRICE_<GOOD> x its
    * supply this window (EARTH_SUPPLY_SWING either way, drawn from the seed)
    * x the player's buying since (+100% for every EARTH_MARKET_DEPTH credits'
-   * worth) x reputation (EARTH_REP_PRICE cheaper at 100, dearer at 0). Earth
-   * pays EARTH_SELL_SHARE of its price for what it buys, less the more it
-   * has been sold, more with reputation. Each window the market keeps
-   * EARTH_MARKET_RECOVERY of the trade it remembers.
+   * worth) x reputation (EARTH_REP_PRICE cheaper at 100, dearer at 0, as
+   * asked at EARTH_REP_NEUTRAL). Earth pays EARTH_SELL_SHARE of its price for
+   * what it buys, less the more it has been sold, more with reputation. Each
+   * window the market keeps EARTH_MARKET_RECOVERY of the trade it remembers.
+   * A world's reputation starts at EARTH_REP_START; the prices' neutral point
+   * is its own constant, so a world started higher (new game plus's "Trusted
+   * by Earth") pays less from the first window. Read from the start, the
+   * curve moved with it, and a world started at 80 paid what any world pays
+   * at 50 (Batch 39's review 2).
    *
    * CONTRACTS: each window Earth offers one (weights EARTH_WEIGHT_*):
    * EARTH_CONTRACT_MATERIALS_YEAR or EARTH_CONTRACT_WATER_YEAR for each of a
@@ -1375,6 +1380,7 @@ export const BASE_TUNING = Object.freeze({
   EARTH_MARKET_DEPTH: 2000,
   EARTH_MARKET_RECOVERY: 0.5,
   EARTH_REP_START: 50,
+  EARTH_REP_NEUTRAL: 50,
   EARTH_REP_PRICE: 0.25,
   EARTH_REP_FULFIL: 10,
   EARTH_REP_FAIL: 20,
@@ -1682,7 +1688,7 @@ export function validateTuning(t: Tuning): void {
   }
   for (const k of ["EARTH_KEEP_SHARE", "EARTH_SUPPLY_SWING", "EARTH_REP_PRICE"] as const) if (!(t[k] >= 0 && t[k] < 1)) fail(`${k} must be in [0, 1)`);
   for (const k of ["EARTH_SELL_SHARE", "EARTH_MARKET_RECOVERY"] as const) if (!(t[k] >= 0 && t[k] <= 1)) fail(`${k} must be in [0, 1]`);
-  if (!(t.EARTH_REP_START >= 0 && t.EARTH_REP_START <= 100)) fail("EARTH_REP_START must be in [0, 100]");
+  for (const k of ["EARTH_REP_START", "EARTH_REP_NEUTRAL"] as const) if (!(t[k] >= 0 && t[k] <= 100)) fail(`${k} must be in [0, 100]`);
   if (!(t.EARTH_MARKET_DEPTH > 0)) fail("EARTH_MARKET_DEPTH must be > 0");
   for (const k of ["EARTH_CONTRACT_WINDOWS", "EARTH_LOG"] as const) if (!(Number.isInteger(t[k]) && t[k] >= 1)) fail(`${k} must be a whole number >= 1`);
   for (const k of ["EARTH_UNLOCK_SETTLERS", "EARTH_UNLOCK_ROVERS"] as const) if (!(Number.isInteger(t[k]) && t[k] >= 0)) fail(`${k} must be a whole number >= 0`);

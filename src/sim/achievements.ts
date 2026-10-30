@@ -35,7 +35,7 @@ import { groundOf, heldBySeawall, peopleOn, seaNow } from "./ending.js";
 import { TARGETS } from "./targets.js";
 import type { Tuning } from "./tuning.js";
 import type { EarnedAchievement, Settlement, SimState } from "./types.js";
-import { EARTH_GOODS, Phase, isCityKind } from "./types.js";
+import { Phase, isCityKind } from "./types.js";
 
 export type AchievementGroup = "planet" | "cities" | "earth" | "events" | "sea" | "style";
 export const ACHIEVEMENT_GROUPS: readonly AchievementGroup[] = ["planet", "cities", "earth", "events", "sea", "style"];
@@ -180,7 +180,10 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = Object.freeze([
     earned: (s, t) => atVictory(s) && s.ending.machineYears < t.ACH_LIGHT_MACHINE_YEARS,
   },
   { id: "swift", group: "style", title: "Swift", rare: true, counts: (t) => `Win within ${t.ACH_SWIFT_YEARS.toLocaleString("en")} years.`, earned: (s, t) => atVictory(s) && s.ending.victory! * t.SUBSTEP_YEARS <= t.ACH_SWIFT_YEARS },
-  { id: "self_reliant", group: "style", title: "Self-reliant", rare: true, counts: () => "Win without buying anything from Earth.", earned: (s) => atVictory(s) && EARTH_GOODS.every((g) => s.earth.bought[g] === 0) },
+  // What was paid Earth and kept, never what its market remembers: `bought` is halved at every window
+  // (EARTH_MARKET_RECOVERY), and a material bought at the first was forgotten by year 2,300 (review 2).
+  // An order cancelled, or refunded for a city lost, takes its credits back out of `spent`.
+  { id: "self_reliant", group: "style", title: "Self-reliant", rare: true, counts: () => "Win without buying anything from Earth.", earned: (s) => atVictory(s) && s.earth.spent === 0 },
 ] satisfies AchievementDef[]);
 
 const BY_ID: ReadonlyMap<string, AchievementDef> = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));

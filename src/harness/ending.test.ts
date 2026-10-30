@@ -11,9 +11,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { SimState, Tuning } from "../sim/index.js";
-import { ACHIEVEMENTS, NEUTRAL_ENV, advance, foundSettlement, makeTuning, resume, toSave, worldScore } from "../sim/index.js";
-import { PACE_OVERRIDES, worldTuning } from "../web/game-tuning.js";
-import { HIGH_SITES, LEAN_POLICY, SEA_TUNING, SWIFT_POLICY, earnedSeconds, playEvacuation, playToVictory, playWalled } from "./ending.js";
+import { ACHIEVEMENTS, NEUTRAL_ENV, advance, cancelEarthOrder, foundSettlement, makeTuning, orderFromEarth, resume, toSave, worldScore } from "../sim/index.js";
+import { PACE_OVERRIDES, tuningRecord, worldTuning } from "../web/game-tuning.js";
+import { HIGH_SITES, LEAN_POLICY, SEA_TUNING, SWIFT_POLICY, earnedSeconds, placeFirst, playEvacuation, playToVictory, playWalled } from "./ending.js";
 import { playPacing } from "./pacing.js";
 import { REFERENCE_POLICY } from "./policy.js";
 
@@ -127,6 +127,35 @@ describe("achievements", () => {
     expect(late.state.ending.peopleLost).toBe(0);
     expect(late.state.steps).toBeGreaterThan(foundedAt! + 1);
     expect(late.earned["nobody_lost"]).toBeUndefined();
+  });
+
+  it("withholds 'Self-reliant' from a world that bought from Earth, however long ago its market forgot the trade", () => {
+    // The sea's world with Earth on, and a bank deep enough for the reference schedule. Its market forgets all its trade at
+    // every window (EARTH_MARKET_RECOVERY 0): the browser's (0.5) has forgotten one material bought after 1,077 windows,
+    // year 2,300, so a world that bought one at its first window and won after that was handed the achievement (review 2).
+    const t = makeTuning({ ...tuningRecord(SEA_TUNING), ECONOMY_ENABLED: 1, EARTH_ENABLED: 1, ECON_STARTING_CREDITS: 1e9, EARTH_MARKET_RECOVERY: 0 });
+    const cfg = { tuning: t, env: NEUTRAL_ENV, forcing: null };
+    // A city with a spaceport, 1,700 years in: the victory twenty years off.
+    const before = playToVictory(REFERENCE_POLICY, t, 1700, {
+      found: [HIGH_SITES[0]!],
+      act: (s) => (s.steps === 0 ? placeFirst(s, "settlement-1", "spaceport", t) : s),
+    }).state;
+    expect(before.ending.victory).toBeNull();
+    const bought = orderFromEarth(before, "settlement-1", "materials", "buy", 1, t);
+    expect(bought.ok, bought.reason ?? "").toBe(true);
+    // The same order taken back before its window: nothing bought after all.
+    const taken = cancelEarthOrder(bought.state, bought.state.earth.orders.at(-1)!.id, t);
+    expect(taken.ok, taken.reason ?? "").toBe(true);
+    const buyer = advance(bought.state, 120, cfg);
+    const keeper = advance(taken.state, 120, cfg);
+    expect(buyer.ending.victory).not.toBeNull();
+    // The material came, and the market has forgotten it.
+    expect(buyer.earth.orders).toEqual([]);
+    expect(buyer.earth.bought.materials).toBe(0);
+    expect(earnedSeconds(buyer, t)["self_reliant"]).toBeUndefined();
+    // Not vacuous: the same world, its order cancelled, wins on the same substep with the achievement.
+    expect(keeper.ending.victory).toBe(buyer.ending.victory);
+    expect(earnedSeconds(keeper, t)["self_reliant"]).toBe(earnedSeconds(keeper, t)["victory"]);
   });
 });
 
