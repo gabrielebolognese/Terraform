@@ -2191,3 +2191,29 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     --minWorkers=1`: 132 files, 1,592 tests, all passed (486 s; the Known-red metropolis test
     passed this run).
   - review request: docs/PROGRESS.md docs/balance/batch39-ending.md docs/design/macro-world.md docs/manual/earth.md docs/manual/the-ending.md docs/manual/update-notes.md src/harness/ending.test.ts src/sim/achievements.ts src/sim/earth.ts src/sim/tuning.ts src/web/ending.test.ts
+- review 3: accepted
+  Both of review 2's problems are fixed, and review 1's stay fixed. "Trusted by Earth": the middle
+  of Earth's price curve is now its own constant, `EARTH_REP_NEUTRAL` (50, in `tuning.ts`,
+  validated, and in §10). `standing()` (`src/sim/earth.ts:168-171`) reads only that constant.
+  `EARTH_REP_START` is still the starting reputation, and it is what the bonus overrides. At 80 a
+  world pays 15% less and is paid 15% more (0.25 x 30/50). That matches the manual's "about 15%"
+  (`docs/manual/the-ending.md:141`, `docs/manual/earth.md:96-97`). A world made before the fix
+  takes the default 50 through `fromRecord`, with no save touched. "Self-reliant" reads
+  `s.earth.spent === 0` (`src/sim/achievements.ts:186`). A purchase adds to it when placed
+  (`src/sim/earth.ts:315`). A cancel, or a refund for a lost city, takes it back out (`:335`,
+  `:536`). Sales and contracts never touch it. Costs are whole credits (`Math.ceil` in
+  `buyCost`), so a full cancel returns it to exactly 0. Three manual statements match the code:
+  the 15% both ways; prices as usual at 50 whatever the start; selling, contracts and a cancelled
+  order not counting against Self-reliant. The new tests use measured values (materials 3.6999
+  against 4.3528) and have a vacuity guard (the cancelled-order world earns the achievement on the
+  same victory substep). No source-grep tests. `src/sim/` imports nothing from `src/web/` or
+  `src/render/`. Fix 2's decisions are ones a bare "Go" would accept. None deletes or overwrites
+  player data. This review's runs: typecheck green; build green; build:web green (708.04 kB JS,
+  238.98 kB gzip, 54.94 kB CSS); `npx vitest run --maxWorkers=2 --minWorkers=1`: 132 files, 1,592
+  tests, all passed (708 s; the Known-red metropolis test passed this run). Injections, one at a
+  time, each file restored from a copy and `git status` clean after each: 25 (`standing()` reading
+  `EARTH_REP_START` again) failed two tests in `src/web/ending.test.ts`, "Earth's asking for
+  materials: expected 4.3528048384934666 to be less than 4.3528048384934666" and "at 30: expected
+  { materials: ... } to deeply equal ...". 28 (a cancelled order keeping its credits in
+  `earth.spent`) failed the Self-reliant test: "expected undefined to be 57350". Both match the
+  note.
