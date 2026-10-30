@@ -11,9 +11,9 @@
 import { describe, expect, it } from "vitest";
 
 import type { SimState, Tuning } from "../sim/index.js";
-import { ACHIEVEMENTS, NEUTRAL_ENV, advance, makeTuning, resume, toSave, worldScore } from "../sim/index.js";
+import { ACHIEVEMENTS, NEUTRAL_ENV, advance, foundSettlement, makeTuning, resume, toSave, worldScore } from "../sim/index.js";
 import { PACE_OVERRIDES, worldTuning } from "../web/game-tuning.js";
-import { LEAN_POLICY, SEA_TUNING, SWIFT_POLICY, earnedSeconds, playEvacuation, playToVictory, playWalled } from "./ending.js";
+import { HIGH_SITES, LEAN_POLICY, SEA_TUNING, SWIFT_POLICY, earnedSeconds, playEvacuation, playToVictory, playWalled } from "./ending.js";
 import { playPacing } from "./pacing.js";
 import { REFERENCE_POLICY } from "./policy.js";
 
@@ -104,6 +104,29 @@ describe("achievements", () => {
     expect(lost.state.ending.victory).not.toBeNull();
     expect(lost.state.settlements.filter((c) => c.lostAtSeaLevelM !== null).length).toBe(1);
     expect(lost.earned["nobody_lost"]).toBeUndefined();
+  });
+
+  it("judges 'Nobody lost to the sea' as the world stood at the victory: a third city founded after it does not earn it", () => {
+    // Won with two cities high above the sea; the third founded (free and instant) the moment after the victory's substep.
+    let foundedAt: number | null = null;
+    const late = playToVictory(REFERENCE_POLICY, SEA_TUNING, 2600, {
+      found: HIGH_SITES.slice(0, 2),
+      after: 5,
+      act: (s) => {
+        if (s.ending.victory === null || foundedAt !== null) return s;
+        const o = foundSettlement(s, "city", HIGH_SITES[2]!.lat, HIGH_SITES[2]!.lon, SEA_TUNING);
+        if (!o.ok) throw new Error(`could not found the third city: ${o.reason}`);
+        foundedAt = s.steps;
+        return o.state;
+      },
+    });
+    expect(late.state.ending.victory).not.toBeNull();
+    expect(foundedAt).toBe(late.state.ending.victory);
+    // Not vacuous: five years on, every other part of the condition holds - three cities standing, nothing and no one lost.
+    expect(late.state.settlements.filter((c) => c.kind === "city" && c.lostAtSeaLevelM === null).length).toBe(SEA_TUNING.ACH_STANDING_CITIES);
+    expect(late.state.ending.peopleLost).toBe(0);
+    expect(late.state.steps).toBeGreaterThan(foundedAt! + 1);
+    expect(late.earned["nobody_lost"]).toBeUndefined();
   });
 });
 

@@ -125,6 +125,9 @@ you earned in it. They are kept by this browser, like your settings.
 | Swift | Win by the year 1,600 |
 | Self-reliant | Win without ever buying anything from Earth |
 
+These four are judged at the moment your world is won, and never again: a city founded after the
+win does not count towards "Nobody lost to the sea".
+
 ## New game plus
 
 Once you have won any world, **New world** offers **New game plus**: a bonus for the new world, if

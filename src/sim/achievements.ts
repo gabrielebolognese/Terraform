@@ -11,10 +11,12 @@
  *
  * THE RARE ONES are asked at the victory: how the world was won - with
  * nobody lost to the sea, with a light touch on the planet, swiftly, without
- * buying from Earth, and a city held behind its wall. Each reads a count that
- * only grows (the machine-years, the people lost, the years) or a fixed
- * substep (the victory), so a condition that fails at the victory can never
- * hold later: the latch asks it on the victory's own substep first.
+ * buying from Earth, and a city held behind its wall. Those of how it was
+ * won are judged on the victory's own substep and never after: the world as
+ * it stood when it was won. Not every count they read only grows - the
+ * cities standing grow with a city founded, free and instant - so asked
+ * later, a world won with two cities would earn "Nobody lost to the sea" a
+ * substep after a third (review 1).
  *
  * None can be earned in a new world's first minute: each waits on something
  * a minute cannot bring (measured in the scripted runs of `ending.test.ts`).
@@ -83,6 +85,9 @@ function greatStanding(s: SimState, t: Tuning): boolean {
 }
 
 const won = (s: SimState): boolean => s.ending.victory !== null;
+
+/** The victory's own substep: `advance` latches the victory and asks the achievements on the same substep, from the state it leaves. */
+const atVictory = (s: SimState): boolean => s.ending.victory === s.steps;
 
 /**
  * The achievements, group by group. Each waits on something a minute of play
@@ -164,7 +169,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = Object.freeze([
     title: "Nobody lost to the sea",
     rare: true,
     counts: (t) => `Win with at least ${t.ACH_STANDING_CITIES} cities standing, no settlement and no one lost to the sea.`,
-    earned: (s, t) => won(s) && standingCities(s).length >= t.ACH_STANDING_CITIES && s.ending.peopleLost === 0 && s.settlements.every((c) => c.lostAtSeaLevelM === null),
+    earned: (s, t) => atVictory(s) && standingCities(s).length >= t.ACH_STANDING_CITIES && s.ending.peopleLost === 0 && s.settlements.every((c) => c.lostAtSeaLevelM === null),
   },
   {
     id: "light_touch",
@@ -172,10 +177,10 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = Object.freeze([
     title: "A light touch",
     rare: true,
     counts: (t) => `Win with fewer than ${t.ACH_LIGHT_MACHINE_YEARS.toLocaleString("en")} machine-years: every machine of the planet's, for every year it ran.`,
-    earned: (s, t) => won(s) && s.ending.machineYears < t.ACH_LIGHT_MACHINE_YEARS,
+    earned: (s, t) => atVictory(s) && s.ending.machineYears < t.ACH_LIGHT_MACHINE_YEARS,
   },
-  { id: "swift", group: "style", title: "Swift", rare: true, counts: (t) => `Win within ${t.ACH_SWIFT_YEARS.toLocaleString("en")} years.`, earned: (s, t) => won(s) && s.ending.victory! * t.SUBSTEP_YEARS <= t.ACH_SWIFT_YEARS },
-  { id: "self_reliant", group: "style", title: "Self-reliant", rare: true, counts: () => "Win without buying anything from Earth.", earned: (s) => won(s) && EARTH_GOODS.every((g) => s.earth.bought[g] === 0) },
+  { id: "swift", group: "style", title: "Swift", rare: true, counts: (t) => `Win within ${t.ACH_SWIFT_YEARS.toLocaleString("en")} years.`, earned: (s, t) => atVictory(s) && s.ending.victory! * t.SUBSTEP_YEARS <= t.ACH_SWIFT_YEARS },
+  { id: "self_reliant", group: "style", title: "Self-reliant", rare: true, counts: () => "Win without buying anything from Earth.", earned: (s) => atVictory(s) && EARTH_GOODS.every((g) => s.earth.bought[g] === 0) },
 ] satisfies AchievementDef[]);
 
 const BY_ID: ReadonlyMap<string, AchievementDef> = new Map(ACHIEVEMENTS.map((a) => [a.id, a]));
