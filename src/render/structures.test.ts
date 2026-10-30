@@ -92,7 +92,11 @@ describe("nothing about the geometry is saved", () => {
   const viewOf = (s: SimState) => cityView(s.settlements[0]!, habitat(s.reservoirs, derive(s.reservoirs, worldEnv(s, NEUTRAL_ENV, T), T), T, 0), T);
 
   it("draws a city loaded from its save exactly as before it was saved", () => {
-    const s = city();
+    // The reactor raised to level 3 (Batch 40's review: with every building at level 1, a save that lost the levels
+    // drew the same, though the structures grow with the level).
+    const built = city();
+    const s: SimState = { ...built, settlements: built.settlements.map((c) => ({ ...c, buildings: c.buildings.map((b) => (b.type === "reactor" ? { ...b, level: 3 } : b)) })) };
+    expect(s.settlements[0]!.buildings.some((b) => b.level === 3), "vacuity: a building above level 1").toBe(true);
     const before = cityScene(viewOf(s), { time: 1, selected: null, ghost: null, quality: "high" });
     const loaded = deserialize(serialize(s, T, "2026-09-26T12:00:00.000Z"), T);
     const after = cityScene(viewOf(loaded), { time: 1, selected: null, ghost: null, quality: "high" });

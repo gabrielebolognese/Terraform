@@ -99,6 +99,7 @@ describe("a contract's size (Batch 34)", () => {
       const t = worldTuning("standard", 7, pace);
       const materials = Array.from({ length: 40 }, (_, k) => contractFor(world, k + 1, "materials", t).amount);
       const water = Array.from({ length: 40 }, (_, k) => contractFor(world, k + 1, "water", t).amount);
+      // Measured (Batch 40's audit): Standard 160-310 materials and 40-80 water, Classic 20-40 and 10, over these 40.
       expect(Math.min(...materials), pace).toBeGreaterThanOrEqual(lo);
       expect(Math.max(...materials), pace).toBeLessThanOrEqual(hi);
       expect(Math.min(...water), pace).toBeGreaterThanOrEqual(wlo);

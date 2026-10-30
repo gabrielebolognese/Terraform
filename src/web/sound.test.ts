@@ -352,6 +352,7 @@ describe("the effects", () => {
     director.alerts(Array.from({ length: 7 }, () => ({ priority: "notice" as const })));
     expect(engine.played.get("alert")).toBe(EFFECTS_PER_LOOK);
     const starts = ctx.oscillators().map((o) => o.started!);
+    // Measured (Batch 40's audit): spread over 0.91 s.
     expect(Math.max(...starts) - Math.min(...starts)).toBeGreaterThan(0.5);
   });
 });
@@ -400,6 +401,7 @@ describe("ambience follows its driver", () => {
   });
 
   it("rain only with clouds over liquid water above freezing; the sea only with a sea, louder at its shore", () => {
+    // Measured (Batch 40's audit): 0.75.
     expect(rainFor(0.5, 290, 0.3)).toBeGreaterThan(0.5);
     expect(rainFor(0, 290, 0.3), "no clouds").toBe(0);
     expect(rainFor(0.5, 260, 0.3), "frozen").toBe(0);
@@ -440,6 +442,7 @@ describe("ambience follows its driver", () => {
     // Thicker air: more wind, at once in the level and the gain's target.
     const thick = { ...bare, reservoirs: { ...bare.reservoirs, co2_atm: bare.reservoirs.co2_atm * 40 } };
     director.readout({ state: thick, derived: derivedOf(thick), storm: 0, seaLevelM: 0, cues: true });
+    // Measured (Batch 40's audit): 0.296 against 0.092 thin, 3.2 times.
     expect(engine.ambienceLevels.wind).toBeGreaterThan(thin * 1.5);
     expect(target("wind")).toBeCloseTo(engine.ambienceLevels.wind * 0.32, 12);
     // A storm on top.
@@ -447,6 +450,7 @@ describe("ambience follows its driver", () => {
     expect(engine.ambienceLevels.wind).toBeCloseTo(windFor(derivedOf(thick).P, 1).level * ORBIT_HEARING.wind, 12);
     // A wet, warm, cloudy world: rain and the sea.
     const wet = { P: 1000, T: 290, oceanFrac: 0.3, cloudFrac: 0.5 };
+    // Measured (Batch 40's audit): 0.75.
     expect(planetBeds(wet, 0).rain).toBeGreaterThan(0.5);
     // Down in a city: its machinery near the camera; the planet's beds heard in full, not from afar.
     let s = ares();
@@ -457,12 +461,14 @@ describe("ambience follows its driver", () => {
     director.readout({ state: s, derived: derivedOf(s), storm: 0, seaLevelM: -9000, cues: true });
     const fromOrbit = engine.ambienceLevels.wind;
     director.city({ settlement: "settlement-1", view, x: 46, y: 46, radius: 18, zoom: 1 }, 0, () => []);
+    // Measured (Batch 40's audit): 0.19.
     expect(engine.ambienceLevels.machinery).toBeGreaterThan(0.05);
     expect(target("machinery")).toBeCloseTo(engine.ambienceLevels.machinery * 0.22, 12);
     expect(engine.ambienceLevels.wind).toBeCloseTo(fromOrbit / ORBIT_HEARING.wind, 12);
     // Far from every building: quieter.
     const close = engine.ambienceLevels.machinery;
     director.city({ settlement: "settlement-1", view, x: 46 + 60, y: 46 - 60, radius: 18, zoom: 1 }, 1000, () => []);
+    // Measured (Batch 40's audit): 0, against 0.19 close.
     expect(engine.ambienceLevels.machinery).toBeLessThan(close / 4);
     // Back near the machinery, then up to orbit from there: none.
     director.city({ settlement: "settlement-1", view, x: 46, y: 46, radius: 18, zoom: 1 }, 2000, () => []);

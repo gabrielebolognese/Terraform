@@ -38,6 +38,8 @@ describe("victory", () => {
   it("comes exactly the hold after the planet enters the band, and the band is never left on the way", () => {
     // "A living world" is latched on the substep after the one whose start first read the band, as the phase is.
     const firstRead = reference.state.ending.achievements.find((a) => a.id === "living")!.step - 1;
+    // Exactly the hold, not more: had the band been left on the way, the hold would have started again on the way
+    // back and the victory come later (Batch 40's audit asked; the equality is the check).
     expect(reference.state.ending.victory! - firstRead).toBe(Math.round(STANDARD.VICTORY_HOLD_YEARS / STANDARD.SUBSTEP_YEARS));
   });
 
