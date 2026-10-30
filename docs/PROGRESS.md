@@ -2339,3 +2339,38 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
      not be clicked. The front door should hold its actions while a world loads (or `playNow`
      should ignore a play while one is in progress, and `enter` should never leave a running game
      behind), with a test that clicks Play twice during a catch-up and expects one game.
+- fix 1: done (2026-10-31, 1 session; commit e821362 and the progress record)
+  1. Known issues: Update 29's and Update 32's lists are back exactly as they shipped (no diff
+     against 30f77a8^ outside Update 40's section and the current list). In "Known issues in the
+     current game": the levelling item rewritten to what the game now says ("Laying a corridor,
+     cable or railway there tells you to use **Level ground** on that tile too", matching
+     `src/sim/micro/settlement.ts` `tooSteep`), and the two Terraformed opening lines added. Also,
+     not in the review's list: Batch 37's two deposit issues (found by Batch 39's fix round, left
+     for Batch 40) added to the current list; both checked still true (deposits drawn only by the
+     city screen; "from Update 37 on" in cities.md).
+  2. One world opens at a time (`src/web/app.ts`): `hold`/`release` around every open - Play and
+     Continue (`play`), the Example planet (`playExample`), Create world (the New world form) -
+     makes the front door's screen `inert` and `aria-busy` (dimmed by `src/web/style.css`) and
+     ignores another open while one is under way or a game is on the page; released when the open
+     ends, loaded or not. `enter` stops any game still on the page before launching one. New tests
+     in `src/web/app.test.ts`: during a real catch-up (the v20 save ten hours away), Play clicked
+     twice, then Back, Continue and the Example planet - one game launched, one `.game` on the page,
+     the screen held during and released after (the notice checked to read "Catching up..." when
+     the clicks land); and a New world submitted twice makes one world and launches once.
+     Injections, one at a time, `app.ts` restored from a copy and compared after each: Play unheld
+     ("games launched: expected 5 to be 1"); Play unheld and `enter` not stopping the first ("one
+     game on the page", two shells); the screen not made inert; never released (two tests: the new
+     one, and "a world that will not load ... the others still play", "expected 'worlds' to be
+     'game'"); Create world unheld ("one world made ... got 2"); the Example planet unheld ("games
+     launched: expected 2 to be 1"). 6 of 6 caught; the assertions ordered so each layer's own
+     check fails first (the first ordering caught Play unheld by the held-screen check instead).
+  - player documentation: Update 40's New and `docs/manual/worlds-and-saving.md` now say the page
+    does not freeze while a world catches up, but its buttons are dimmed and wait until the world
+    has opened (they said "the page keeps working").
+  - note: `docs/balance/batch40-playtest.md` (what went wrong 10, injections 22-27, the fix round's
+    verification); GAME_PLAN.md's Batch 40 line on the opening says the same.
+  - verification: typecheck green; build green; build:web green (709.97 kB JS, 239.66 kB gzip,
+    54.98 kB CSS); `npx vitest run src/web/app.test.ts`: 10 tests passed; `npx vitest run
+    --maxWorkers=2 --minWorkers=1`: 135 files, 1,626 tests, all passed (693 s; the metropolis
+    opening test and the golden frames among them).
+  - review request: GAME_PLAN.md docs/PROGRESS.md docs/balance/batch40-playtest.md docs/manual/update-notes.md docs/manual/worlds-and-saving.md src/web/app.test.ts src/web/app.ts src/web/style.css

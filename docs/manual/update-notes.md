@@ -637,6 +637,9 @@ and railways between settlements; and the Example planet.
   another letter on it. It is still the key in that place.
 - A frame's time, shown in **Settings**, is measured in the cities you see after the page opens;
   reloading starts again.
+- Deposits are seen only in a city: the planet, the world map and founding a settlement do not
+  show them.
+- Worlds made before Update 37 have no deposits.
 - Worlds made before Update 38 have no rising sea, and cannot turn it on.
 - A city's people can only be moved to the nearest cities out of the sea's way, and a city cannot be
   moved.
