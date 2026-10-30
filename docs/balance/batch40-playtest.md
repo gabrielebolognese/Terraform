@@ -102,7 +102,9 @@ canvas's own filling, the GPU, the globe's WebGL - is counted, not timed.
       back as they shipped; the current list says what levelling's message now says and has the
       Terraformed opening. Cost: a second time for the same mistake, so it is written here as
       plainly as it can be: an update's notes describe what that update shipped and are never edited
-      after; only Update 40's own section and the current list change.
+      after; only Update 40's own section and the current list change. The fix round also added
+      Batch 37's two deposit issues to the current list (they were only ever in Update 35's and 37's
+      lists, found by Batch 39's fix round and left for this batch); both still hold.
 
 ## What was built
 
@@ -291,6 +293,9 @@ after finished it in 0.8-1.1 s, and the full run in 1.5 s. Not explained.
   game's first frames had drawn it ("parameter 1 is not of type 'Element'"). It passed alone and in
   five runs under twenty busy processes; the test now waits for the three elements it reads.
 - The second full run, after that: 135 files, 1,624 tests, all passed (481 s).
+- Review 1's fix round: typecheck, build and build:web green (709.97 kB JS, 239.66 kB gzip,
+  54.98 kB CSS); `npx vitest run src/web/app.test.ts`: 10 tests passed; the full run
+  (`--maxWorkers=2 --minWorkers=1`): 135 files, 1,626 tests, all passed (693 s).
 - The built page, its script and its styles served and fetched over HTTP (200; 709,519 and 54,940 bytes).
 - `npm run build:web`: green (709.50 kB JS, 239.53 kB gzip, 54.94 kB CSS; Vite's 500 kB warning, as
   since Batch 31).
