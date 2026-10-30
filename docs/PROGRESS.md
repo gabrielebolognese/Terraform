@@ -5,7 +5,7 @@ top are read by the script; keep them one per line, `name: value`. The status ta
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
 last_completed_batch: 39
-in_progress_batch: none
+in_progress_batch: 40
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -2217,3 +2217,9 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   { materials: ... } to deeply equal ...". 28 (a cancelled order keeping its credits in
   `earth.spent`) failed the Self-reliant test: "expected undefined to be 57350". Both match the
   note.
+
+### Batch 40 - Playtest pass: performance, polish and an adversarial review
+- status: in progress
+- sessions: 1 (2026-10-30)
+- machine: AMD Ryzen 7 5700U (8 cores, 16 threads), 16 GB, Windows 11 Home, Node 22.16.0
+- decisions:
