@@ -125,10 +125,12 @@ describe("objectives on a scripted run", () => {
 
 describe("the first hour by mode", () => {
   it("is Standard's alone: a sandbox and a Terraformed start have neither the guide nor objectives", () => {
-    expect(MODE_OVERRIDES.standard).toEqual({ GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1, DECISIONS_ENABLED: 1, EARTH_ENABLED: 1 });
+    // Batch 39: the ending - victory, the score, achievements - is a Standard world's too.
+    expect(MODE_OVERRIDES.standard).toEqual({ GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1, DECISIONS_ENABLED: 1, EARTH_ENABLED: 1, ENDING_ENABLED: 1 });
     for (const mode of ["sandbox", "terraformed"] as const) {
       const t = worldTuning(mode, 0, "standard");
       expect(t.GUIDE_ENABLED + t.OBJECTIVES_ENABLED, mode).toBe(0);
+      expect(t.ENDING_ENABLED, `${mode}: nothing to win`).toBe(0);
       const s = foundSettlement(marsStart(undefined, t), "city", PACING_SITE.lat, PACING_SITE.lon, t).state;
       expect(objectiveStatus(s, t)).toEqual([]);
       expect(guideActive(s, t)).toBe(false);

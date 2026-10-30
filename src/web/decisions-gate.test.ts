@@ -21,6 +21,7 @@ import { playPacing } from "../harness/pacing.js";
 import { tuningRecord, worldTuning } from "./game-tuning.js";
 import { CHOICE_TITLES, cardAt, cardDealtAt, cardFor, chooseDecision, decisionChoices, deckSlots, defaultWords, outbreakAtRisk, secondsFor, substepsFor } from "../sim/decisions.js";
 import { emptyEarth } from "../sim/earth.js";
+import { NO_ENDING } from "../sim/planets/mars.js";
 import { advance } from "../sim/integrate.js";
 import { BUILDING_DEFS } from "../sim/micro/buildings.js";
 import { resume } from "../sim/offline.js";
@@ -417,11 +418,14 @@ describe("answering (Batch 33)", () => {
     delete v17["decisions"];
     // Nor Earth (v19, Batch 34): a world from before it loads with Earth as a world starts it.
     delete v17["earth"];
+    // Nor the ending (v21, Batch 39): never in the band, not won, nothing counted or earned.
+    delete v17["ending"];
     const loaded = fromSave(v17, OFF);
     // And each city is held from the sea for its grace (v20, Batch 38): it was made before flooding.
-    expect({ ...loaded, earth: s.earth }).toEqual({ ...s, settlements: s.settlements.map((c) => ({ ...c, floodGraceYears: OFF.FLOOD_GRACE_YEARS })) });
+    expect({ ...loaded, earth: s.earth, ending: s.ending }).toEqual({ ...s, settlements: s.settlements.map((c) => ({ ...c, floodGraceYears: OFF.FLOOD_GRACE_YEARS })) });
     expect(loaded.decisions).toEqual({ open: [], log: [] });
     expect(loaded.earth).toEqual(emptyEarth(OFF));
+    expect(loaded.ending).toEqual(NO_ENDING);
   });
 });
 
