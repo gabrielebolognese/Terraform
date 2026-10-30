@@ -35,7 +35,7 @@ afterEach(async () => {
   mounted = null;
 });
 
-function page(store = new MemorySaveStore(true)): { app: App; root: HTMLElement; store: MemorySaveStore; downloads: string[] } {
+function page(store = new MemorySaveStore(true), launch: typeof startGame = startGame): { app: App; root: HTMLElement; store: MemorySaveStore; downloads: string[] } {
   const root = document.createElement("div");
   root.id = "app";
   document.body.append(root);
@@ -47,7 +47,7 @@ function page(store = new MemorySaveStore(true)): { app: App; root: HTMLElement;
     store,
     now: () => (at += 1000),
     randomSeed: () => 4242,
-    launch: startGame,
+    launch,
     // The look-only example's build is about forty seconds; its plumbing is what is tested here.
     buildExample: () => ({ state: marsStart(7, BROWSER_TUNING), tuning: BROWSER_TUNING }),
     download: (_name, text) => downloads.push(text),
@@ -109,6 +109,58 @@ describe("the front door, through the real components", () => {
     expect(said.some((t) => /^Catching up on the time you were away: \d+%$/.test(t)), said.join(" | ")).toBe(true);
     expect(notice(root), "cleared once it is done").toBe("");
     expect(app.currentView).toBe("game");
+  });
+
+  it("opens one world at a time: Play clicked again while a world catches up starts no second game (Batch 40's review)", async () => {
+    // Batch 40 hands the page back while a long absence is caught up; a second Play then launched the world
+    // again over the first, both games autosaving into one slot.
+    const old = JSON.parse(readFileSync("src/web/old-saves/v20.json", "utf8")) as { slot: string; index: { worlds: { id: string; name: string }[] }; save: string };
+    const store = new MemorySaveStore(true);
+    await store.saveMeta("worlds", old.index);
+    store.putRaw(old.slot, { ...(JSON.parse(old.save) as object), last_saved_real: new Date(T0 - 10 * 3600 * 1000).toISOString() });
+    let launched = 0;
+    const { app, root } = page(store, (...args) => {
+      launched += 1;
+      return startGame(...args);
+    });
+    await app.start();
+    buttonNamed(root, "Worlds").click();
+    const name = old.index.worlds[0]!.name;
+    buttonNamed(row(root, name), "Play").click();
+    for (let i = 0; i < 400 && !notice(root).startsWith("Catching up"); i++) await new Promise((r) => setTimeout(r, 5));
+    // Not vacuous: the clicks below land while the world is still catching up, its row and Play on the page.
+    expect(notice(root), "the clicks land during the catch-up").toMatch(/^Catching up on the time you were away: \d+%$/);
+    const screen = root.querySelector<HTMLElement>(".front-screen")!;
+    const held = screen.hasAttribute("inert");
+    buttonNamed(row(root, name), "Play").click();
+    buttonNamed(row(root, name), "Play").click();
+    buttonNamed(root, "Back").click();
+    buttonNamed(root, /^Continue/).click();
+    buttonNamed(root, "Example planet").click();
+    await app.settled();
+    expect(app.currentView).toBe("game");
+    // The page first (a game left running behind another), then every launch (one stopped at once).
+    expect(root.querySelectorAll(".game"), "one game on the page").toHaveLength(1);
+    expect(launched, "games launched").toBe(1);
+    expect(held, "the front door's actions are held while a world opens").toBe(true);
+    expect(screen.hasAttribute("inert"), "released once the world is open").toBe(false);
+  });
+
+  it("a New world submitted twice makes one world and opens it once (Batch 40's review)", async () => {
+    let launched = 0;
+    const { app, root } = page(undefined, (...args) => {
+      launched += 1;
+      return startGame(...args);
+    });
+    await app.start();
+    buttonNamed(root, "New world").click();
+    const form = root.querySelector<HTMLFormElement>(".new-world")!;
+    submit(form);
+    submit(form);
+    await created(app);
+    expect(app.currentView).toBe("game");
+    expect(app.library.worlds, "one world made").toHaveLength(1);
+    expect(launched, "games launched").toBe(1);
   });
 
   it("create, play, quit to title, continue: the world made is the world written and the world reopened", async () => {

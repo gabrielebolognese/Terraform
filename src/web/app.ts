@@ -124,6 +124,12 @@ export class App {
   private menu: HTMLElement | null = null;
   /** Serialises everything that writes: two clicks never race for one slot. */
   private busy: Promise<void> = Promise.resolve();
+  /**
+   * A world is being opened. Batch 40's review: a long absence is caught up between frames, so the page
+   * can be clicked meanwhile, and a second Play queued a second game over the first - both autosaving into
+   * one slot. While one opens, the front door holds its actions and another open is ignored.
+   */
+  private opening = false;
 
   constructor(private readonly deps: AppDeps) {
     this.library = new WorldLibrary(deps.store, deps.now);
@@ -177,6 +183,27 @@ export class App {
       this.say(error instanceof Error ? error.message : String(error));
     });
     return this.busy;
+  }
+
+  /** Begin opening a world, if none is opening or open: the front door's actions held until it is done. */
+  private hold(): boolean {
+    if (this.opening || this.game !== null) return false;
+    this.opening = true;
+    this.screen.setAttribute("inert", "");
+    this.screen.setAttribute("aria-busy", "true");
+    return true;
+  }
+
+  private release(): void {
+    this.opening = false;
+    this.screen.removeAttribute("inert");
+    this.screen.removeAttribute("aria-busy");
+  }
+
+  /** Open a world through the queue, one at a time. */
+  private opens(work: () => Promise<void>): Promise<void> {
+    if (!this.hold()) return Promise.resolve();
+    return this.queue(work).finally(() => this.release());
   }
 
   // ---- the planet behind the menus -------------------------------------------
@@ -440,6 +467,7 @@ export class App {
       const chosen = (form.querySelector('input[name="mode"]:checked') as HTMLInputElement | null)?.value as WorldMode | undefined;
       const mode = chosen ?? "standard";
       const s = parseSeed(seed.value) ?? this.deps.randomSeed();
+      if (!this.hold()) return;
       create.disabled = true;
       this.say(mode === "terraformed" ? "Making a living planet - about forty seconds..." : "Making the world...");
       // Let the message paint before a long build.
@@ -450,7 +478,7 @@ export class App {
           const meta = await this.library.create({ name: name.value, seed: s, mode, pace: (WORLD_PACES as readonly string[]).includes(pace.value) ? (pace.value as WorldPace) : "standard", bonus });
           this.say("");
           await this.playNow(meta.id);
-        });
+        }).finally(() => this.release());
       }, 30);
     });
     panel.append(head, form);
@@ -533,7 +561,7 @@ export class App {
 
   /** Open a world. One that fails to load stays on the list with its reason - nothing is started over it. */
   play(id: string): Promise<void> {
-    return this.queue(() => this.playNow(id));
+    return this.opens(() => this.playNow(id));
   }
 
   private async playNow(id: string): Promise<void> {
@@ -572,7 +600,7 @@ export class App {
 
   /** The example planet: look only, nothing saved. */
   playExample(): Promise<void> {
-    return this.queue(async () => {
+    return this.opens(async () => {
       this.say("Building the example planet - about forty seconds...");
       await new Promise((r) => setTimeout(r, 30));
       const example = this.deps.buildExample();
@@ -595,6 +623,9 @@ export class App {
   }
 
   private enter(options: GameOptions, world: WorldMeta | null, autosaver: Autosaver | null): void {
+    // Never two games on the page: one left running would autosave its own state into the world's slot.
+    this.game?.handle.stop();
+    this.game = null;
     this.hidePlanet();
     this.front.hidden = true;
     this.view = "game";

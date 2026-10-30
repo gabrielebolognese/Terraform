@@ -12,8 +12,8 @@ longer freezes the page while it catches up, and the game saves once when an aut
 **New**
 - **Catching up, shown**: when a world takes a moment to catch up on the time you were away, the
   title screen or the **Worlds** list says how far it has got ("Catching up on the time you were
-  away: 34%"), and the page keeps working meanwhile. Before, a Terraformed start you had been away
-  from could freeze the page for minutes.
+  away: 34%"). The page no longer freezes meanwhile, but its buttons wait until the world has
+  opened. Before, a Terraformed start you had been away from could freeze the page for minutes.
 
 **Changed**
 - **Panning a big city is smoother.** The city's picture is worked out again when something in it
@@ -399,9 +399,6 @@ and they are happier: a happy city fills its homes faster and every building in 
   railway, and the ready-made cities have only a few lines.
 - Making a Terraformed start, and building the Example planet, take longer than before: about
   40 seconds each, where they took about 20.
-- A Terraformed start you have been away from takes a while to open: about half a minute after an
-  hour away, and around five minutes after ten hours. The game shows how far it has got.
-- A Terraformed start takes a few seconds to open even when you have not been away.
 - Happiness is not yet shown on the world map's city cards, in the Settlements list, in Alerts or
   in Statistics.
 
@@ -520,6 +517,9 @@ the route sets how long a job takes. Trains run on a track each way and stop at 
 **Known issues**
 - Trains on different lines still pass through each other where the lines cross.
 - A rover driving past another one at work beside its site can pass through it.
+- Levelling ground can leave the tiles beside it too steep to build on, with no rock on them.
+  Laying a corridor, cable or railway there tells you to send a rover to break the crag, but there
+  is none: use **Level ground** on that tile instead.
 
 ---
 
@@ -598,9 +598,8 @@ and railways between settlements; and the Example planet.
 - The ocean cover bar's minimum mark says "0.3%" when it means 30%.
 - In a city, trains on different lines pass through each other where the lines cross.
 - A rover driving past another one at work beside its site can pass through it.
-- Levelling ground can leave the tiles beside it too steep to build on, with no rock on them.
-  Laying a corridor, cable or railway there tells you to send a rover to break the crag, but there
-  is none: use **Level ground** on that tile instead.
+- Levelling ground can leave the tiles beside it too steep to build on, with no rock on them. Laying
+  a corridor, cable or railway there tells you to use **Level ground** on that tile too.
 - The guide's sixth step, claiming land, waits for 200 people: the guide takes about 40 minutes to
   an hour to finish.
 - A reward of settlers or materials is partly lost when the city has no empty homes or no room in
@@ -616,6 +615,9 @@ and railways between settlements; and the Example planet.
 - In a Terraformed start, Stations reach only some of a city's homes.
 - Making a Terraformed start, and building the Example planet, take longer than before: about
   40 seconds each, where they took about 20.
+- A Terraformed start you have been away from takes a while to open: about half a minute after an
+  hour away, and around five minutes after ten hours. The game shows how far it has got.
+- A Terraformed start takes a few seconds to open even when you have not been away.
 - Happiness is not yet shown on the world map's city cards, in the Settlements list, in Alerts or
   in Statistics.
 - Events keep coming while the game is closed, and nobody answers them: each comes to its worst.

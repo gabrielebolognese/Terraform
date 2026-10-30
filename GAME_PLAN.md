@@ -1128,8 +1128,8 @@ recorded in `docs/PROGRESS.md`.
   and the globe are counted, not timed.
 - **The budget is met but for one world**: a Terraformed start opens in 4.6 s, 31 s an hour away and
   290 s after ten, against 3 s - its 83,589 buildings make a substep about 87 ms and the
-  catch-up must equal live play. Recorded with its cause; the page now keeps working and says how far
-  it is. Standard worlds open in under a second after ten hours away.
+  catch-up must equal live play. Recorded with its cause; the page no longer freezes and says how far
+  it is (its buttons held until the world opens, after review 1). Standard worlds open in under a second after ten hours away.
 - **The opening test is load-proof by shares of the whole, not by CPU time**: the process's CPU time
   counts the collector's threads and grew under load as much as the wall clock (measured).
 - **"Every test injection-checked"** was taken as: every batch's own table already breaks each new
