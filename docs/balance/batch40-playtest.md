@@ -247,11 +247,24 @@ each file restored from a copy and checked identical after.
 35 faults, 32 caught at once, the 3 not caught fixed and caught as 18-20.
 
 One run of the front door's new test (21) did not finish in ten minutes and was stopped; three runs
-after, and the full run, finished it in about a second. Not explained.
+after finished it in 0.8-1.1 s, and the full run in 1.5 s. Not explained.
 
 ## Verification
 
-VERIFICATION
+- `npm run typecheck`: green.
+- `npx vitest run --maxWorkers=2 --minWorkers=1`, the first full run: 135 files, 1,624 tests, 1,623
+  passed (702 s). The metropolis opening test passed (Known red since Batch 26; now load-proof). The
+  one failure: `settings-gate.test.ts`, "the interface, on the page" - it read an element before the
+  game's first frames had drawn it ("parameter 1 is not of type 'Element'"). It passed alone and in
+  five runs under twenty busy processes; the test now waits for the three elements it reads.
+- The second full run, after that: 135 files, 1,624 tests, all passed (481 s).
+- The built page, its script and its styles served and fetched over HTTP (200; 709,519 and 54,940 bytes).
+- `npm run build:web`: green (709.50 kB JS, 239.53 kB gzip, 54.94 kB CSS; Vite's 500 kB warning, as
+  since Batch 31).
+- `npm run build`: green.
+- The golden frames (city, terrain, flood, structures, the planet) are in the suite and passed, unchanged:
+  nothing this batch changed is drawn differently (the view's buildings carry the same values; only
+  the order of an object's keys moved).
 
 ## Open
 

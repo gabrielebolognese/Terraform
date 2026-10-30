@@ -681,6 +681,11 @@ describe("the interface, on the page", () => {
     const { app, root } = await title(store);
     const style = (sel: string) => getComputedStyle(root.querySelector<HTMLElement>(sel)!);
     await newWorld(app, root);
+    // Batch 40: what is read below comes with the game's first frames; in one full run, under its load, the first
+    // look came before one of them was there ("parameter 1 is not of type 'Element'"). Five runs alone and under
+    // every core kept busy never showed it again. Waited for, as a player's eye would.
+    const read = [".shell-hud", '.hud-metric-status[data-state="below-minimum"]', ".game-menu-button"];
+    for (let i = 0; i < 150 && read.some((sel) => root.querySelector(sel) === null); i += 1) await wait(20);
     try {
       // As it comes: everything at its size, the standard colours, the panels as they were, things that move.
       expect(style(".shell-hud").zoom).toBe("1");

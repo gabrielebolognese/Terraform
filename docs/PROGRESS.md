@@ -4,8 +4,8 @@ Where the build stands, for `scripts/run-batches.sh` and each unattended session
 top are read by the script; keep them one per line, `name: value`. The status table in
 `GAME_PLAN.md` stays the source of truth for what each batch is; this file is the run's state.
 
-last_completed_batch: 39
-in_progress_batch: 40
+last_completed_batch: 40
+in_progress_batch: none
 final_batch: 40
 skipped_batches: none
 needs_human: none
@@ -14,9 +14,9 @@ needs_human: none
 
 Failures already recorded in a balance note. They do not block a batch; a new failure does.
 
-- `src/web/city-open.test.ts`, the metropolis timing test: 440-505 ms against its 400 ms limit on
-  this machine, failing on the commit before Batch 28 as well. Batch 26's finding, assigned to
-  Batch 40 ([note](balance/batch28-build-times.md)).
+- Resolved in Batch 40: `src/web/city-open.test.ts`, the metropolis timing test, is load-proof (each
+  time a share of the whole making, the work cut first) and passed in Batch 40's full runs. The lines
+  below are its history ([note](balance/batch40-playtest.md)).
 - The full `npx vitest run` can be killed for low memory on this machine. If it is, run it again
   with fewer workers rather than skipping it: `npx vitest run --maxWorkers=2 --minWorkers=1` (with
   `--maxWorkers=2` alone this vitest refuses to start: "minThreads and maxThreads must not
@@ -28,6 +28,10 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
 - Batch 38's review 1 fix run: the same test failed at 511 ms against 400 (the only failure); the
   round changed test files only.
 - Batch 39's full run: the same test failed at 400.5 ms against 400; no code it runs changed.
+- Batch 40's first full run: `src/web/settings-gate.test.ts`, "the interface, on the page", read an
+  element before the game's first frames had drawn it, once ("parameter 1 is not of type
+  'Element'"); five runs alone and under every core kept busy passed. The test now waits for what it
+  reads. Not red; recorded in case it comes back.
 
 ## Batches
 
@@ -2219,8 +2223,13 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   note.
 
 ### Batch 40 - Playtest pass: performance, polish and an adversarial review
-- status: in progress
-- sessions: 1 (2026-10-30)
+- status: complete
+- note: docs/balance/batch40-playtest.md
+- manual: docs/manual/update-notes.md (Update 40, the current known issues: the levelling message
+  fixed, a Terraformed start's opening), docs/manual/worlds-and-saving.md (catching up shown, how
+  long; a save that fails tried again at the next autosave), docs/manual/cities.md (steep ground's
+  message for a link)
+- sessions: 1 (2026-10-30 to 31)
 - machine: AMD Ryzen 7 5700U (8 cores, 16 threads), 16 GB, Windows 11 Home, Node 22.16.0
 - decisions:
   - No browser is opened (the user's standing rule), so the budget is measured in Node on the machine
@@ -2258,3 +2267,21 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
   - 043197e: the frame budget: the view when its inputs change, 16 ms of new pictures, budget.ts
   - 76f11d9 (autosave), 09412db (steep ground), 371d19c (catch-up between frames), e3ae12d (the review's
     test fixes and traced thresholds)
+- verification: typecheck green; build green; build:web green (709.50 kB JS, 239.53 kB gzip, 54.94 kB
+  CSS); the built page, script and styles served and fetched over HTTP; npx vitest run
+  --maxWorkers=2 --minWorkers=1, first run: 135 files, 1,624 tests, 1,623 passed (702 s) - the
+  metropolis opening test passed (load-proof now), the one failure settings-gate's "the interface,
+  on the page" reading an element before the first frames drew it, passing alone and in five runs
+  under load, the test now waiting for what it reads; second run: 135 files, 1,624 tests, all passed (481 s). The golden frames are in
+  the suite, unchanged.
+- measured: the reference city's frames median 2.45 ms, p95 4.78, p99 11.7, 10 of 1,199 over 16.7 ms;
+  a metropolis (40,539 buildings) panned at 1x median 6.79 ms, p95 12.9, 11 of 1,799 over 33 ms (at
+  3x p95 19.2, 31 over); before the fixes p95 110.8, 203 over; heap 285/272/288 MB over three laps;
+  opening a Standard world 7-938 ms at every absence to the 10 h cap; a Terraformed start 4.6 s,
+  31 s an hour away, 290 s after ten (missed, recorded; the page handed back every 50 ms, the first
+  slice about 4 s); the opening test's longest step 51-114 ms alone (was 203-254), 1.3-3.8% of the
+  whole; keyTile 5.4 ms for 177,796 keys after the example (was 175).
+- injections: 21 faults of mine, one at a time, each file restored from a copy and checked: 21
+  caught (one premise of mine replaced, recorded); the review's 14 into untabled tests of Batches
+  26-39: 11 caught, the 3 not caught fixed and caught. The table is in the note.
+- review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch40-playtest.md docs/manual/cities.md docs/manual/update-notes.md docs/manual/worlds-and-saving.md scripts/old-save.ts src/harness/ending.test.ts src/render/structures.test.ts src/shared/planet-terrain.test.ts src/sim/index.ts src/sim/micro/build-curve.test.ts src/sim/micro/build-queue.test.ts src/sim/micro/drive.test.ts src/sim/micro/drive.ts src/sim/micro/rocks.ts src/sim/micro/settlement.ts src/sim/micro/space.ts src/sim/micro/view.ts src/sim/offline.test.ts src/sim/offline.ts src/sim/tick.ts src/web/app.test.ts src/web/app.ts src/web/budget.ts src/web/city-chunks.ts src/web/city-open.test.ts src/web/city.ts src/web/decisions-gate.test.ts src/web/earth-gate.test.ts src/web/old-saves.test.ts src/web/old-saves/v13.json src/web/old-saves/v14.json src/web/old-saves/v15.json src/web/old-saves/v16.json src/web/old-saves/v17.json src/web/old-saves/v18.json src/web/old-saves/v19.json src/web/old-saves/v20.json src/web/pace.test.ts src/web/planner.ts src/web/session.test.ts src/web/session.ts src/web/settings-gate.test.ts src/web/sound.test.ts src/web/view-inputs.test.ts src/web/view-inputs.ts src/web/worlds.ts
