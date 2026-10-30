@@ -6,7 +6,8 @@
  * view's panel for the sea - the warning, and Evacuate - and the inspector's
  * Raise its ground; the Seawall's card where the sea floods and not where it
  * does not; and the assembled game, saying what switching the planet's
- * facilities off would buy a city in the burst.
+ * facilities off would buy a city in the burst, evacuating it, and raising a
+ * building's ground through the game's own hooks.
  */
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,6 +15,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { terraformedMars } from "../harness/example.js";
 import type { SimState, Tuning } from "../sim/index.js";
 import {
+  BUILDING_DEFS,
   DEFAULT_TUNING,
   NEUTRAL_ENV,
   checkPlacement,
@@ -30,6 +32,7 @@ import {
   siteElevation,
   terraceBuilding,
   terracePlan,
+  tileKey,
   threatened,
   upgradeBuilding,
 } from "../sim/index.js";
@@ -257,9 +260,9 @@ describe("the throttle link in the assembled game (Batch 38)", () => {
     return best!;
   };
   /** A city's first open place for a dome, and the dome. */
-  const home = (s: SimState, id: string): SimState => {
+  const home = (s: SimState, id: string, tuning: Tuning = T): SimState => {
     for (let k = 0; k < 32 * 32; k += 1) {
-      const o = placeBuilding(s, id, "habitat_dome", k % 32, Math.floor(k / 32), T);
+      const o = placeBuilding(s, id, "habitat_dome", k % 32, Math.floor(k / 32), tuning);
       if (o.ok) return o.state;
     }
     throw new Error("no room for a dome");
@@ -324,6 +327,55 @@ describe("the throttle link in the assembled game (Batch 38)", () => {
       expect(handle.state.settlements[1]!.population).toBe(30);
       frames.step(4, 300);
       expect(root.querySelector(".city-hint")!.textContent).toBe("30 people moved to safety: High (30).");
+    } finally {
+      handle.stop();
+    }
+  });
+
+  it("down in a city: Raise its ground on a selected building sends a rover from the headquarters, and the game carries it", () => {
+    // Review 1: without the game's hook the city screen never offers terracing - the screen's own tests mount it
+    // with theirs. A city that lands with its headquarters (the browser's), high above the sea: terracing is
+    // offered for any building in a world the sea floods.
+    const H = makeTuning({ ...T, HEADQUARTERS_ENABLED: 1 });
+    let state = terraformedMars(DEFAULT_TUNING, 290);
+    const high = siteAt(1000);
+    state = foundSettlement(state, "city", high.lat, high.lon, H, "High").state;
+    state = { ...state, settlements: state.settlements.map((c) => ({ ...c, stores: { ...c.stores, materials: 1000 } })) };
+    state = home(state, "settlement-1", H);
+    expect(state.settlements[0]!.buildings.some((b) => b.type === "headquarters")).toBe(true);
+    const frames = new Frames();
+    frames.install();
+    const root = document.createElement("div");
+    document.body.append(root);
+    const handle: GameHandle = startGame(root, { state, tuning: H, fresh: () => marsStart(undefined, H) }, { save: () => {}, saveDue: () => false, saveFailures: () => 0, onMenu: () => {}, onBackToTitle: () => {} });
+    try {
+      frames.step(3, 100);
+      root.querySelector<HTMLButtonElement>(".hud-settlement-open")!.click();
+      for (let i = 0; i < 300 && handle.views.city.root.hidden; i += 1) frames.step();
+      expect(handle.views.city.root.hidden, "down in the city").toBe(false);
+      const canvas = root.querySelector<HTMLCanvasElement>(".city canvas")!;
+      canvas.width = 800;
+      canvas.height = 600;
+      const city = (): SimState["settlements"][number] => handle.state.settlements[0]!;
+      const dome = city().buildings.findIndex((b) => b.type === "habitat_dome");
+      const b = city().buildings[dome]!;
+      handle.views.city.select(dome);
+      frames.step(1, 300);
+      const raise = root.querySelector<HTMLButtonElement>(".city-terrace")!;
+      expect(raise.hidden, "Raise its ground offered").toBe(false);
+      const plan = terracePlan(city(), b.tx, b.ty, H)!;
+      expect(raise.textContent).toBe(`Raise its ground 2 m (${plan.materials} materials)`);
+      const materials = city().stores.materials;
+      raise.click();
+      const job = city().jobs.find((j) => j.kind === "rover");
+      expect(job, "a rover out in the game's state").toEqual(expect.objectContaining({ tile: tileKey(b.tx, b.ty), levelM: plan.levelM, area: { w: 3, d: 3 } }));
+      expect(city().stores.materials).toBe(materials - plan.materials);
+      frames.step(4, 300);
+      expect(root.querySelector(".city-hint")!.textContent).toBe(`A rover is on its way to raise the ${BUILDING_DEFS.habitat_dome.name}'s ground.`);
+      // The game's own advance carries the trip: a substep is about 8 s at 1x.
+      const left = (): number => city().jobs.find((j) => j.kind === "rover")?.remaining ?? 0;
+      for (let i = 0; i < 60 && left() === job!.remaining; i += 1) frames.step(1, 300);
+      expect(left()).toBeLessThan(job!.remaining);
     } finally {
       handle.stop();
     }
