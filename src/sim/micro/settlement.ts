@@ -21,6 +21,7 @@ import type { BuildingType, Grade, History, MicroResource, PlacedBuilding, Plann
 import { MICRO_RESOURCES, NEUTRAL_ENV, isCityKind } from "../types.js";
 import { BUILDING_DEFS, UNLOCKED, buildYears, keySet, levelFactor, maxLevel, tilesUnder } from "./buildings.js";
 import { baseOf, chunkKey, claimTest, footprintTiles, frameOf, gridTiles, isBaseChunk, keyChunk, keyTile, TILE_STRIDE, tileKey } from "./space.js";
+import type { Ground } from "./terrain.js";
 import { isSteep, slopeAt } from "./terrain.js";
 import type { Rock } from "./rocks.js";
 import { garage, levelFor, rockAt, roverCount, roversOut, rocksOf, siteGround } from "./rocks.js";
@@ -338,12 +339,22 @@ const LAYER_WORDS: Readonly<Record<LinkLayer, { one: string; cost: (t: Tuning) =
  * nothing, off the grid, on ground too steep to build on, under a building,
  * where one already is, or without the materials. A tile may carry both.
  */
+/**
+ * Ground too steep for a link, and what makes it buildable: breaking the crag on it, or - where there is
+ * none - levelling it. Batch 40: it always said to break the crag, and on steep ground with no crag (left
+ * steep beside a levelled or terraced tile) a rover sent was refused, "there is no rock there to break".
+ */
+function tooSteep(s: Settlement, ground: Ground, one: string, tx: number, ty: number, t: Tuning): string {
+  const fix = rockAt(s, tx, ty, t) === "crag" ? "send a rover to break the crag" : "level the ground first";
+  return `the ground is too steep for a ${one} (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE}) - ${fix}`;
+}
+
 /** Why a link cannot go on (tx, ty) - the ground, a building, rock, one already there - or null. Not the materials. */
 export function linkRefusal(s: Settlement, layer: LinkLayer, tx: number, ty: number, t: Tuning): string | null {
   const words = LAYER_WORDS[layer];
   if (!claimTest(s, t)(tx, ty)) return `a ${words.one} must be on the grid - the land the city holds`;
   const ground = siteGround(s, t);
-  if (isSteep(ground, tx, ty)) return `the ground is too steep for a ${words.one} (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE}) - send a rover to break the crag`;
+  if (isSteep(ground, tx, ty)) return tooSteep(s, ground, words.one, tx, ty, t);
   if (tilesUnder(s.buildings).has(tileKey(tx, ty))) return "a building stands there";
   if (rockAt(s, tx, ty, t) === "crag") return `hard rock is in the way of a ${words.one} - send a rover to break it first`;
   if (keySet(s[layer]).has(tileKey(tx, ty))) return `there is a ${words.one} there already`;
@@ -358,7 +369,7 @@ export function placeLink(state: SimState, settlementId: string, layer: LinkLaye
   if (s.lostAtSeaLevelM !== null) return refuse(`${settlementId} was lost to the sea`);
   if (!claimTest(s, t)(tx, ty)) return refuse(`a ${words.one} must be on the grid - the land the city holds`);
   const ground = siteGround(s, t);
-  if (isSteep(ground, tx, ty)) return refuse(`the ground is too steep for a ${words.one} (slope ${slopeAt(ground, tx, ty).toFixed(2)}, limit ${t.TERRAIN_MAX_SLOPE}) - send a rover to break the crag`);
+  if (isSteep(ground, tx, ty)) return refuse(tooSteep(s, ground, words.one, tx, ty, t));
   if (tilesUnder(s.buildings).has(tileKey(tx, ty))) return refuse("a building stands there");
   if (rockAt(s, tx, ty, t) === "crag") return refuse(`hard rock is in the way of a ${words.one} - send a rover to break it first`);
   const key = tileKey(tx, ty);

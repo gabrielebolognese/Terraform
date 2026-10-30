@@ -236,6 +236,44 @@ describe("a rover's route", () => {
     expect(routes, "vacuity: ways past it").toBeGreaterThan(100);
   });
 
+  it("says what makes steep ground buildable for a link: levelling where there is no crag, breaking the crag where there is (Batch 40)", () => {
+    // Batch 29's open item: steep ground with no crag on it (levelling's neighbours, as above) refused a corridor
+    // with "send a rover to break the crag", and a rover sent there was refused, "there is no rock there to break".
+    let s = city(ROUGH, 1e6, 3000);
+    const id = sid(s);
+    const door = garageDoor(first(s))!;
+    const cfg = { tuning: ROUGH, env: NEUTRAL_ENV, forcing: null };
+    for (let x = door.tx - 3; x <= door.tx + 3; x += 1) {
+      s = levelGround(s, id, x, door.ty + 6, ROUGH).state;
+      for (let k = 0; k < 400 && first(s).jobs.length > 0; k += 1) s = advance(s, 1, cfg);
+    }
+    const c = first(s);
+    const ground = siteGround(c, ROUGH);
+    const rocks = rocksOf(c, ROUGH);
+    const n = ground.tiles;
+    const open = (i: number): boolean => claimTest(c, ROUGH)(i % n, Math.floor(i / n)) && !c.buildings.some((b) => i % n >= b.tx && Math.floor(i / n) >= b.ty && i % n < b.tx + BUILDING_DEFS[b.type].footprint && Math.floor(i / n) < b.ty + BUILDING_DEFS[b.type].depth);
+    let bare = -1;
+    let crag = -1;
+    for (let i = 0; i < n * n; i += 1) {
+      if (ground.steep[i] !== true || !open(i)) continue;
+      if (rocks[i] === "crag" && crag < 0) crag = i;
+      if (rocks[i] !== "crag" && bare < 0) bare = i;
+    }
+    expect(bare, "vacuity: steep ground with no crag").toBeGreaterThanOrEqual(0);
+    expect(crag, "vacuity: steep ground with a crag").toBeGreaterThanOrEqual(0);
+    const at = (i: number): [number, number] => [i % n, Math.floor(i / n)];
+    // No crag: levelling is the way, and doing it is accepted; a rover sent to break rock is not.
+    const noCrag = placeLink(s, id, "corridors", ...at(bare), ROUGH);
+    expect(noCrag.ok).toBe(false);
+    expect(noCrag.reason).toMatch(/too steep for a corridor .* - level the ground first$/);
+    expect(levelGround(s, id, ...at(bare), ROUGH).ok, "levelling it, as told").toBe(true);
+    expect(sendRover(s, id, ...at(bare), ROUGH).reason).toBe("there is no rock there to break");
+    // A crag: breaking it is the way, and sending the rover is accepted.
+    const onCrag = placeLink(s, id, "cables", ...at(crag), ROUGH);
+    expect(onCrag.reason).toMatch(/too steep for a cable .* - send a rover to break the crag$/);
+    expect(sendRover(s, id, ...at(crag), ROUGH).ok, "breaking it, as told").toBe(true);
+  });
+
   it("sets the trip: twice its drive at the tuned speeds, and the work", () => {
     let s = city(ON);
     const door = garageDoor(first(s))!;
