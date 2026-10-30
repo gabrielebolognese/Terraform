@@ -147,7 +147,8 @@ describe("the build-time curve, through a real advance (Batch 28)", () => {
   it("lands on the plan's starting targets (GAME_PLAN Batch 28's table)", () => {
     const first = (type: BuildingType) => timed.get(type)![0]!;
     const top = (type: BuildingType) => timed.get(type)!.at(-1)!;
-    // The plan proposed these; they are the curve's own numbers to a substep.
+    // The plan proposed these ranges; the curve's own numbers, to a substep, measured (Batch 40's audit): the depot
+    // 25 s first and 20.4 min at the top, the reactor 4.03 min and 2.97 h, the mega mall 1.00 h and 8.17 h.
     expect(first("storage_depot")).toBeLessThan(30);
     expect(top("storage_depot") / 60).toBeGreaterThan(15);
     expect(top("storage_depot") / 60).toBeLessThan(25);

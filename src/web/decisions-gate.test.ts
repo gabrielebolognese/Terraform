@@ -232,7 +232,8 @@ describe("each choice, measured through a real advance (Batch 33's gate)", () =>
     const left = play(town(), e, null, window);
     expect(shields.economy.credits).toBeCloseTo(control.economy.credits - ON.METEOR_SHIELD_CREDITS, 6);
     expect(cityOf(shields).buildings).toEqual(cityOf(control).buildings);
-    // Shelter: the city's buildings untouched, and over the samples while its people are under cover, no materials made.
+    // Shelter: the city's buildings untouched, and over the span its people are under cover, little made: measured
+    // (Batch 40's audit) 31.4 materials against 125.7 for a city with no shower, a quarter - not none, as this said.
     expect(cityOf(shelter).buildings).toEqual(cityOf(control).buildings);
     const atDeadline = play(town(), e, "shelter", toDeadline(e));
     const covered = play(town(), e, "shelter", toDeadline(e) + substepsFor(ON.METEOR_SHELTER_SECONDS, ON));
@@ -303,6 +304,10 @@ describe("each choice, measured through a real advance (Batch 33's gate)", () =>
     expect(lost("treat")).toBeCloseTo(Math.round(e.stake * ON.OUTBREAK_TREATED), 6);
     expect(lost("quarantine")).toBeCloseTo(Math.round(e.stake * ON.OUTBREAK_QUARANTINED), 6);
     expect(lost(null)).toBeCloseTo(e.stake, 6);
+    // And each choice's words name the people it loses, as played out here (Batch 40's review: the words for
+    // treating were never checked, and words giving 2.5 times the toll passed).
+    const words = (id: string): string => decisionChoices(e, ON).find((x) => x.id === id)!.words;
+    for (const id of ["treat", "quarantine"]) expect(words(id), id).toMatch(new RegExp(`^${Math.round(lost(id))} (person|people) lost`));
     // The quarantine's stop: no one born while it lasts, where the treated city grows.
     const stop = substepsFor(ON.OUTBREAK_QUARANTINE_SECONDS, ON);
     const start = play(town(), e, "quarantine", at);

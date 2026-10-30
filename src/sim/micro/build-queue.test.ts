@@ -81,10 +81,15 @@ describe("the build queue (Batch 28)", () => {
 
   it("never sends more rovers than the city has", () => {
     let s = busy();
+    let most = 0;
     for (let k = 0; k < 200; k += 1) {
       s = advance(s, 1, cfg);
-      expect(first(s).jobs.filter((j) => j.kind === "build" || j.kind === "rover").length).toBeLessThanOrEqual(roverCount(first(s), T));
+      const out = first(s).jobs.filter((j) => j.kind === "build" || j.kind === "rover").length;
+      most = Math.max(most, out);
+      expect(out).toBeLessThanOrEqual(roverCount(first(s), T));
     }
+    // Vacuity (Batch 40's audit): every rover was out at some substep, with work still queued behind them.
+    expect(most).toBe(roverCount(first(s), T));
   });
 
   it("is reorderable: moved to the front, the greenhouse goes before the dome", () => {

@@ -92,6 +92,7 @@ describe("the scripted playthrough, in real time at 1x", () => {
   it("Standard slows the planet and not the cities: Phase 2 comes 8x later, the city of 1,000 within a fifth", () => {
     // The clock alone, as Batch 28 made the paces: routes cost the two paces differently (below).
     expect(standard28.phase2! / classic28.phase2!).toBeCloseTo(8, 0);
+    // Measured (Batch 40's audit): 1.135, the city of 1,000 at 6,433 s against 5,667.
     expect(standard28.city1000! / classic28.city1000!).toBeLessThan(1.2);
     expect(standard.phase2! / classic.phase2!).toBeCloseTo(8, 0);
   });
