@@ -123,7 +123,7 @@ you earned in it. They are kept by this browser, like your settings.
 | Nobody lost to the sea | Win with at least 3 cities standing, and no settlement and no one ever lost to the sea |
 | A light touch | Win with fewer than 70,000 machine-years |
 | Swift | Win by the year 1,600 |
-| Self-reliant | Win without ever buying anything from Earth |
+| Self-reliant | Win without ever buying anything from Earth. Selling to Earth and its contracts do not count, nor an order you cancelled before it went up |
 
 These four are judged at the moment your world is won, and never again: a city founded after the
 win does not count towards "Nobody lost to the sea".
@@ -138,7 +138,7 @@ it is a Standard world. Choose one, or **No bonus**:
 | **Funded from home** | Start with 9,000 credits instead of 3,000 |
 | **A bigger garage** | Five rovers at every headquarters instead of three: more builds at once |
 | **Well supplied** | Every city founded with its stores full: 400 materials instead of 250 |
-| **Trusted by Earth** | Earth's regard starts at 80 instead of 50: better prices from the first launch |
+| **Trusted by Earth** | Earth's regard starts at 80 instead of 50: better prices from the first launch (Earth asks about 15% less, and pays about 15% more) |
 
 The bonus is part of the world for good, and the **Worlds** list shows it: "New game plus: A
 bigger garage". A world with a bonus keeps a score and earns achievements like any other.

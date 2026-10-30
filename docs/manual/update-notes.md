@@ -31,7 +31,11 @@ opens a bonus for your next world.
   while you were away.
 
 **Fixed**
-- Nothing in this update.
+- **Trusted by Earth** now gives the better prices it promises: Earth asks about 15% less and pays
+  about 15% more than in a world without it. A world already made with it gets them from its next
+  order.
+- **Self-reliant** is no longer earned by a world that bought from Earth long before it won. An order
+  you cancel before it goes up still does not count.
 
 **Known issues**
 - Worlds made before this update, Sandbox worlds and Terraformed starts have no victory, score or

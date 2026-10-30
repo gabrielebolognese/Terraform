@@ -66,6 +66,29 @@ world on the worlds list, about thirty achievements checked from state, and new 
    moment after the victory and checks the achievement does not come, with every other part of its
    condition holding five years on (injection 24). The same review found the batch's known issues
    written into Update 35's notes instead of the list of the current game's; moved.
+9. **Review 2: "Trusted by Earth" gave no better prices.** The bonus overrode EARTH_REP_START,
+   which was both a world's starting reputation and the middle of Earth's price curve (where a
+   reputation moves no price). A bonus world at 80 paid exactly what a world without it pays at 50
+   (seed 7: materials 4.353, rovers 1,414.06, to the last digit), and at any regard under 100 paid
+   more than a world without it at the same regard (materials 4.625 against 4.135 at 60). The New
+   world dialog and the manual both promised "better prices from the first launch". Only "A bigger
+   garage" had a test of its effect. The curve's middle is now its own constant, EARTH_REP_NEUTRAL
+   (50): the bonus world asks 3.700 a material, 15% less, and pays the same as any world at the same
+   regard. A world made with the bonus before the fix keeps a tuning with no EARTH_REP_NEUTRAL in it,
+   takes the default 50, and so gets the better prices from its next order with no migration. Tests
+   now check each bonus's effect in the world the worlds list makes (injections 25, 29-31).
+10. **Review 2: "Self-reliant" read the market's memory, not the player's purchases.** It asked
+    that `earth.bought` be 0 for every good: Earth's memory of trade, for pricing, halved at every
+    window. One material bought puts 4 into it, which is exactly 0 after 1,077 windows (year 2,300),
+    so a world that bought once at its first window and won after that earned "Win without ever
+    buying anything from Earth". Every run that earned it never traded, and no run bought and
+    checked it was withheld; with the purchase check removed, every test passed. It now reads
+    `earth.spent`, what was paid Earth and kept (a cancelled order, or one refunded for a city lost,
+    takes its credits back out). The new test buys one material 1,700 years in, in a world whose
+    market forgets all its trade at each window (EARTH_MARKET_RECOVERY 0, so the old reading is
+    fooled the window after rather than 1,077 windows after), and wins on substep 6,882 without the
+    achievement; the same world with the order cancelled wins on the same substep with it
+    (injections 26-28).
 
 ## What was built
 
@@ -112,7 +135,10 @@ world on the worlds list, about thirty achievements checked from state, and new 
   achievement was earned in. New game plus opens with any victory in it.
 - **Four bonuses**: 9,000 starting credits, five rovers a headquarters, cities founded with full
   stores (400 materials - a new city's store holds 400, so 750 would have been clamped), Earth's
-  regard from 80. A Standard world's only.
+  regard from 80. A Standard world's only. Earth's prices are neutral at their own regard
+  (EARTH_REP_NEUTRAL 50), never the start, so the regard bonus is a better price (review 2).
+- **"Self-reliant" is what was paid Earth and kept** (`earth.spent`), never the market's memory
+  (review 2); selling to Earth and contracts do not count against it.
 
 ## Measurements
 
@@ -191,7 +217,8 @@ gate's test file about 30 s in all.
 ## Verified by injection
 
 Each fault put into the source alone, its test run, the file restored from a copy and `git status`
-checked after each: 23 faults, 22 caught at once, 1 caught once its test was strengthened (13).
+checked after each: 30 faults, 29 caught at once, 1 caught once its test was strengthened (13).
+Injection 24 is review 1's round, 25-31 review 2's.
 
 | # | Fault | Caught by | Message |
 |---|---|---|---|
@@ -219,6 +246,13 @@ checked after each: 23 faults, 22 caught at once, 1 caught once its test was str
 | 22 | The away summary quiet about the win | coming back to a world won | the headline lacks the line |
 | 23 | The score's speed not scaled by the years | the score | expected 1000 to be greater than 1000 |
 | 24 | "Nobody lost to the sea" asked after the victory (review 1) | a third city founded after the win | expected 57358.33 to be undefined |
+| 25 | Earth's price curve neutral at the starting regard again (review 2) | "Trusted by Earth": better prices | Earth's asking for materials: expected 4.3528048384934666 to be less than 4.3528048384934666 |
+| 26 | "Self-reliant" read from the market's memory again (review 2) | a world that bought from Earth | expected 57350 to be undefined |
+| 27 | "Self-reliant" with no purchase check (review 2's own) | a world that bought from Earth | expected 57350 to be undefined |
+| 28 | A cancelled order keeps its credits in what was paid Earth | the same world, its order cancelled | expected undefined to be 57350 |
+| 29 | A world kept before the fix given its start as the curve's middle | "Trusted by Earth" in a world made before the fix | expected { materials: ... } to deeply equal { materials: ... } |
+| 30 | "Funded from home" without its credits | the bonuses' effects | expected 3000 to be 9000 |
+| 31 | "Well supplied" without its materials | the bonuses' effects | expected 250 to be 400 |
 
 ## Verification
 
@@ -255,3 +289,6 @@ For Batch 40:
 - **Achievements earned while away get no card** (the away summary counts them).
 - The scripted five-hour city crosses "A people" (4,000) 1,367 s before its end: a change that slows
   growth by a fifth would drop it from the run. The gate would say so.
+- A world with "Trusted by Earth" starts at 80, so the achievement of the same name (regard 90)
+  needs one contract met rather than four. Bounded away from the first minute still (a contract
+  takes a window), but cheaper; left as it is.
