@@ -1392,6 +1392,67 @@ export const BASE_TUNING = Object.freeze({
   EARTH_UNLOCK_ROVERS: 3,
   EARTH_LOG: 40,
 
+  // -------------------------------------------------------------------------
+  // The ending (Batch 39): victory, the score and the achievements. OFF (0) by
+  // default and in every world made before it; a new Standard world uses 1.
+  // -------------------------------------------------------------------------
+  /**
+   * The ending is kept: `advance` counts the victory hold, the people, the
+   * losses to the sea and the machine-years, and latches the achievements.
+   * Off, the state's ending stays as the world began it.
+   */
+  ENDING_ENABLED: 0,
+  /**
+   * Sim-years in a row the planet must hold every §2.3 row inside its band
+   * (Phase 6, as it stands) to be won. 44 real minutes at 1x in a Standard
+   * world, 5.5 at Classic. The reference playthrough enters the band once and
+   * never leaves it (measured to year 2,800, weather on or off).
+   */
+  VICTORY_HOLD_YEARS: 10,
+  /**
+   * The score's speed: SCORE_SPEED_POINTS for a victory in
+   * SCORE_SPEED_REF_YEARS sim-years - the reference playthrough's, measured
+   * (Phase 6 at 1,710, won at 1,720) - scaled by REF / years, so sooner is more.
+   */
+  SCORE_SPEED_POINTS: 1000,
+  SCORE_SPEED_REF_YEARS: 1720,
+  /** Points for each person at the planet's most. */
+  SCORE_POINTS_PER_PERSON: 0.1,
+  /** Points for each city standing where the sea would have taken it but for its Seawall, and taken for each city lost. */
+  SCORE_CITY_SAVED_POINTS: 250,
+  SCORE_CITY_LOST_POINTS: 250,
+  /** Points taken for each machine-year (the pressure on the planet): the reference playthrough's 96,176 by its victory cost 385. */
+  SCORE_POINTS_PER_MACHINE_YEAR: 0.004,
+  /** Achievements: "Half an atmosphere", mbar at the surface. */
+  ACH_PRESSURE_MBAR: 500,
+  /** People living on the planet for "A hundred people", "A thousand people" and the most. */
+  ACH_PEOPLE_FEW: 100,
+  ACH_PEOPLE_MANY: 1000,
+  ACH_PEOPLE_MOST: 4000,
+  /** "A network": cities on one rail network, with one city of ACH_TOWN_PEOPLE. */
+  ACH_CITIES: 3,
+  ACH_TOWN_PEOPLE: 500,
+  /** "A thousand years": a city standing in this sim-year. */
+  ACH_YEAR: 1000,
+  /** "A fortune": credits the bank has taken in, all told (a world starts with 3,000). */
+  ACH_CREDITS_EARNED: 25000,
+  /** Earth's regard for "Trusted by Earth", 0-100. */
+  ACH_REPUTATION: 90,
+  /** Events answered (a choice made before the deadline) for "Steady hands". */
+  ACH_EVENTS_ANSWERED: 5,
+  /** "Nobody lost to the sea": won with at least this many cities standing, and none lost. */
+  ACH_STANDING_CITIES: 3,
+  /** "A light touch": won with fewer machine-years than this. The reference playthrough's are 96,176; a leaner one won with 63,412. */
+  ACH_LIGHT_MACHINE_YEARS: 70000,
+  /** "Swift": won within this many sim-years. The reference won at 1,720; with 16 nitrogen importers, at 1,543.5. */
+  ACH_SWIFT_YEARS: 1600,
+  /**
+   * New game plus: the bonus a world was made with, 0 for none (1 funded from
+   * home, 2 a bigger garage, 3 well supplied, 4 trusted by Earth). A label:
+   * the bonus itself is the tuning it was made with, recorded in the world.
+   */
+  NEW_GAME_PLUS_BONUS: 0,
+
   /** Habitat Dome: people housed, and life support drawn per year. */
   DOME_HOUSING: 40,
   DOME_POWER: 3,
@@ -1548,6 +1609,17 @@ export function validateTuning(t: Tuning): void {
   if (!(t.TERRACE_MATERIALS_PER_M >= 0)) fail("TERRACE_MATERIALS_PER_M must be >= 0");
   if (!(t.THROTTLE_HORIZON_YEARS > 0)) fail("THROTTLE_HORIZON_YEARS must be > 0");
   if (!(t.THROTTLE_STEP_YEARS > 0)) fail("THROTTLE_STEP_YEARS must be > 0");
+  if (!(t.VICTORY_HOLD_YEARS > 0)) fail("VICTORY_HOLD_YEARS must be > 0");
+  if (!(t.SCORE_SPEED_REF_YEARS > 0)) fail("SCORE_SPEED_REF_YEARS must be > 0");
+  for (const k of ["SCORE_SPEED_POINTS", "SCORE_POINTS_PER_PERSON", "SCORE_CITY_SAVED_POINTS", "SCORE_CITY_LOST_POINTS", "SCORE_POINTS_PER_MACHINE_YEAR"] as const) {
+    if (!(t[k] >= 0)) fail(`${k} must be >= 0`);
+  }
+  for (const k of ["ACH_PEOPLE_FEW", "ACH_PEOPLE_MANY", "ACH_PEOPLE_MOST", "ACH_CITIES", "ACH_TOWN_PEOPLE", "ACH_EVENTS_ANSWERED", "ACH_STANDING_CITIES"] as const) {
+    if (!(Number.isInteger(t[k]) && t[k] >= 1)) fail(`${k} must be a whole number >= 1`);
+  }
+  if (!(t.ACH_PRESSURE_MBAR > 0 && t.ACH_LIGHT_MACHINE_YEARS > 0 && t.ACH_SWIFT_YEARS > 0 && t.ACH_YEAR > 0 && t.ACH_CREDITS_EARNED > 0)) fail("ACH_PRESSURE_MBAR, ACH_LIGHT_MACHINE_YEARS, ACH_SWIFT_YEARS, ACH_YEAR and ACH_CREDITS_EARNED must be > 0");
+  if (!(t.ACH_REPUTATION >= 0 && t.ACH_REPUTATION <= 100)) fail("ACH_REPUTATION must be in [0, 100]");
+  if (!(Number.isInteger(t.NEW_GAME_PLUS_BONUS) && t.NEW_GAME_PLUS_BONUS >= 0 && t.NEW_GAME_PLUS_BONUS <= 4)) fail("NEW_GAME_PLUS_BONUS must be 0, 1, 2, 3 or 4");
   if (!(t.COST_CORRIDOR >= 0)) fail("COST_CORRIDOR must be >= 0");
   if (!(t.COST_CABLE >= 0)) fail("COST_CABLE must be >= 0");
   if (!(t.ROVERS_PER_HQ >= 0)) fail("ROVERS_PER_HQ must be >= 0");

@@ -47,7 +47,9 @@ import type {
   Reservoirs,
   SimState,
 } from "./types.js";
-import { LEDGER_KEYS, RESERVOIR_KEYS } from "./types.js";
+import { LEDGER_KEYS, Phase, RESERVOIR_KEYS } from "./types.js";
+import { stepEnding } from "./ending.js";
+import { latchAchievements } from "./achievements.js";
 
 /**
  * Flows exempt from the dev tripwire below.
@@ -365,8 +367,11 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
      * an economy player banked 189,000 credits and still could not buy an
      * atmospheric processor.
      */
-    const reached = latchPhase(working.phaseReached, evaluatePhase(working.reservoirs, d, env, t));
+    const phaseNow = evaluatePhase(working.reservoirs, d, env, t);
+    const reached = latchPhase(working.phaseReached, phaseNow);
     const techUnlocked = unlockedFor(reached, working.techUnlocked);
+    // The state this substep began from: the ending counts what changed across it (Batch 39).
+    const begun = working;
 
     working = {
       ...working,
@@ -393,6 +398,9 @@ export function advance(state: SimState, steps: number, cfg: SimConfig): SimStat
       const now = derive(working.reservoirs, worldEnv(working, cfg.env, t), t);
       working = { ...working, history: recordPlanet(working.history, planetSample(working, now, t), t) };
     }
+    // The ending (Batch 39): the victory's hold from the phase's own reading, the tallies, then the achievements -
+    // every substep, from the state it leaves.
+    if (t.ENDING_ENABLED) working = latchAchievements(stepEnding(begun, working, phaseNow === Phase.LivingWorld, t), t);
   }
 
   if (checking) {

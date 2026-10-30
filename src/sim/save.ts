@@ -66,6 +66,7 @@ import type {
   EarthOrder,
   EarthRecord,
   EarthState,
+  Ending,
 } from "./types.js";
 import { BUILDING_TYPES, EARTH_GOODS, FACILITY_TYPES, LEDGER_KEYS, MICRO_RESOURCES, PHASE_ORDER, RESERVOIR_KEYS } from "./types.js";
 import { NO_GOODS, SELLABLE, emptyEarth } from "./earth.js";
@@ -79,7 +80,7 @@ import { NO_GOODS, SELLABLE, emptyEarth } from "./earth.js";
  * the integer substep counter. Every one of those arrived in Batches 1 and 2,
  * so v1 -> v2 is a real migration with real decisions in it, not a placeholder.
  */
-export const SAVE_SCHEMA_VERSION = 20;
+export const SAVE_SCHEMA_VERSION = 21;
 
 export interface SavedFacility {
   readonly type: string;
@@ -146,6 +147,14 @@ export interface SaveFile {
    * the seed's.
    */
   readonly earth?: Record<string, unknown>;
+  /**
+   * Added in v21 (Batch 39, the ending): the substeps in a row inside the
+   * living-world band, the victory's substep (or null), the most people, the
+   * people lost to the sea and moved to safety, the events answered, the
+   * machine-years, and the achievements earned with their substeps. The score
+   * and the world's story are never kept: they are derived on load.
+   */
+  readonly ending?: Record<string, unknown>;
 }
 
 export interface SavedSettlement {
@@ -351,6 +360,16 @@ export function toSave(state: SimState, t: Tuning, savedAtIso: string): SaveFile
       rewards: state.earth.rewards,
       next_id: state.earth.nextId,
     },
+    ending: {
+      living_steps: state.ending.livingSteps,
+      victory: state.ending.victory,
+      peak_people: state.ending.peakPeople,
+      people_lost: state.ending.peopleLost,
+      people_evacuated: state.ending.peopleEvacuated,
+      events_answered: state.ending.eventsAnswered,
+      machine_years: state.ending.machineYears,
+      achievements: state.ending.achievements.map((a) => ({ id: a.id, step: a.step })),
+    },
   };
 }
 
@@ -406,6 +425,7 @@ export function fromSave(raw: unknown, t: Tuning): SimState {
     history: readPlanetHistory(save, steps),
     decisions: readDecisions(save, settlements, steps),
     earth: readEarth(save, settlements, steps),
+    ending: readEnding(save, steps),
   };
 
   assertFiniteState(state, "fromSave");
@@ -458,7 +478,63 @@ function migrate(save: Record<string, unknown>, t: Tuning): Record<string, unkno
   // v19 -> v20: flood defences (Batch 38). Every city standing in a save made before them is given its grace: it
   // may stand under the sea already, and is warned before the sea takes anything. None had been evacuated.
   if (version < 20) current = migrateV19toV20(current, t);
+  // v20 -> v21: the ending (Batch 39). Nothing of it was kept: a world made before it has the ending off in its
+  // recorded tuning, so this - never in the band, not won, no one counted, nothing earned - is what it keeps.
+  if (version < 21) current = migrateV20toV21(current);
   return current;
+}
+
+/** v20 -> v21: the ending as a world starts it. */
+function migrateV20toV21(save: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...save,
+    schema_version: 21,
+    ending: { living_steps: 0, victory: null, peak_people: 0, people_lost: 0, people_evacuated: 0, events_answered: 0, machine_years: 0, achievements: [] },
+  };
+}
+
+/**
+ * v21: the ending - counts never negative, the hold and the victory whole
+ * substeps no later than the save's own, each achievement once, earned at a
+ * substep no later than the save's.
+ */
+function readEnding(save: Record<string, unknown>, steps: number): Ending {
+  const raw = asRecord(save["ending"], "ending");
+  const livingSteps = wholeAt(raw, "living_steps", "ending.living_steps");
+  if (livingSteps > steps) throw new SaveError(`ending.living_steps (${livingSteps}) is longer than the world (${steps} substeps)`);
+  const v = raw["victory"];
+  let victory: number | null = null;
+  if (v !== null) {
+    victory = wholeAt(raw, "victory", "ending.victory");
+    if (victory > steps) throw new SaveError(`ending.victory (${victory}) is later than the save (${steps})`);
+  }
+  const nonNegative = (key: string): number => {
+    const x = numberAt(raw, key, `ending.${key}`);
+    if (x < 0) throw new SaveError(`ending.${key} must be >= 0, got ${x}`);
+    return x;
+  };
+  const seen = new Set<string>();
+  const achievements = asArray(raw["achievements"], "ending.achievements").map((x, i) => {
+    const at = `ending.achievements[${i}]`;
+    const r = asRecord(x, at);
+    const id = r["id"];
+    if (typeof id !== "string" || id === "") throw new SaveError(`${at}.id must be an achievement's id, got ${describe(id)}`);
+    if (seen.has(id)) throw new SaveError(`ending.achievements names "${id}" twice`);
+    seen.add(id);
+    const step = wholeAt(r, "step", `${at}.step`);
+    if (step > steps) throw new SaveError(`${at}.step (${step}) is later than the save (${steps})`);
+    return { id, step };
+  });
+  return {
+    livingSteps,
+    victory,
+    peakPeople: nonNegative("peak_people"),
+    peopleLost: nonNegative("people_lost"),
+    peopleEvacuated: nonNegative("people_evacuated"),
+    eventsAnswered: wholeAt(raw, "events_answered", "ending.events_answered"),
+    machineYears: nonNegative("machine_years"),
+    achievements,
+  };
 }
 
 /**

@@ -74,9 +74,12 @@ export const NEW_WORLD_OVERRIDES: TuningOverrides = {
  * to Standard and Terraformed worlds alike, never to a sandbox (no losses).
  * So does Earth (Batch 34) - its launch windows, market and contracts: a
  * sandbox has unlimited credits and materials, and nothing to trade for.
+ * The ending (Batch 39) - victory, the score, achievements - is Standard's
+ * alone: a sandbox has nothing to win, and a Terraformed start begins on a
+ * living world, won before it is played.
  */
 export const MODE_OVERRIDES: Readonly<Record<WorldMode, TuningOverrides>> = {
-  standard: { GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1, DECISIONS_ENABLED: 1, EARTH_ENABLED: 1 },
+  standard: { GUIDE_ENABLED: 1, OBJECTIVES_ENABLED: 1, DECISIONS_ENABLED: 1, EARTH_ENABLED: 1, ENDING_ENABLED: 1 },
   sandbox: {},
   terraformed: { DECISIONS_ENABLED: 1, EARTH_ENABLED: 1 },
 };

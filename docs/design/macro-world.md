@@ -721,6 +721,15 @@ EARTH_CONTRACT_WINDOWS = 3   EARTH_CONTRACT_MATERIALS_YEAR = 9  EARTH_CONTRACT_W
 EARTH_CONTRACT_PAY_MATERIALS = 4  EARTH_CONTRACT_PAY_WATER = 6  EARTH_CONTRACT_PAY_RESEARCH = 2   # credits a unit, paid when met
 EARTH_WEIGHT_MATERIALS = 1   EARTH_WEIGHT_WATER = 1        EARTH_WEIGHT_RESEARCH = 1
 EARTH_UNLOCK_SETTLERS = 1    EARTH_UNLOCK_ROVERS = 3       EARTH_LOG = 40            # contracts met before Earth sends settlers, rovers; records kept
+ENDING_ENABLED = 0           # Batch 39: victory, the score and achievements are kept; new Standard worlds use 1, a sandbox and a Terraformed start 0
+VICTORY_HOLD_YEARS = 10      # sim-years in a row inside every §2.3 band (Phase 6 as it stands) to win: 44 min at 1x Standard, 5.5 min Classic
+SCORE_SPEED_POINTS = 1000    SCORE_SPEED_REF_YEARS = 1720  # a victory in the reference playthrough's years scores this, x REF / years
+SCORE_POINTS_PER_PERSON = 0.1  SCORE_CITY_SAVED_POINTS = 250  SCORE_CITY_LOST_POINTS = 250  SCORE_POINTS_PER_MACHINE_YEAR = 0.004   # people at the most; a city held by its Seawall, a city lost; the pressure on the planet
+ACH_PRESSURE_MBAR = 500      ACH_PEOPLE_FEW = 100          ACH_PEOPLE_MANY = 1000    ACH_PEOPLE_MOST = 4000   # achievements: surface mbar; people on the planet
+ACH_CITIES = 3               ACH_TOWN_PEOPLE = 500         ACH_YEAR = 1000           ACH_CREDITS_EARNED = 25000   # cities joined by rail, with a city of this many; a city standing in this year; credits taken in
+ACH_REPUTATION = 90          ACH_EVENTS_ANSWERED = 5       ACH_STANDING_CITIES = 3   # Earth's regard; events answered; won with this many cities and none lost
+ACH_LIGHT_MACHINE_YEARS = 70000  ACH_SWIFT_YEARS = 1600    # won under this many machine-years (reference 96,176); won within this many sim-years (reference 1,720)
+NEW_GAME_PLUS_BONUS = 0      # the bonus a world was made with (1 credits, 2 rovers, 3 materials, 4 reputation): a label; the bonus is its tuning
 DOME_HOUSING = 40          DOME_POWER = 3             DOME_WATER = 2
 DOME_OXYGEN = 2            DOME_FOOD = 2              DOME_OPEN_RELIEF = 0.75
 SOLAR_POWER = 6            GEOTHERMAL_POWER = 8       REACTOR_POWER = 24
