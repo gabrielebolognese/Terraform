@@ -667,7 +667,7 @@ export class CityScreen {
       this.preparing = null;
     }
     // The view is re-derived a few times a second, not every frame: for a
-    // metropolis it costs ~15 ms. A change of buildings, corridors, cables,
+    // metropolis it costs 19-30 ms (95-140 ms before Batch 40). A change of buildings, corridors, cables,
     // rocks or jobs - anything a click does - refreshes it at once, so the
     // player never waits for their click.
     let view = this.view;

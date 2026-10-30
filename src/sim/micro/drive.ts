@@ -298,6 +298,18 @@ export function roverRoute(s: Settlement, site: Site, t: Tuning): RoverRoute | n
   return made;
 }
 
+/**
+ * The rovers' grid, then the tiles they can reach from the door, as two steps
+ * of a city's opening before its first routes (Batch 40: with the first route,
+ * 150 ms in one step of a metropolis's, measured). Both are kept as
+ * `roverRoute` would keep them.
+ */
+export function* prepareDrive(s: Settlement, t: Tuning): Generator<number, void> {
+  const g = gridOf(s, t);
+  yield 0.5;
+  if (g !== null) reachOf(g);
+}
+
 /** Whether some tile beside `site` is one a rover can get to from the door: a route exists, found or not. */
 function reachableOn(g: DriveGrid, site: Site): boolean {
   const n = g.n;
