@@ -139,6 +139,28 @@ export function catchUp(
   cfg: SimConfig = defaultConfig(),
   onChunk?: (state: SimState, done: number, total: number) => void,
 ): SimState {
+  const steps = catchUpSteps(state, elapsedSimYears, cfg);
+  for (;;) {
+    const r = steps.next();
+    if (r.done === true) return r.value;
+    onChunk?.(r.value.state, r.value.done, r.value.total);
+  }
+}
+
+/**
+ * The catch-up a slice at a time (Batch 40), yielding after each how far it
+ * is: `slice` substeps, MAX_SUBSTEPS_PER_TICK unless asked. The world comes
+ * out the same whatever the slice - `advance` is chunk-independent - so a
+ * browser can catch up a substep at a time between frames: a Terraformed
+ * start's substep is about 90 ms, and ten hours away was five minutes of a
+ * frozen page (measured).
+ */
+export function* catchUpSteps(
+  state: SimState,
+  elapsedSimYears: number,
+  cfg: SimConfig = defaultConfig(),
+  slice?: number,
+): Generator<{ readonly state: SimState; readonly done: number; readonly total: number }, SimState> {
   if (!Number.isFinite(elapsedSimYears) || elapsedSimYears < 0) {
     throw new RangeError(`catchUp: elapsed must be a non-negative finite number, got ${elapsedSimYears}`);
   }
@@ -146,14 +168,15 @@ export function catchUp(
   const t = cfg.tuning;
   const capped = Math.min(elapsedSimYears, t.CATCHUP_MAX_SIM_YEARS);
   const totalSteps = Math.round(capped / t.SUBSTEP_YEARS);
+  const most = Math.max(1, Math.floor(slice ?? t.MAX_SUBSTEPS_PER_TICK));
 
   let current = state;
   let done = 0;
   while (done < totalSteps) {
-    const chunk = Math.min(t.MAX_SUBSTEPS_PER_TICK, totalSteps - done);
+    const chunk = Math.min(most, totalSteps - done);
     current = advance(current, chunk, cfg);
     done += chunk;
-    onChunk?.(current, done, totalSteps);
+    yield { state: current, done, total: totalSteps };
   }
   return current;
 }

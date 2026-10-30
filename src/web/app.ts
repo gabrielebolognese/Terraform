@@ -537,7 +537,13 @@ export class App {
   }
 
   private async playNow(id: string): Promise<void> {
-    const loaded = await this.library.load(id);
+    // Batch 40: a long absence in a big world is caught up between frames, and says how far it is.
+    let told = false;
+    const loaded = await this.library.load(id, (done, total) => {
+      told = true;
+      this.say(`Catching up on the time you were away: ${Math.floor((100 * done) / Math.max(1, total))}%`);
+    });
+    if (told) this.say("");
     const world = this.library.find(id);
     if (!loaded.ok || world === undefined) {
       this.say(`${world?.name ?? "That world"} will not load: ${loaded.ok ? "it is gone" : loaded.reason}. It has been kept as it is.`);

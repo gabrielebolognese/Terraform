@@ -121,7 +121,7 @@ export {
 export type { EconomyState } from "./types.js";
 export type { Rgb, ScalarChannel, VisualChannels } from "./visuals.js";
 
-export { offlineGrant, resume, summariseAway } from "./offline.js";
+export { offlineGrant, resume, resumeSteps, summariseAway } from "./offline.js";
 export type { AwayDeltas, AwaySummary, GrantLimit, OfflineGrant, ResumeResult } from "./offline.js";
 
 export { BASE_TUNING, DEFAULT_TUNING, makeTuning, TuningError, TUNING_SCALAR_KEYS, validateTuning } from "./tuning.js";

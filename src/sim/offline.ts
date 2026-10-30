@@ -29,7 +29,7 @@ import { computeProgress } from "./progress.js";
 import type { SaveFile } from "./save.js";
 import { fromSave } from "./save.js";
 import type { SimConfig } from "./integrate.js";
-import { catchUp } from "./tick.js";
+import { catchUpSteps } from "./tick.js";
 import type { Tuning } from "./tuning.js";
 import type { Phase, SimState } from "./types.js";
 import { NEUTRAL_ENV, PHASE_ORDER } from "./types.js";
@@ -271,13 +271,35 @@ export interface ResumeResult {
  * the only version that can run in CI.
  */
 export function resume(raw: unknown, nowEpochMs: number, cfg: SimConfig): ResumeResult {
+  const steps = resumeSteps(raw, nowEpochMs, cfg);
+  for (;;) {
+    const r = steps.next();
+    if (r.done === true) return r.value;
+  }
+}
+
+/**
+ * `resume` a slice of the catch-up at a time (Batch 40), yielding how many
+ * substeps of how many are done - for a browser to catch up between frames
+ * and say how far it is. The same world as `resume`, whatever the slice.
+ */
+export function* resumeSteps(raw: unknown, nowEpochMs: number, cfg: SimConfig, slice?: number): Generator<{ readonly done: number; readonly total: number }, ResumeResult> {
   const t = cfg.tuning;
   const loaded = fromSave(raw, t);
   const savedAt = savedAtEpochMs(raw);
 
   const elapsedSeconds = savedAt === null ? 0 : (nowEpochMs - savedAt) / 1000;
   const grant = offlineGrant(elapsedSeconds, t);
-  const advanced = catchUp(loaded, grant.grantedSimYears, cfg);
+  const run = catchUpSteps(loaded, grant.grantedSimYears, cfg, slice);
+  let advanced: SimState;
+  for (;;) {
+    const r = run.next();
+    if (r.done === true) {
+      advanced = r.value;
+      break;
+    }
+    yield { done: r.value.done, total: r.value.total };
+  }
 
   return { state: advanced, grant, summary: summariseAway(loaded, advanced, t) };
 }
