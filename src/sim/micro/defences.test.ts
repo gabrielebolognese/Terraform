@@ -208,7 +208,7 @@ describe("terracing raises a building's ground (detail §1.3, §4.5)", () => {
     for (let i = 0; i < 8; i += 1) s = advance(s, 1, still);
     expect(low(s).jobs).toEqual([]);
     expect(siteGround(low(s), t).heightM[15 * ground.tiles]).toBeCloseTo(plan.levelM, 9);
-    // A 3 x 3 footprint: every tile of it, one height.
+    // A 2 x 2 footprint (the geothermal plant): every tile of it, one height.
     const big = terraceBuilding(S, LOW_ID, 14, 14, t);
     expect(big.ok, big.reason ?? "").toBe(true);
     let b = big.state;
