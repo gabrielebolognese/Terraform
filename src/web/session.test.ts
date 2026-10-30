@@ -204,6 +204,63 @@ describe("autosaving", () => {
     expect(saver.due(30_000)).toBe(true);
   });
 
+  it("asks for a save once, not again on each frame while the write is on its way (Batch 40)", async () => {
+    const clock = stubClock();
+    // A write that lands only when let go, as IndexedDB's lands a few frames after it is asked for.
+    let land: () => void = () => undefined;
+    let writes = 0;
+    const slow: SaveStore = {
+      durable: true,
+      load: () => Promise.resolve(null),
+      save: () => {
+        writes += 1;
+        return new Promise<void>((resolve) => {
+          land = resolve;
+        });
+      },
+      clear: () => Promise.resolve(),
+    };
+    const saver = new Autosaver(slow, cfg, clock.now);
+    // The game's frame: save when due. Ten frames while the first write is on its way.
+    const asked: Promise<void>[] = [];
+    for (let frame = 0; frame < 10; frame += 1) {
+      if (saver.due(30_000)) asked.push(saver.save(playedState()));
+      clock.advance(16);
+      await Promise.resolve();
+    }
+    // Before Batch 40: asked on every one of the ten frames.
+    expect(asked.length).toBe(1);
+    land();
+    await asked[0];
+    expect(writes).toBe(1);
+    expect(saver.due(30_000)).toBe(false);
+    clock.advance(30_000);
+    expect(saver.due(30_000), "an interval later").toBe(true);
+  });
+
+  it("tries a failing store again an interval later, not on every frame (Batch 40)", async () => {
+    const clock = stubClock();
+    let attempts = 0;
+    const failing: SaveStore = {
+      durable: true,
+      load: () => Promise.resolve(null),
+      save: () => {
+        attempts += 1;
+        return Promise.reject(new Error("disk full"));
+      },
+      clear: () => Promise.resolve(),
+    };
+    const saver = new Autosaver(failing, cfg, clock.now);
+    // A minute of frames at 60 a second.
+    for (let frame = 0; frame < 3600; frame += 1) {
+      if (saver.due(30_000)) await saver.save(playedState());
+      clock.advance(1000 / 60);
+    }
+    expect(saver.failureCount, "vacuity: it failed and was counted").toBeGreaterThan(0);
+    // Asked at 0 s and 30 s (and not at 60, the minute's last frame being just short of it); before Batch 40 every frame.
+    expect(attempts).toBe(2);
+  });
+
   it("stamps the save with the injected clock, not a real one", () => {
     const saver = new Autosaver(new MemorySaveStore(), cfg, stubClock().now);
     expect(saver.snapshot(marsStart()).last_saved_real).toBe("2026-01-01T00:00:00.000Z");

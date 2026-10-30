@@ -76,6 +76,8 @@ function message(error: unknown): string {
 export class Autosaver {
   private inFlight: Promise<void> = Promise.resolve();
   private lastSavedAtMs = 0;
+  /** When a save was last asked for (Batch 40): what `due` counts from. */
+  private askedAtMs = 0;
   private failures = 0;
 
   constructor(
@@ -100,6 +102,7 @@ export class Autosaver {
   }
 
   save(state: SimState): Promise<void> {
+    this.askedAtMs = this.now();
     const data = this.snapshot(state);
     this.inFlight = this.inFlight
       .catch(() => undefined)
@@ -119,8 +122,14 @@ export class Autosaver {
     return this.inFlight;
   }
 
-  /** True when `intervalMs` has passed since the last successful write. */
+  /**
+   * True when `intervalMs` has passed since a save was last asked for. Batch 40: it counted from the
+   * last write to land, and a write lands a moment after the frame that asks for it, so each frame in
+   * between found the save still due and asked again - a world written once a frame until the first
+   * write landed (Batch 36's finding), and a failing store written to every frame. A failed write is
+   * tried again an interval later.
+   */
   due(intervalMs: number): boolean {
-    return this.now() - this.lastSavedAtMs >= intervalMs;
+    return this.now() - Math.max(this.lastSavedAtMs, this.askedAtMs) >= intervalMs;
   }
 }
