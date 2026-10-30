@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import type { SimState } from "../sim/index.js";
-import { NEUTRAL_ENV, NO_ENDING, SAVE_SCHEMA_VERSION, advance, fromSave, toSave } from "../sim/index.js";
+import { NEUTRAL_ENV, NO_ENDING, SAVE_SCHEMA_VERSION, advance, fromSave, resume, toSave } from "../sim/index.js";
 import { fromRecord } from "./game-tuning.js";
 import { MemorySaveStore } from "./storage.js";
 import { WorldLibrary } from "./worlds.js";
@@ -138,4 +138,37 @@ describe("real old saves, each written by its own era's game", () => {
       expect(loaded.state.settlements.length).toBe(2);
     });
   }
+});
+
+describe("a long absence caught up between frames (Batch 40)", () => {
+  it("hands the page back while it catches up, says how far it is, and comes to the world caught up at once", async () => {
+    const old = read(20);
+    const store = new MemorySaveStore(true);
+    await store.saveMeta("worlds", old.index);
+    const raw = JSON.parse(old.save) as { last_saved_real: string };
+    store.putRaw(old.slot, raw);
+    const now = Date.parse(raw.last_saved_real) + 10 * 3600 * 1000;
+    const lib = new WorldLibrary(store, () => now);
+    await lib.open();
+    const id = old.index.worlds[0]!.id;
+    // A timer the page runs: it can tick only when the load hands the page back.
+    let ticks = 0;
+    const timer = setInterval(() => (ticks += 1), 0);
+    const told: { done: number; total: number }[] = [];
+    const loaded = await lib.load(id, (done, total) => told.push({ done, total }));
+    const ticked = ticks;
+    clearInterval(timer);
+    if (!loaded.ok) throw new Error(loaded.reason);
+    // Measured: 10 ticks and 10 reports over the 4,320 substeps. Before Batch 40 the page was held for the whole
+    // catch-up: no tick until it was done.
+    expect(ticked, "the page ran between slices").toBeGreaterThan(0);
+    expect(told.length, "how far it is, told").toBeGreaterThan(0);
+    expect(told.every((p, i) => p.total === told[0]!.total && (i === 0 || p.done > told[i - 1]!.done))).toBe(true);
+    // The same world as caught up at once.
+    const t = fromRecord(lib.find(id)!.tuning);
+    const atOnce = resume(JSON.parse(old.save), now, { tuning: t, env: NEUTRAL_ENV, forcing: null });
+    expect(loaded.state.steps).toBe(atOnce.state.steps);
+    expect(told[0]!.total, "the whole absence counted").toBe(atOnce.state.steps - (raw as unknown as { steps: number }).steps);
+    expect(toSave(loaded.state, t, "x")).toEqual(toSave(atOnce.state, t, "x"));
+  });
 });

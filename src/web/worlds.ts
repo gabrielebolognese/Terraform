@@ -25,8 +25,8 @@
  * world's state: it moves saves between slots, files and the index.
  */
 
-import type { AwaySummary, OfflineGrant, SaveFile, SimConfig, SimState, Tuning } from "../sim/index.js";
-import { DEFAULT_TUNING, NAME_MAX, NEUTRAL_ENV, SaveError, fromSave, marsStart, resume, toSave, worldScore } from "../sim/index.js";
+import type { AwaySummary, OfflineGrant, ResumeResult, SaveFile, SimConfig, SimState, Tuning } from "../sim/index.js";
+import { DEFAULT_TUNING, NAME_MAX, NEUTRAL_ENV, SaveError, fromSave, marsStart, resumeSteps, toSave, worldScore } from "../sim/index.js";
 import { examplePlanet } from "../harness/example.js";
 import type { GameStore } from "./storage.js";
 import type { WorldMode, WorldPace } from "./game-tuning.js";
@@ -39,6 +39,8 @@ export type Clock = () => number;
 export const LEGACY_SLOT = "mars";
 export const LEGACY_NAME = "My planet";
 const INDEX_KEY = "worlds";
+/** Work done catching up an absence before the page is handed back for a frame (Batch 40). */
+const CATCH_UP_SLICE_MS = 50;
 const INDEX_VERSION = 1;
 /** The exported file's own format, around a `SaveFile`. */
 export const EXPORT_FORMAT = "terraform-world";
@@ -326,8 +328,13 @@ export class WorldLibrary {
    * Load a world to play: validate, migrate, and advance by the absence.
    * A failure is recorded against the world and returned - nothing is
    * started, so nothing can be saved over it.
+   *
+   * Batch 40: the absence is caught up a substep at a time, handing the page
+   * back every CATCH_UP_SLICE_MS of work and saying how far it is - the same
+   * world as caught up at once. A Terraformed start's substep is about 90 ms,
+   * and ten hours away froze the page for five minutes (measured).
    */
-  async load(id: string): Promise<Loaded> {
+  async load(id: string, onProgress?: (done: number, total: number) => void): Promise<Loaded> {
     const meta = this.find(id);
     if (meta === undefined) return { ok: false, reason: "there is no such world" };
     let tuning: Tuning;
@@ -345,7 +352,21 @@ export class WorldLibrary {
     if (raw === null || raw === undefined) return this.fail(meta, "its save is missing");
     try {
       const cfg: SimConfig = { tuning, env: NEUTRAL_ENV, forcing: null };
-      const r = resume(raw, this.now(), cfg);
+      const steps = resumeSteps(raw, this.now(), cfg, 1);
+      let since = performance.now();
+      let r: ResumeResult;
+      for (;;) {
+        const next = steps.next();
+        if (next.done === true) {
+          r = next.value;
+          break;
+        }
+        if (performance.now() - since >= CATCH_UP_SLICE_MS) {
+          onProgress?.(next.value.done, next.value.total);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          since = performance.now();
+        }
+      }
       if (meta.problem !== null) await this.put({ ...meta, problem: null });
       return { ok: true, state: r.state, tuning, grant: r.grant, summary: r.summary };
     } catch (error) {

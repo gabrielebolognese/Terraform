@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { buildFacility } from "./actions.js";
 import { advance } from "./integrate.js";
-import { offlineGrant, resume, summariseAway } from "./offline.js";
+import { offlineGrant, resume, resumeSteps, summariseAway } from "./offline.js";
+import { foundSettlement } from "./micro/registry.js";
+import { placeBuilding } from "./micro/settlement.js";
 import { marsStart } from "./planets/mars.js";
 import { toSave } from "./save.js";
 import { defaultConfig } from "./tick.js";
@@ -119,6 +121,47 @@ describe("resuming advances the world correctly", () => {
     const direct = advance(start, Math.round(expectedYears / t.SUBSTEP_YEARS), cfg);
     expect(resumed.state.reservoirs).toEqual(direct.reservoirs);
     expect(resumed.state.steps).toBe(direct.steps);
+  });
+
+  it("is the same world caught up a substep at a time, as a browser catches it up between frames (Batch 40)", () => {
+    // A city with builds under way, Earth's windows, events dealt and decided by default: what a slice could split.
+    const rich = makeTuning({ SETTLEMENTS_ENABLED: 1, HEADQUARTERS_ENABLED: 1, BUILD_TIME_ENABLED: 1, ECONOMY_ENABLED: 1, EVENTS_ENABLED: 1, DECISIONS_ENABLED: 1, EARTH_ENABLED: 1, NETWORK_ENABLED: 1 });
+    const richCfg = { ...cfg, tuning: rich };
+    let start = foundSettlement(marsStart(undefined, rich), "city", 0.31, -1.2, rich).state;
+    const id = start.settlements[0]!.id;
+    for (const type of ["solar_array", "habitat_dome"] as const) {
+      for (let i = 0; i < 128 * 128; i += 1) {
+        const o = placeBuilding(start, id, type, i % 128, Math.floor(i / 128), rich);
+        if (o.ok) {
+          start = o.state;
+          break;
+        }
+      }
+    }
+    expect(start.settlements[0]!.jobs.length, "vacuity: builds under way").toBeGreaterThan(0);
+    const savedAt = Date.parse("2026-01-01T00:00:00.000Z");
+    const save = toSave(start, rich, new Date(savedAt).toISOString());
+    const at = savedAt + 6 * HOUR * 1000;
+    const whole = resume(save, at, richCfg);
+    const steps = resumeSteps(save, at, richCfg, 1);
+    let yields = 0;
+    let last = 0;
+    let sliced: ReturnType<typeof resume>;
+    for (;;) {
+      const r = steps.next();
+      if (r.done === true) {
+        sliced = r.value;
+        break;
+      }
+      yields += 1;
+      expect(r.value.done).toBe(last + 1);
+      last = r.value.done;
+    }
+    expect(yields, "a substep a slice").toBe(whole.state.steps - start.steps);
+    // Measured: 389 substeps for six hours away at this tuning's offline rate.
+    expect(yields, "vacuity: hours of substeps").toBeGreaterThan(300);
+    expect(toSave(sliced.state, rich, "x")).toEqual(toSave(whole.state, rich, "x"));
+    expect(sliced.summary).toEqual(whole.summary);
   });
 
   it("is reproducible - the same absence always yields the same world", () => {
