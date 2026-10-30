@@ -58,7 +58,7 @@ What is missing, in the user's words (2026-10-11):
 | 37 | Terrain resource deposits (was `BUILD_PLAN` 27) | **COMPLETE** - [note](docs/balance/batch37-deposits.md) - ore on ridges and rims, ice in hollows (more poleward), vents along the canyons' fault, sunny high flats: derived at site coordinates, never stored; a mine, extractor, geothermal plant or solar array on its own deposit makes x2, x2 (fading with water), x2, x1.5 by the share of its footprint, through `advance`, in new worlds only; marked by shape when placing and by a Deposits tool, the hint giving the factor; Batch 18's bootstrap done 13 years sooner, the scripted pacing within 4%, far deposits a trap |
 | 38 | Flood defences and the rising water; flooding on (was `BUILD_PLAN` 28) | **COMPLETE** - [note](docs/balance/batch38-flood-defences.md) - the sea floods cities in new worlds; a Seawall raises a city's datum 4 m a level and stands until the city falls; terracing raises a building's ground; evacuation moves people to the nearest safe cities; the throttle link as a projection with every machine off (7.75-48 years bought at year 290, named exactly); a water plane clipped at the waterline in a reference frame; a grace for a city carried from an older save (v20); no founding under the sea |
 | 39 | The ending: victory, scores and achievements | **COMPLETE** - [note](docs/balance/batch39-ending.md) - the six minimums held 10 years wins a new Standard world (the reference policy at the Standard pace: substep 55,032, 127.4 h at 1x); a score derived from the state (speed, people, cities held and lost, machine-years), the same live or offline, on the worlds list; 30 achievements latched from the state, each earned in a scripted run, none in the first minute (soonest 1,708 s); the victory over the globe with the world's story and the choice to keep playing; new game plus bonuses; save v21 |
-| 40 | Playtest pass: performance, polish and an adversarial review | IN PROGRESS |
+| 40 | Playtest pass: performance, polish and an adversarial review | **COMPLETE** - [note](docs/balance/batch40-playtest.md) - the budget measured on a stated machine (the reference city at 2.5 ms a frame, a metropolis panned at 6.8 ms, 99.4% of frames in 33 ms; memory steady), met but for a Terraformed start's opening (31 s an hour away, recorded; its page no longer frozen); what it found fixed: tile keys on a deprecated V8 map, a metropolis's view re-derived five times a second, 40 ms a frame of new pictures; the opening test load-proof; every save from v13 to v20 written by its own era's game and opened by today's; 14 injections into untabled tests (3 gaps fixed), 613 thresholds audited; the autosave once |
 
 The order is by what the player meets first, and by what later batches stand on:
 - worlds before time, so a re-paced game can be started fresh;
@@ -1098,25 +1098,46 @@ recorded in `docs/PROGRESS.md`.
 right where it was wrong.
 
 **Deliverables:**
-- [ ] **Make the metropolis-opening timing test load-proof** (Batch 26's finding): it times the wall
+- [x] **Make the metropolis-opening timing test load-proof** (Batch 26's finding): it times the wall
   clock, and failed at 403.7 ms in a full run against a 145-148 ms quiet measurement.
-- [ ] **A performance budget:**
+- [x] **A performance budget:**
   - 60 fps in the reference city;
   - 30 fps or better panning a metropolis;
   - a world opening in under 3 s;
   - memory bounded.
 
   Measured on a stated machine. Every overrun fixed or recorded with its cause.
-- [ ] **An adversarial review of Batches 26-39**, to the standard of Batches 10, 13 and 14: every
+- [x] **An adversarial review of Batches 26-39**, to the standard of Batches 10, 13 and 14: every
   test injection-checked, every threshold traced to a measurement, every save migration loaded
   from a real old save.
-- [ ] **A polish list** from a scripted playthrough and the user's own play, fixed in order of how
+- [x] **A polish list** from a scripted playthrough and the user's own play, fixed in order of how
   often it is met.
 
 **Exit gate:**
 - The budget met, numbers stated.
 - The review's findings all fixed, or each recorded with a reason it waits.
 - A clean full run of every gate: typecheck, the suite, both builds, the golden frames.
+
+**Done** - see [the note](docs/balance/batch40-playtest.md). Built unattended; the decisions are
+recorded in `docs/PROGRESS.md`.
+
+**What changed from the plan, and why:**
+- **Measured in Node, not in a browser** (none is opened in this project's runs): the budget times
+  the browser's own code - the chunked city, the view as the city screen derives it, every shape
+  through its `fillShapes` into a canvas that counts - on a Ryzen 7 5700U. The canvas's fill, the GPU
+  and the globe are counted, not timed.
+- **The budget is met but for one world**: a Terraformed start opens in 4.6 s, 31 s an hour away and
+  290 s after ten, against 3 s - its 83,589 buildings make a substep about 87 ms and the
+  catch-up must equal live play. Recorded with its cause; the page now keeps working and says how far
+  it is. Standard worlds open in under a second after ten hours away.
+- **The opening test is load-proof by shares of the whole, not by CPU time**: the process's CPU time
+  counts the collector's threads and grew under load as much as the wall clock (measured).
+- **"Every test injection-checked"** was taken as: every batch's own table already breaks each new
+  test once, and the review broke one test of each batch that its table does not name (14; 11
+  caught, the 3 gaps fixed). **"Every threshold traced"**: all 613 numeric assertions audited, the
+  loosest 11 untraced ones traced, 22 recorded with the reason they wait.
+- **The polish list is from the scripted playthroughs and the open items every batch recorded**: the
+  user's own play is not available to an unattended run.
 
 ---
 
