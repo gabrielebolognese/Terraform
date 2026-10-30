@@ -93,7 +93,8 @@ Prices move:
   what it remembers. A big order is priced at its middle, so buying it in one go or in parts costs
   the same.
 - **With your reputation.** At 100, Earth asks a quarter less and pays a quarter more. At 0 it is
-  the other way round.
+  the other way round. At 50 its prices are as usual, whatever your world started at: a world made
+  with the **Trusted by Earth** bonus starts at 80 and gets the better prices from the first launch.
 
 Earth never pays more for a good than it asks for one, so buying and selling back never makes
 credits.
