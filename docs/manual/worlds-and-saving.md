@@ -60,7 +60,8 @@ Catching up is quick in a world you built yourself: under a second after ten hou
 hours into a game. A Terraformed start, with its dozens of cities, takes much longer: about half
 a minute after an hour away and around five minutes after ten. While the game catches up, the
 title screen or the **Worlds** list says how far it has got ("Catching up on the time you were away:
-34%"), and the page keeps working while it does.
+34%"). The page does not freeze while it does, but its buttons are dimmed and wait until the world
+has opened.
 
 The **While you were away** summary says how much time passed, what changed on the planet, and
 what your cities built ("In the cities, the reactor reached level 5, the spaceport is half

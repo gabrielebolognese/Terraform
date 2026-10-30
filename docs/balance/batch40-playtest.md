@@ -79,6 +79,30 @@ canvas's own filling, the GPU, the globe's WebGL - is counted, not timed.
 
    And two vacuity guards of new tests fired on their first run (a building that could not be placed
    where the test asked): each guard did its job.
+10. **Review 1 rejected the batch for two faults of its own making:**
+    - **Handing the page back let a second Play launch the world twice.** Item 4's fix made the page
+      clickable during a catch-up, and the front door stayed as it was: the Worlds list's **Play**
+      enabled, `playNow` unguarded, and `enter` overwriting the open game without stopping it. A
+      second click queued a second load; once the first game was on the page, the second launched
+      over it, and the first ran on unseen, autosaving its own state into the world's slot through
+      the second game's autosaver - two diverging worlds writing one save. The review reproduced it
+      with the real `App` and the v20 save ten hours away: "games launched: 2; shells on the page: 2".
+      A Standard world ten hours away is about 1 s of catch-up, a double click's time; a Terraformed
+      start 31 s to 5 minutes, with a notice that invites waiting and clicking again. Before this
+      batch the frozen page could not be clicked. Fixed: while a world opens (Play, Continue, the
+      Example planet, Create world) the front door's screen is inert, dimmed and `aria-busy`, and
+      another open is ignored; `enter` stops any game still on the page before it launches one.
+      Tested by clicking Play twice, Back, Continue and the Example planet during a real catch-up:
+      one game launched, one on the page (injections 22-27). Cost: the fix round. The lesson: a page
+      handed back is a page that can be clicked, and every action on it has to be thought through.
+    - **The known issues went into the wrong updates' lists**, the mistake Batch 39's review 1 found:
+      the Terraformed opening was added to Update 32's Known issues, the fixed levelling message was
+      deleted from Update 29's, and "Known issues in the current game" was left unchanged - still
+      saying the game tells you to break a crag that is not there. Update 29's and 32's lists are
+      back as they shipped; the current list says what levelling's message now says and has the
+      Terraformed opening. Cost: a second time for the same mistake, so it is written here as
+      plainly as it can be: an update's notes describe what that update shipped and are never edited
+      after; only Update 40's own section and the current list change.
 
 ## What was built
 
@@ -103,14 +127,14 @@ canvas's own filling, the GPU, the globe's WebGL - is counted, not timed.
   and an audit of every numeric threshold in the batches' tests.
 - **The polish list**, in the order a player meets it:
   1. every player, at every autosave: saved once, not once a frame until the write lands (and a
-     failing store no longer written to every frame);
+      failing store no longer written to every frame);
   2. every player in a big city: panning without a stutter five times a second;
   3. every player panning into a metropolis: no frame spending 40 ms on new pictures;
   4. everyone, after a big world was built in the session: tile keys read at full speed;
-  5. a player opening a Terraformed start after time away: a page that keeps working and says how
-     far it is, instead of minutes frozen;
+  5. a player opening a Terraformed start after time away: a page that does not freeze and says how
+      far it is, instead of minutes frozen (its buttons held until the world opens: review 1);
   6. a player levelling ground: steep ground with no crag says to level it, not to break a crag that
-     is not there.
+      is not there.
 
 ## Decisions
 
@@ -242,9 +266,18 @@ each file restored from a copy and checked identical after.
 | 19 | structures: a city loaded draws as before | a building's level not read back | caught: 224,562 shapes against 224,603 |
 | 20 | terrain rotation: a rotation for every seed | a sign in the matrix | caught: det 1.00026 at seed 1 |
 | 21 | front door: says how far it has got while a world catches up | the progress never said | caught: no "Catching up" among what the notice said |
+| 22 | front door: one world at a time (review 1) | Play queued unheld, as before (`enter` still stops the first) | caught: "games launched: expected 5 to be 1" |
+| 23 | front door: one world at a time (review 1) | Play unheld and `enter` leaving the first game running | caught: "one game on the page" (two `.game` shells) |
+| 24 | front door: one world at a time (review 1) | the screen not made inert while a world opens | caught: "the front door's actions are held while a world opens: expected false to be true" |
+| 25 | front door: one world at a time; a world that will not load (review 1) | the hold never released | caught by both: "released once the world is open: expected true to be false"; the good world after the bad one "expected 'worlds' to be 'game'" |
+| 26 | front door: New world submitted twice (review 1) | Create world not held | caught: "one world made: ... got 2" |
+| 27 | front door: one world at a time (review 1) | the Example planet not held | caught: "games launched: expected 2 to be 1" |
 
-21 faults, 21 caught; one premise of mine replaced (the row without a number). With the review's 14:
-35 faults, 32 caught at once, the 3 not caught fixed and caught as 18-20.
+27 faults, 27 caught; one premise of mine replaced (the row without a number). With the review's 14:
+41 faults, 38 caught at once, the 3 not caught fixed and caught as 18-20. Rows 22-27 are review 1's
+fix round; 22 and 23 together show both layers: with the hold gone `enter` still keeps one game on
+the page (22), and with both gone two are (23). Each assertion was ordered so the layer it guards
+fails first.
 
 One run of the front door's new test (21) did not finish in ten minutes and was stopped; three runs
 after finished it in 0.8-1.1 s, and the full run in 1.5 s. Not explained.
@@ -271,7 +304,7 @@ after finished it in 0.8-1.1 s, and the full run in 1.5 s. Not explained.
 The project's last batch: these are left with their evidence for whoever takes it on.
 
 - **A Terraformed start's opening** (item 4): 4.6 s at once, 31 s an hour away, 290 s ten hours
-  away, against 3 s. The page keeps working and says how far it is, but its first slice - reading
+  away, against 3 s. The page does not freeze and says how far it is, but its first slice - reading
   the 43 MB save and the first substep - still stops it for about 4 s. A cheaper substep for a world of
   83,589 buildings, or deposits worked out a city at a time (Batch 37's open item), are the ways;
   a coarser catch-up is not (live must equal offline).

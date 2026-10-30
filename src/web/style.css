@@ -2397,6 +2397,11 @@ button:hover {
   width: min(380px, 100%);
 }
 
+/* A world opening: the front door's buttons wait for it (Batch 40's review). */
+.front-screen[aria-busy="true"] {
+  opacity: 0.6;
+}
+
 .front-panel {
   display: flex;
   flex-direction: column;
