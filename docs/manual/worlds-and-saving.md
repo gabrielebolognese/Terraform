@@ -28,6 +28,9 @@ The game saves for you:
 - when you press **Save** in the game menu, or **Ctrl+S** (**Cmd+S** on a Mac) while you play, or
   **Save and quit to title**.
 
+If a save fails (the browser's storage is full, say), the game warns you that saving is failing and
+tries again at the next autosave.
+
 The game menu says, under **Save**, when the world was last saved ("Last saved 42 seconds ago")
 and where your worlds are kept: in this browser's storage for this site, on this device. Clearing
 your browser's site data deletes them, and a private window does not keep them; the title screen
@@ -52,6 +55,12 @@ the planet moves on:
 - **Standard pace:** up to 10 hours of absence count in full. Builds that would finish within that
   time are done when you return.
 - **Classic pace:** up to 8 hours count, at a reduced rate.
+
+Catching up is quick in a world you built yourself: under a second after ten hours away, even five
+hours into a game. A Terraformed start, with its dozens of cities, takes much longer: about
+40 seconds after an hour away and around five minutes after ten. While the game catches up, the
+title screen or the **Worlds** list says how far it has got ("Catching up on the time you were away:
+34%"), and the page keeps working while it does.
 
 The **While you were away** summary says how much time passed, what changed on the planet, and
 what your cities built ("In the cities, the reactor reached level 5, the spaceport is half
