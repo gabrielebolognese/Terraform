@@ -28,6 +28,7 @@ import { buildStates, buildWords, formatDuration, realSeconds } from "./build-ti
 import type { CardKind } from "./city-cards.js";
 import { makePreviews } from "./city-cards.js";
 import { ChunkedCity } from "./city-chunks.js";
+import { ViewInputs } from "./view-inputs.js";
 import { formatMetres } from "./settlement-label.js";
 import { RESOURCE_NAMES, offlineWords } from "./offline-words.js";
 import { formatLatLon, settlementLabel, sizeLabel } from "./settlement-label.js";
@@ -296,6 +297,8 @@ export class CityScreen {
   private viewAt = -Infinity;
   private viewBuildings: Settlement["buildings"] | null = null;
   private viewLinks: readonly unknown[] = [];
+  /** What the view was derived from (Batch 40): derived again only when they change. */
+  private readonly viewInputs = new ViewInputs();
   /** Two fingers on the city (Batch 36): a pinch zooms, and moves the view with it. */
   private readonly pinch = new Pinch();
   /** Where the pointer rests over the view, for edge scrolling; null off it. */
@@ -666,19 +669,21 @@ export class CityScreen {
       }
       this.preparing = null;
     }
-    // The view is re-derived a few times a second, not every frame: for a
-    // metropolis it costs 19-30 ms (95-140 ms before Batch 40). A change of buildings, corridors, cables,
-    // rocks or jobs - anything a click does - refreshes it at once, so the
-    // player never waits for their click.
+    // The view is re-derived when the city or the planet it reads has changed - a substep - and then no more
+    // than every VIEW_MS, not every frame: for a metropolis it costs 20-145 ms (Batch 40: it was re-derived
+    // five times a second whether or not anything had changed, a hitch every 200 ms while panning). A change of
+    // buildings, corridors, cables, rocks or jobs - anything a click does - refreshes it at once, so the player
+    // never waits for their click.
     let view = this.view;
     const links = [settlement.corridors, settlement.cables, settlement.cleared, settlement.jobs.length, settlement.claims, settlement.buildQueue];
     const changed = settlement.buildings !== this.viewBuildings || links.some((l, i) => l !== this.viewLinks[i]);
-    if (view === null || view.id !== settlement.id || changed || now - this.viewAt >= VIEW_MS) {
+    if (view === null || view.id !== settlement.id || changed || (this.viewInputs.changed(settlement, env) && now - this.viewAt >= VIEW_MS)) {
       view = cityView(settlement, env, this.tuning);
       this.view = view;
       this.viewAt = now;
       this.viewBuildings = settlement.buildings;
       this.viewLinks = links;
+      this.viewInputs.took(settlement, env);
     }
     if (this.selected !== null && this.selected >= view.buildings.length) this.selected = null;
     const size = this.viewSize();
