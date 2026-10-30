@@ -1929,3 +1929,27 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     ms); this round changed only test files, none of the code it runs.
   - files: src/sim/micro/defences.test.ts, src/web/flood-defences.test.ts,
     docs/balance/batch38-flood-defences.md, docs/PROGRESS.md
+- review 2: accepted
+  - Review 1's three problems are fixed, each by a test that fails with its rule broken. Three
+    injected in this review, one at a time, each file restored from a copy and `git status` clean
+    after each:
+    - the footprint's read dropped (`src/sim/save.ts:1413`, `area` never read): "carries a rover
+      out raising a footprint through a save" fails, "14,13: expected 1 to be close to 2";
+    - the game's `onTerrace` hook deleted (`src/web/game.ts:635-639`): the assembled-game terrace
+      test fails, "Raise its ground offered: expected true to be false";
+    - the every-rover-out refusal removed (`src/sim/micro/defences.ts:110`): the refusal test
+      fails, "expected null to be 'all 3 rovers are out'".
+  - The evacuated-refuge refusal's new assertions were read: a city with room marked `evacuated`
+    is refused, the same city not evacuated takes them (the allowed case beside it).
+  - Since review 1 only tests, the note, this file and `scripts/run-batches.sh` (the runner, not
+    the game) changed; no shipped code, so review 1's checks of the rest still hold.
+  - The note's finding 10 and table rows 48-52 match the fixes; its totals add up (45 + 3 + 4 =
+    52).
+  - `npm run typecheck`, `npm run build:web` and `npm run build` green.
+  - `npx vitest run --maxWorkers=2 --minWorkers=1`: 129 files, 1,557 tests, 1,556 passed (698 s).
+    The one failure is the Known-red metropolis opening test, 545 ms against its 400 ms limit this
+    run (no code it runs changed in this batch).
+  - Three statements in the manual checked against the code, not the ones review 1 checked:
+    founding refused with "The sea covers that place." (`registry.ts:78`); buildings lost under
+    2 m of water (`FLOOD_BUILDING_LOSS_M`); a city lost under 10 m (`FLOOD_THRESHOLD_M`). A
+    Sandbox keeps flooding off (`worldTuning`).
