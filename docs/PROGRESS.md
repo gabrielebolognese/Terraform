@@ -2025,3 +2025,41 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
 - injections: 23 faults, one at a time, each file restored from a copy and checked: 22 caught at
   once, 1 caught once its test was strengthened (13). The table is in the note.
 - review request: GAME_PLAN.md README.md docs/PROGRESS.md docs/balance/batch39-ending.md docs/design/macro-world.md docs/manual/README.md docs/manual/getting-started.md docs/manual/goals.md docs/manual/the-ending.md docs/manual/the-planet.md docs/manual/update-notes.md docs/manual/worlds-and-saving.md src/harness/ending.test.ts src/harness/ending.ts src/harness/pacing.ts src/sim/achievements.ts src/sim/decisions.ts src/sim/ending.test.ts src/sim/ending.ts src/sim/index.ts src/sim/integrate.ts src/sim/micro/defences.ts src/sim/offline.ts src/sim/planets/mars.ts src/sim/save.ts src/sim/tuning.ts src/sim/types.ts src/web/app.ts src/web/decisions-gate.test.ts src/web/ending-words.ts src/web/ending.test.ts src/web/first-hour.test.ts src/web/game-tuning.ts src/web/game.ts src/web/milestones.ts src/web/onboarding.test.ts src/web/pace.test.ts src/web/profile.ts src/web/sound-director.ts src/web/style.css src/web/victory.ts src/web/worlds.ts
+- review 1: rejected
+  Checked and sound: every deliverable is built and each exit gate holds. The reference policy
+  wins on substep 55,032 (127.39 h at 1x, an exact test). The score is the same live and offline
+  over two hours. Every achievement is earned in a scripted run, the soonest at 1,708 s. Typecheck,
+  build and build:web are green. This review's full run, `npx vitest run --maxWorkers=2
+  --minWorkers=1`: 132 files, 1,586 tests, all passed (the Known-red metropolis test passed this
+  time). Injections 12 (a city held with the sea anywhere over its ground: "expected 1 to be +0")
+  and 19 (the bonus left out of the tuning: "expected 3 to be 5") were each broken once, both were
+  caught with the note's messages, and the tree was clean after. ENDING_ENABLED is 0 by default,
+  with the on/off reservoir test. The constants are in tuning.ts and §10. The v20 -> v21 migration
+  has a test. The menus, victory card and profile read the state and never write it. Three manual
+  statements match the code: the bonus numbers (credits 3,000, rovers 3, materials 250, regard 50),
+  the five great structures that ask for 1,000 or more people, and the away summary in the
+  Instruments drawer. Two problems:
+  1. A rare achievement described as "Win with at least 3 cities standing" can be earned after
+     the win. In `src/sim/achievements.ts:167`, "Nobody lost to the sea" checks
+     `standingCities(s).length >= t.ACH_STANDING_CITIES` on every substep after the victory.
+     That count can grow after the victory, because founding a city is free and instant. So a
+     world won with one or two cities earns it one substep after the player founds another.
+     This contradicts the in-game text, `docs/manual/the-ending.md:123` ("Win with at least 3
+     cities standing"), and the file's own claim at `src/sim/achievements.ts:14-17` ("a
+     condition that fails at the victory can never hold later"). Reproduced in this review:
+     `playToVictory(REFERENCE_POLICY, SEA_TUNING, 2600, { found: [{ lat: 0.31, lon: -1.2 },
+     { lat: 0.31, lon: -1.22 }] })` wins on substep 6,882 without the achievement.
+     `foundSettlement(..., "city", 0.33, -1.2, ...)` then one `advance` gives
+     `{ id: "nobody_lost", step: 6883 }`. No test catches this: "does not hand 'Nobody lost to
+     the sea' to a world that lost a city" (`src/harness/ending.test.ts`) only tests the losses.
+     The condition must be judged as the world stood at the victory, with a test that founds a
+     city after the win.
+  2. The batch's known issues went into the wrong list in `docs/manual/update-notes.md`. The four
+     "current known issues" (no ending in old worlds, Sandbox or Terraformed; the record kept by
+     this browser; no card for an achievement earned away; the pressure part unmeasured for a
+     paying player) were added at lines 222-229. That is **Update 35**'s Known issues (its section
+     runs from line 184 to 240), so the Update 35 notes now describe Update 39. "Known issues in
+     the current game" (line 557 on) is the list next-batch.md says to keep current, and it does
+     not have them. The batch rightly removed "There is no ending yet" from that list, and the
+     entry's `manual:` line says "the current known issues" were updated. The four lines belong
+     at the bottom list, and Update 35's list should be as it was.
