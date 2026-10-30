@@ -36,9 +36,10 @@ export function siteGround(s: Settlement, t: Tuning): Ground {
   const n = ground.tiles;
   const m = n + 1;
   let { cornersM, heightM, slope } = ground;
-  const steep = [...ground.steep];
+  // Batch 40: copied with `slice`, not spread (a metropolis's four million-tile copies took 236 ms, measured).
+  const steep = ground.steep.slice();
   if (s.grades.length > 0) {
-    const corners = [...cornersM];
+    const corners = cornersM.slice();
     const touched = new Set<number>();
     for (const g of s.grades) {
       const { tx, ty } = keyTile(g.tile);
@@ -46,8 +47,8 @@ export function siteGround(s: Settlement, t: Tuning): Ground {
       for (const [cx, cy] of [[tx, ty], [tx + 1, ty], [tx, ty + 1], [tx + 1, ty + 1]] as const) corners[cy * m + cx] = g.heightM;
       for (let y = ty - 1; y <= ty + 1; y += 1) for (let x = tx - 1; x <= tx + 1; x += 1) if (x >= 0 && y >= 0 && x < n && y < n) touched.add(y * n + x);
     }
-    const heights = [...heightM];
-    const slopes = [...slope];
+    const heights = heightM.slice();
+    const slopes = slope.slice();
     for (const i of touched) {
       const x = i % n;
       const y = (i - x) / n;

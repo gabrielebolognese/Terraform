@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 import { examplePlanet } from "../harness/example.js";
 import { sceneStats } from "../render/city.js";
 import type { CityView } from "../sim/index.js";
-import { DEFAULT_TUNING, NEUTRAL_ENV, cityView, claimTest, derive, habitat, makeTuning, prepareCity, worldEnv, worldOf } from "../sim/index.js";
+import { DEFAULT_TUNING, NEUTRAL_ENV, TILE_STRIDE, cityView, claimTest, derive, habitat, keyTile, makeTuning, prepareCity, worldEnv, worldOf } from "../sim/index.js";
 import { centreCamera, qualityFor } from "./city-camera.js";
 import { ChunkedCity } from "./city-chunks.js";
 import type { CityHooks } from "./city.js";
@@ -93,6 +93,17 @@ describe("opening a metropolis", () => {
     expect(s.kept).toBeLessThanOrEqual(120);
   });
 
+  /*
+   * Batch 40: load-proof. This timed the wall clock against 400 ms - the longest step 145-203 ms alone -
+   * and failed in full runs at 400-513 ms. Each time is now a share of the whole making, timed in the
+   * same run: load slows the whole as it slows the step, and a stall the scheduler puts on one step is
+   * a few percent of it (195 ms of 5.2 s, the worst measured). Each bound leaves room for such a stall
+   * and still fails what it guards against. The work was cut first, so the shares are small: the
+   * longest step was 255 ms (four conversions and the first route in one step), then 185 ms (broken
+   * rocks read on a deprecated map); the view built its buildings with four spreads each (65 ms of its
+   * 95-140). The process's CPU time was tried and is worse: it counts the collector's threads beside
+   * the step (a 51 ms step read 157 ms), and under load it grew as much as the wall clock.
+   */
   it("makes a metropolis's ground a frame's worth at a time, then its view at once from what was made", () => {
     // Another metropolis, never opened: its world, its view's lists, not yet made.
     const other = state.settlements.filter((c) => c.kind === "metropolis" && c.id !== largest.id)[0]!;
@@ -100,6 +111,7 @@ describe("opening a metropolis", () => {
     let count = 0;
     let longest = 0;
     let last = 0;
+    const began = performance.now();
     for (;;) {
       const start = performance.now();
       const r = steps.next();
@@ -109,19 +121,62 @@ describe("opening a metropolis", () => {
       last = r.value;
       count += 1;
     }
+    const whole = performance.now() - began;
     expect(last).toBe(1);
-    // Measured: 5,422 steps, the longest 175 ms (made at once: 4.8 s, and the view 0.9 s more).
+    // Measured: 5,111 steps in 3.5-4.9 s alone (made at once: 4.8 s, and the view 0.9 s more).
     expect(count, "vacuity: many steps").toBeGreaterThan(500);
-    expect(longest).toBeLessThan(400);
+    // Measured: the longest 51-114 ms alone, 1.3-2.3% of the whole; 134-195 ms, 1.6-3.8%, with twenty processes
+    // keeping every core busy. The world's fine heights sampled in one step: 1,981 of 3,681 ms, 54%.
+    expect(longest / whole, `the longest step, ${longest.toFixed(0)} of ${whole.toFixed(0)} ms`).toBeLessThan(0.1);
     const start = performance.now();
     const v = cityView(other, env, game);
-    // Measured: 257 ms from what was made (170 at half the buildings); 530-570 ms had the view to make its world's heights itself.
-    expect(performance.now() - start).toBeLessThan(400);
+    const firstView = performance.now() - start;
+    // Measured: 104-129 ms from what was made, 2.0-2.9% of the whole, alone or busy (257 ms before Batch 40;
+    // 530-570 ms, about 13%, had the view to make its world's heights itself).
+    expect(firstView / whole, `the first view, ${firstView.toFixed(0)} of ${whole.toFixed(0)} ms`).toBeLessThan(0.08);
+    // And again, as the city screen re-derives it five times a second: the quickest of three, against the whole
+    // making as above. Measured: 19-29 ms, 0.47-0.69% (alone); 25-67 ms, 0.47-0.82% (every core busy). Before
+    // Batch 40 it was 95-144 ms, 2.3-3.3% (and the city screen's own note said ~15 ms).
+    let again = Infinity;
+    for (let k = 0; k < 3; k += 1) {
+      const at = performance.now();
+      cityView(other, env, game);
+      again = Math.min(again, performance.now() - at);
+    }
+    expect(again / whole, `the view again, ${again.toFixed(0)} of ${whole.toFixed(0)} ms`).toBeLessThan(0.015);
     // And what was made is what the view would have made itself.
     const w = worldOf(other, game);
     expect(v.world.fine).toEqual(w.fineM.map((h) => h / game.TILE_METRES));
     const ours = claimTest(other, game);
     expect(v.claimed.every((c, i) => c === ours(i % v.tiles, Math.floor(i / v.tiles)))).toBe(true);
+  });
+
+  it("reads a tile's key as fast as a fresh copy of the same sums, once the example is built (Batch 40)", () => {
+    // Every `{ tx, ty }` object literal shared one hidden class; once the example was built, each tile
+    // `keyTile` made was born on a deprecated map and migrated where it was read. Measured over the
+    // metropolises' broken rocks: 1,159 ms against 81 ms for a copy as a literal (14x); 4.5 ms against 44
+    // since the tile is an object of its own class (a literal made here is slowed too, less). Both timed back
+    // to back, the best of five, so load slows them alike.
+    const keys = state.settlements.filter((c) => c.kind === "metropolis").flatMap((c) => c.cleared);
+    expect(keys.length, "vacuity: a metropolis's broken rocks").toBeGreaterThan(100_000);
+    const copy = (key: number): { tx: number; ty: number } => ({ tx: key % TILE_STRIDE, ty: Math.floor(key / TILE_STRIDE) });
+    const best = (read: (key: number) => { tx: number; ty: number }): number => {
+      let quickest = Infinity;
+      for (let r = 0; r < 5; r += 1) {
+        const at = performance.now();
+        let sum = 0;
+        for (const key of keys) {
+          const { tx, ty } = read(key);
+          sum += tx + ty;
+        }
+        quickest = Math.min(quickest, performance.now() - at);
+        expect(sum).toBeGreaterThan(0);
+      }
+      return quickest;
+    };
+    const ours = best(keyTile);
+    const fresh = best(copy);
+    expect(ours / fresh, `keyTile ${ours.toFixed(1)} ms, a copy ${fresh.toFixed(1)} ms`).toBeLessThan(4);
   });
 
   it("shows how far the ground is made while a metropolis first opens, then the city", () => {

@@ -25,7 +25,7 @@ import type { Rock } from "./rocks.js";
 import { garage, prepareRocks, rocksOf, siteGround } from "./rocks.js";
 import { claimTest, frameOf, keyTile, tileKey } from "./space.js";
 import type { Site } from "./drive.js";
-import { buildingSite, garageDoor, garageLeg, roverRoute, tileSite } from "./drive.js";
+import { buildingSite, garageDoor, garageLeg, prepareDrive, roverRoute, tileSite } from "./drive.js";
 import { keySet } from "./buildings.js";
 import type { World } from "./terrain.js";
 import { worldOf } from "./terrain.js";
@@ -296,7 +296,13 @@ export function* prepareCity(s: Settlement, t: Tuning): Generator<number, void> 
   const world = worldOf(s, t);
   const had = worldsInTiles.get(world);
   if (had === undefined || had.corners.length !== world.cornersM.length) {
-    const corners = world.cornersM.map((h) => h / t.TILE_METRES);
+    // Batch 40: a band of rows at a time, as the fine heights below (a metropolis's at once were 76 ms of one step).
+    const corners = new Array<number>(world.cornersM.length);
+    const m = world.size + 1;
+    for (let y = 0; y < m; y += 1) {
+      for (let x = 0; x < m; x += 1) corners[y * m + x] = world.cornersM[y * m + x]! / t.TILE_METRES;
+      if (y % 256 === 255) yield 0.75 + (0.02 * y) / m;
+    }
     yield 0.77;
     const fine = new Array<number>(world.fineM.length);
     const f = 2 * world.size + 1;
@@ -319,11 +325,16 @@ export function* prepareCity(s: Settlement, t: Tuning): Generator<number, void> 
     perTile.set(ground, { n, t, also: s.claims, value: out });
   }
   for (const list of [s.corridors, s.cables, s.rails]) {
-    kept(list, n, t, null, () => Array.from(linkGrid(list, n), (r) => r === 1));
+    kept(list, n, t, null, () => flags(linkGrid(list, n)));
     yield 0.96;
   }
+  // Batch 40: a step each, and the rovers' grid two more before their routes (with the first route, all of it was
+  // one step of 255 ms in a metropolis's opening, measured).
   kept(ground.heightM, n, t, null, () => ground.heightM.map((h) => h / t.TILE_METRES));
+  yield 0.97;
   kept(ground.cornersM, n, t, null, () => ground.cornersM.map((h) => h / t.TILE_METRES));
+  yield 0.98;
+  for (const f of prepareDrive(s, t)) yield 0.98 + 0.01 * f;
   // Batch 29: the way each rover sent without a route (an old save's, the example's) is drawn - found here, a job
   // a step, so the first view does not search them all at once (a metropolis's twelve took 0.9 s, measured).
   if (garage(s) !== null) {
@@ -334,6 +345,13 @@ export function* prepareCity(s: Settlement, t: Tuning): Generator<number, void> 
     }
   }
   yield 1;
+}
+
+/** A grid of 0s and 1s as flags (a loop: `Array.from` with a mapper took 60 ms for a metropolis's million, measured). */
+function flags(grid: Uint8Array): boolean[] {
+  const out = new Array<boolean>(grid.length);
+  for (let i = 0; i < grid.length; i += 1) out[i] = grid[i] === 1;
+  return out;
 }
 
 /** What a rover's job works on: the building whose corner is its tile, or the tile itself. */
@@ -370,7 +388,7 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
     for (let ty = 0; ty < n; ty += 1) for (let tx = 0; tx < n; tx += 1) out[ty * n + tx] = ours(tx, ty);
     return out;
   });
-  const grid = (list: readonly number[]): boolean[] => kept(list, n, t, null, () => Array.from(linkGrid(list, n), (r) => r === 1));
+  const grid = (list: readonly number[]): boolean[] => kept(list, n, t, null, () => flags(linkGrid(list, n)));
   let wet = dry.get(n);
   if (wet === undefined) {
     wet = new Array<boolean>(n * n).fill(false);
@@ -436,7 +454,14 @@ export function cityView(s: Settlement, env: HabitatChannels, t: Tuning): CityVi
       const reaches = reached !== null && PROVIDERS.has(b.type) ? reached[index]! : undefined;
       const share = siting === null ? 0 : siting.shares[index]!;
       const deposit = share > 0 ? { kind: DEPOSIT_KINDS[siting!.kinds[index]!]!, share, factor: 1 + depositNow![siting!.kinds[index]!]! * share } : undefined;
-      return { index, type: b.type, tx: b.tx, ty: b.ty, size, ...(depth === size ? {} : { depth }), operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null, ...(reaches === undefined ? {} : { reaches }), ...(fault === undefined ? {} : { fault }), ...(deposit === undefined ? {} : { deposit }) };
+      // Batch 40: the parts a building may lack added after, not spread in (four spreads a building were 65 ms of a
+      // metropolis's view, re-derived five times a second; measured).
+      const v: { -readonly [K in keyof CityBuildingView]: CityBuildingView[K] } = { index, type: b.type, tx: b.tx, ty: b.ty, size, operable, activity, baseZ: Number.isFinite(baseZ) ? baseZ : 0, submerged: drowned, network: step.network[index] ?? null, level: b.level, construction: building.get(tileKey(b.tx, b.ty)) ?? null };
+      if (depth !== size) v.depth = depth;
+      if (reaches !== undefined) v.reaches = reaches;
+      if (fault !== undefined) v.fault = fault;
+      if (deposit !== undefined) v.deposit = deposit;
+      return v;
     }),
     population: s.population,
     housing: home,

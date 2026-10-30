@@ -157,8 +157,25 @@ export function tileKey(tx: number, ty: number): number {
   return ty * TILE_STRIDE + tx;
 }
 
+/**
+ * A key's tile, as an object of its own class (Batch 40). As an object
+ * literal it shared its hidden class with every `{ tx, ty }` in the program;
+ * once one of those widened what `tx` holds, every tile made here was born on
+ * a deprecated map, and each was migrated where it was read: 1 us a call, 19
+ * times a fresh copy's, measured after the example planet was built (177,796
+ * broken rocks took 185 ms of one step of a metropolis's opening).
+ */
+class KeyedTile {
+  readonly tx: number;
+  readonly ty: number;
+  constructor(tx: number, ty: number) {
+    this.tx = tx;
+    this.ty = ty;
+  }
+}
+
 export function keyTile(key: number): { tx: number; ty: number } {
-  return { tx: key % TILE_STRIDE, ty: Math.floor(key / TILE_STRIDE) };
+  return new KeyedTile(key % TILE_STRIDE, Math.floor(key / TILE_STRIDE));
 }
 
 // ---------------------------------------------------------------------------
