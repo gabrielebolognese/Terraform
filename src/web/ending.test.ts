@@ -8,19 +8,20 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import type { SimState } from "../sim/index.js";
-import { marsStart, summariseAway, toSave } from "../sim/index.js";
-import { SEA_TUNING, playToVictory, playWalled } from "../harness/ending.js";
+import type { SimState, Tuning } from "../sim/index.js";
+import { EARTH_GOODS, earthPrices, foundSettlement, marsStart, summariseAway, toSave } from "../sim/index.js";
+import { HIGH_SITES, SEA_TUNING, playToVictory, playWalled } from "../harness/ending.js";
 import { REFERENCE_POLICY } from "../harness/policy.js";
 import { App } from "./app.js";
 import type { GameHandle } from "./game.js";
 import { startGame } from "./game.js";
-import { BROWSER_TUNING } from "./game-tuning.js";
+import { BROWSER_TUNING, fromRecord, tuningRecord, worldTuning } from "./game-tuning.js";
 import { DEFAULT_SETTINGS } from "./settings.js";
 import { MilestoneWatch } from "./milestones.js";
 import { MemorySaveStore } from "./storage.js";
 import { Frames } from "./test-frames.js";
 import { CARD_AFTER_MS, SWING_MS, SWING_RAD } from "./victory.js";
+import { startState } from "./worlds.js";
 
 /** Three high cities and a walled one, won in year 1,720.5 (`harness/ending.ts`). */
 const won: SimState = playWalled().state;
@@ -191,6 +192,58 @@ describe("the title: scores, achievements and new game plus", () => {
     await app.quitToTitle();
     button(root, "Worlds").click();
     expect(root.querySelector(".world-bonus")!.textContent).toBe("New game plus: A bigger garage");
+  });
+});
+
+describe("new game plus's bonuses, in the world they make", () => {
+  /** A new Standard world on seed 7, its tuning and first state as the worlds list makes them, with a bonus or none. */
+  function made(bonus: number): { readonly s: SimState; readonly t: Tuning } {
+    const t = worldTuning("standard", 7, "standard", bonus);
+    return { s: startState({ name: "Bonus", seed: 7, mode: "standard", pace: "standard", bonus }, t), t };
+  }
+  const plain = made(0);
+  const trusted = made(4);
+  const at = (w: { readonly s: SimState }, reputation: number): SimState => ({ ...w.s, earth: { ...w.s.earth, reputation } });
+
+  it("'Trusted by Earth': regard 80, and better prices than a world without it from the first launch", () => {
+    expect(trusted.s.earth.reputation).toBe(80);
+    expect(plain.s.earth.reputation).toBe(50);
+    const mine = earthPrices(trusted.s, trusted.t);
+    const theirs = earthPrices(plain.s, plain.t);
+    for (const g of EARTH_GOODS) {
+      expect(mine[g].buy, `Earth's asking for ${g}`).toBeLessThan(theirs[g].buy);
+      if (theirs[g].sell > 0) expect(mine[g].sell, `what Earth pays for ${g}`).toBeGreaterThan(theirs[g].sell);
+    }
+    // Measured: materials 3.700 a unit against 4.353, 15% less; rovers 1,201.95 against 1,414.06. Before review 2's
+    // fix the two were the same to the last digit: the bonus moved the curve's middle along with the start.
+    expect(mine.materials.buy).toBeCloseTo(3.6999, 4);
+    expect(theirs.materials.buy).toBeCloseTo(4.3528, 4);
+  });
+
+  it("'Trusted by Earth' moves the start, not Earth's prices: at the same regard both worlds pay the same", () => {
+    // Before the fix the bonus world paid more at every regard under 100: materials 4.625 against 4.135 at 60.
+    for (const r of [0, 30, 50, 60, 80, 90, 100]) expect(earthPrices(at(trusted, r), trusted.t), `at ${r}`).toEqual(earthPrices(at(plain, r), plain.t));
+  });
+
+  it("'Trusted by Earth' gives the better prices to a world made with it before the fix: its kept tuning takes the curve's middle at 50", () => {
+    const kept: Record<string, number> = tuningRecord(trusted.t);
+    delete kept["EARTH_REP_NEUTRAL"];
+    const loaded = fromRecord(kept);
+    expect(loaded.EARTH_REP_START).toBe(80);
+    expect(earthPrices(trusted.s, loaded)).toEqual(earthPrices(trusted.s, trusted.t));
+  });
+
+  it("'Funded from home' opens the bank with 9,000 credits; 'Well supplied' founds a city with 400 materials", () => {
+    expect(plain.s.economy.credits).toBe(3000);
+    expect(made(1).s.economy.credits).toBe(9000);
+    const site = HIGH_SITES[0]!;
+    const city = (w: { readonly s: SimState; readonly t: Tuning }): number => {
+      const o = foundSettlement(w.s, "city", site.lat, site.lon, w.t);
+      if (!o.ok) throw new Error(o.reason ?? "could not found the city");
+      return o.state.settlements[0]!.stores.materials;
+    };
+    expect(city(plain)).toBe(250);
+    expect(city(made(3))).toBe(400);
   });
 });
 

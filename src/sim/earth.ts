@@ -160,9 +160,14 @@ export function supplyOf(seed: number, k: number, good: EarthGood, t: Tuning): n
   return 1 + t.EARTH_SUPPLY_SWING * (2 * rand01(seed, k, SALT.supply + EARTH_GOODS.indexOf(good)) - 1);
 }
 
-/** Reputation as -1 (none) to 1 (full): what moves the prices. */
+/**
+ * Reputation as -1 (none) to 1 (full), 0 at EARTH_REP_NEUTRAL: what moves the
+ * prices. Never read from the start: a world started higher is a world
+ * trusted more (Batch 39's review 2).
+ */
 function standing(reputation: number, t: Tuning): number {
-  return (reputation - t.EARTH_REP_START) / Math.max(1, reputation >= t.EARTH_REP_START ? 100 - t.EARTH_REP_START : t.EARTH_REP_START);
+  const mid = t.EARTH_REP_NEUTRAL;
+  return (reputation - mid) / Math.max(1, reputation >= mid ? 100 - mid : mid);
 }
 
 /** Whether Earth sells this good yet: settlers and rovers wait for contracts met. */
