@@ -2233,6 +2233,28 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     once the example was built (14x a copy). Same values; a performance fix only.
   - Real old saves made by each era's own code from git history (v13-v20) and kept as test files
     (about 360 kB); the generator kept in scripts/ for the next schema.
+  - The city's view derived when the settlement or the planet's channels change (by value), at most
+    every 200 ms, and at once on a click: a view is a pure function of them. The planner alike.
+  - 16 ms a frame for pictures never drawn, not 40: smoother panning against a slower first fill.
+  - A long absence caught up a substep at a time between frames, with its progress on the front
+    screen; resume keeps its chunks (advance is chunk-independent, and a test holds the two equal).
+  - A Terraformed start's opening recorded as missing the budget (6 s; 37.5 s an hour away; 302 s
+    after ten), not worked around: a cheaper catch-up would break live-equals-offline.
+  - The script not split (708 kB): a change to how the page loads that cannot be checked in a
+    browser here.
+  - "Every test injection-checked" taken as: the batches' own tables break each new test; the review
+    broke one untabled test a batch (14). "Every threshold traced": all 613 audited, the loosest 11
+    traced, 22 recorded with the reason they wait (the note's Open).
+  - The polish list from the scripted playthroughs and every batch's recorded open items: the
+    user's own play is not available unattended.
+  - The autosave counts from when a save was asked for; a failed write is tried an interval later.
+  - Steep ground with no crag says "level the ground first"; with a crag, "break the crag".
+  - Two helpers ran beside the main session: a read-only audit of the thresholds, and the 14
+    injections in a worktree of their own (removed after; nothing of theirs committed).
+  - docs/AUTO_BATCH_SETUP.md (untracked, not this batch's) left as it is.
 - pieces:
   - a1a82cf: the opening test load-proof; the steps split, keyTile, the city view's buildings
   - f090919: real old saves v13-v20, opened by today's library
+  - 043197e: the frame budget: the view when its inputs change, 16 ms of new pictures, budget.ts
+  - 76f11d9 (autosave), 09412db (steep ground), 371d19c (catch-up between frames), e3ae12d (the review's
+    test fixes and traced thresholds)

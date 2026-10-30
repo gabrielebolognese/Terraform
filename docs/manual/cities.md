@@ -182,6 +182,10 @@ Drag to lay a line; start a drag on an existing link to remove links instead. Wh
 not connected, its panel says what is missing, for example "Not connected: ... Lay a power cable
 to a power plant."
 
+A link cannot go on ground too steep to build on. The message says what to do: where hard rock
+stands on the tile, send a rover to break the crag; where there is none (beside ground you have
+levelled, often), use **Level ground** on the tile first.
+
 ## People
 
 People arrive once there is housing and every need is met: **power, water, oxygen and food**. The

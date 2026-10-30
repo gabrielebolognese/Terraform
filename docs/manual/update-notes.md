@@ -4,6 +4,45 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 40 - Smoother cities, steadier saves
+
+A playtest pass over the whole game. Big cities pan more smoothly, a world you come back to no
+longer freezes the page while it catches up, and the game saves once when an autosave is due.
+
+**New**
+- **Catching up, shown**: when a world takes a moment to catch up on the time you were away, the
+  title screen or the **Worlds** list says how far it has got ("Catching up on the time you were
+  away: 34%"), and the page keeps working meanwhile. Before, a Terraformed start you had been away
+  from could freeze the page for minutes.
+
+**Changed**
+- **Panning a big city is smoother.** The city's picture is worked out again when something in it
+  has changed (the world moving on, or your click), not five times a second whatever happened: in a
+  metropolis that stopped a stutter five times a second. New parts of a city fill in over a few more
+  frames as you pan, and the frames stay steady.
+- **Opening a metropolis for the first time** ("Surveying the ground") is smoother: no step of it
+  holds the page for long.
+- **Steep ground says what to do.** Laying a corridor, cable or railway on ground too steep to build
+  on now tells you to use **Level ground** where there is no rock on it, and to send a rover to break
+  the crag where there is.
+- Worlds saved by earlier updates, from Update 27 on, were loaded and played in this update to
+  check them: every one opens and plays on as before.
+
+**Fixed**
+- When an autosave came due, the game could save the world several times in a row before the first
+  save finished. It now saves once.
+- When saving fails (the browser's storage is full, say), the game no longer tries again on every
+  frame; it tries again at the next autosave, and still warns you that saving is failing.
+- Levelling ground could leave a tile beside it too steep to build on with no rock on it, and the
+  game told you to send a rover to break a crag that was not there.
+
+**Known issues**
+- A Terraformed start you have been away from still takes a while to open: about 40 seconds after
+  an hour away, and around five minutes after ten hours. The game shows how far it has got.
+- A Terraformed start takes a few seconds to open even when you have not been away.
+
+---
+
 ## Update 39 - A world to win
 
 Mars can be won. Hold the living world for ten years and your world is won, with its story told in
@@ -360,6 +399,9 @@ and they are happier: a happy city fills its homes faster and every building in 
   railway, and the ready-made cities have only a few lines.
 - Making a Terraformed start, and building the Example planet, take longer than before: about
   40 seconds each, where they took about 20.
+- A Terraformed start you have been away from takes a while to open: about 40 seconds after an hour
+  away, and around five minutes after ten hours. The game shows how far it has got.
+- A Terraformed start takes a few seconds to open even when you have not been away.
 - Happiness is not yet shown on the world map's city cards, in the Settlements list, in Alerts or
   in Statistics.
 
@@ -478,9 +520,6 @@ the route sets how long a job takes. Trains run on a track each way and stop at 
 **Known issues**
 - Trains on different lines still pass through each other where the lines cross.
 - A rover driving past another one at work beside its site can pass through it.
-- Levelling ground can leave the tiles beside it too steep to build on, with no rock on them.
-  Laying a corridor, cable or railway there tells you to send a rover to break the crag, but there
-  is none: use **Level ground** on that tile instead.
 
 ---
 

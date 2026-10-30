@@ -229,6 +229,21 @@ choice to keep playing; the worlds list shows each world's score; the title's **
 the player's record across worlds; a victory opens new game plus, a bonus recorded in the new
 world's tuning. All behind `ENDING_ENABLED` (new Standard worlds only); save v21.
 
+**Playtest pass: performance, polish and an adversarial review** (Batch 40). A performance budget
+measured in Node through the browser's code (`src/web/budget.ts`, on a Ryzen 7 5700U): the reference
+city's frames at a median of 2.5 ms (p95 4.8), a metropolis panned at 1x at 6.8 ms (p95 12.9, 99.4%
+of frames within 33 ms), memory steady at about 280 MB of heap while panning; a Standard world opens
+in under a second after ten hours away, a Terraformed start does not (37.5 s an hour away, five
+minutes after ten - recorded, its page no longer frozen). What the budget found is fixed: tile keys
+read on a deprecated V8 map after a big world was built (`keyTile` a class), a metropolis's view
+re-derived five times a second whatever changed (now when its inputs change), 40 ms a frame of new
+pictures (16), and a long absence caught up between frames with its progress shown. The
+metropolis-opening timing test is load-proof: every time a share of the whole making. Every save
+schema from v13 to v20 was written by its own era's game from git history and is opened by today's
+library as the browser opens it. The review broke a test of each of Batches 26-39 that no table
+names (11 of 14 caught; the 3 fixed) and traced the loosest untraced thresholds; the autosave asks
+once, not once a frame; steep ground says to level it where there is no crag.
+
 In a world, the shell shows the current phase and what it looks like, the composite progress bar,
 the six section 2.3 target bands, a derived milestone log, and **what the planet needs next** —
 which is computed from section 8.1's own weighted geometric mean rather than scripted, then resolved

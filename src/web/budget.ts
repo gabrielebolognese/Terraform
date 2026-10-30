@@ -14,7 +14,7 @@
  */
 
 import type { CityView, Settlement, SimState, Tuning } from "../sim/index.js";
-import { NEUTRAL_ENV, cityView, fromSave, makeTuning, marsStart, prepareCity, resume, toSave, advance } from "../sim/index.js";
+import { NEUTRAL_ENV, cityView, makeTuning, marsStart, prepareCity, resumeSteps, toSave, advance } from "../sim/index.js";
 import type { HabitatChannels } from "../sim/habitat.js";
 import { cityDay, metropolisScene } from "../harness/vehicles.js";
 import { examplePlanet } from "../harness/example.js";
@@ -232,14 +232,27 @@ function open(): unknown {
     const text = JSON.stringify(toSave(state, t, new Date(savedAt).toISOString()));
     const record = tuningRecord(t);
     for (const awayH of [0, 1, 10]) {
-      // As the library loads it: the tuning from its record, the save read, migrated and caught up.
-      const [loaded, loadMs] = time(() => resume(JSON.parse(text) as unknown, savedAt + awayH * 3600_000, { tuning: fromRecord(record), env: NEUTRAL_ENV, forcing: null }));
+      // As the library loads it: the tuning from its record, the save read and migrated, then caught up a substep at
+      // a time (the page handed back between): the whole, and the longest single slice - the longest the page stops.
+      const began = performance.now();
+      const steps = resumeSteps(JSON.parse(text) as unknown, savedAt + awayH * 3600_000, { tuning: fromRecord(record), env: NEUTRAL_ENV, forcing: null }, 1);
+      let longest = 0;
+      let at = performance.now();
+      let r = steps.next();
+      // The first slice holds the parse and the migration.
+      const readMs = Math.round(performance.now() - began);
+      while (r.done !== true) {
+        at = performance.now();
+        r = steps.next();
+        longest = Math.max(longest, performance.now() - at);
+      }
+      const loadMs = Math.round(performance.now() - began);
+      const loaded = r.value;
       // And the first substep played after it.
       const [, stepMs] = time(() => advance(loaded.state, 1, { tuning: t, env: NEUTRAL_ENV, forcing: null }));
-      out.push({ world: name, awayHours: awayH, madeMs, saveKb: Math.round(text.length / 1024), loadMs, firstStepMs: stepMs, caughtUpSteps: loaded.state.steps - state.steps });
+      out.push({ world: name, awayHours: awayH, madeMs, saveKb: Math.round(text.length / 1024), readMs, loadMs, longestSliceMs: Math.round(longest), firstStepMs: stepMs, caughtUpSteps: loaded.state.steps - state.steps });
     }
   }
-  void fromSave;
   return out;
 }
 
