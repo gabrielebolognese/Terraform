@@ -19,6 +19,8 @@
 # - before every session: a stale git lock removed, the branch put back, memory waited for, and
 #   the tree snapshotted under refs/auto/ so no work can be lost;
 # - the runner itself crashing: restarted by its supervisor;
+# - the runner stopped between a batch's build and its acceptance: on the next start, the review
+#   (and any fix a rejection asked for) is finished before the next batch;
 # - Windows kept awake while it runs.
 # Every 5 minutes it says what it is doing. Log: logs/auto-run/runner.log (one file per session
 # beside it); one-line state: logs/auto-run/status.txt.
@@ -307,6 +309,11 @@ fix_batch() { # batch, round
 review_batch() {
   local n=$1 r v
   r=$(( $(entry "$n" | grep -cE "review [0-9]+: (accepted|rejected)") + 1 ))
+  # The runner stopped after a rejection and before its fix was done: finish the fix first.
+  if (( r > 1 )) && entry "$n" | grep -qE "review $(( r - 1 )): rejected" && ! entry "$n" | grep -q "fix $(( r - 1 )): done"; then
+    log "batch $n: review $(( r - 1 ))'s fix was never finished; carrying on with it"
+    fix_batch "$n" $(( r - 1 ))
+  fi
   while true; do
     (( r > MAX_REVIEWS )) && stop_for_human "batch $n: $MAX_REVIEWS reviews without being accepted (see its entry in $PROGRESS)"
     (( $(errs "$n") >= MAX_ERRORS )) && stop_for_human "batch $n: $(errs "$n") failed sessions during its review"
@@ -325,14 +332,26 @@ review_batch() {
 }
 
 [[ -z "$UNTIL" ]] && UNTIL="$(field final_batch)"
+# Batches 26-28 were accepted by the user before the runner ("review: accepted").
+accepted() { entry "$1" | grep -qiE "review( [0-9]+)?: accepted"; }
 if [[ "${RUNNER_RESTARTED:-0}" == 0 ]]; then
   # Started by hand: whatever stopped it before has been seen to, so a fresh budget.
-  n=$(( $(last_done) + 1 ))
-  if [[ -f "$(errfile "$n")" ]] && (( $(errs "$n") > 0 )); then printf '# budget reset %s (the runner was started again)\n\n' "$(date '+%Y-%m-%d %H:%M')" >>"$(errfile "$n")"; fi
+  for n in $(last_done) $(( $(last_done) + 1 )); do
+    if [[ -f "$(errfile "$n")" ]] && (( $(errs "$n") > 0 )); then printf '# budget reset %s (the runner was started again)\n\n' "$(date '+%Y-%m-%d %H:%M')" >>"$(errfile "$n")"; fi
+  done
   needs="$(field needs_human)"
   [[ -n "$needs" && "$needs" != "none" ]] && { log "clearing needs_human ($needs): the runner was started again"; set_field needs_human none; }
 fi
 log "runner started on $BRANCH, batches $(( $(last_done) + 1 )) to $UNTIL; in progress: $(field in_progress_batch)"
+
+# A batch built but never accepted (the runner was stopped during its review or fix) is finished
+# before the next one starts.
+n=$(last_done)
+if (( n > 0 )) && ! accepted "$n"; then
+  log "batch $n was built but never accepted; finishing its review first"
+  review_batch "$n"
+  push
+fi
 
 while (( $(last_done) < UNTIL )); do
   next=$(( $(last_done) + 1 ))
