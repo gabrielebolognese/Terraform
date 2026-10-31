@@ -105,6 +105,19 @@ canvas's own filling, the GPU, the globe's WebGL - is counted, not timed.
       after; only Update 40's own section and the current list change. The fix round also added
       Batch 37's two deposit issues to the current list (they were only ever in Update 35's and 37's
       lists, found by Batch 39's fix round and left for this batch); both still hold.
+11. **Review 2 rejected the batch because two of its own new tests timed out in a full run.** The front
+    door's catch-up tests (the progress notice, 21, and one world at a time, 22-27) drive a ten-hour
+    absence through the real page and kept vitest's 5 s default: in review 2's full run, beside another
+    project's suite keeping all sixteen threads busy, they took 5,044 and 5,080 ms. Measured since:
+    0.79-0.84 s and 0.40-0.43 s alone, 2.3-4.0 s and 1.2-2.2 s under twenty busy processes. The page's
+    other heavy tests give themselves 15-30 s; these two were written without a look at them. Worse,
+    the file's cleanup quit only a world already on the page, so a test out of time left its
+    catch-up running and its game launching unseen into the next test: likely why the one-world test,
+    normally under half a second, timed out right after the first. Fixed: both tests get 15 s (three
+    times the worst), and the cleanup quits through the App's queue, which waits for a world still
+    opening first. Cost: a review round, for the mistake this batch's first deliverable was about
+    fixing - a test that only passes on an idle machine. The lesson: a new test that does real work
+    through the page takes its neighbours' limit, measured under load before it is committed.
 
 ## What was built
 
@@ -284,6 +297,14 @@ fails first.
 One run of the front door's new test (21) did not finish in ten minutes and was stopped; three runs
 after finished it in 0.8-1.1 s, and the full run in 1.5 s. Not explained.
 
+Review 2's fix round changed two limits and a cleanup, no test's assertions. Checked by cutting the
+limit to 600 ms, `app.test.ts` restored from a copy and compared after: the progress test failed with
+"Test timed out in 600ms", so the limit reaches it, and the one-world test after it passed in its usual
+381-403 ms with the new cleanup. With the old cleanup and the same 600 ms, the one-world test ran
+595 ms, with the timed-out test's catch-up still running beside it. (A second run with the old cleanup
+did not time out at all: the catch-up's slices hold the event loop, so vitest's timer can fire after
+the test has already finished.)
+
 ## Verification
 
 - `npm run typecheck`: green.
@@ -296,6 +317,11 @@ after finished it in 0.8-1.1 s, and the full run in 1.5 s. Not explained.
 - Review 1's fix round: typecheck, build and build:web green (709.97 kB JS, 239.66 kB gzip,
   54.98 kB CSS); `npx vitest run src/web/app.test.ts`: 10 tests passed; the full run
   (`--maxWorkers=2 --minWorkers=1`): 135 files, 1,626 tests, all passed (693 s).
+- Review 2's fix round: typecheck, build and build:web green (709.97 kB JS, 239.66 kB gzip,
+  54.98 kB CSS); `npx vitest run src/web/app.test.ts`: 10 tests passed, three times alone (the two
+  catch-up tests 0.79-0.84 s and 0.40-0.43 s) and three under twenty busy processes (2.3-4.0 s and
+  1.2-2.2 s); the full run (`--maxWorkers=2 --minWorkers=1`): 135 files, 1,626 tests, all passed
+  (495 s; the metropolis opening test and the golden frames among them).
 - The built page, its script and its styles served and fetched over HTTP (200; 709,519 and 54,940 bytes).
 - `npm run build:web`: green (709.50 kB JS, 239.53 kB gzip, 54.94 kB CSS; Vite's 500 kB warning, as
   since Batch 31).

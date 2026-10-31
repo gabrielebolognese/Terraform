@@ -1138,6 +1138,9 @@ recorded in `docs/PROGRESS.md`.
   loosest 11 untraced ones traced, 22 recorded with the reason they wait.
 - **The polish list is from the scripted playthroughs and the open items every batch recorded**: the
   user's own play is not available to an unattended run.
+- **Review 2's fix**: the two front-door tests that catch up a ten-hour absence get 15 s, like the
+  page's other heavy tests (they took 5.04 and 5.08 s in review 2's loaded full run, past vitest's
+  5 s default), and that file's cleanup waits for a world still opening before quitting it.
 
 ---
 

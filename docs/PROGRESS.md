@@ -2430,3 +2430,24 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     - "Deposits are seen only in a city": only the city screen's code reads deposits
       (`src/web/city.ts`, `city-cards.ts`, `deposit-words.ts`, `src/render/city.ts`).
   - The fix round adds no decision, no save change, no tuning constant and no simulation code.
+- fix 2: done (2026-10-31, 1 session; commit 0d3d6fb and the progress record)
+  1. The two catch-up tests (`src/web/app.test.ts`, the progress notice and one world at a time) get
+     `CATCH_UP_TIMEOUT`, 15 s, like the page's other heavy tests, with the measurements beside it:
+     this round, three runs each, 0.79-0.84 s and 0.40-0.43 s alone, 2.34-4.05 s and 1.23-2.25 s
+     under twenty busy processes; review 2's full run 5,044 and 5,080 ms. 15 s is three times the
+     worst. The file's cleanup now quits every App through its queue, which waits for a world still
+     opening, so a test out of time leaves no catch-up running and no game launching into the next
+     (before, it quit only a world already in view), with a 15 s limit of its own.
+     Checked, `app.test.ts` restored from a copy and compared after each: the limit cut to 600 ms,
+     the progress test failed "Test timed out in 600ms" (the limit reaches it) and the one-world test
+     after it passed in its usual 381-403 ms; with the old cleanup put back as well, the one-world test
+     ran 595 ms beside the timed-out test's catch-up (a second run with the old cleanup did not time
+     out: the catch-up's slices hold the event loop past vitest's timer). Not a Known red entry: fixed.
+  - player documentation: none; nothing a player sees changed.
+  - note: `docs/balance/batch40-playtest.md` (what went wrong 11, the check under the injection
+    table, the fix round's verification); GAME_PLAN.md's Batch 40 "What changed" has review 2's fix.
+  - verification: typecheck green; build green; build:web green (709.97 kB JS, 239.66 kB gzip,
+    54.98 kB CSS); `npx vitest run src/web/app.test.ts`: 10 tests passed (three runs alone, three
+    under load); `npx vitest run --maxWorkers=2 --minWorkers=1`: 135 files, 1,626 tests, all passed
+    (495 s; the metropolis opening test and the golden frames among them).
+  - review request: GAME_PLAN.md docs/PROGRESS.md docs/balance/batch40-playtest.md src/web/app.test.ts
