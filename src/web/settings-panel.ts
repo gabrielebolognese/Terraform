@@ -6,6 +6,9 @@
  * Every control writes the player's settings at once and is heard, seen or
  * felt at once; none of them reaches the world. The key list takes any key
  * while it waits for one (Esc too), with Cancel and Clear beside it.
+ *
+ * At the user's request the settings are grouped by kind: a side panel of
+ * Sound, Graphics, Controls, Keys, Interface and Saving, one page at a time.
  */
 
 import type { ActionId, KeyBindings } from "./keys.js";
@@ -73,12 +76,29 @@ interface Waiting {
   readonly slot: 0 | 1;
 }
 
+/** The settings' kinds, in the order the side panel lists them (at the user's request: grouped by type). */
+export const SETTINGS_PAGES = ["sound", "graphics", "controls", "keys", "interface", "saving"] as const;
+export type SettingsPage = (typeof SETTINGS_PAGES)[number];
+export const PAGE_NAMES: Readonly<Record<SettingsPage, string>> = {
+  sound: "Sound",
+  graphics: "Graphics",
+  controls: "Controls",
+  keys: "Keys",
+  interface: "Interface",
+  saving: "Saving",
+};
+
+/** The page last looked at, this session: the panel opens where the player left it, on the title and in a world. */
+let lastPage: SettingsPage = "sound";
+
 export class SettingsPanel {
   readonly root: HTMLElement;
   private readonly sound: SoundPanel;
   private readonly keyList: HTMLElement;
   private readonly keyNote: HTMLElement;
   private readonly controls = new Map<string, HTMLInputElement | HTMLSelectElement>();
+  private readonly tabs = new Map<SettingsPage, HTMLButtonElement>();
+  private readonly pages = new Map<SettingsPage, HTMLElement>();
   private waiting: Waiting | null = null;
   private readonly listening = new AbortController();
   private readonly unsubscribe: () => void;
@@ -109,8 +129,10 @@ export class SettingsPanel {
       this.check("controls.scrollPans", "Trackpad: two fingers move the map, a pinch zooms (off: the wheel zooms)", s.controls.scrollPans, (v) => this.change("controls", { ...this.now.controls, scrollPans: v })),
       el("p", "settings-about", "On a touch screen, drag with one finger to move and pinch with two to zoom, in every view."),
     );
+    // ---- keys: a page of their own, the longest list here
+    const keys = this.section("Keys", "settings-keys-page");
     const keysHead = el("div", "settings-keys-head");
-    keysHead.append(el("h4", "settings-subhead", "Keys"));
+    keysHead.append(el("p", "settings-about", "Two keys for each action. Click one, then press the key you want."));
     const reset = el("button", "front-button settings-keys-reset", "Reset keys");
     reset.type = "button";
     reset.addEventListener("click", () => {
@@ -122,7 +144,7 @@ export class SettingsPanel {
     this.keyNote = el("p", "settings-key-note");
     this.keyNote.setAttribute("role", "status");
     this.keyList = el("table", "settings-keys");
-    controls.append(keysHead, this.keyNote, this.keyList);
+    keys.append(keysHead, this.keyNote, this.keyList);
     this.renderKeys();
     // While a key is awaited, the next key pressed is it - before the game or a menu hears it.
     window.addEventListener(
@@ -160,13 +182,70 @@ export class SettingsPanel {
     const last = deps.lastSaved?.() ?? null;
     if (last !== null) saving.append(el("p", "settings-last-saved", last));
 
-    this.root.append(this.sound.root, graphics, controls, ui, saving);
+    // A side panel of the settings' kinds, and one page shown at a time.
+    const nav = el("nav", "settings-nav");
+    nav.setAttribute("role", "tablist");
+    nav.setAttribute("aria-orientation", "vertical");
+    nav.setAttribute("aria-label", "Kinds of settings");
+    const body = el("div", "settings-pages");
+    const sections: Readonly<Record<SettingsPage, HTMLElement>> = { sound: this.sound.root, graphics, controls, keys, interface: ui, saving };
+    for (const page of SETTINGS_PAGES) {
+      const tab = el("button", "settings-tab", PAGE_NAMES[page]);
+      tab.type = "button";
+      tab.id = `settings-tab-${page}`;
+      tab.dataset["page"] = page;
+      tab.setAttribute("role", "tab");
+      tab.addEventListener("click", () => this.showPage(page));
+      nav.append(tab);
+      this.tabs.set(page, tab);
+      const section = sections[page];
+      section.classList.add("settings-page");
+      section.dataset["page"] = page;
+      section.setAttribute("role", "tabpanel");
+      section.setAttribute("aria-labelledby", tab.id);
+      body.append(section);
+      this.pages.set(page, section);
+    }
+    // Up and down move along the side panel, as a list of tabs does.
+    nav.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const at = SETTINGS_PAGES.indexOf(this.page);
+      const next = SETTINGS_PAGES[(at + (e.key === "ArrowDown" ? 1 : SETTINGS_PAGES.length - 1)) % SETTINGS_PAGES.length]!;
+      this.showPage(next);
+      this.tabs.get(next)?.focus();
+      e.preventDefault();
+    });
+    this.root.append(nav, body);
+    this.showPage(lastPage);
     // Changes made elsewhere (a reset, another panel) show here too.
     this.unsubscribe = deps.settings.onChange((next) => this.show(next));
   }
 
   private get now(): Settings {
     return this.deps.settings.current;
+  }
+
+  /** The page shown. */
+  get page(): SettingsPage {
+    return lastPage;
+  }
+
+  /** Show one kind of setting; the others wait behind their tabs. A key being awaited is let go. */
+  showPage(page: SettingsPage): void {
+    if (page !== "keys" && this.waiting !== null) {
+      this.wait(null);
+      this.keyNote.textContent = "";
+      this.renderKeys();
+    }
+    lastPage = page;
+    for (const p of SETTINGS_PAGES) {
+      const on = p === page;
+      this.pages.get(p)!.hidden = !on;
+      const tab = this.tabs.get(p)!;
+      tab.setAttribute("aria-selected", String(on));
+      tab.tabIndex = on ? 0 : -1;
+      tab.classList.toggle("on", on);
+    }
   }
 
   /** Take the panel down: its listeners go with it. */

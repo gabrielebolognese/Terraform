@@ -148,6 +148,7 @@ describe("the title: scores, achievements and new game plus", () => {
     const { app, root } = page(store);
     await app.start();
     // Before any victory there is no bonus to choose.
+    button(root, "Play").click();
     button(root, "New world").click();
     expect(root.querySelector<HTMLElement>(".new-world-bonus")!.hidden).toBe(true);
     button(root, "Back").click();
@@ -162,12 +163,14 @@ describe("the title: scores, achievements and new game plus", () => {
     expect(app.library.find(meta.id)!.victorySeen).toBe(true);
     await app.quitToTitle();
 
+    button(root, "Play").click();
     button(root, "Worlds").click();
     const row = [...root.querySelectorAll<HTMLElement>(".world-row")].find((r) => r.querySelector(".world-name")?.textContent === "Won")!;
     expect(row.querySelector(".world-score")!.textContent).toMatch(/^Score [\d,]+ - won in year 1,721 - \d+ achievements$/);
 
     // Deleted, the world's achievements stay the player's.
     await app.library.remove(meta.id);
+    button(root, "Back").click();
     button(root, "Back").click();
     button(root, "Achievements").click();
     const held = root.querySelector<HTMLElement>('[data-achievement="nobody_lost"]')!;
@@ -178,6 +181,7 @@ describe("the title: scores, achievements and new game plus", () => {
 
     // New game plus: the bonus chosen is the new world's tuning.
     button(root, "Back").click();
+    button(root, "Play").click();
     button(root, "New world").click();
     const bonus = root.querySelector<HTMLElement>(".new-world-bonus")!;
     expect(bonus.hidden).toBe(false);
@@ -190,6 +194,7 @@ describe("the title: scores, achievements and new game plus", () => {
     expect(made.tuning["ROVERS_PER_HQ"]).toBe(5);
     expect(made.tuning["NEW_GAME_PLUS_BONUS"]).toBe(2);
     await app.quitToTitle();
+    button(root, "Play").click();
     button(root, "Worlds").click();
     expect(root.querySelector(".world-bonus")!.textContent).toBe("New game plus: A bigger garage");
   });

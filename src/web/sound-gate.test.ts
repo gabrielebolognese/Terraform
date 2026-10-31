@@ -174,6 +174,7 @@ describe("the sound settings", () => {
     const app = new App({ root, store, now: () => Date.parse("2026-10-16T12:00:00Z"), randomSeed: () => 4242, launch: startGame, buildExample: () => ({ state: marsStart(7, BROWSER_TUNING), tuning: BROWSER_TUNING }), download: () => undefined, titleGlobe: false, sound });
     await app.start();
     expect(sound.musicPiece).toBe(PIECES[0]);
+    [...root.querySelectorAll("button")].find((b) => b.textContent === "Play")!.click();
     [...root.querySelectorAll("button")].find((b) => b.textContent === "New world")!.click();
     root.querySelector<HTMLFormElement>("form.new-world")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await wait(80);
@@ -196,6 +197,7 @@ describe("the sound settings", () => {
     const page = await title(store);
     await page.app.settings.setSound({ ...DEFAULT_SOUND, effects: 0.35 });
     page.sound.setVolumes(page.app.settings.sound);
+    [...page.root.querySelectorAll("button")].find((b) => b.textContent === "Play")!.click();
     [...page.root.querySelectorAll("button")].find((b) => b.textContent === "New world")!.click();
     page.root.querySelector<HTMLFormElement>("form.new-world")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await wait(80);

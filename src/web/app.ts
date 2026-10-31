@@ -6,7 +6,9 @@
  * over a slowly turning planet, and nothing is loaded until the player
  * chooses: Continue (the last world played), Worlds, New world, the Example
  * planet (look only), Settings (sound since Batch 35; the rest in Batch 36)
- * and Credits.
+ * and Credits. At the user's request the title is grouped as Minecraft's is:
+ * Play holds the worlds (Continue, New world, Worlds, the Example planet),
+ * and the title keeps Play, Achievements, Settings and Credits.
  *
  * Batch 35: the session's sound lives here, from the title on - the title's
  * music, the player's volumes, and a tick for every button.
@@ -16,7 +18,7 @@
  */
 
 import type { SimState, Tuning } from "../sim/index.js";
-import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS, GROUP_NAMES, NAME_MAX, NEUTRAL_ENV, PHASE_INFO, marsStart } from "../sim/index.js";
+import { ACHIEVEMENTS, NAME_MAX, NEUTRAL_ENV, PHASE_INFO, marsStart } from "../sim/index.js";
 import type { Phase } from "../sim/index.js";
 import { Globe } from "./globe.js";
 import type { GameHandle, GameOptions, GameHooks } from "./game.js";
@@ -26,6 +28,7 @@ import type { WorldMode, WorldPace } from "./game-tuning.js";
 import { BONUSES, BROWSER_TUNING, MODE_NAMES, PACE_NAMES, WORLD_MODES, WORLD_PACES, bonusById, fromRecord, worldTuning } from "./game-tuning.js";
 import { PlayerProfile } from "./profile.js";
 import { listWords } from "./ending-words.js";
+import { achievementMap } from "./achievement-map.js";
 import type { Clock, WorldMeta } from "./worlds.js";
 import { WorldLibrary, parseSeed, startState } from "./worlds.js";
 import { drawThumbnail, planetLook } from "./thumbnail.js";
@@ -67,7 +70,7 @@ function titleSound(sound: SoundEngine): void {
   sound.setAmbience({ ...SILENCE, wind: wind.level * ORBIT_HEARING.wind, windHz: wind.hz });
 }
 
-type View = "title" | "worlds" | "new" | "settings" | "credits" | "achievements" | "game";
+type View = "title" | "play" | "worlds" | "new" | "settings" | "credits" | "achievements" | "game";
 
 const MODE_ABOUT: Readonly<Record<WorldMode, string>> = {
   standard: "Today's game: earn what you build, unlock it as the planet changes.",
@@ -235,33 +238,58 @@ export class App {
     this.screen.dataset["view"] = view;
   }
 
+  /**
+   * The title, grouped as Minecraft's is (at the user's request): Play, which
+   * holds everything about worlds, then Achievements, and Settings beside
+   * Credits.
+   */
   showTitle(): void {
     this.showPlanet();
     titleSound(this.sound);
-    const last = this.library.last;
     const panel = el("section", "front-panel front-title");
     panel.append(el("h1", "front-logo", "Terraform"), el("p", "front-tagline", "Make Mars a living world."));
-    const nav = el("nav", "front-nav");
-    const cont = button(last === null ? "Continue" : `Continue - ${last.name}`, () => {
-      if (last !== null) void this.play(last.id);
-    });
-    cont.disabled = last === null;
-    cont.classList.add("primary");
-    nav.append(
-      cont,
-      button("Worlds", () => this.showWorlds()),
-      button("New world", () => this.showNewWorld()),
-      button("Achievements", () => this.showAchievements()),
-      button("Example planet", () => void this.playExample()),
-      button("Settings", () => this.showSettings()),
-      button("Credits", () => this.showCredits()),
-    );
+    const nav = el("nav", "front-nav front-grid");
+    const play = button("Play", () => this.showPlay(), "front-button primary front-wide");
+    const pair = el("div", "front-pair");
+    pair.append(button("Settings", () => this.showSettings()), button("Credits", () => this.showCredits()));
+    nav.append(play, button("Achievements", () => this.showAchievements(), "front-button front-wide"), el("div", "front-gap"), pair);
     panel.append(nav);
     this.render("title", panel);
   }
 
-  private back(): HTMLButtonElement {
-    return button("Back", () => this.showTitle(), "front-button front-back");
+  /**
+   * Play: the last world to continue, full width; New world and Worlds side by
+   * side under it; a button's height of space; the Example planet, narrower;
+   * and Back.
+   */
+  showPlay(): void {
+    this.showPlanet();
+    titleSound(this.sound);
+    const last = this.library.last;
+    const panel = el("section", "front-panel front-play");
+    panel.append(el("h2", "front-heading", "Play"));
+    const nav = el("nav", "front-nav front-grid");
+    const cont = button(last === null ? "Continue" : `Continue - ${last.name}`, () => {
+      if (last !== null) void this.play(last.id);
+    }, "front-button primary front-wide");
+    cont.disabled = last === null;
+    if (last === null) cont.title = "No world yet: make one with New world.";
+    const pair = el("div", "front-pair");
+    pair.append(button("New world", () => this.showNewWorld()), button("Worlds", () => this.showWorlds()));
+    nav.append(
+      cont,
+      pair,
+      el("div", "front-gap"),
+      button("Example planet", () => void this.playExample(), "front-button front-narrow"),
+      button("Back", () => this.showTitle(), "front-button front-back front-narrow"),
+    );
+    panel.append(nav);
+    this.render("play", panel);
+  }
+
+  /** Back to where the screen was opened from: the worlds' screens to Play, the rest to the title. */
+  private back(to: () => void = () => this.showTitle()): HTMLButtonElement {
+    return button("Back", to, "front-button front-back");
   }
 
   showWorlds(): void {
@@ -276,7 +304,7 @@ export class App {
       if (file !== undefined) void this.importFile(file);
       input.value = "";
     });
-    head.append(this.back(), el("h2", "", "Worlds"), button("Import a world", () => input.click()), input);
+    head.append(this.back(() => this.showPlay()), el("h2", "", "Worlds"), button("Import a world", () => input.click()), input);
     panel.append(head);
 
     const worlds = this.library.worlds;
@@ -398,7 +426,7 @@ export class App {
   showNewWorld(): void {
     const panel = el("section", "front-panel front-new");
     const head = el("header", "front-head");
-    head.append(this.back(), el("h2", "", "New world"));
+    head.append(this.back(() => this.showPlay()), el("h2", "", "New world"));
     const form = el("form", "new-world");
 
     const nameLabel = el("label", "front-field", "Name");
@@ -513,7 +541,7 @@ export class App {
     this.settingsPanel = null;
   }
 
-  /** Batch 39: every achievement - those the player has earned in any world, and where first - group by group. */
+  /** Batch 39: every achievement - those the player has earned in any world, and where first - group by group, on a map (at the user's request). */
   showAchievements(): void {
     const panel = el("section", "front-panel front-achievements");
     const head = el("header", "front-head");
@@ -522,24 +550,11 @@ export class App {
     const earned = ACHIEVEMENTS.filter((a) => record.achievements[a.id] !== undefined).length;
     const victories = record.victories.length;
     const won = victories === 0 ? "" : victories === 1 ? " - a world won" : " - " + victories + " worlds won";
-    panel.append(head, el("p", "achievements-total", earned + " of " + ACHIEVEMENTS.length + " earned" + won + ". Achievements are earned in Standard worlds."));
-    const t = BROWSER_ENDING;
-    for (const group of ACHIEVEMENT_GROUPS) {
-      const section = el("section", "achievement-group");
-      section.append(el("h3", "", GROUP_NAMES[group]));
-      const list = el("ul", "achievement-list");
-      for (const a of ACHIEVEMENTS.filter((x) => x.group === group)) {
-        const first = record.achievements[a.id];
-        const li = el("li", "achievement" + (first === undefined ? "" : " earned") + (a.rare ? " rare" : ""));
-        li.dataset["achievement"] = a.id;
-        li.append(el("span", "achievement-mark", first === undefined ? "Not yet" : "Earned"), el("strong", "achievement-title", a.title), el("span", "achievement-counts", a.counts(t)));
-        if (a.rare) li.append(el("span", "achievement-rare", "Rare"));
-        if (first !== undefined) li.append(el("span", "achievement-where", "First in " + first.name));
-        list.append(li);
-      }
-      section.append(list);
-      panel.append(section);
-    }
+    panel.append(
+      head,
+      el("p", "achievements-total", earned + " of " + ACHIEVEMENTS.length + " earned" + won + ". Achievements are earned in Standard worlds. Point at one to see what earns it."),
+      achievementMap(record, BROWSER_ENDING),
+    );
     this.render("achievements", panel);
   }
 
@@ -551,7 +566,7 @@ export class App {
       head,
       el("p", "", "Terraform - a planet-scale simulation of making Mars habitable."),
       el("p", "", "Made by Gabriele B., built with Claude."),
-      el("p", "", "Typeface: Lexend (SIL Open Font License). Everything else is drawn by the game itself."),
+      el("p", "", "Typefaces: Chakra Petch and VT323 (SIL Open Font License). Everything else is drawn by the game itself."),
       el("p", "", "Music and sound: made by the game itself as it plays, from tones and noise - no recordings."),
     );
     this.render("credits", panel);
@@ -712,22 +727,36 @@ export class App {
     const saved = el("p", "game-menu-saved", this.lastSavedWords() ?? "");
     const place = el("p", "game-menu-place", mayPersist ? this.deps.store.place : "");
     place.hidden = !mayPersist;
-    // Settings: every setting, opened under the button and closed again.
+    // Settings: every setting, in the menu's place (the panel widens for its side panel), and Back to the menu.
+    const main = el("div", "game-menu-main");
     let open: SettingsPanel | null = null;
+    const closeSettings = (): void => {
+      this.closeSettings();
+      open = null;
+      panel.querySelector(".game-menu-settings")?.remove();
+      panel.classList.remove("wide");
+      main.hidden = false;
+      settings.setAttribute("aria-expanded", "false");
+      settings.focus();
+    };
     const settings = button("Settings", () => {
       if (open !== null) {
-        this.closeSettings();
-        open = null;
-        settings.setAttribute("aria-expanded", "false");
+        closeSettings();
         return;
       }
       open = this.openSettings(() => this.lastSavedWords());
       this.settingsPanel = open;
-      settings.after(open.root);
+      const sub = el("div", "game-menu-settings");
+      const head = el("header", "front-head");
+      head.append(button("Back", closeSettings, "front-button front-back"), el("h2", "", "Settings"));
+      sub.append(head, open.root);
+      main.hidden = true;
+      panel.classList.add("wide");
+      panel.append(sub);
       settings.setAttribute("aria-expanded", "true");
     });
     settings.setAttribute("aria-expanded", "false");
-    panel.append(
+    main.append(
       el("h2", "", this.game.world?.name ?? "Example planet"),
       button("Resume", () => this.closeMenu(), "front-button primary"),
       save,
@@ -737,6 +766,7 @@ export class App {
       button(mayPersist ? "Save and quit to title" : "Quit to title", () => void this.quitToTitle()),
       status,
     );
+    panel.append(main);
     overlay.append(panel);
     this.deps.root.append(overlay);
     this.menu = overlay;

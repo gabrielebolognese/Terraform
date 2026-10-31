@@ -1,7 +1,7 @@
 # Controls
 
 The game is played with the mouse, a trackpad or a touch screen, and has keyboard shortcuts for
-the things you do most. Every key below can be changed in **Settings**, under **Controls**; this
+the things you do most. Every key below can be changed in **Settings**, under **Keys**; this
 page gives the keys as they come. See [Settings](settings.md#keys).
 
 ## Keyboard
@@ -113,5 +113,6 @@ Opening the game menu pauses the world; closing it goes back to the speed you ha
 saved, so the last button is just **Quit to title**.
 
 Under **Save** the menu says when the world was last saved and where your worlds are kept.
-**Settings** opens every setting under it - sound, graphics, controls, the interface and saving -
-and closes them again. The same settings are on the title screen. See [Settings](settings.md).
+**Settings** opens every setting in the menu's place - sound, graphics, controls, keys, the
+interface and saving, each in the list down the left - and **Back** returns to the menu. The same
+settings are on the title screen. See [Settings](settings.md).

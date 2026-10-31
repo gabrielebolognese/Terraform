@@ -1,22 +1,30 @@
 :root {
-  /* One dark-gray system. Surfaces step up in lightness; text steps down.
-     Colour is reserved for meaning: one calm accent, and green / amber / red
-     only where something is good, needs attention, or is wrong. */
-  --bg: #0e0f11;
-  --surface-solid: #16171a;
-  --surface: rgba(22, 23, 26, 0.84);
-  --surface-2: #1c1d21;
-  --surface-3: #25272c;
-  --line: #2d2f34;
-  --line-strong: #3a3d44;
-  --text: #ececee;
-  --text-2: #b3b5bb;
-  --text-3: #83868e;
-  --accent: #82b4ff;
-  --good: #7fd49a;
-  --warn: #e3b46e;
-  --warn-bg: #2a261f;
-  --bad: #e88b7c;
+  /* Retro terminal, cyberpunk edge (at the user's request): near-black navy
+     surfaces with hard square edges, one neon cyan accent, a magenta second
+     for display type, and green / amber / red only where something is good,
+     needs attention, or is wrong. Surfaces step up in lightness; text steps
+     down. Corners are square, shadows are hard, nothing is blurred. */
+  --bg: #06060c;
+  --surface-solid: #0b0b16;
+  --surface: rgba(9, 9, 20, 0.92);
+  --surface-2: #10101f;
+  --surface-3: #191930;
+  --line: #262646;
+  --line-strong: #3a3a66;
+  --text: #e7e9ff;
+  --text-2: #a9acd0;
+  --text-3: #7175a0;
+  --accent: #2ee6ff;
+  --accent-2: #ff3fa4;
+  --good: #3dff8f;
+  --warn: #ffc23d;
+  --warn-bg: #2a2410;
+  --bad: #ff5468;
+  --radius: 0;
+  --shadow: 5px 5px 0 rgba(0, 0, 0, 0.55);
+  --glow: 0 0 12px rgba(46, 230, 255, 0.35);
+  --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -3px 0 rgba(0, 0, 0, 0.45);
+  --font-display: "VT323", "Consolas", "Lucida Console", monospace;
   /* Legacy names, kept so no rule silently loses its colour. */
   --panel: var(--surface-solid);
   --panel-edge: var(--line);
@@ -25,7 +33,7 @@
   --rust-bright: var(--accent);
   --ice: #8fd3ff;
   --life: var(--good);
-  --font: "Lexend", Arial, Helvetica, sans-serif;
+  --font: "Chakra Petch", "Segoe UI", Arial, sans-serif;
 }
 
 * {
@@ -44,10 +52,15 @@ body {
   color: var(--text);
   font-family: var(--font);
   font-size: 14px;
-  font-weight: 350;
-  line-height: 1.55;
+  font-weight: 400;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  color: var(--bg);
+  background: var(--accent);
 }
 
 /* Numbers that update in place should not jitter sideways. */
@@ -80,7 +93,7 @@ body {
 
 .header {
   border: 1px solid var(--panel-edge);
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: linear-gradient(160deg, var(--surface-solid) 0%, var(--panel) 70%);
   padding: 20px 22px;
 }
@@ -143,7 +156,7 @@ body {
 .progress {
   flex: 1;
   height: 10px;
-  border-radius: 5px;
+  border-radius: var(--radius);
   background: var(--surface-2);
   overflow: hidden;
 }
@@ -176,7 +189,7 @@ body {
 
 .panel {
   border: 1px solid var(--panel-edge);
-  border-radius: 10px;
+  border-radius: var(--radius);
   background: var(--panel);
   padding: 16px 18px;
 }
@@ -207,17 +220,20 @@ body {
 button {
   font-family: inherit;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
+  letter-spacing: 0.02em;
   color: var(--text);
   background: var(--surface-3);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
+  box-shadow: var(--bevel);
   padding: 7px 13px;
   cursor: pointer;
   transition:
     background 120ms ease,
     border-color 120ms ease,
-    color 120ms ease;
+    color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 button:disabled {
@@ -230,8 +246,13 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-button:hover {
+button:hover:not(:disabled) {
   border-color: var(--rust);
+  box-shadow: var(--bevel), var(--glow);
+}
+
+button:active:not(:disabled) {
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.45);
 }
 
 .chip.on {
@@ -262,7 +283,7 @@ button:hover {
 
 .stat {
   background: var(--surface-solid);
-  border-radius: 7px;
+  border-radius: var(--radius);
   padding: 8px 10px;
 }
 
@@ -295,7 +316,7 @@ button:hover {
   display: block;
   width: 100%;
   background: var(--surface-solid);
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .spark-note {
@@ -390,7 +411,7 @@ button:hover {
   gap: 5px;
   padding: 10px 12px;
   background: var(--surface-solid);
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 
 .lever-head {
@@ -479,7 +500,7 @@ button:hover {
 
 .swatch-chip {
   height: 34px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   border: 1px solid var(--panel-edge);
   transition: background 180ms linear;
 }
@@ -519,7 +540,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-3);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -565,7 +586,7 @@ button:hover {
   padding: 20px;
   background: var(--surface-solid);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
 }
 
 .hud-header {
@@ -623,7 +644,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-3);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -647,7 +668,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-2);
   border-left: 3px solid var(--warn);
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 .hud-progress {
@@ -677,7 +698,7 @@ button:hover {
   position: relative;
   height: 9px;
   background: var(--surface-3);
-  border-radius: 5px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -689,7 +710,7 @@ button:hover {
   height: 100%;
   width: 0;
   background: linear-gradient(90deg, var(--accent), var(--accent));
-  border-radius: 5px;
+  border-radius: var(--radius);
   transition: width 120ms linear;
 }
 
@@ -731,7 +752,7 @@ button:hover {
   padding: 16px 18px;
   background: var(--surface-2);
   border: 1px solid var(--surface-3);
-  border-radius: 9px;
+  border-radius: var(--radius);
 }
 
 .hud-advice-eyebrow {
@@ -747,7 +768,7 @@ button:hover {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 2px 8px;
-  border-radius: 20px;
+  border-radius: var(--radius);
   border: 1px solid var(--line-strong);
   color: var(--text-2);
 }
@@ -802,7 +823,7 @@ button:hover {
   color: var(--surface-solid);
   background: var(--accent);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -926,7 +947,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-2);
   border-left: 3px solid var(--warn);
-  border-radius: 6px;
+  border-radius: var(--radius);
 }
 
 /* ======================================================================
@@ -976,8 +997,6 @@ button:hover {
   margin: 0;
   background: var(--surface);
   border-color: var(--line);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 .shell-hud .hud-header {
@@ -986,7 +1005,7 @@ button:hover {
 }
 
 .shell-hud .hud-phase-name {
-  font-size: 22px;
+  font-size: 36px;
 }
 
 .shell-instruments {
@@ -1000,8 +1019,6 @@ button:hover {
   z-index: 3;
   background: var(--surface);
   border-left: 1px solid var(--panel-edge);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   transform: translateX(100%);
   visibility: hidden;
   transition:
@@ -1039,10 +1056,8 @@ button:hover {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
   cursor: pointer;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 
 .instruments-toggle:hover {
@@ -1077,7 +1092,7 @@ button:hover {
   }
 
   .shell-hud .hud {
-    border-radius: 12px 12px 0 0;
+    border-radius: var(--radius);
   }
 
   .globe-hint {
@@ -1125,7 +1140,7 @@ button:hover {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-left: 3px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
   transition: border-color 160ms ease;
 }
 
@@ -1145,7 +1160,7 @@ button:hover {
   0%,
   40% {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(130, 180, 255, 0.18);
+    box-shadow: 0 0 0 3px rgba(46, 230, 255, 0.18);
   }
   100% {
     box-shadow: 0 0 0 0 transparent;
@@ -1188,7 +1203,7 @@ button:hover {
 }
 
 .hud-lever-more:hover:not(:disabled) {
-  background: rgba(130, 180, 255, 0.12);
+  background: rgba(46, 230, 255, 0.12);
 }
 
 .hud-lever-toggle {
@@ -1235,7 +1250,7 @@ button:hover {
   border-radius: 50%;
   background: var(--accent);
   border: 2px solid var(--bg);
-  box-shadow: 0 0 0 2px rgba(130, 180, 255, 0.35);
+  box-shadow: 0 0 0 2px rgba(46, 230, 255, 0.35);
 }
 
 .globe-marker[data-kind="outpost"] .globe-marker-pin {
@@ -1250,7 +1265,7 @@ button:hover {
   font-size: 12px;
   color: var(--text);
   background: rgba(14, 15, 17, 0.72);
-  border-radius: 6px;
+  border-radius: var(--radius);
   white-space: nowrap;
 }
 
@@ -1274,7 +1289,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 .hud-found-prompt[hidden] {
@@ -1378,9 +1393,7 @@ button:hover {
   padding: 18px 18px 20px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
@@ -1415,7 +1428,7 @@ button:hover {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-left: 3px solid var(--good);
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 .city-status[data-state="short"] {
@@ -1431,7 +1444,7 @@ button:hover {
   background: var(--warn-bg);
   border: 1px solid var(--line);
   border-left: 3px solid var(--warn);
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 .city-flood[hidden],
@@ -1571,9 +1584,7 @@ button:hover {
   overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
   /* The browser's own scrollbar is hidden: the bar below is ours. */
   scrollbar-width: none;
   pointer-events: auto;
@@ -1591,9 +1602,7 @@ button:hover {
   padding: 4px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
   pointer-events: auto;
   cursor: pointer;
 }
@@ -1606,7 +1615,7 @@ button:hover {
   height: 100%;
   min-width: 48px;
   background: var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
   cursor: grab;
   transition: background 120ms ease-out;
   touch-action: none;
@@ -1640,9 +1649,7 @@ button:hover {
   overflow-x: auto;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
 }
 
 .city-tools .city-card {
@@ -1660,7 +1667,7 @@ button:hover {
   text-align: left;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
   transition:
     transform 120ms ease-out,
     border-color 120ms ease-out,
@@ -1684,7 +1691,7 @@ button:hover {
   display: block;
   width: 112px;
   height: 80px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: radial-gradient(ellipse at 50% 60%, #2a2622 0%, #1c1d21 72%);
 }
 
@@ -1736,9 +1743,7 @@ button:hover {
   padding: 7px 12px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 10px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
   pointer-events: auto;
 }
 
@@ -1750,8 +1755,8 @@ button:hover {
   font-size: 12.5px;
   background: var(--surface-solid);
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   pointer-events: none;
 }
 
@@ -1794,7 +1799,7 @@ button:hover {
   padding: 14px;
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius);
 }
 
 .city-inspector[hidden] {
@@ -1862,9 +1867,7 @@ button:hover {
   padding: 12px 14px 12px 18px;
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
 }
 
 .travel-prompt[hidden] {
@@ -1914,9 +1917,7 @@ button:hover {
   font-size: 13px;
   background: var(--surface);
   border: 1px solid var(--accent);
-  border-radius: 12px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
 }
 
 .example-banner[hidden] {
@@ -1935,7 +1936,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-solid);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
   font: inherit;
   font-size: 13px;
 }
@@ -1998,7 +1999,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-solid);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
   font: inherit;
 }
 
@@ -2056,7 +2057,7 @@ button:hover {
   grid-area: stage;
   min-height: 0;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
   overflow: hidden;
   background: #14161a;
 }
@@ -2097,7 +2098,7 @@ button:hover {
   display: inline-block;
   width: 10px;
   height: 10px;
-  border-radius: 3px;
+  border-radius: var(--radius);
 }
 
 /* A chart key's sample of its line, in its pattern. */
@@ -2114,7 +2115,7 @@ button:hover {
   padding: 14px;
   background: var(--surface-solid);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius);
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
@@ -2138,7 +2139,7 @@ button:hover {
   padding: 8px;
   margin-bottom: 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius);
 }
 
 .planner-zone[aria-selected="true"] {
@@ -2191,7 +2192,7 @@ button:hover {
   width: 100%;
   height: auto;
   background: #121317;
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 .planner-chart-keys {
@@ -2300,9 +2301,7 @@ button:hover {
   padding: 14px 16px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius);
 }
 
 .worldmap-name {
@@ -2393,8 +2392,13 @@ button:hover {
   width: min(720px, 100%);
 }
 
-.front-screen[data-view="title"] {
-  width: min(380px, 100%);
+.front-screen[data-view="title"],
+.front-screen[data-view="play"] {
+  width: min(460px, 100%);
+}
+
+.front-screen[data-view="achievements"] {
+  width: min(1240px, 100%);
 }
 
 /* A world opening: the front door's buttons wait for it (Batch 40's review). */
@@ -2408,22 +2412,75 @@ button:hover {
   gap: 12px;
   padding: 24px;
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* The title and Play stand on the planet with no box round them, as Minecraft's menu stands on its world. */
+.front-title,
+.front-play {
+  align-items: stretch;
+  padding: 8px 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
 }
 
 .front-logo {
   margin: 0;
-  font-size: 34px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  font-family: var(--font-display);
+  font-size: clamp(52px, 15vw, 96px);
+  font-weight: 400;
+  line-height: 0.9;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow:
+    3px 0 0 var(--accent-2),
+    -3px 0 0 var(--accent),
+    0 0 24px rgba(46, 230, 255, 0.45),
+    0 6px 0 rgba(0, 0, 0, 0.6);
 }
 
 .front-tagline {
-  margin: 0 0 8px;
-  color: var(--text-2);
+  margin: 0 0 20px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.14em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--accent);
+  text-shadow: 2px 2px 0 #000;
+}
+
+/* A cursor blinking after the tagline: a terminal waiting for you. */
+.front-tagline::after {
+  content: "_";
+  margin-left: 2px;
+  animation: front-cursor 1.1s steps(1) infinite;
+}
+
+@keyframes front-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+
+.front-heading {
+  margin: 0 0 18px;
+  font-family: var(--font-display);
+  font-size: 48px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow:
+    2px 0 0 var(--accent-2),
+    -2px 0 0 var(--accent),
+    0 4px 0 rgba(0, 0, 0, 0.6);
 }
 
 .front-nav {
@@ -2432,40 +2489,97 @@ button:hover {
   gap: 8px;
 }
 
+/* The menu grid (at the user's request, after Minecraft's): a full-width button, two halves with a margin
+   between them, a button's height of space, and a narrower button centred. */
+.front-grid {
+  --front-button-h: 48px;
+  gap: 10px;
+}
+
+.front-grid > .front-button {
+  height: var(--front-button-h);
+}
+
+.front-wide {
+  width: 100%;
+}
+
+.front-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.front-pair > .front-button {
+  height: var(--front-button-h);
+}
+
+.front-gap {
+  height: calc(var(--front-button-h) - 10px);
+}
+
+.front-narrow {
+  align-self: center;
+  width: 70%;
+}
+
 .front-head {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
 
 .front-head h2 {
   flex: 1;
   margin: 0;
-  font-size: 20px;
-  font-weight: 450;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
 }
 
 .front-panel h2 {
   margin: 0;
-  font-weight: 450;
+  font-weight: 400;
 }
 
 .front-button,
 .game-menu-button {
   padding: 9px 16px;
   font: inherit;
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text);
-  background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  text-shadow: 2px 2px 0 #000;
+  background: linear-gradient(to bottom, var(--surface-3), var(--surface-2));
+  border: 2px solid var(--line-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--bevel), 0 0 0 1px #000;
   cursor: pointer;
   text-align: center;
 }
 
 .front-button:hover:not(:disabled),
 .game-menu-button:hover {
-  background: var(--surface-3);
+  color: var(--accent);
+  background: linear-gradient(to bottom, #20203c, var(--surface-3));
+  border-color: var(--accent);
+  box-shadow: var(--bevel), 0 0 0 1px #000, var(--glow);
+}
+
+.front-button:active:not(:disabled),
+.game-menu-button:active {
+  box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.5), 0 0 0 1px #000;
 }
 
 .front-button:focus-visible,
@@ -2476,17 +2590,37 @@ button:hover {
 }
 
 .front-button:disabled {
+  opacity: 0.85;
   color: var(--text-3);
+  text-shadow: none;
+  background: var(--surface-solid);
+  border-style: dashed;
+  box-shadow: none;
   cursor: default;
 }
 
-.front-button.primary {
+.front-button.primary:not(:disabled) {
   border-color: var(--accent);
+  box-shadow: var(--bevel), 0 0 0 1px #000, inset 0 0 14px rgba(46, 230, 255, 0.12);
 }
 
 .front-button.danger {
   color: var(--bad);
   border-color: var(--bad);
+}
+
+.front-button.danger:hover:not(:disabled) {
+  color: var(--bad);
+  border-color: var(--bad);
+  box-shadow: var(--bevel), 0 0 0 1px #000, 0 0 12px rgba(255, 84, 104, 0.35);
+}
+
+/* Small menu buttons beside a list (a world's own actions, Back in a header): the same look, a size down. */
+.front-head .front-button,
+.world-actions .front-button,
+.world-inline .front-button {
+  padding: 7px 12px;
+  font-size: 18px;
 }
 
 .front-link {
@@ -2532,7 +2666,7 @@ button:hover {
   padding: 12px;
   background: var(--surface-solid);
   border: 1px solid var(--line);
-  border-radius: 11px;
+  border-radius: var(--radius);
 }
 
 .world-thumb {
@@ -2578,7 +2712,7 @@ button:hover {
   font-size: 12px;
   color: var(--warn);
   background: var(--warn-bg);
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 
 .world-actions,
@@ -2592,7 +2726,7 @@ button:hover {
 .world-actions .front-button,
 .world-inline .front-button {
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: 18px;
 }
 
 .world-inline input,
@@ -2604,7 +2738,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-solid);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 
 .world-confirm label {
@@ -2654,7 +2788,7 @@ button:hover {
   padding: 8px 10px;
   color: var(--text);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -2684,8 +2818,6 @@ button:hover {
   z-index: 8;
   padding: 7px 14px;
   background: var(--surface);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 .game:has(.city:not([hidden])) .game-menu-button {
@@ -2750,7 +2882,7 @@ button:hover {
   font-size: 12px;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
 }
 
 .city-build[data-kind="building"] {
@@ -2768,7 +2900,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-3);
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -2800,7 +2932,7 @@ button:hover {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--accent);
-  border-radius: 999px;
+  border-radius: var(--radius);
 }
 
 .city-countdown[hidden] {
@@ -2820,10 +2952,8 @@ button:hover {
   padding: 12px 16px 14px;
   background: var(--surface);
   border: 1px solid var(--accent);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .game:has(.city:not([hidden])) .guide-card {
@@ -2855,7 +2985,7 @@ button:hover {
   color: var(--text-2);
   background: transparent;
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -2887,10 +3017,10 @@ button:hover {
 @keyframes guide-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(130, 180, 255, 0.55);
+    box-shadow: 0 0 0 0 rgba(46, 230, 255, 0.55);
   }
   50% {
-    box-shadow: 0 0 0 7px rgba(130, 180, 255, 0);
+    box-shadow: 0 0 0 7px rgba(46, 230, 255, 0);
   }
 }
 
@@ -2905,10 +3035,8 @@ button:hover {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius);
   cursor: pointer;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 .game:has(.city:not([hidden])) .objectives-toggle {
@@ -2937,8 +3065,8 @@ button:hover {
   padding: 12px 16px 16px;
   background: var(--surface-solid);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .game:has(.city:not([hidden])) .objectives-panel {
@@ -2976,7 +3104,7 @@ button:hover {
   padding: 10px 12px;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius);
 }
 
 .objective[data-done] {
@@ -3004,7 +3132,7 @@ button:hover {
   height: 6px;
   margin-top: 8px;
   background: var(--surface-3);
-  border-radius: 3px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -3020,7 +3148,7 @@ button:hover {
   color: var(--bg);
   background: var(--good);
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -3048,8 +3176,8 @@ button:hover {
   text-align: center;
   background: var(--surface-solid);
   border: 1px solid var(--warn);
-  border-radius: 14px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .milestone-card[hidden] {
@@ -3098,7 +3226,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-3);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -3165,10 +3293,8 @@ button:hover {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius);
   cursor: pointer;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 /* Something urgent: the button says so in words (its count and label) as well as in colour. */
@@ -3193,8 +3319,8 @@ button:hover {
   padding: 12px 16px 16px;
   background: var(--surface-solid);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .game:has(.city:not([hidden])) .alerts-panel {
@@ -3254,7 +3380,7 @@ button:hover {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-left: 3px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -3309,8 +3435,8 @@ button:hover {
 .alert-toast {
   position: relative;
   pointer-events: auto;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
-  border-radius: 8px;
+  box-shadow: var(--shadow);
+  border-radius: var(--radius);
   animation: alert-in 0.25s ease-out;
 }
 
@@ -3352,8 +3478,8 @@ button:hover {
   padding: 14px 18px 18px;
   background: var(--surface-solid);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .statistics-head h2 {
@@ -3366,7 +3492,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 
 .statistics-span,
@@ -3413,8 +3539,8 @@ button:hover {
   padding: 10px 14px 12px;
   background: var(--surface-solid);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .decision-card[data-waiting] {
@@ -3451,7 +3577,7 @@ button:hover {
   color: var(--text-2);
   background: transparent;
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -3514,7 +3640,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-3);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -3565,10 +3691,8 @@ button:hover {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius);
   cursor: pointer;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
 }
 
 /* An offer waiting: said in the label as well as the colour. */
@@ -3593,8 +3717,8 @@ button:hover {
   padding: 12px 16px 16px;
   background: var(--surface-solid);
   border: 1px solid var(--line-strong);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
 .game:has(.city:not([hidden])) .earth-panel {
@@ -3623,7 +3747,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -3679,7 +3803,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius);
 }
 
 .earth-amount {
@@ -3695,7 +3819,7 @@ button:hover {
   color: var(--bg);
   background: var(--accent);
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -3768,7 +3892,7 @@ button:hover {
   padding: 10px 12px;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius);
 }
 
 .earth-contract[data-offer] {
@@ -3800,7 +3924,7 @@ button:hover {
   height: 6px;
   margin-top: 8px;
   background: var(--surface-3);
-  border-radius: 3px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -3819,9 +3943,12 @@ button:hover {
 
 .sound-head {
   margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-2);
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .sound-row {
@@ -3858,51 +3985,153 @@ button:hover {
   color: var(--text-3);
 }
 
-.game-menu-panel .sound-panel {
-  padding: 10px 0 4px;
-  border-top: 1px solid var(--line);
-}
+/* ---- settings (Batch 36): every setting, on the Settings screen and in the menu; at the user's request
+   grouped by kind, a side panel on the left and one page at a time ---- */
 
 .front-settings {
-  width: min(460px, 100%);
-}
-
-/* ---- settings (Batch 36): every setting in one panel, on the Settings screen and in the menu ---- */
-
-.front-settings {
-  width: min(640px, 100%);
+  width: min(900px, 100%);
 }
 
 .settings-panel {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 0;
+  height: min(64vh, 620px);
+  border: 1px solid var(--line);
+  background: var(--surface-solid);
+}
+
+.settings-nav {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  max-height: min(70vh, 720px);
+  gap: 2px;
+  padding: 10px 0;
+  background: repeating-linear-gradient(to bottom, transparent 0 3px, rgba(46, 230, 255, 0.025) 3px 4px), var(--bg);
+  border-right: 1px solid var(--line);
+}
+
+.settings-tab {
+  position: relative;
+  padding: 10px 16px 10px 22px;
+  font-family: var(--font-display);
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+.settings-tab:hover:not(:disabled) {
+  color: var(--text);
+  background: var(--surface-2);
+  box-shadow: none;
+}
+
+.settings-tab.on {
+  color: var(--accent);
+  background: linear-gradient(to right, rgba(46, 230, 255, 0.14), transparent);
+}
+
+/* The page shown: a bar at its tab's edge, and an arrow, as well as the colour. */
+.settings-tab.on::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 4px;
+  background: var(--accent);
+  box-shadow: var(--glow);
+}
+
+.settings-tab.on::after {
+  content: ">";
+  position: absolute;
+  right: 12px;
+}
+
+.settings-pages {
+  min-height: 0;
   overflow-y: auto;
-  padding-right: 6px;
+  padding: 18px 22px;
 }
 
-.game-menu-panel:has(.settings-panel) {
-  width: min(640px, 100%);
+.settings-page[hidden] {
+  display: none;
 }
 
-.game-menu-panel .settings-panel {
-  padding: 10px 0 4px;
-  border-top: 1px solid var(--line);
+.game-menu-panel.wide {
+  width: min(900px, 100%);
+}
+
+/* A narrow screen: the kinds of setting run along the top, and the page has the width. */
+@media (max-width: 640px) {
+  .settings-panel {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    height: min(72vh, 620px);
+  }
+
+  .settings-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .settings-tab {
+    flex: none;
+    padding: 10px 14px 12px;
+  }
+
+  .settings-tab.on::before {
+    top: auto;
+    left: 6px;
+    right: 6px;
+    bottom: 0;
+    width: auto;
+    height: 3px;
+  }
+
+  .settings-tab.on::after {
+    content: none;
+  }
+
+  .settings-pages {
+    padding: 14px;
+  }
+
+  .settings-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.game-menu-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .settings-head,
 .settings-subhead {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-2);
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .settings-subhead {
@@ -3927,7 +4156,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-3);
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
+  border-radius: var(--radius);
   font: inherit;
 }
 
@@ -3950,6 +4179,13 @@ button:hover {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
+}
+
+.settings-keys-reset {
+  flex: none;
+  font-size: 18px;
+  white-space: nowrap;
 }
 
 .settings-keys {
@@ -3978,7 +4214,7 @@ button:hover {
   color: var(--text);
   background: var(--surface-3);
   border: 1px solid var(--line-strong);
-  border-radius: 5px;
+  border-radius: var(--radius);
   font: inherit;
   cursor: pointer;
 }
@@ -4067,7 +4303,7 @@ button:hover {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius);
   z-index: 40;
 }
 
@@ -4084,62 +4320,291 @@ button:hover {
   color: var(--text-2);
 }
 
-.achievement-group h3 {
-  margin: 14px 0 6px;
-  font-size: 13px;
+/* The achievements map (at the user's request): a start on the left, a lane per group running right, each
+   achievement a box joined to the one before. Earned is green with a tick, the rest grey with a lock. */
+.ach-map {
+  --ach-w: 184px;
+  --ach-h: 52px;
+  --ach-gap: 30px;
+  --ach-lane: 82px;
+  --ach-off: var(--line-strong);
+  --ach-on: var(--good);
+  position: relative;
+  overflow: auto;
+  max-height: calc(100vh - 230px);
+  margin: 0 -24px -24px;
+  padding: 8px 24px 24px;
+  background:
+    linear-gradient(rgba(46, 230, 255, 0.05) 1px, transparent 1px) 0 0 / 24px 24px,
+    linear-gradient(90deg, rgba(46, 230, 255, 0.05) 1px, transparent 1px) 0 0 / 24px 24px,
+    var(--bg);
+  border-top: 1px solid var(--line);
+}
+
+.ach-board {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: max-content;
+  padding: 0 140px 64px 0;
+}
+
+/* The start, and the line that runs down to every lane. */
+.ach-start {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 96px;
+  padding: 12px 8px 10px;
+  font-family: var(--font-display);
+  font-size: 20px;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--surface-2);
+  border: 2px solid var(--accent);
+  box-shadow: var(--shadow), var(--glow);
+}
+
+.ach-start .ach-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.ach-lanes {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-left: 44px;
+}
+
+/* The trunk: from the boxes of the first lane to those of the last; the start joins it halfway. A lane's
+   boxes sit at its foot, under its name, so the trunk's middle is below the lanes' middle by half the name's
+   height - and the start is moved down to meet it. */
+.ach-start {
+  margin-top: calc(var(--ach-lane) - var(--ach-h));
+}
+
+.ach-lanes::before {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: calc(var(--ach-lane) - var(--ach-h) / 2 - 1px);
+  bottom: calc(var(--ach-h) / 2 - 1px);
+  width: 2px;
+  background: var(--ach-off);
+}
+
+.ach-lanes::after {
+  content: "";
+  position: absolute;
+  left: -44px;
+  top: calc(50% + (var(--ach-lane) - var(--ach-h)) / 2 - 1px);
+  width: 22px;
+  height: 2px;
+  background: var(--ach-off);
+}
+
+.ach-lane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: var(--ach-lane);
+}
+
+.ach-lane-name {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  margin: 0 0 4px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-2);
 }
 
-.achievement-list {
-  list-style: none;
+.ach-lane-count {
+  color: var(--text-3);
+}
+
+.ach-list {
+  position: relative;
+  display: flex;
+  gap: var(--ach-gap);
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: 6px;
+  list-style: none;
 }
 
-.achievement {
-  display: grid;
-  grid-template-columns: 5.5em 1fr auto;
-  column-gap: 10px;
-  align-items: baseline;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+/* Each lane's branch off the trunk, into its first box. */
+.ach-list::before {
+  content: "";
+  position: absolute;
+  left: -22px;
+  top: calc(var(--ach-h) / 2 - 1px);
+  width: 22px;
+  height: 2px;
+  background: var(--ach-off);
 }
 
-.achievement-mark {
-  grid-row: span 2;
-  font-size: 11px;
-  letter-spacing: 0.06em;
+.ach-node {
+  position: relative;
+  flex: none;
+  width: var(--ach-w);
+  height: var(--ach-h);
+}
+
+/* The link from the box before: lit when this one is earned. */
+.ach-node + .ach-node::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: calc(var(--ach-h) / 2 - 1px);
+  width: var(--ach-gap);
+  height: 2px;
+  background: var(--ach-off);
+}
+
+.ach-node.earned + .ach-node.earned::before {
+  background: var(--ach-on);
+  box-shadow: 0 0 6px rgba(61, 255, 143, 0.5);
+}
+
+/* The box: its icon and title; the details open under them, over the lane below. */
+.ach-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto 0fr;
+  width: var(--ach-w);
+  min-height: var(--ach-h);
+  color: var(--text-3);
+  background: var(--surface-2);
+  border: 2px solid var(--ach-off);
+  box-shadow: var(--bevel), 3px 3px 0 rgba(0, 0, 0, 0.6);
+  cursor: default;
+  outline: none;
+  transition:
+    width 180ms steps(6),
+    grid-template-rows 220ms ease-out,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.ach-node.earned .ach-card {
+  color: var(--good);
+  background: linear-gradient(to bottom, rgba(61, 255, 143, 0.12), rgba(61, 255, 143, 0.03)), var(--surface-2);
+  border-color: var(--good);
+  box-shadow: var(--bevel), 3px 3px 0 rgba(0, 0, 0, 0.6), 0 0 10px rgba(61, 255, 143, 0.25);
+}
+
+.ach-node.rare .ach-card {
+  border-style: double;
+  border-width: 4px;
+}
+
+.ach-card:hover,
+.ach-card:focus-visible {
+  z-index: 5;
+  width: 300px;
+  grid-template-rows: auto 1fr;
+  border-color: var(--accent);
+  box-shadow: var(--bevel), var(--shadow), var(--glow);
+}
+
+.ach-node.earned .ach-card:hover,
+.ach-node.earned .ach-card:focus-visible {
+  border-color: var(--good);
+  box-shadow: var(--bevel), var(--shadow), 0 0 16px rgba(61, 255, 143, 0.45);
+}
+
+.ach-face {
+  display: grid;
+  grid-template-columns: 28px 1fr 14px;
+  align-items: center;
+  gap: 8px;
+  min-height: calc(var(--ach-h) - 4px);
+  padding: 4px 8px;
+}
+
+.ach-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+
+.ach-icon svg,
+.ach-badge svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.ach-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--text-2);
+}
+
+.ach-node.earned .ach-title {
+  color: var(--text);
+}
+
+.ach-badge {
+  align-self: start;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+
+.ach-detail {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ach-detail-inner {
+  padding: 0 10px 10px;
+  border-top: 1px dashed var(--line-strong);
+}
+
+.ach-detail p {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.ach-detail .ach-state {
+  font-family: var(--font-display);
+  font-size: 17px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-3);
 }
 
-.achievement.earned {
-  border-color: var(--good);
-}
-
-.achievement.earned .achievement-mark {
+.ach-node.earned .ach-detail .ach-state {
   color: var(--good);
 }
 
-.achievement-counts,
-.achievement-where {
-  grid-column: 2 / span 2;
-  font-size: 12px;
-  color: var(--text-2);
-}
-
-.achievement-rare {
-  grid-column: 3;
-  grid-row: 1;
-  font-size: 11px;
-  letter-spacing: 0.06em;
+.ach-detail .ach-rare {
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--warn);
+  color: var(--accent-2);
 }
 
 /* The victory: the panels step aside while the camera swings round the planet; then the card. */
@@ -4193,8 +4658,8 @@ button:hover {
   padding: 18px 22px;
   background: var(--surface-solid);
   border: 1px solid var(--good);
-  border-radius: 14px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
   animation: victory-rise 0.8s ease-out;
 }
 
@@ -4245,4 +4710,358 @@ button:hover {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ======================================================================
+   The retro layer (at the user's request): a CRT's scanlines over the
+   whole screen, square controls with a terminal's look, corner brackets on
+   the floating panels, and the display face on titles. Colour still only
+   repeats what words and marks already say.
+   ====================================================================== */
+
+/* Scanlines and a faint vignette over everything, the planet and the city too. They take no clicks. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0) 0 2px, rgba(0, 0, 0, 0.16) 2px 3px),
+    radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 62%, rgba(0, 0, 0, 0.38) 100%);
+}
+
+:root[data-contrast="high"] body::after {
+  display: none;
+}
+
+/* Titles in the display face, in capitals. */
+.panel-title,
+.settings-key-group th {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Inputs, lists and sliders: square, dark, lit cyan when in use. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+select,
+textarea {
+  font-family: var(--font);
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.5), var(--glow);
+}
+
+select option {
+  color: var(--text);
+  background: var(--surface-solid);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.5);
+  cursor: pointer;
+}
+
+input[type="radio"] {
+  border-radius: 50%;
+}
+
+/* Checked: a mark inside - a filled square, a dot - not only a colour. */
+input[type="checkbox"]::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  transform: scale(0);
+  transition: transform 80ms steps(2);
+}
+
+input[type="radio"]::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  transition: transform 80ms steps(2);
+}
+
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  border-color: var(--accent);
+}
+
+input[type="checkbox"]:checked::before,
+input[type="radio"]:checked::before {
+  transform: scale(1);
+}
+
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Sliders: a track of segments and a square thumb. */
+input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 18px;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 8px;
+  background: repeating-linear-gradient(90deg, var(--surface-3) 0 6px, var(--bg) 6px 8px);
+  border: 1px solid var(--line-strong);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 8px;
+  background: repeating-linear-gradient(90deg, var(--surface-3) 0 6px, var(--bg) 6px 8px);
+  border: 1px solid var(--line-strong);
+}
+
+input[type="range"]::-moz-range-progress {
+  height: 8px;
+  background: var(--accent);
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 18px;
+  margin-top: -6px;
+  background: var(--accent);
+  border: 2px solid #000;
+  box-shadow: var(--glow);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 10px;
+  height: 16px;
+  background: var(--accent);
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow: var(--glow);
+}
+
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Scrollbars: thin and square, a cyan thumb on a dark rail. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border: 2px solid var(--bg);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* Corner brackets on the panels that float over the world: an instrument's frame. Drawn as backgrounds,
+   so they never take a pseudo-element a panel already uses. */
+.front-panel:not(.front-title):not(.front-play),
+.game-menu-panel {
+  background:
+    linear-gradient(var(--accent), var(--accent)) top left / 14px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) top left / 2px 14px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) top right / 14px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) top right / 2px 14px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) bottom left / 14px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) bottom left / 2px 14px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) bottom right / 14px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) bottom right / 2px 14px no-repeat,
+    var(--surface);
+}
+
+:root[data-contrast="high"] .front-panel,
+:root[data-contrast="high"] .game-menu-panel {
+  background: #000;
+}
+
+.front-panel > p,
+.front-about,
+.world-facts,
+.world-when {
+  letter-spacing: 0.01em;
+}
+
+/* In a world: the panels' names in the display face, the eyebrows over them in its small capitals, and the
+   buttons along the edges of the screen in it too, so the whole game reads as one terminal. */
+.hud-phase-name,
+.hud-advice-title,
+.city-title,
+.earth-title,
+.worldmap-name,
+.guide-title,
+.milestone-title,
+.decision-title,
+.city-inspector-name {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.hud-phase-name {
+  font-size: 40px;
+  text-shadow:
+    1px 0 0 var(--accent-2),
+    -1px 0 0 var(--accent),
+    0 3px 0 rgba(0, 0, 0, 0.6);
+}
+
+.hud-advice-state {
+  white-space: nowrap;
+}
+
+/* The menu in a world: its buttons in a column, under the world's name in the display face. */
+.game-menu-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.game-menu-main[hidden] {
+  display: none;
+}
+
+.game-menu-main > h2,
+.statistics-head h2 {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.hud-advice-title,
+.milestone-title,
+.city-title {
+  font-size: 28px;
+}
+
+.guide-title,
+.worldmap-name,
+.earth-title,
+.city-inspector-name,
+.decision-title {
+  font-size: 24px;
+}
+
+.hud-phase-index,
+.hud-section-title,
+.hud-advice-eyebrow,
+.city-section-title,
+.earth-heading,
+.alerts-section,
+.planner-subtitle,
+.guide-progress {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.instruments-toggle,
+.statistics-toggle,
+.alerts-toggle,
+.earth-toggle,
+.objectives-toggle,
+.game-menu-button {
+  padding: 6px 14px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-shadow: 2px 2px 0 #000;
+  background: linear-gradient(to bottom, var(--surface-3), var(--surface-2));
+  border: 2px solid var(--line-strong);
+  box-shadow: var(--bevel), 0 0 0 1px #000;
+}
+
+/* The HUD and the cards over the planet: an instrument's corner brackets, like the menus'. */
+.hud,
+.decision-card {
+  background:
+    linear-gradient(var(--accent), var(--accent)) top left / 12px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) top left / 2px 12px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) top right / 12px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) top right / 2px 12px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) bottom left / 12px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) bottom left / 2px 12px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) bottom right / 12px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) bottom right / 2px 12px no-repeat,
+    var(--surface-solid);
+}
+
+:root[data-contrast="high"] .hud,
+:root[data-contrast="high"] .decision-card {
+  background: #000;
+}
+
+.guide-card,
+.milestone-card,
+.decision-card,
+.objectives-panel,
+.earth-panel,
+.city-panel {
+  box-shadow: var(--shadow);
 }

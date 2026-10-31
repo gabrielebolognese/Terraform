@@ -7,7 +7,8 @@ itself. Every asset added to the game is listed here with its licence (Batch 35'
 
 | Asset | Where it is used | Author | Licence | Source |
 |---|---|---|---|---|
-| Lexend (typeface) | All the game's text | The Lexend Project (Bonnie Shaver-Troup, Thomas Jockin and contributors) | SIL Open Font License 1.1 | Google Fonts, loaded by `index.html` |
+| Chakra Petch (typeface) | The game's text | Cadson Demak | SIL Open Font License 1.1 | Google Fonts, loaded by `index.html` |
+| VT323 (typeface) | Titles, menu buttons and labels | Peter Hull | SIL Open Font License 1.1 | Google Fonts, loaded by `index.html` |
 
 No other third-party asset ships with the game: no images, no recordings, no music files, no
 sound samples.

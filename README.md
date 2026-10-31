@@ -69,6 +69,7 @@ that state.
 | [`docs/balance/detail-pass-rover-post.md`](docs/balance/detail-pass-rover-post.md) | Four times the hard-rock clusters, the Rover Post (one more rover per 100 people), and the connective tools moved to the top right. |
 | [`docs/balance/detail-pass-claims.md`](docs/balance/detail-pass-claims.md) | Founding ground three times larger, and claiming land as a city grows: the frame, the save (v9), and the view kept fast at the new sizes. |
 | [`docs/balance/detail-pass-open-world.md`](docs/balance/detail-pass-open-world.md) | The open world round every city: mountains, canyons, craters and caves; smooth ground, foundations on slopes, and ground that greens with the biosphere. |
+| [`docs/balance/detail-pass-menus-look.md`](docs/balance/detail-pass-menus-look.md) | Menus with less in them, grouped as Minecraft's (Play holds the worlds), the 30 achievements as a connected map with their own pixel-art icons, the settings by kind behind a side panel, and a retro, cyberpunk look across the whole game. |
 | [`docs/frames/contact-sheet.png`](docs/frames/contact-sheet.png) | The whole visual arc, twelve frames at fixed progress values. |
 
 ## Status
@@ -171,7 +172,7 @@ objective - are crossings seen between two looks at the state (the first look ta
 placed by where they happen in the city view. The sound reads the state and never writes it: a run
 heard and a run not are the same to the bit. The volumes are the player's, kept beside the worlds
 list, and set on the title's **Settings** and the world menu's. The licences are in
-[`docs/credits.md`](docs/credits.md): the font's, and the game's own for every sound.
+[`docs/credits.md`](docs/credits.md): the fonts', and the game's own for every sound.
 
 **Settings, controls and accessibility** (Batch 36). Every setting in one panel, on the title and
 in the world menu, kept per player in an IndexedDB store of its own (Batch 35's sound record moved

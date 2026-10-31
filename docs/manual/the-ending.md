@@ -61,8 +61,12 @@ There are 30, each earned the moment the world shows it, and none can be earned 
 minute. When one is earned a card says so, with its chime. Those marked **rare** reward how you
 won rather than how long you played.
 
-**Achievements** on the title screen lists all 30, marked **Earned** or **Not yet**, with the world
-each was first earned in. They are yours, not a world's: deleting a world does not take back what
+**Achievements** on the title screen shows all 30 as a map: a lane for each group below, running
+left to right from the landing, each achievement a box with its picture and name. The ones you
+have earned are lit green with a tick; the rest are grey with a lock. Point at a box, or move to it
+with **Tab**, and it opens to say what earns it, whether you have earned it and the world it was
+first earned in. The rare ones have a double edge. Turn the mouse wheel over the map to move
+along it. They are yours, not a world's: deleting a world does not take back what
 you earned in it. They are kept by this browser, like your settings.
 
 **The planet**

@@ -739,10 +739,10 @@ export class CityScreen {
     const y = size.h / 2;
     ctx.fillStyle = "rgba(255,255,255,0.12)";
     ctx.fillRect(x, y, w, 6);
-    ctx.fillStyle = "rgb(130,180,255)";
+    ctx.fillStyle = "rgb(46,230,255)";
     ctx.fillRect(x, y, w * fraction, 6);
     ctx.fillStyle = "rgb(236,236,238)";
-    ctx.font = "15px Lexend, Arial, sans-serif";
+    ctx.font = "22px VT323, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.fillText(`Surveying the ground - ${Math.round(fraction * 100)}%`, size.w / 2, y - 14);
   }

@@ -16,7 +16,7 @@ This manual describes the game as it is today. What changed in each update is in
 
 | Page | What it covers |
 |---|---|
-| [Getting started](getting-started.md) | The title screen, making your first world, and your first half hour |
+| [Getting started](getting-started.md) | The title screen and Play, making your first world, and your first half hour |
 | [The planet](the-planet.md) | The view from orbit: phases, the machines you order, credits, the goal |
 | [Goals](goals.md) | The guide through your first steps, the objectives and their rewards, and milestones |
 | [Alerts and statistics](alerts-and-statistics.md) | What needs you and where, pop-up messages, the Alerts button, the charts of your planet and cities, and each city at a glance |
@@ -26,7 +26,7 @@ This manual describes the game as it is today. What changed in each update is in
 | [Earth](earth.md) | Launch windows, buying from and selling to Earth, prices, contracts and your reputation |
 | [Buildings](buildings.md) | Every structure: what it costs, what it does, how long it takes |
 | [Controls](controls.md) | Every keyboard shortcut, the mouse, a trackpad and touch, and game speed in every view |
-| [Settings](settings.md) | Sound, graphics, controls and keys, the interface (size, colour-blind palettes, reduced motion, high contrast, pop-ups) and saving |
+| [Settings](settings.md) | Sound, graphics, controls, keys, the interface (size, colour-blind palettes, reduced motion, high contrast, pop-ups) and saving, each a page of its own |
 | [Sound and music](sound.md) | The music for each phase, the wind, rain, sea and machinery, every sound effect, and the volume settings |
 | [Winning: victory, score and achievements](the-ending.md) | How a world is won and what the victory shows, each world's score, the 30 achievements, and new game plus |
 | [Worlds and saving](worlds-and-saving.md) | Keeping several worlds, saving, backups, and what happens while you are away |
@@ -34,7 +34,7 @@ This manual describes the game as it is today. What changed in each update is in
 
 ## The game in one minute
 
-1. **From the title screen, choose New world**, give it a name, and press **Create world**.
+1. **From the title screen, choose Play, then New world**, give it a name, and press **Create world**.
 2. **You start in orbit**, looking at a bare red Mars. In a Standard world, a card at the top of
    the screen guides your first steps, and **Objectives** holds goals with rewards. The panel on
    the left tells you what the planet needs next. Order an **Orbital mirror array** to start

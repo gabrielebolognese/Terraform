@@ -596,7 +596,7 @@ ${def.caution}`;
       view.shieldStrength > 0 ? `magnetic shield at ${(view.shieldStrength * 100).toFixed(0)}%` : "";
 
     this.sparkT.draw(rings.T, { lo: T_AXIS_LO, hi: T_AXIS_HI, log: false, colour: "#e3b46e" });
-    this.sparkP.draw(rings.P, { lo: P_AXIS_LO, hi: P_AXIS_HI, log: true, colour: "#82b4ff" });
+    this.sparkP.draw(rings.P, { lo: P_AXIS_LO, hi: P_AXIS_HI, log: true, colour: "#2ee6ff" });
     this.sparkProgress.draw(rings.progress, { lo: 0, hi: 1, log: false, colour: "#7fd49a" });
   }
 

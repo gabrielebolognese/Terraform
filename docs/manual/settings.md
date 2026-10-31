@@ -1,9 +1,13 @@
 # Settings
 
-**Settings** on the title screen, or **Menu** then **Settings** in a world, opens every setting in
-one panel: **Sound**, **Graphics**, **Controls**, **Interface** and **Saving**. A change works at
-once - you hear it, see it or feel it straight away - and nothing you set here changes your world:
-the planet and your cities play exactly the same whatever you choose.
+**Settings** on the title screen, or **Menu** then **Settings** in a world, opens the settings.
+They are grouped by kind in a list down the left: **Sound**, **Graphics**, **Controls**, **Keys**,
+**Interface** and **Saving**. Click one, or move along the list with the up and down arrow keys, to
+see its settings on the right. The settings open where you left them last time. In a world's menu
+the settings take the menu's place; **Back** returns to the menu.
+
+A change works at once - you hear it, see it or feel it straight away - and nothing you set here
+changes your world: the planet and your cities play exactly the same whatever you choose.
 
 Your settings are yours, not a world's. This browser keeps them for every world you play, apart
 from the worlds themselves: they are not in a world's save or its exported file, and deleting a
@@ -34,14 +38,15 @@ A volume for everything together, the music, the ambience, the effects and the i
 A trackpad's pinch always zooms, whatever these say. On a touch screen, one finger does what the
 mouse does, and a pinch with two zooms, in every view.
 
-### Keys
+## Keys
 
 Every keyboard shortcut is listed under **Keys**, two keys to an action. To change one, click the
 key and press the new one: any key counts, **Esc** too, and **Ctrl**, **Alt** and **Shift** can be
 part of it. **Cancel** leaves it as it was; **Clear** leaves that slot empty. A key already used by
 another action is swapped: that action takes the old key, and the panel says so. **Reset keys** puts
 every key back. Keys are named by where they sit on the keyboard, so W, A, S and D are the same
-four keys whatever your keyboard's layout. See [Controls](controls.md#keyboard) for the list.
+four keys whatever your keyboard's layout. If you leave the **Keys** page while it waits for a key,
+it stops waiting and the key stays as it was. See [Controls](controls.md#keyboard) for the list.
 
 ## Interface
 
