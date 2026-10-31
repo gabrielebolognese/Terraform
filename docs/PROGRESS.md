@@ -2451,3 +2451,38 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     under load); `npx vitest run --maxWorkers=2 --minWorkers=1`: 135 files, 1,626 tests, all passed
     (495 s; the metropolis opening test and the golden frames among them).
   - review request: GAME_PLAN.md docs/PROGRESS.md docs/balance/batch40-playtest.md src/web/app.test.ts
+- review 3: accepted
+  Review 2's problem is fixed. Both catch-up tests in `src/web/app.test.ts` (`:101`, the progress
+  notice, and `:121`, one world at a time) now take `CATCH_UP_TIMEOUT`, 15 s (`:98`), with the
+  measurements beside it. That matches the page's other heavy tests (`alert-centre.test.ts:251`
+  and `decisions.test.ts:251` at 15 s, `sound-gate.test.ts:364` at 30 s). The file's cleanup
+  (`:28-35`) now quits every App through `quitToTitle`. That call queues behind any world still
+  opening (`src/web/app.ts:181-186`, `:754-766`) and does nothing when no game is on the page, so
+  a test out of time leaves no catch-up or launch running into the next. The fix round touched only
+  `app.test.ts` and the docs: no source, no assertion, no decision, no save change, no tuning
+  constant.
+
+  Checked in this round:
+  - The full suite, `npx vitest run --maxWorkers=2 --minWorkers=1`: 135 files, 1,626 tests, all
+    passed (507 s). The two catch-up tests took 1,078 and 575 ms. The metropolis opening test
+    (`city-open.test.ts`) and the golden frames passed. Typecheck, `build` and `build:web` are green
+    (709.97 kB JS, 239.66 kB gzip, 54.98 kB CSS, as recorded).
+  - Two injections, one at a time, each file restored from a copy and compared, `git status` clean
+    after each (only the untracked `docs/AUTO_BATCH_SETUP.md`):
+    - 16, the library's catch-up never handing the page back (`src/web/worlds.ts`, the slice check
+      made false): `old-saves.test.ts` failed "the page ran between slices: expected 0 to be
+      greater than 0", the note's message;
+    - 14, steep ground always "send a rover to break the crag" (`tooSteep`,
+      `src/sim/micro/settlement.ts`): `drive.test.ts` failed, the corridor's reason not matching
+      "level the ground first".
+  - Three manual statements match the code:
+    - "Catching up on the time you were away: 34%" is the notice `playNow` writes
+      (`src/web/app.ts:572`) and clears when done;
+    - "Surveying the ground" is the city screen's status while a metropolis first opens
+      (`src/web/city.ts:723`);
+    - a failed save "tries again at the next autosave, and still warns you": `due` counts from when
+      a save was asked for (`src/web/session.ts:132-133`), and the failure count drives "Saving
+      failed - progress may not survive a reload." (`src/web/app.ts:660`).
+  - The note's what went wrong 11 records the cost and the measurements. GAME_PLAN's Batch 40
+    "What changed" has review 2's fix, and its row and README's row are in place. Update 40 and the
+    current known issues are as review 2 found them.
