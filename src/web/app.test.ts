@@ -26,14 +26,13 @@ let mounted: HTMLElement | null = null;
 let apps: App[] = [];
 
 afterEach(async () => {
-  // Leave no world running into the next test.
-  for (const a of apps) {
-    if (a.currentView === "game") await a.quitToTitle();
-  }
+  // Leave no world running into the next test. The quit queues behind any world still opening (a test
+  // out of time mid catch-up), so that world is waited for and then quit, not left to launch unseen.
+  for (const a of apps) await a.quitToTitle();
   apps = [];
   mounted?.remove();
   mounted = null;
-});
+}, 15_000);
 
 function page(store = new MemorySaveStore(true), launch: typeof startGame = startGame): { app: App; root: HTMLElement; store: MemorySaveStore; downloads: string[] } {
   const root = document.createElement("div");
@@ -90,6 +89,14 @@ function notice(root: ParentNode): string {
   return root.querySelector(".front-notice")?.textContent ?? "";
 }
 
+/**
+ * The two tests that catch up a ten-hour absence through the page. Measured (Batch 40's review 2): the
+ * progress test 0.79-0.84 s alone, 2.3-4.0 s under twenty busy processes, 5.04 s in a full run beside another
+ * project's suite, which vitest's 5 s default failed; the one-world test 0.40-0.43 s, 1.2-2.2 s, 5.08 s.
+ * 15 s, like the page's other heavy tests, is three times the worst.
+ */
+const CATCH_UP_TIMEOUT = 15_000;
+
 describe("the front door, through the real components", () => {
   it("says how far it has got while a world catches up on a long absence, then plays it (Batch 40)", async () => {
     // A world an earlier update saved (the v20 test file), its save written ten hours before this page's clock.
@@ -109,7 +116,7 @@ describe("the front door, through the real components", () => {
     expect(said.some((t) => /^Catching up on the time you were away: \d+%$/.test(t)), said.join(" | ")).toBe(true);
     expect(notice(root), "cleared once it is done").toBe("");
     expect(app.currentView).toBe("game");
-  });
+  }, CATCH_UP_TIMEOUT);
 
   it("opens one world at a time: Play clicked again while a world catches up starts no second game (Batch 40's review)", async () => {
     // Batch 40 hands the page back while a long absence is caught up; a second Play then launched the world
@@ -144,7 +151,7 @@ describe("the front door, through the real components", () => {
     expect(launched, "games launched").toBe(1);
     expect(held, "the front door's actions are held while a world opens").toBe(true);
     expect(screen.hasAttribute("inert"), "released once the world is open").toBe(false);
-  });
+  }, CATCH_UP_TIMEOUT);
 
   it("a New world submitted twice makes one world and opens it once (Batch 40's review)", async () => {
     let launched = 0;
