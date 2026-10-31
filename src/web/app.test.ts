@@ -97,6 +97,82 @@ function notice(root: ParentNode): string {
  */
 const CATCH_UP_TIMEOUT = 15_000;
 
+describe("the title and Play, grouped as Minecraft's (at the user's request)", () => {
+  /** A screen's buttons and spacers in order, each with its role in the grid. */
+  const layout = (root: ParentNode, sel: string): string[] =>
+    [...root.querySelectorAll(`${sel} .front-grid > *`)].map((n) => {
+      if (n.classList.contains("front-gap")) return "(gap)";
+      if (n.classList.contains("front-pair")) return `[${[...n.children].map((b) => b.textContent).join(" | ")}]`;
+      const width = n.classList.contains("front-wide") ? "wide" : n.classList.contains("front-narrow") ? "70%" : "?";
+      return `${n.textContent} (${width})`;
+    });
+
+  it("the title holds Play and Achievements, a space, then Settings beside Credits; Play holds the worlds", async () => {
+    const store = new MemorySaveStore(true);
+    const first = page(store);
+    await first.app.start();
+    expect(layout(first.root, ".front-title")).toEqual(["Play (wide)", "Achievements (wide)", "(gap)", "[Settings | Credits]"]);
+    buttonNamed(first.root, "Play").click();
+    expect(first.app.currentView).toBe("play");
+    expect(layout(first.root, ".front-play")).toEqual(["Continue (wide)", "[New world | Worlds]", "(gap)", "Example planet (70%)", "Back (70%)"]);
+    expect(buttonNamed(first.root, "Continue").disabled, "nothing to continue yet").toBe(true);
+    buttonNamed(first.root, "Back").click();
+    expect(first.app.currentView).toBe("title");
+    // With a world, Continue names it and is the first thing in Play.
+    await first.app.library.create({ name: "Ares", seed: 1, mode: "standard", pace: "standard" });
+    await first.app.library.markLast(first.app.library.worlds[0]!.id);
+    first.root.remove();
+    const again = page(store);
+    await again.app.start();
+    buttonNamed(again.root, "Play").click();
+    expect(layout(again.root, ".front-play")[0]).toBe("Continue - Ares (wide)");
+    expect(buttonNamed(again.root, "Continue - Ares").disabled).toBe(false);
+  });
+
+  it("Back from Worlds and from New world goes to Play, where they were opened; Back from Play to the title", async () => {
+    const { app, root } = page();
+    await app.start();
+    buttonNamed(root, "Play").click();
+    buttonNamed(root, "Worlds").click();
+    expect(app.currentView).toBe("worlds");
+    buttonNamed(root, "Back").click();
+    expect(app.currentView).toBe("play");
+    buttonNamed(root, "New world").click();
+    expect(app.currentView).toBe("new");
+    buttonNamed(root, "Back").click();
+    expect(app.currentView).toBe("play");
+    buttonNamed(root, "Back").click();
+    expect(app.currentView).toBe("title");
+    // Achievements, Settings and Credits are the title's, and go back to it.
+    for (const name of ["Achievements", "Settings", "Credits"]) {
+      buttonNamed(root, name).click();
+      expect(app.currentView, name).not.toBe("title");
+      buttonNamed(root, "Back").click();
+      expect(app.currentView, `back from ${name}`).toBe("title");
+    }
+  });
+
+  it("lays the grid out as asked: two halves side by side, the narrow buttons 70% wide and centred", async () => {
+    const style = document.createElement("style");
+    style.textContent = readFileSync("src/web/style.css", "utf8");
+    document.head.append(style);
+    try {
+      const { app, root } = page();
+      await app.start();
+      buttonNamed(root, "Play").click();
+      const pair = getComputedStyle(root.querySelector(".front-play .front-pair")!);
+      expect(pair.display).toBe("grid");
+      expect(pair.gridTemplateColumns).toBe("1fr 1fr");
+      const narrow = getComputedStyle(buttonNamed(root, "Example planet"));
+      expect(narrow.width).toBe("70%");
+      expect(narrow.alignSelf).toBe("center");
+      expect(getComputedStyle(root.querySelector(".front-play .front-gap")!).height, "a button's height, less the gaps either side").toMatch(/calc\(|38px/);
+    } finally {
+      style.remove();
+    }
+  });
+});
+
 describe("the front door, through the real components", () => {
   it("says how far it has got while a world catches up on a long absence, then plays it (Batch 40)", async () => {
     // A world an earlier update saved (the v20 test file), its save written ten hours before this page's clock.
@@ -106,6 +182,7 @@ describe("the front door, through the real components", () => {
     store.putRaw(old.slot, { ...(JSON.parse(old.save) as object), last_saved_real: new Date(T0 - 10 * 3600 * 1000).toISOString() });
     const { app, root } = page(store);
     await app.start();
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "Worlds").click();
     const said: string[] = [];
     const watch = new MutationObserver(() => said.push(notice(root)));
@@ -131,6 +208,7 @@ describe("the front door, through the real components", () => {
       return startGame(...args);
     });
     await app.start();
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "Worlds").click();
     const name = old.index.worlds[0]!.name;
     buttonNamed(row(root, name), "Play").click();
@@ -160,6 +238,7 @@ describe("the front door, through the real components", () => {
       return startGame(...args);
     });
     await app.start();
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "New world").click();
     const form = root.querySelector<HTMLFormElement>(".new-world")!;
     submit(form);
@@ -174,6 +253,7 @@ describe("the front door, through the real components", () => {
     const { app, root, store } = page();
     await app.start();
     expect(app.currentView).toBe("title");
+    buttonNamed(root, "Play").click();
     expect(buttonNamed(root, "Continue").disabled, "nothing to continue on a first launch").toBe(true);
 
     buttonNamed(root, "New world").click();
@@ -201,6 +281,7 @@ describe("the front door, through the real components", () => {
     expect(root.querySelector(".game"), "leaving a world takes it off the page").toBeNull();
     expect(root.querySelector(".game-menu")).toBeNull();
     expect(store.raw(world.slot), "the quit wrote the world").toBeDefined();
+    buttonNamed(root, "Play").click();
     const cont = buttonNamed(root, "Continue - Ares");
     expect(cont.disabled).toBe(false);
 
@@ -215,6 +296,7 @@ describe("the front door, through the real components", () => {
   it("offers both paces in New world, Standard first, and the world keeps the one chosen (Batch 28)", async () => {
     const { app, root } = page();
     await app.start();
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "New world").click();
     const pace = root.querySelector<HTMLSelectElement>(".new-world-pace")!;
     expect(pace.disabled).toBe(false);
@@ -234,6 +316,7 @@ describe("the front door, through the real components", () => {
   it("gives a Standard world the slow speeds only", async () => {
     const { app, root } = page();
     await app.start();
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "New world").click();
     submit(root.querySelector<HTMLFormElement>(".new-world")!);
     await created(app);
@@ -246,6 +329,7 @@ describe("the front door, through the real components", () => {
     await app.start();
     const keep = await app.library.create({ name: "Keep", seed: 1, mode: "standard", pace: "standard" });
     const doomed = await app.library.create({ name: "Doomed", seed: 2, mode: "standard", pace: "standard" });
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "Worlds").click();
     expect(app.currentView).toBe("worlds");
 
@@ -294,6 +378,7 @@ describe("the front door, through the real components", () => {
 
     const { app, root } = page(store);
     await app.start();
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "Worlds").click();
     expect(row(root, "Bad").querySelector(".world-problem")?.textContent).toMatch(/Will not load: .*corrupt save/);
     expect(row(root, "Good").querySelector(".world-problem")).toBeNull();
@@ -314,6 +399,7 @@ describe("the front door, through the real components", () => {
   it("the example planet is look only: nothing is saved and no world is made", async () => {
     const { app, root, store } = page();
     await app.start();
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "Example planet").click();
     await app.settled();
     expect(app.currentView).toBe("game");
@@ -332,6 +418,7 @@ describe("the front door, through the real components", () => {
     await app.start();
     const w = await app.library.create({ name: "Traveller", seed: 99, mode: "sandbox", pace: "standard" });
     const before = await app.library.load(w.id);
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "Worlds").click();
     buttonNamed(row(root, "Traveller"), "Export").click();
     await app.settled();

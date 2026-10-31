@@ -5,23 +5,28 @@
 When the game opens you see Mars turning slowly behind the menu. The game is silent until your
 first click or key press, as browsers require; then the music starts.
 
-- **Continue - *name*** opens the world you played last. With no world yet it just says
-  **Continue** and cannot be pressed.
-- **Worlds** lists every world you have made: play, rename, duplicate, back up or delete them.
-  See [Worlds and saving](worlds-and-saving.md).
-- **New world** makes a new planet to play.
-- **Achievements** lists the 30 achievements, which you have earned, and in which world. See
+- **Play** opens everything to do with worlds (below).
+- **Achievements** shows the 30 achievements as a map, the ones you have earned lit green. See
   [Winning](the-ending.md#achievements).
-- **Example planet** shows a fully terraformed Mars with cities and metropolises already built,
-  to look around. It takes about forty seconds to build, and nothing you do there is saved.
 - **Settings** sets the game up for you: the sound, the graphics, the controls and every key,
   the size and colours of the interface (with colour-blind palettes, reduced motion and high
   contrast), and how often your world is saved. See [Settings](settings.md).
 - **Credits** says who made the game.
 
+### Play
+
+- **Continue - *name***, across the top, opens the world you played last. With no world yet it
+  just says **Continue** and cannot be pressed.
+- **New world** makes a new planet to play.
+- **Worlds** lists every world you have made: play, rename, duplicate, back up or delete them.
+  See [Worlds and saving](worlds-and-saving.md).
+- **Example planet** shows a fully terraformed Mars with cities and metropolises already built,
+  to look around. It takes about forty seconds to build, and nothing you do there is saved.
+- **Back** returns to the title screen. **Back** from **New world** or **Worlds** returns here.
+
 ## Making a world
 
-Press **New world** and choose:
+Press **Play**, then **New world**, and choose:
 
 - **Name.** Anything you like; it starts as "World 1", "World 2" and so on.
 - **Seed.** The seed decides where the continents and basins lie. The same seed always makes the

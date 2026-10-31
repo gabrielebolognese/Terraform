@@ -509,7 +509,7 @@ export class WorldMapScreen {
       }
       if (s.kind !== "outpost" || cam.scale > 1.5) {
         ctx.fillStyle = "rgba(236,236,238,0.92)";
-        ctx.font = `${s.kind === "metropolis" ? 13 : 11}px Lexend, Arial, sans-serif`;
+        ctx.font = `${s.kind === "metropolis" ? 13 : 11}px 'Chakra Petch', Arial, sans-serif`;
         ctx.fillText(settlementLabel(s), sx(p.x) + 7, sy(p.y) - 6);
       }
     }

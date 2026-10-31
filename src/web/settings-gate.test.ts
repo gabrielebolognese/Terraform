@@ -27,7 +27,7 @@ import type { GameHandle, GameOptions } from "./game.js";
 import { KEY_PAN_PX, KEY_ZOOM_STEP } from "./game.js";
 import { BROWSER_TUNING, worldTuning } from "./game-tuning.js";
 import { EDGE_SPEED_PX } from "./city.js";
-import { setWaitingForKey } from "./keys.js";
+import { isWaitingForKey, setWaitingForKey } from "./keys.js";
 import { CHUNK_PIXELS, DEFAULT_SETTINGS, PlayerSettings } from "./settings.js";
 import { SettingsPanel } from "./settings-panel.js";
 import { FrameCosts } from "./frame-costs.js";
@@ -114,6 +114,78 @@ const AWAY: readonly (readonly [string, string | boolean])[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// The side panel (at the user's request): the settings grouped by kind
+// ---------------------------------------------------------------------------
+
+describe("the Settings' side panel", () => {
+  const tabs = (root: ParentNode): HTMLButtonElement[] => [...root.querySelectorAll<HTMLButtonElement>(".settings-tab")];
+  const shown = (root: ParentNode): (string | undefined)[] => [...root.querySelectorAll<HTMLElement>(".settings-page")].filter((p) => !p.hidden).map((p) => p.dataset["page"]);
+
+  it("lists every kind, shows one page at a time, and every setting is on exactly one page", async () => {
+    const { root } = await title(new MemorySaveStore(true));
+    buttonNamed(root, "Settings").click();
+    expect(tabs(root).map((t) => t.textContent)).toEqual(["Sound", "Graphics", "Controls", "Keys", "Interface", "Saving"]);
+    for (const tab of tabs(root)) {
+      tab.click();
+      expect(shown(root), tab.textContent ?? "").toEqual([tab.dataset["page"]]);
+      expect(tabs(root).filter((t) => t.getAttribute("aria-selected") === "true"), "one tab chosen").toEqual([tab]);
+    }
+    const settings = [...root.querySelectorAll("[data-setting]")];
+    expect(settings.length, "the settings were found").toBeGreaterThan(10);
+    for (const c of settings) expect(c.closest(".settings-page"), (c as HTMLElement).dataset["setting"]).not.toBeNull();
+    expect(root.querySelector('.settings-page[data-page="keys"] .settings-keys'), "the keys on their own page").not.toBeNull();
+    expect(root.querySelector('.settings-page[data-page="sound"] .sound-slider'), "the sound on its page").not.toBeNull();
+    expect(root.querySelector('.settings-page[data-page="controls"] [data-setting="controls.cameraSpeed"]')).not.toBeNull();
+  });
+
+  it("opens where it was left - on the title and in a world's menu - and the arrow keys move along it", async () => {
+    frames.install();
+    const store = new MemorySaveStore(true);
+    const { app, root } = await title(store);
+    buttonNamed(root, "Settings").click();
+    tabs(root).find((t) => t.textContent === "Interface")!.click();
+    buttonNamed(root, "Back").click();
+    buttonNamed(root, "Settings").click();
+    expect(shown(root), "the title's Settings again").toEqual(["interface"]);
+    const nav = root.querySelector<HTMLElement>(".settings-nav")!;
+    nav.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(shown(root)).toEqual(["saving"]);
+    nav.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(shown(root), "round to the top").toEqual(["sound"]);
+    nav.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    expect(shown(root)).toEqual(["saving"]);
+    buttonNamed(root, "Back").click();
+    const handle = await newWorld(app, root);
+    try {
+      frames.step(2);
+      app.openMenu();
+      const menu = root.querySelector<HTMLElement>(".game-menu")!;
+      buttonNamed(menu, "Settings").click();
+      expect(shown(menu), "the menu's Settings open where the title's were left").toEqual(["saving"]);
+      expect(menu.querySelector(".game-menu-main")!.hasAttribute("hidden"), "the menu's buttons step aside for the settings").toBe(true);
+      buttonNamed(menu, "Back").click();
+      expect(menu.querySelector(".settings-panel"), "Back closes the settings").toBeNull();
+      expect(menu.querySelector(".game-menu-main")!.hasAttribute("hidden"), "and the menu is back").toBe(false);
+      expect(handle.speed, "the world stood still behind it all").toBe(0);
+    } finally {
+      await app.quitToTitle();
+    }
+  });
+
+  it("leaving the Keys page while a key is awaited lets it go: the game hears its shortcuts again", async () => {
+    const { root } = await title(new MemorySaveStore(true));
+    buttonNamed(root, "Settings").click();
+    tabs(root).find((t) => t.textContent === "Keys")!.click();
+    const key = root.querySelector<HTMLButtonElement>('.settings-key[data-action="pause"] .settings-key-button[data-slot="0"]')!;
+    key.click();
+    expect(isWaitingForKey(), "waiting for a key").toBe(true);
+    tabs(root).find((t) => t.textContent === "Graphics")!.click();
+    expect(isWaitingForKey(), "let go on leaving the page").toBe(false);
+    expect(root.querySelector('.settings-key[data-action="pause"] .settings-key-button[data-slot="0"]')!.textContent).not.toBe("Press a key...");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // The Settings screen: every setting kept, through a reload
 // ---------------------------------------------------------------------------
 
@@ -122,7 +194,7 @@ describe("the Settings screen", () => {
     const store = new MemorySaveStore(true);
     const { root } = await title(store);
     buttonNamed(root, "Settings").click();
-    expect([...root.querySelectorAll(".settings-head")].map((h) => h.textContent)).toEqual(["Graphics", "Controls", "Interface", "Saving"]);
+    expect([...root.querySelectorAll(".settings-head")].map((h) => h.textContent)).toEqual(["Graphics", "Controls", "Keys", "Interface", "Saving"]);
     expect(root.querySelector(".sound-panel")).not.toBeNull();
     for (const [setting] of AWAY) expect(control(root, setting), setting).not.toBeNull();
     // Every shortcut listed, with its keys.
@@ -666,6 +738,7 @@ describe("graphics, in a city", () => {
 
 /** A new world opened from the title, its game's handle. */
 async function newWorld(app: App, root: HTMLElement): Promise<GameHandle> {
+  buttonNamed(root, "Play").click();
   buttonNamed(root, "New world").click();
   root.querySelector<HTMLFormElement>("form.new-world")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   for (let i = 0; i < 50 && app.currentView !== "game"; i += 1) await wait(20);
@@ -689,7 +762,7 @@ describe("the interface, on the page", () => {
     try {
       // As it comes: everything at its size, the standard colours, the panels as they were, things that move.
       expect(style(".shell-hud").zoom).toBe("1");
-      expect(style('.hud-metric-status[data-state="below-minimum"]').color).toBe("#e3b46e");
+      expect(style('.hud-metric-status[data-state="below-minimum"]').color).toBe("#ffc23d");
       expect(style(".game-menu-button").transitionDuration).not.toBe("0.001ms");
 
       await app.settings.update("ui", { scale: 1.25, palette: "red-green", motion: "reduced", contrast: true, popups: "all" });
@@ -845,6 +918,7 @@ describe("saving", () => {
     frames.install();
     const store = new CountingStore(true);
     const { app, root } = await title(store);
+    buttonNamed(root, "Play").click();
     buttonNamed(root, "Example planet").click();
     for (let i = 0; i < 50 && app.currentView !== "game"; i += 1) await wait(20);
     await app.settled();

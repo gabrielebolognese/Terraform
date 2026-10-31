@@ -4,6 +4,39 @@ What is new, changed and fixed in each update, newest first.
 
 ---
 
+## Update 41 - A new look, and menus with less in them
+
+The game has a new look, retro and a little cyberpunk, from the title screen to the last panel. The
+menus have been regrouped so that each screen holds less, the achievements are now a map, and the
+settings are sorted by kind.
+
+**New**
+- **A new look.** Square panels and buttons with hard shadows, a terminal typeface for titles and
+  buttons, neon cyan edges, and faint scanlines over the screen, like an old monitor. **High
+  contrast** in **Settings** turns the scanlines off.
+- **The Achievements map.** **Achievements** now shows all 30 on a map: a lane for each group,
+  running left to right from the landing, each achievement a box with its own picture and its
+  name. The ones you have earned are lit green with a tick; the rest are grey with a lock; the rare
+  ones have a double edge. Point at a box, or move to it with **Tab**, and it opens to say what earns
+  it and where you first earned it.
+
+**Changed**
+- **The title screen** now holds just **Play**, **Achievements**, **Settings** and **Credits**.
+- **Play** holds everything about worlds: **Continue** across the top, **New world** and **Worlds**
+  side by side under it, then **Example planet** and **Back**. **Back** from **New world** or
+  **Worlds** returns to **Play**.
+- **Settings** are grouped by kind in a list down the left: **Sound**, **Graphics**, **Controls**,
+  **Keys** (now a page of their own), **Interface** and **Saving**, one at a time. They open where you
+  left them last time.
+- **Settings in a world's menu** now take the menu's place, with **Back** to return to it, instead of
+  opening under the button.
+
+**Known issues**
+- The new typefaces come from the internet, as the old one did: without a connection the game
+  shows a plainer typeface.
+
+---
+
 ## Update 40 - Smoother cities, steadier saves
 
 A playtest pass over the whole game. Big cities pan more smoothly, a world you come back to no
@@ -85,6 +118,7 @@ opens a bonus for your next world.
 - The score's pressure part, and "A light touch", were set from playthroughs that order the planet's
   machines on a schedule without paying for them; a player paying as they go has not been measured
   against them.
+- The game's typefaces come from the internet: without a connection it shows a plainer one.
 
 ---
 
@@ -654,3 +688,4 @@ and railways between settlements; and the Example planet.
 - The score's pressure part, and "A light touch", were set from playthroughs that order the planet's
   machines on a schedule without paying for them; a player paying as they go has not been measured
   against them.
+- The game's typefaces come from the internet: without a connection it shows a plainer one.
