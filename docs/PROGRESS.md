@@ -2374,3 +2374,59 @@ Failures already recorded in a balance note. They do not block a batch; a new fa
     --maxWorkers=2 --minWorkers=1`: 135 files, 1,626 tests, all passed (693 s; the metropolis
     opening test and the golden frames among them).
   - review request: GAME_PLAN.md docs/PROGRESS.md docs/balance/batch40-playtest.md docs/manual/update-notes.md docs/manual/worlds-and-saving.md src/web/app.test.ts src/web/app.ts src/web/style.css
+- review 2: rejected
+  Review 1's two problems are fixed (details under "Checked in this round"). One new problem:
+  1. The full suite failed in this review. Two tests in `src/web/app.test.ts` ran past vitest's
+     default 5 s limit ("Test timed out in 5000ms"). Both are new in this batch, neither is in
+     Known red, and neither sets a timeout of its own:
+     - `:94`, "says how far it has got while a world catches up on a long absence, then plays it
+       (Batch 40)" (83fab4f): 5,044 ms;
+     - `:114`, "opens one world at a time: Play clicked again while a world catches up starts no
+       second game (Batch 40's review)" (the fix round): 5,080 ms.
+
+     The run was `npx vitest run --maxWorkers=2 --minWorkers=1`: 135 files, 1,626 tests, 1,624
+     passed (735 s). Another project's vitest (about 15 workers) kept all 16 threads busy during
+     it. Measured in this review, three runs each:
+     - the file alone: 0.95-1.02 s (`:94`) and 0.46-0.52 s (`:114`);
+     - under twenty busy processes, the load the note uses to call the opening test load-proof:
+       2.9-4.7 s (`:94`) and 1.4-2.8 s (`:114`). The first comes within 0.3 s of the limit.
+
+     The project's other heavy tests through the page give themselves 15-30 s
+     (`src/web/alert-centre.test.ts:251`, `src/web/decisions.test.ts:251`,
+     `src/web/sound-gate.test.ts:364`). The exit gate asks for a clean full run of every gate,
+     and the batch's first deliverable was a test that survives load. Also, a test that times out
+     leaves its catch-up and its game running into the next test. That is likely why `:114`,
+     normally half a second, timed out right after `:94`. Needed: give both tests a timeout set
+     from these measurements (15 s, like the neighbours, is over three times the worst), then run
+     the full suite again. If they are left as they are, they need a Known red entry with these
+     measurements.
+
+  Checked in this round:
+  - Review 1's problem 1: against `30f77a8^`, `docs/manual/update-notes.md` changes only in Update
+    40's section and in "Known issues in the current game". Update 29's and Update 32's lists are
+    as they shipped. The current list's levelling item matches `tooSteep`
+    (`src/sim/micro/settlement.ts:347-350`), and the two Terraformed opening lines and Batch 37's two
+    deposit lines are added.
+  - Review 1's problem 2: `hold`, `release` and `opens` (`src/web/app.ts:189-207`) cover every way
+    a world opens: Continue and Play (`play`), the Example planet, and Create world (held at
+    `:470`, released at `:481`). Nothing outside `app.ts` opens a world: `src/web/main.ts:50`
+    hands `startGame` to the App as its `launch`, and only `enter` calls it. `hold` refuses while a game is on the page. `quitToTitle` clears the game before
+    the title returns, so a world opens again after quitting (the "create, play, quit to title,
+    continue" test). `enter` stops any game left on the page (`:627-628`). The notice is outside
+    the inert screen, so the progress stays readable.
+  - Two of the fix round's injections, one at a time, `app.ts` restored from a copy and compared
+    after each, `git status` clean (only the untracked `docs/AUTO_BATCH_SETUP.md`):
+    - injection 23, Play unheld and `enter` not stopping the first game: "one game on the page"
+      fails, two `.game` shells, as the note records;
+    - injection 26, Create world not held: "one world made: ... to have a length of 1 but got 2".
+  - Typecheck, `build` and `build:web` are green (709.97 kB JS, 239.66 kB gzip, 54.98 kB CSS, as
+    recorded).
+  - Three manual statements match the code:
+    - "its buttons are dimmed and wait until the world has opened": while a world opens, the
+      screen is `inert` and `aria-busy`, and `src/web/style.css` dims
+      `.front-screen[aria-busy="true"]` to 0.6;
+    - "tells you to use **Level ground** on that tile too": with no crag, `tooSteep` says "level
+      the ground first", and **Level ground** is the card's name (`src/web/city.ts:1215`);
+    - "Deposits are seen only in a city": only the city screen's code reads deposits
+      (`src/web/city.ts`, `city-cards.ts`, `deposit-words.ts`, `src/render/city.ts`).
+  - The fix round adds no decision, no save change, no tuning constant and no simulation code.
