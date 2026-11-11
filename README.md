@@ -23,7 +23,7 @@ browser's IndexedDB.
 - A full-screen, rotatable globe shaded on the GPU with WebGL2, with a software renderer as the
   fallback when WebGL2 is unavailable.
 - Seven phases, from **Barren** through Warming, Runaway thickening, First water, Ecopoiesis and
-  Oxygenation to **Living world**, each latched from the simulated state.
+  Oxygenation and buffer to **Living world**, each latched from the simulated state.
 - Nine planet-scale machines to order, dismantle or switch off: Orbital mirror array, Solar shade,
   Greenhouse factory, Atmospheric processor, Comet redirect, Nitrogen import, Cyanobacteria seeding,
   Carbon scrubber and Orbital magnetic shield.
