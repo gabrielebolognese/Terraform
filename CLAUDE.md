@@ -1,6 +1,6 @@
 # Project context
 
-Blank TypeScript scaffold. Node >= 20, ESM, strict tsconfig, vitest for tests.
+A browser game about terraforming Mars, driven by a deterministic planetary simulation (see README.md). Node >= 20, ESM, strict tsconfig, vitest for tests.
 
 ## Conventions
 
